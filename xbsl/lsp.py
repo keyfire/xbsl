@@ -1920,8 +1920,8 @@ def _make_server() -> "LanguageServer":
     @server.feature("xbsl/bindingComplete")
     def _binding_complete(params: object) -> dict:
         # Component-reference completions for the form binding editor (flat params
-        # {uri, prefix}): =Компоненты.<part> –> the form's components, =Компоненты.<comp>.<part>
-        # –> members of that component's TYPE. The other binding contexts (=Объект.<attr>,
+        # {uri, prefix}): =Components.<part> -> the form's components, =Components.<comp>.<part>
+        # -> members of that component's TYPE. The other binding contexts (=Object.<attr>,
         # enum values, bindings already used in the form) are the editor's own. The form is
         # taken from the uri stem, the components from the project index and the members from
         # the stdlib dataset. Never raises: any failure degrades to an empty list, like the

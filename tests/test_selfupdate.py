@@ -133,7 +133,7 @@ def _stub_download(monkeypatch, payload=None):
 
 
 def test_busy_installation_is_refused_before_anything_is_removed(fake_site, monkeypatch):
-    """Переименование – ворота процедуры: файл занят, а удалять ещё нечего."""
+    """Переименование - ворота процедуры: файл занят, а удалять ещё нечего."""
     _stub_download(monkeypatch)
     original = selfupdate.Path.rename
 
@@ -157,7 +157,7 @@ def test_busy_installation_is_refused_before_anything_is_removed(fake_site, monk
 
 
 def test_unknown_holders_still_produce_an_honest_message(fake_site, monkeypatch):
-    """Имён может не быть – тогда так и сказано, а не молчание."""
+    """Имён может не быть - тогда так и сказано, а не молчание."""
     _stub_download(monkeypatch)
     monkeypatch.setattr(selfupdate.Path, "rename",
                         lambda self, target: (_ for _ in ()).throw(OSError("занято")))
@@ -209,11 +209,11 @@ def test_the_wheel_of_this_platform_is_preferred(monkeypatch):
 
 
 def test_portable_install_is_healed_with_the_native_wheel(fake_site, monkeypatch):
-    """Выбор от вида УСТАНОВКИ делал храповик: одно переносимое обновление – и навсегда.
+    """Install-kind selection was a ratchet: one portable update made it permanent.
 
-    Поймано на релизе 0.53.0: установка, ставшая переносимой в эпоху дефекта cache_tag,
-    обновилась переносимым колесом при живом нативном – без единого слова. Колесо
-    выбирается по платформе, а прежний вид установки только определяет, о чём сказать.
+    Found in release 0.53.0: an installation made portable during the cache_tag defect updated
+    with a portable wheel while a native wheel was available, without any notice. The platform
+    selects the wheel; the previous install kind only controls the message.
     """
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
     url, kind = selfupdate._pick_wheel(WHEELS)
@@ -233,7 +233,7 @@ def test_portable_install_is_healed_with_the_native_wheel(fake_site, monkeypatch
 
 
 def test_platform_without_a_native_wheel_falls_back(monkeypatch):
-    """Отрицательный контроль: чужая платформа – переносимое колесо, и об этом говорят."""
+    """Отрицательный контроль: чужая платформа - переносимое колесо, и об этом говорят."""
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp312", ("macosx", "arm64")))
     assert selfupdate._pick_wheel(WHEELS) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
 
@@ -271,11 +271,11 @@ def test_holders_are_our_own_processes_only(monkeypatch):
 
 
 def test_holders_exclude_own_process_tree(monkeypatch):
-    """Обёртка, запустившая команду, и её дерево – не держатели.
+    """The command wrapper and its process tree are not holders.
 
-    Живой отказ 28.07: `--stop-holders` снял собственный родительский `xbsl.exe`,
-    обрыв обновления, версия осталась прежней. Свои: предки (обёртка и то, что её
-    запустило) и потомки; чужой процесс с тем же именем остаётся держателем.
+    A live 28 July failure: `--stop-holders` stopped its own parent `xbsl.exe`, aborted the
+    update, and left the old version. Own processes are ancestors (the wrapper and what started
+    it) and descendants; a foreign process with the same name remains a holder.
     """
     own = os.getpid()
     monkeypatch.setattr(
@@ -305,11 +305,10 @@ def test_family_pids_survives_a_parent_loop():
 
 # -- корневые нативные модули mypyc ---------------------------------------------------------
 #
-# mypyc кладёт общую библиотеку РЯДОМ с пакетом, в корень site-packages, под именем,
-# одинаковым между версиями. Живой отказ 28.07: распаковка перезаписывала её на месте и
-# падала Errno 13 – файл держит импорт самого процесса self-update (переименование
-# занятого модуля проходит, перезапись нет). Список своих корневых файлов берётся из
-# RECORD: голый glob зацепил бы mypyc-библиотеку ЧУЖОГО пакета в том же корне.
+# mypyc puts its shared library beside the package, at the site-packages root, with a name
+# shared across versions. A live 28 July failure overwrote it in place and raised Errno 13:
+# the self-update process imports the file. Renaming an occupied module works; overwriting does
+# not. Own root files come from RECORD, since a bare glob would catch another package's library.
 
 _MYPYC = "0155c65d__mypyc.cp314-win_amd64.pyd"
 
@@ -527,7 +526,7 @@ def test_a_version_the_index_does_not_carry_is_named_as_such(monkeypatch):
 
 
 def test_interpreter_tag_is_the_wheel_spelling():
-    """cache_tag пишет тот же интерпретатор как cpython-314 – колёс с таким именем нет."""
+    """cache_tag пишет тот же интерпретатор как cpython-314 - колёс с таким именем нет."""
     interpreter, keywords = selfupdate.platform_tags()
     assert interpreter.startswith(("cp", "pp")) and interpreter[2:].isdigit()
     assert "-" not in interpreter and keywords
@@ -544,10 +543,10 @@ def test_stop_holders_reports_what_it_ended(monkeypatch):
 
 
 def test_every_message_is_translated(monkeypatch, fake_site, capsys):
-    """Пакет публичный: --lang en обязан отвечать по-английски, а не по-русски.
+    """A public package must answer in English for `--lang en`.
 
-    Проверяется не наличие ключей, а ФАКТ вывода: отказ занятой установки и строка
-    завершения – самые длинные тексты команды, и оба собираются из нескольких ключей.
+    The test checks output rather than key presence: the held-install refusal and completion
+    line are the command's longest texts, and both are assembled from several keys.
     """
     from xbsl import i18n
 

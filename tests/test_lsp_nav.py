@@ -1096,7 +1096,7 @@ def test_search_forms_request_registered():
 def test_binding_complete_request_registered():
     # xbsl/bindingComplete (the form binding editor's component-reference completions) is wired
     # and never raises. Without a built index (a bare workspace) it yields an empty list, and a
-    # garbage request yields one too – an empty result, never an exception.
+    # garbage request yields one too - an empty result, never an exception.
     pytest.importorskip("pygls", reason="LSP-методы проверяются при установленном extra [lsp]")
     from xbsl import lsp as lsp_module
 

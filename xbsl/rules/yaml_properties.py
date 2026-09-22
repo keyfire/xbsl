@@ -417,13 +417,13 @@ def unknown_property(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "yaml" or not _HAVE_YAML:
         return []
     if not metamodel.available():
-        return []  # the metamodel is not generated – skip the check
+        return []  # the metamodel is not generated - skip the check
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
         return []
     vid = object_kind(data)
     if not isinstance(vid, str) or not metamodel.is_vetted(vid):
-        return []  # the vid is not vetted – skip it
+        return []  # the vid is not vetted - skip it
     allowed = metamodel.allowed_keys(vid)
 
     diags: list[Diagnostic] = []

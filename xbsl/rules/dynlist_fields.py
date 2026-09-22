@@ -3,7 +3,7 @@
 The yaml/dynlist-missing-field rule encodes a pitfall that neither the compiler nor apply
 catches: a dynamic list typed with the row data of the object's automatic list form
 (`Таблица<ДинамическийСписок<Акция.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>`) must
-select EVERY attribute of that object in `Источник.Поля` – at runtime the list crashes
+select EVERY attribute of that object in `Источник.Поля` - at runtime the list crashes
 with "Отсутствует обязательное поле <Имя>" for the first attribute it cannot find. The
 typical way to hit it: an attribute is added to the object, the list forms stay behind.
 
@@ -14,19 +14,19 @@ is not used. Lists
 that derive the row type from the declaration itself require nothing and are skipped:
 the untyped `Таблица<ДинамическийСписок>` (a list is kept untyped exactly when the full
 set cannot be selected) and a form's own row type (`ФормаX.ДанныеСтрокиСписка`,
-two segments – the platform docs declare such lists with a subset of fields).
+two segments - the platform docs declare such lists with a subset of fields).
 
 Zero-false-positive guards:
 - only nodes whose `Тип` contains exactly one generic argument of the form
   `X.АвтоматическаяФормаСписка.ДанныеСтрокиСписка`, where X is a project object of kind
   Справочник/Документ with a parsed `Реквизиты` list;
-- `Источник.ОсновнаяТаблица.Таблица` must equal X – an aliased or foreign table is skipped;
+- `Источник.ОсновнаяТаблица.Таблица` must equal X - an aliased or foreign table is skipped;
 - `Источник.Поля` must be a non-empty list of mappings with string `Выражение` values;
   anything else means the field set cannot be trusted, and the node is skipped;
 - collection-typed attributes (Массив/Соответствие/Множество/СписокЗначений) and binary
   ones (ДвоичныйОбъект) are not required: a typed selection cannot carry them at all
-  (the compiler rejects "references a collection attribute", so such lists stay untyped) – a typed list over such an object is a documented false negative;
-- `Ссылка` and standard fields not declared in `Реквизиты` are not required – the rule
+  (the compiler rejects "references a collection attribute", so such lists stay untyped) - a typed list over such an object is a documented false negative;
+- `Link` and standard fields not declared in `Attributes` are not required - the rule
   checks only what the object's yaml declares;
 - an attribute counts as present when its name matches a field's `Выражение` (bare or
   the last segment of a qualified `Псевдоним.Имя`) or the field's `Псевдоним`.
@@ -173,7 +173,7 @@ dataset.register_reset(_auto_tails.cache_clear)
 # Object kinds whose declared attributes are known to make up the automatic row type.
 _OBJECT_KINDS = frozenset({"Справочник", "Документ"})
 
-# Attribute type roots a typed selection cannot carry – excluded from the required set.
+# Attribute type roots a typed selection cannot carry - excluded from the required set.
 _EXCLUDED_ROOTS = frozenset({
     "Массив", "Соответствие", "Множество", "СписокЗначений", "ДвоичныйОбъект",
 })
@@ -202,7 +202,7 @@ def _declared_names(fields: list) -> set[str] | None:
 
     A name is the `Выражение` itself, the last segment of a qualified expression
     (`Псевдоним.Имя`) and the `Псевдоним` when present. A field without a string
-    `Выражение` makes the whole set unreliable – the caller skips the node.
+    `Expression` makes the whole set unreliable - the caller skips the node.
     """
     names: set[str] = set()
     for f in fields:
@@ -506,5 +506,4 @@ def dynlist_missing_field(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                         rel, line, col, "yaml/dynlist-missing-field", Severity.WARNING,
                         i18n.t("yaml/dynlist-missing-field.missing", attr=attr, obj=obj),
                     )
-
 

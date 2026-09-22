@@ -1,26 +1,24 @@
 """Tier D: a call from outside a module must target a method visible outside it.
 
-Two rules, one invariant of the platform: @Локально is the DEFAULT visibility of a language
-construct (docs: topic "Модульная разработка" - "@Локально - конструкция видна только в своем
-модуле (значение по умолчанию)"), so a method with no visibility annotation is reachable from
+Two rules, one invariant of the platform: local visibility is the DEFAULT for a language
+construct, so a method with no visibility annotation is reachable from
 its own module alone. The rules differ in how the call reaches the method:
-code/local-method-cross-component goes through a component INSTANCE (`Компоненты.X.Метод(...)`,
+code/local-method-cross-component goes through a component INSTANCE (`Components.X.Method(...)`,
 which fails at runtime) and code/local-method-cross-module through the MODULE NAME
-(`Модуль.Метод(...)`, which the compiler rejects on deploy).
+(`Module.Method(...)`, which the compiler rejects on deploy).
 
 The code/local-method-cross-component rule: a method of an interface component is
-@Локально by default – a call `Компоненты.X.Метод(...)` from ANOTHER component's module
+local by default - a call `Components.X.Method(...)` from ANOTHER component's module
 fails at runtime with "Method is invisible due to visibility modifier @Локально" unless
-the method carries a visibility annotation wider than local: @ВПодсистеме, @ВПроекте,
-@ВТипе or @Глобально (docs: Стд::Аннотации::ОбластиВидимости, topic "Модульная
-разработка" – @Локально is the default for language constructs).
+the method carries a visibility annotation allowing subsystem, project, type or global access.
+The platform's modular-development documentation defines the local default.
 
 The pattern the rule encodes: every cross-component call targets a method
-annotated @ВПодсистеме (a router page-switch is the reference shape –
-`Компоненты.КарточкаЗадачи.Загрузить(...)`); every other `Компоненты.X.Y(...)` call
+visible within its subsystem (a router page-switch is the reference shape -
+`Components.TaskCard.Load(...)`); every other `Components.X.Y(...)` call
 hits a form-local instance (an HTML container, a table) whose X is not a project
-component, so those are skipped by construction. Yaml bindings (`=Компоненты...`)
-reference form-local tables and platform built-ins only, never project components –
+component, so those are skipped by construction. Yaml bindings (`=Components...`)
+reference form-local tables and platform built-ins only, never project components -
 bindings are not checked.
 
 Zero-false-positive guards:
@@ -29,9 +27,9 @@ Zero-false-positive guards:
   properties are left alone;
 - the caller must be the paired module of a КомпонентИнтерфейса yaml, and that yaml
   must embed the component under the same instance name (a node with `Имя: X` and
-  `Тип: X`) – this rules out a same-name instance of a different type;
+  `Тип: X`) - this rules out a same-name instance of a different type;
 - X must be a project КомпонентИнтерфейса with a paired module `X.xbsl`, and the called
-  name must be found among the methods declared in that module – platform built-ins on
+  name must be found among the methods declared in that module - platform built-ins on
   component instances (ПодключитьОбработчикТаймера, ВызватьМетод...) are not declared
   there and are skipped;
 - a module where the name `Компоненты` is shadowed (declared, assigned, annotated or
@@ -80,10 +78,9 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# The visibility-scope annotations (Стд::Аннотации::ОбластиВидимости). Anything from
-# _WIDE makes the method callable from another component's module; @ВТипе is counted as
-# wide too – the docs describe it as visible "в данном типе, его наследниках и внешних
-# объектах", so treating it as local could produce false positives.
+# The visibility-scope annotations. Anything from _WIDE makes the method callable from
+# another component's module. Type visibility includes derived types and external objects,
+# so treating it as local could produce false positives.
 #
 # BOTH spellings of every name, from the platform's own dictionary. The sources are
 # bilingual and a project mixes the forms freely - sometimes within one declaration, an
@@ -136,7 +133,7 @@ dataset.register_reset(_components_forms.cache_clear)
 def _shadows(toks: list, name: str) -> bool:
     """The module binds the name somewhere: a declaration, an assignment, an annotation.
 
-    Wider than necessary on purpose – a shadowed name only makes the rule skip.
+    Wider than necessary on purpose - a shadowed name only makes the rule skip.
     """
     n = len(toks)
     for i, t in enumerate(toks):
@@ -218,7 +215,7 @@ def _cross_component_mapper(source: SourceFile) -> dict | None:
                 continue  # not a call Компоненты.X.Y(...)
             comp, meth = toks[i + 2], toks[i + 4]
             if comp.value == owner:
-                continue  # the component's own module – locality never restricts it
+                continue  # the component's own module - locality never restricts it
             calls.append((comp.value, meth.value, meth.line, meth.col))
     if not visibility and not calls:
         return None
@@ -255,7 +252,7 @@ def local_method_cross_component(facts: dict[str, dict]) -> Iterable[Diagnostic]
             continue
         instances = instances_by_stem.get(fact["stem"])
         if instances is None:
-            continue  # not an interface component module – no components collection
+            continue  # not an interface component module - no components collection
         for comp, meth, line, col in fact["calls"]:
             target_stem = comp_stems.get(comp)
             if target_stem is None or target_stem == fact["stem"]:
@@ -264,10 +261,10 @@ def local_method_cross_component(facts: dict[str, dict]) -> Iterable[Diagnostic]
             if target is None:
                 continue
             if instances.get(comp) != [comp]:
-                continue  # the form embeds no instance X of type X – ambiguous, skip
+                continue  # the form embeds no instance X of type X - ambiguous, skip
             annotations = target["visibility"].get(meth)
             if annotations is None:
-                continue  # not declared in the module – a platform built-in, skip
+                continue  # not declared in the module - a platform built-in, skip
             if set(annotations) & _wide_visibility():
                 continue
             yield Diagnostic(

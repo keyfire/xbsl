@@ -1,7 +1,7 @@
 """Tier D: type expressions in yaml against the stdlib catalog and the project objects.
 
 The yaml/unknown-type rule mirrors code/unknown-type and code/unknown-object-type on the yaml
-side of a project: every string value of a `Тип` key is a type expression – the component type
+side of a project: every string value of a `Type` key is a type expression - the component type
 of a form node (`Группа`, `ПолеВвода<Строка>`), the type of an attribute, a tabular-section
 attribute, a property or a client-work parameter (`Число`, `Товары.Ссылка?`), a wrapper value
 (`АбсолютныйЦвет`), a form base (`ФормаОбъекта<Товары.Объект>`)... The expression is parsed at
@@ -12,7 +12,7 @@ the string level:
     цепочка       := Имя ('.' Имя)*
 
 (an empty alternative and a trailing `?` are the nullable marker). For every chain the root
-must be known – a stdlib symbol, a project object or a module-declared local type; when the
+must be known - a stdlib symbol, a project object or a module-declared local type; when the
 root is a project object of a checked kind, the second segment must belong to the family of
 types the object generates (the same table as code/unknown-object-type, including the
 automatic forms: `Акция.АвтоматическаяФормаСписка.ДанныеСтрокиСписка`).
@@ -21,7 +21,7 @@ Zero-false-positive guards: only yaml files with `ВидЭлемента` are ch
 taken from the parsed yaml tree, so a `Тип: ...` line inside a literal block scalar cannot
 false-match; a value that does not parse as a type expression (a binding `=...`, an unexpected
 character) is skipped rather than guessed. Positions are found by a text search for the value;
-the rule is project-wide – it needs the objects of the whole project (as code/unknown-type,
+the rule is project-wide - it needs the objects of the whole project (as code/unknown-type,
 it does not run in single-file mode).
 """
 
@@ -120,13 +120,13 @@ def _parse_type_string(value: str) -> list[list[str]] | None:
         nonlocal i
         while True:
             skip_ws()
-            if i < n and s[i] == "?":  # a bare '?' alternative – the nullable marker
+            if i < n and s[i] == "?":  # a bare '?' alternative - the nullable marker
                 i += 1
             elif i < n and (s[i].isalpha() or s[i] == "_"):
                 if not parse_alt():
                     return False
             elif i >= n or s[i] in "|>,":
-                pass  # an empty alternative (`Строка|`) – also the nullable marker
+                pass  # an empty alternative (`Строка|`) - also the nullable marker
             else:
                 return False
             skip_ws()
@@ -224,7 +224,7 @@ def _yaml_type_mapper(source: SourceFile) -> dict | None:
         return None
     stdlib = _stdlib_names()
     if not stdlib:
-        return None  # the catalog is not generated – skip the check
+        return None  # the catalog is not generated - skip the check
     lib_names = _library_type_names(source)
     if lib_names:  # the project descriptor: the types its libraries make visible
         return {"k": "lib", "names": lib_names}

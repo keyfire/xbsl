@@ -108,7 +108,7 @@ def run(args: list[str], lang: str) -> str:
             timeout=30,
         )
     except subprocess.TimeoutExpired:
-        return ""          # справки нет – раздел такой команды просто не появится
+        return ""          # No help output means no section for this command.
     text = (out.stdout or out.stderr).rstrip()
     # An environment without the extra answers "needs the [lsp] extra" INSTEAD of the flags,
     # and the page would silently come out short - the generated file then differs from the
@@ -181,7 +181,7 @@ def esc_text(s: str) -> str:
     """Ordinary text: Markdown reads angle brackets as a tag and swallows them along with
     what is inside (`xbsl <command>` becomes `xbsl`), and the theme's typography glues a
     double hyphen into a dash - a flag mentioned in a description, `--select`, turns into an
-    unusable `–select`. Inside backticks neither happens."""
+    unusable `-select`. Inside backticks neither happens."""
     s = s.replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
     return FLAG_RE.sub(r"`\1`", s)
 

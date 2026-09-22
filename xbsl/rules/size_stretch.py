@@ -44,29 +44,29 @@ the width of its row), which the collapse does not touch.
 The platform gotcha: РастягиватьПоВертикали/РастягиватьПоГоризонтали are `Авто|Булево` and at
 `Авто` the platform decides on its own whether to stretch the component (the docs topic
 "Размещение компонентов на экране"). When it decides to stretch, flex-grow takes the parent's
-leftover space and the fixed Высота/Ширина is overridden – blank space below the component,
+leftover space and the fixed Height/Width is overridden - blank space below the component,
 inflated neighbours. The fix is an explicit `РастягиватьПоВертикали: Ложь` (respectively
 `РастягиватьПоГоризонтали: Ложь`) next to the size.
 
-Narrowing – driven by a survey of a real deployed project (130 yaml, 195 nodes carrying
+Narrowing - driven by a survey of a real deployed project (130 yaml, 195 nodes carrying
 Высота/Ширина), where a formal "size without Растягивать" is often perfectly valid:
 
-- components with an intrinsic (content) size – Картинка (80 nodes), Группа (7), Надпись (1),
-  РедакторHtml (1) – practically never set Растягивать next to a size and work fine: for them
+- components with an intrinsic (content) size - pictures (80 nodes), groups (7), labels (1),
+  HTML editors (1) - practically never set stretching next to a size and work fine: for them
   `Авто` reliably resolves to "do not stretch", so they are not checked;
-- КонтейнерHtml – the only kind with mass evidence both ways: 73 of 93 size-carrying nodes set
+- HTML containers - the only kind with mass evidence both ways: 73 of 93 size-carrying nodes set
   `Растягивать*: Ложь` (or a binding), yet 20 deployed nodes omit it and still work (the parent
   has no leftover space along that axis, which is not statically decidable). The convention is
   strong but not a 100% law, so a warning is impossible without false positives;
-- Таблица<...> (3 without / 1 with) and СтандартнаяКарточка (bindings only) – singular samples,
+- tables (3 without / 1 with) and standard cards (bindings only) - singular samples,
   not checked.
 
 Hence the rule is a diagnostic hint, not a warning: severity INFO and disabled by default (the
 style/line-length model). Enable it point-blank (`--select yaml/size-needs-no-stretch`) when a
-layout shows the symptom – blank space or inflated neighbours around a fixed-size component –
+layout shows the symptom - blank space or inflated neighbours around a fixed-size component -
 to list the candidates. Checked are only КонтейнерHtml nodes (an iframe has no intrinsic size,
 so `Авто` most often resolves to "stretch") whose size is a fixed positive number; `Авто`,
-bindings (`=...`) and zero are skipped. Only a missing Растягивать* key fires – an explicit
+bindings (`=...`) and zero are skipped. Only a missing stretch key fires - an explicit
 `Авто` or `Истина` is taken as the author's deliberate choice.
 
 --- yaml/col-width-needs-no-stretch (a column width that turns into a share) ---

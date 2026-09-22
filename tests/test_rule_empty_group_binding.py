@@ -1,7 +1,7 @@
 """The binding flavour of yaml/empty-group-sized: an empty UNNAMED group sized by a binding.
 
 The literal flavour is covered in test_rules_render_and_layout.py; these tests pin the branch
-added for a size binding – the exact shape that survived on a live public page for a month and
+added for a size binding - the exact shape that survived on a live public page for a month and
 a half (`Высота: =ОтступСнизу` on an unnamed spacer group, no content). The name filter is the
 load-bearing part: a NAMED empty container is filled from code through its name, so the rule
 must stay silent on it, while an unnamed one is unreachable from code and never renders.

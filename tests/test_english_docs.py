@@ -287,14 +287,13 @@ def test_bare_russian_guard_catches_a_planted_defect():
 @pytest.mark.needs_data
 @pytest.mark.parametrize("name", ENGLISH_CHANGELOGS)
 def test_english_changelog_uses_english_spellings(name: str):
-    """У имени платформы есть английское написание – в английском чейнджлоге стоит оно.
+    """An English changelog uses the platform's English spelling.
 
-    Чейнджлоги когда-то были выведены из-под этой проверки: их записи объясняют, как
-    платформа зовёт вещь на каждом языке, и оба написания обязаны стоять рядом. Исключение
-    оказалось шире нужного – 27.07 в английскую запись уехали `Истина`, `Ложь`, `.ВСтроку()`
-    и целый пример на русском. Теперь исключение сужено до того, ради чего заводилось:
-    русское написание законно, если в ТОЙ ЖЕ записи стоит его английский двойник (тогда
-    запись и объясняет пару) либо если оно внутри цитаты сообщения платформы.
+    Changelogs used to be exempt: an entry may explain the platform spelling in each language,
+    and both spellings have to stand together. The exemption was too broad: the 27 July English
+    entry acquired `True`, `False`, `.ToString()`, and a full Russian example. It now permits a
+    Russian spelling only when the same entry has its English counterpart, or inside a quoted
+    platform message.
     """
     wrong = _wrong_spellings((ROOT / name).read_text(encoding="utf-8"))
     assert not wrong, f"{name}: в английском чейнджлоге русские написания: " + "; ".join(

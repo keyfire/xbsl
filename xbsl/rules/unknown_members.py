@@ -160,8 +160,8 @@ def _member_kinds() -> dict[str, dict[str, str]]:
 def _member_kind(type_name: str, member: str) -> str | None:
     """The declared kind of a member reached through a type name, in either spelling.
 
-    The kinds table is keyed the way the catalog stores it – the Russian type and member
-    names – while a translated module reaches the same member through the English spelling
+    The kinds table is keyed the way the catalog stores it - the Russian type and member
+    names - while a translated module reaches the same member through the English spelling
     of both. The type is taken back to its catalog name through the term dictionary and the
     member through the pairing the existence check relies on; a member no vocabulary pairs
     is not judged, the same silence the neighbouring rule keeps.

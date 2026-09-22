@@ -31,7 +31,7 @@ reference is a type position (the string values of `Type` keys, generic argument
 a navigation target (`FormType`) - see _REFERENCE_KEYS - or the table of a list: the main table
 and the joined tables of a dynamic list, the joined tables of the reference input settings of a
 field (see _list_tables). The namespace import in the paired `.xbsl` module does not cover the
-yaml – such a project deploys, but the component initialization fails at runtime.
+yaml - such a project deploys, but the component initialization fails at runtime.
 
 A third reference shape is a BINDING: a yaml string value opening with `=` holds an
 expression, and the root of a dotted chain in it (`=ЧужойМодуль.Метод()`) reaches a
@@ -73,7 +73,7 @@ the path is the subsystem root, and the folders below it are its packages.
 Narrowings for zero false positives:
 
 - only foreign objects with `ОбластьВидимости: ВПроекте`/`Глобально` are reported: a
-  non-public foreign object is inaccessible regardless of imports – that is a visibility
+  non-public foreign object is inaccessible regardless of imports - that is a visibility
   error, not a missing import, and the platform semantics of it are not this rule's;
 - a name that also belongs to an element of the file's own subsystem resolves locally
   and is skipped;
@@ -81,12 +81,12 @@ Narrowings for zero false positives:
   namespace is not in scope and the name resolves to the standard namespace (the guard
   is active when the type catalog is generated);
 - a name that is also a module-declared local type (structure, enumeration, exception)
-  anywhere in the project is skipped – the yaml may legitimately reference a type of a
+  anywhere in the project is skipped - the yaml may legitimately reference a type of a
   module of its own subsystem (without the language data this guard degrades to a skip
   of nothing);
 - qualified names (`Подсистема::Тип`) rely on the subsystem's `Использование`, not on
-  the element's import – they do not parse as short chains and are skipped;
-- a binding root declared in THIS yaml (any name-key value of the tree – an attribute,
+  the element's import - they do not parse as short chains and are skipped;
+- a binding root declared in THIS yaml (any name-key value of the tree - an attribute,
   a component, a command, a property) or in the PAIRED module (a method, a field, a
   structure, an enumeration) resolves to the file's own scope and is skipped, as are
   the implicit names of the platform;
@@ -100,7 +100,7 @@ Narrowings for zero false positives:
 One diagnostic is reported per missing subsystem per file (the fix is a single import
 line), anchored at the first offending type value. When several foreign public
 subsystems declare the same name and none of them is imported, the candidates are listed
-together ('Б/В') – importing any of them resolves the name.
+together ('Б/В') - importing any of them resolves the name.
 
 The rule is project-wide: it needs the layout of the whole project (like
 yaml/unknown-type, it does not run in single-file mode).
@@ -697,7 +697,7 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
         try:
             local = semantics._file_local_types(source)
         except DatasetError:
-            return None  # no language data – neither guard has anything to offer
+            return None  # no language data - neither guard has anything to offer
         module, errors = parse(source)
         declared = set() if errors else {
             name for member in module.members

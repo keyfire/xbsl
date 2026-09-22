@@ -1,10 +1,10 @@
 """Tier D: namespace-qualified project-object references in type positions.
 
 The code/unknown-ns-object rule: a type-position chain whose root is the Russian name of an
-object kind used as a namespace – `Справочник.Программа.Ссылка`, `Перечисление.Категория`,
-`Массив<Документ.Заказ.Объект>` in code, the same expressions in yaml `Тип` values – must
+object kind used as a namespace - `Справочник.Программа.Ссылка`, `Перечисление.Категория`,
+`Массив<Документ.Заказ.Объект>` in code, the same expressions in yaml `Type` values - must
 name a project object of exactly that kind in the second segment. The third segment, when
-present, must belong to the family of types the object generates – the same table as
+present, must belong to the family of types the object generates - the same table as
 code/unknown-object-type: the catalog object_members plus the safety-net union, the object's
 tabular sections and its module-declared structures. Deeper segments are not checked.
 
@@ -16,13 +16,13 @@ values via the string-level parser (yaml_types._parse_type_string), including ne
 generics (`Массив<Справочник.X.Ссылка>`).
 
 Zero-false-positive guards: the stdlib itself carries dotted generic types with the same
-roots (`Справочник.Ссылка`, `Документ.Объект` – "a reference to some catalog"), so a chain
+roots (`Справочник.Ссылка`, `Документ.Объект` - "a reference to some catalog"), so a chain
 whose first two segments name such a stdlib type is a generic, not an object reference, and
 is skipped; without the stdlib catalog the rule does not run at all. Chains shorter than two
 segments (`знч Х: Справочник`) are the stdlib root types and are left alone.
 
 Limitation, stated on purpose: objects supplied by external libraries (.xlib) are not
-visible among the project sources – on a project that plugs in libraries via the dependency
+visible among the project sources - on a project that plugs in libraries via the dependency
 manifest the rule would flag their objects as unknown (false positives). Once that practice
 appears the rule must learn the manifest (Проект.yaml) instead of guessing.
 
@@ -124,7 +124,7 @@ def _ns_tokens(s: SourceFile) -> list:
 
     The lexer marks `Перечисление` as a keyword (the enum declaration word) regardless of
     case, so the chain builder would not start a chain at it. In a type position the
-    capitalized form is the namespace root – reclassify it as a name. Declaration anchors
+    capitalized form is the namespace root - reclassify it as a name. Declaration anchors
     react to lowercase keywords only, so the reclassification cannot invent declarations.
     """
     return [
@@ -158,7 +158,7 @@ def _ns_mapper(source: SourceFile) -> dict | None:
     candidate chains with per-segment positions. The object model lives in the reduce."""
     stdlib = _stdlib_names()
     if not stdlib:
-        return None  # the catalog is not generated – the dotted-generic guard needs it
+        return None  # the catalog is not generated - the dotted-generic guard needs it
     if source.kind == "yaml":
         data, err = _parsed(source)
         if err is not None or not isinstance(data, dict):

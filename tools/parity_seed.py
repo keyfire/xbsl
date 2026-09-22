@@ -189,7 +189,7 @@ _INPUT_RU = _FORM_RU + "    Содержимое:\n        Тип: ПолеВв�
 _INPUT_EN = _FORM_EN + "    Content:\n        Type: Edit<String>\n        Name: Field\n        OnChange: Change\n"
 _INPUT_TOKENS = {**_FORM_TOKENS, "Поле": "Field", "Изменение": "Change", "Источник": "Source",
                  "Событие": "Event"}
-#: A number attribute of the catalog – a regular attribute, judged by the keys of its own class.
+#: A number attribute of the catalog - a regular attribute, judged by the keys of its own class.
 _NUMBER_ATTRIBUTE_RU = """\
 Реквизиты:
     -
@@ -232,7 +232,7 @@ _DELETE_CURRENT_DIMENSION_RU = """\nИзмерения:
         ПриУдаленииОбъектаПоСсылке: УдалятьТекущий
 """
 _DELETE_CURRENT_TOKENS = {"Заявки": "Applications", "Основание": "Basis"}
-#: A common module of both environments – where a query block needs the server annotation.
+#: A common module of both environments - where a query block needs the server annotation.
 _COMMON_MODULE_RU = """\
 ВидЭлемента: ОбщийМодуль
 Ид: 1d1f5c60-0000-4000-8000-000000000f0c
@@ -251,7 +251,7 @@ _QUERY_RU = "    знч Итог = Запрос{\n        ВЫБРАТЬ ПЕР�
 _QUERY_EN = "    val Result = Query{\n        SELECT TOP 1 Name FROM Catalog.Applications\n    }\n"
 _QUERY_TOKENS = {"Заявки": "Applications", "Вычисления": "Calculations", "Пересчитать": "Recount",
                  "Итог": "Result"}
-#: An event log event without the importance line – the seeds append it, or not.
+#: An event log event without the importance line - the seeds append it, or not.
 _EVENT_RU = """\
 ВидЭлемента: СобытиеЖурналаСобытий
 Ид: 1d1f5c60-0000-4000-8000-000000000f0d
@@ -270,7 +270,7 @@ _EVENT_PROPERTY_RU = "Важность: Обычная\nСвойства:\n    -
 _EVENT_PROPERTY_EN = "Importance: Normal\nProperties:\n    -\n        Name: {name}\n        Type: {type}\n"
 _EVENT_TOKENS = {"ЗаявкаПринята": "ApplicationAccepted", "Состояния": "States", "Открыт": "Open",
                  "Причина": "Reason", "Состояние": "State"}
-#: A catalog with a tabular section and the object form over it – the rows' collection the
+#: A catalog with a tabular section and the object form over it - the rows' collection the
 #: tabular member rule resolves from the project's own yaml.
 _TASKS_RU = """\
 ВидЭлемента: Справочник
@@ -342,7 +342,7 @@ _NAMESAKE_TABLE_RU = """\
                 Имя: Всего
                 Тип: Число
 """
-#: The built-in name attribute – dispatched to a class of its own by the name alone.
+#: The built-in name attribute - dispatched to a class of its own by the name alone.
 _NAME_ATTRIBUTE_RU = "Реквизиты:\n    -\n        Имя: Наименование\n"
 _NAME_ATTRIBUTE_EN = "Attributes:\n    -\n        Name: Name\n"
 #: A reference attribute pointing back at the catalog; `{mark}` is the nullable marker or nothing.
@@ -382,7 +382,7 @@ _COLUMN_EN = ("    Content:\n        Type: Table<DynamicList>\n        Name: Lis
               "        Columns:\n            -\n                Type: StandardTableColumn\n"
               "                Width: 40\n")
 _COLUMN_TOKENS = {**_FORM_TOKENS, "Список": "List"}
-#: Common modules of one environment each – the pair the environment family judges.
+#: Common modules of one environment each - the pair the environment family judges.
 _CLIENT_MODULE_RU = """\
 ВидЭлемента: ОбщийМодуль
 Ид: 1d1f5c60-0000-4000-8000-000000000f12
@@ -685,7 +685,7 @@ _AUTO_FIELD_EN = ("                -\n                    Type: DynamicListField
                   "                    Expression: Amount\n")
 _AUTO_LIST_TOKENS = {"Отметки": "Marks", "РеестрОтметок": "MarkRegistry", "Список": "List",
                      "Срок": "Deadline", "Сумма": "Amount"}
-#: The project description – the only place the compatibility mode is written.
+#: The project description - the only place the compatibility mode is written.
 _PROJECT_RU = """\
 Ид: 1d1f5c60-0000-4000-8000-000000000f1e
 Поставщик: acme
@@ -700,7 +700,7 @@ Name: Probe
 Version: 1.0.0
 CompatibilityMode: {mode}
 """
-#: A picture carrying a property the schema dates 9.0 – newer than an 8.0 project.
+#: A picture carrying a property the schema dates 9.0 - newer than an 8.0 project.
 _PICTURE_RU = """\
 ВидЭлемента: КомпонентИнтерфейса
 Ид: 1d1f5c60-0000-4000-8000-000000000f1f

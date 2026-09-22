@@ -866,9 +866,9 @@ def _expand_extra(lines: tuple[str, ...], name: str) -> list[str]:
 
 @dataclass(frozen=True)
 class KindSpec:
-    # The visibility default is the platform's: "Стандартно элемент виден только внутри
-    # своей подсистемы (ВПодсистеме)... Если хочется использовать в других подсистемах –
-    # нужно установить ВПроекте" ("Модульная разработка" documentation). The tool does not
+    # The platform defaults to visibility within the element's own subsystem. Access from
+    # another subsystem requires project visibility, according to the modular-development docs.
+    # The tool does not
     # widen visibility on the developer's behalf: wider - via an explicit scope parameter.
     scope: str = "ВПодсистеме"
     module: bool = False  # create a paired module file
@@ -957,8 +957,8 @@ _STUB_SERVICE_CONTRACT = """\
 # also has node coordinates; unavailable in the cloud), КлиентSoapСервиса (useless without
 # a WSDL loaded from the IDE).
 # Mandatory starter fields: without them the object does not compile, and the platform
-# will not supply them. Документ - the Дата attribute ("Обязан присутствовать всегда.
-# Если реквизит отсутствует – выдается ошибка"), a standard one, hence without Ид.
+# will not supply them. A document requires its standard date attribute; compilation fails
+# when it is absent. The attribute is standard and therefore has no Id.
 # РегистрСведений - a non-empty list of dimensions ("Список измерений не может быть
 # пустым"); a dimension cannot be an unbounded Строка, hence МаксимальнаяДлина.
 # РегистрНакопления - a non-empty list of resources ("Список ресурсов не может быть
@@ -1905,7 +1905,7 @@ class ScaffoldResult:
     notes: list[str] = field(default_factory=list)  # warnings, manual steps
     renames: list[FileRename] = field(default_factory=list)  # file renames (before edits)
     deletes: list[Path] = field(default_factory=list)  # files removed from disk (after edits)
-    # One line per edited file of an operation that edits many ("<file>: замен – 3"). These
+    # One line per edited file of an operation that edits many ("<file>: замен - 3"). These
     # are notes too and every full answer lists them after the notes, but a short answer
     # leaves them out: a rename across a project wrote sixty of them.
     details: list[str] = field(default_factory=list)

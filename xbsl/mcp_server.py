@@ -1,11 +1,11 @@
 """The toolkit's MCP adapter (a thin wrapper over xbsl.engine and xbsl.scaffold).
 
-Run: xbsl-mcp  (or python -m xbsl.mcp_server). Transport – stdio.
+Run: xbsl-mcp  (or python -m xbsl.mcp_server). Transport - stdio.
 The `mcp` dependency comes from an extra:  pip install "xbsl[mcp]".
 
 Tools: linting (lint_paths/lint_source), the 1C:Element documentation (docs_*) and
 metadata scaffolding (meta_*). Every meta_* tool that writes files also lints what it
-wrote and returns the diagnostics – creation and validation in one round trip.
+wrote and returns the diagnostics - creation and validation in one round trip.
 
 Diagnostic message language follows env XBSL_LANG (then the system locale, then ru), since
 an MCP server takes no CLI flags.
@@ -101,9 +101,9 @@ def list_rules(
 ) -> list[dict] | dict:
     """List the available linter rules (id, title, tier, scope, severity).
 
-    select – answer about these rules alone (a rule id, a group, or a tier letter A/B/C/D);
-    ignore – leave these out. Without either one the whole registry is listed.
-    filter – narrow by a word, case-insensitive. A word that IS a group (the part of an id
+    select - answer about these rules alone (a rule id, a group, or a tier letter A/B/C/D);
+    ignore - leave these out. Without either one the whole registry is listed.
+    filter - narrow by a word, case-insensitive. A word that IS a group (the part of an id
              before '/') asks for that group and answers with it alone: "code" gives the
              rules of `code/` and nothing else. Any other word is looked for as a rule id
              substring or as a word of the title or of the rule's own description - every
@@ -257,19 +257,19 @@ def lint_paths(
 ) -> dict:
     """Check files/directories on disk.
 
-    paths       – list of paths (.xbsl/.yaml files or directories, traversed recursively);
-    select      – limit the rule set (id or tier letter A/B/C/D);
-    ignore      – exclude rules;
-    enable      – add a rule that is OFF by default ON TOP of the defaults (the CLI --enable);
+    paths       - list of paths (.xbsl/.yaml files or directories, traversed recursively);
+    select      - limit the rule set (id or tier letter A/B/C/D);
+    ignore      - exclude rules;
+    enable      - add a rule that is OFF by default ON TOP of the defaults (the CLI --enable);
                   `select` answers with that rule ALONE, this one with everything plus it -
                   the way a project asks for its translation gaps or its typography;
-    baseline    – a baseline file to apply; without it the project's own `.xbsllint-baseline`
+    baseline    - a baseline file to apply; without it the project's own `.xbsllint-baseline`
                   is looked up above the checked files, exactly as the CLI does;
-    no_baseline – report the frozen findings too;
-    fix         – apply unambiguous formatting and code fixes on disk, only outside the
+    no_baseline - report the frozen findings too;
+    fix         - apply unambiguous formatting and code fixes on disk, only outside the
                   baseline; default false. Rechecks after each pass and reports remaining
                   findings, with summary.fixed and summary.files_changed;
-    as_ci       – check with the rule set the project's CI job runs: the --select/--ignore/
+    as_ci       - check with the rule set the project's CI job runs: the --select/--ignore/
                   --enable flags and the baseline of the xbsl command in `.gitlab-ci.yml`
                   (or a GitHub workflow) next to the project, ADDED to whatever this call
                   asks for. This is what a preflight needs - a project turns rules on in its
@@ -280,12 +280,12 @@ def lint_paths(
                   unread. The CLI `--format json` answers with the same record. When there is
                   no such file, or no xbsl command in it, the answer is {"error"} rather than
                   a quieter verdict;
-    as_ci_job   – WHICH job of that file to take (implies `as_ci`). A pipeline runs the
+    as_ci_job   - WHICH job of that file to take (implies `as_ci`). A pipeline runs the
                   linter twice as soon as the project checks a second tree - the sources in
                   one job, what `translate` wrote in another - and those judge different
                   sets. Without a name the first command wins and `as_ci.jobs` names the
                   others; a part of the name is enough when only one job fits;
-    compact     – drop `summary.by_file`; keep counts, `errors` - the full records of the
+    compact     - drop `summary.by_file`; keep counts, `errors` - the full records of the
                   error-level findings - and, findings permitting, the findings themselves.
                   Up to report.COMPACT_FINDINGS_LIMIT (10) findings, `findings` lists them
                   one line each ("path:line rule - message"); past it `findings` is left out
@@ -297,8 +297,8 @@ def lint_paths(
                   {"adopted": true, "brief": ...}: the file relative to the checkout, the job,
                   the flags with a long list counted ("--enable ×10"), the jobs not taken and
                   the includes left unread;
-    as_ci_full  – with `compact`, keep the whole `as_ci` record instead of the line;
-    compare     – a file that keeps the run for the next call; the CLI `--compare` reads and
+    as_ci_full  - with `compact`, keep the whole `as_ci` record instead of the line;
+    compare     - a file that keeps the run for the next call; the CLI `--compare` reads and
                   writes the same file. The first call saves the run and answers
                   `compare: {file, compared: false}`. Every next call compares with the saved
                   run, saves this run over it and answers with the changes in place of the
@@ -499,8 +499,8 @@ def lint_source(
 ) -> dict:
     """Check in-memory content (e.g. before writing the file).
 
-    filename – name with an extension (.xbsl/.yaml); sets the kind and appears in positions;
-    content  – the source text.
+    filename - name with an extension (.xbsl/.yaml); sets the kind and appears in positions;
+    content  - the source text.
     Only per-file rules run (cross-file rules need the whole project).
     """
     src = load_text(filename, content)
@@ -828,17 +828,17 @@ def meta_project_info(root: str, kind: str | None = None, subsystem: str | None 
                       project: str | None = None, reference: bool = False) -> dict:
     """Map the 1C:Element sources under a root: projects, subsystems, packages, objects by kind.
 
-    root – the caller's project or repository root, an absolute path (a relative one is taken
+    root - the caller's project or repository root, an absolute path (a relative one is taken
     against the server's working directory, which a session started elsewhere does not
     share); the answer repeats the absolute path read as `root`, and every path in it is
     absolute.
-    kind / subsystem / package – list only the objects of that kind (`Catalog`), of that
+    kind / subsystem / package - list only the objects of that kind (`Catalog`), of that
     subsystem (its packages included) or of that package (`Batches`, or `Warehouse::Batches`;
-    a nested package belongs to the one it lies in); brief – leave the list out and answer
+    a nested package belongs to the one it lies in); brief - leave the list out and answer
     with the counts alone. A real project does not fit here whole (the site sources are 105 KB
     of listing), so ask narrowly: the counts by kind (`object_counts`) come with every answer,
     filtered or not, and `filter` states what was left out.
-    project – walk only the projects of that name (`Name` or `Vendor::Name`, as `projects`
+    project - walk only the projects of that name (`Name` or `Vendor::Name`, as `projects`
     lists them) or the one in that folder (absolute or under root; two checkouts of a project
     share the name). A repository root holds more than the project: a folder of examples next
     to it multiplied one answer sevenfold (3324 objects against 471). An unknown name is an
@@ -851,7 +851,7 @@ def meta_project_info(root: str, kind: str | None = None, subsystem: str | None 
     packages included), `objects` counting the listed objects lying directly in it; brief
     leaves it out together with the objects.
 
-    reference – also answer which object kinds meta_new_object can create
+    reference - also answer which object kinds meta_new_object can create
     (`creatable_kinds`), which section kinds meta_add_field accepts per object kind
     (`field_kinds`) and the access methods and rights (`access_methods`,
     `access_kind_rights`). These do not depend on the sources and cost about 4 KB - more than
@@ -877,16 +877,16 @@ def meta_object_info(root: str, name: str | None = None, yaml_path: str | None =
     hierarchy, existing forms, suggested form layout, subsystem, package (null at the subsystem
     root) and namespace (`Vendor::Project::Subsystem[::Package]`), plus:
 
-    - access – the КонтрольДоступа summary (null means no section: РазрешеноАдминистраторам)
-      and access_rights – the rights this kind has;
-    - access_handlers – whether the object's module declares ВычислитьРазрешенияДоступа
+    - access - the access-control summary (null means the default administrator access)
+      and access_rights - the rights this kind has;
+    - access_handlers - whether the object's module declares the access-calculation handler
       (level 1, needed for РазрешенияВычисляются) and ВычислитьРазрешенияДоступаДляОбъектов
       (level 2, needed for РазрешенияВычисляютсяДляКаждогоОбъекта);
-    - register – for registers only: register_kind (Остатки/Обороты), periodicity, and
-      needs_record_type – whether a movement needs ВидЗаписи (Приход/Расход): only a
+    - register - for registers only: register_kind (balances or turnovers), periodicity, and
+      needs_record_type - whether a movement needs a receipt/expense direction: only a
       РегистрНакопления of kind Остатки does.
 
-    root – the caller's project or repository root (absolute); a relative yaml_path resolves
+    root - the caller's project or repository root (absolute); a relative yaml_path resolves
     against it, and the answer names the absolute `root` and `path`.
     Pass either the object name (searched under root; ambiguity is an error) or the
     explicit path to its .yaml.
@@ -914,7 +914,7 @@ def meta_new_project(
 
     Files land in <root>/<vendor>/<name>/. library=True marks a library project
     (deployable only as an Импорт dependency).
-    root – the caller's repository root, an absolute path (a relative one is taken against
+    root - the caller's repository root, an absolute path (a relative one is taken against
     the server's working directory, which a session started elsewhere does not share); the
     answer names it as `root` next to the absolute paths written.
 
@@ -947,23 +947,23 @@ def meta_new_object(
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
-    directory – the subsystem folder; kind – one of
+    directory - the subsystem folder; kind - one of
     meta_project_info(reference=True).creatable_kinds
     (Справочник, Документ, Перечисление, ОбщийМодуль, HttpСервис, Отчет, КлючДоступа,
     ПланОбмена, НаборКонстант, ВиртуальнаяТаблица, Обработка, ЗапланированноеЗадание,
     контракты, права, команды ...). Kinds whose module has a mandatory handler get it
     stubbed; ВиртуальнаяТаблица gets a paired empty .xbql (its query is mandatory).
     Anything the platform will not infer is reported in notes.
-    scope overrides ОбластьВидимости; environment – Окружение (ОбщийМодуль/Структура);
-    access – КонтрольДоступа (РазрешеноАутентифицированным etc.); routes – HttpСервис
+    scope overrides visibility; environment selects the context of common modules/structures;
+    access sets access control (authenticated users, etc.); routes configures HTTP services
     routes like "GET /, POST /, GET /{id}" (handlers are stubbed in the module);
-    report_spec – for Report: {source, rows: [...], columns: [...], measures: [{expr, title}], title};
-    presentation – Presentation of the element. Beware of what the kind means by it: a
+    report_spec - for Report: {source, rows: [...], columns: [...], measures: [{expr, title}], title};
+    presentation - Presentation of the element. Beware of what the kind means by it: a
     report or a command carries a CAPTION there, while a catalog, a document, an exchange
     plan and a settings storage carry the NAME of a string attribute whose value the
     platform shows for a record (a caption written there fails to compile). Pass it:
     without one the very first lint of the new file answers naming/presentation.
-    base – for an InterfaceComponent, what the component inherits: "Form" (the default, with
+    base - for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
     scaffold used to be rewritten by hand for it. Either spelling is accepted and the yaml
@@ -1010,7 +1010,7 @@ def meta_add_field(
     is asked, and the other way round), the field_kind that would have placed the item beside
     the existing fields.
 
-    type – the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
+    type - the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
     name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
     and is judged by its own metamodel class - the one metadata_schema answers with for that
     name: no "Ид", a "Тип" only where the class declares one ("Наименование" has none), the
@@ -1018,16 +1018,16 @@ def meta_add_field(
     enforced ("Номер" takes "Строка" or "Число"), and "Владелец" needs the owner's reference
     type explicitly.
 
-    tabular – target tabular-section name when adding a реквизит into it.
+    tabular - target tabular-section name when adding an attribute into it.
 
-    names – several items of this kind in one call, with the same type, props and tabular:
+    names - several items of this kind in one call, with the same type, props and tabular:
     the values of an enumeration, a row of attributes. Composes with `name`, which goes
     first. The batch is planned whole before anything is written, so a taken or repeated
     name refuses all of it and the file stays as it was. The kinds `операция` (it also writes
     the module), `строка` and `шаблон` (they echo into the translations) take one call each;
     many strings at once are meta_set_localization with entries.
 
-    props – the item's other properties as {"Property": value}: DefaultValue, Presentation,
+    props - the item's other properties as {"Property": value}: DefaultValue, Presentation,
     MaxLength and whatever else the item's class declares (ask metadata_schema with
     sections=["<section>"] and names=["<name>"] for the list - a built-in "Номер" declares
     "Длина", "Уникальность" and "Автонумерация" where a regular attribute does not). Names
@@ -1122,7 +1122,7 @@ def meta_add_localization(yaml_path: str, language: str, root: str | None = None
     Strings/Templates sections with the default-language values for the translator to
     replace in place.
 
-    language – Russian/English (either project spelling) or the folder code Ru/En. The
+    language - Russian/English (either project spelling) or the folder code Ru/En. The
     language must be declared in LocalizationLanguages of the project descriptor and must
     differ from DefaultLanguage. Candidates come from meta_localization_info.
 
@@ -1151,11 +1151,11 @@ def meta_set_localization(
     element and again into its English twin, and the two files drifted apart with nothing but
     a pair of eyes to compare them.
 
-    yaml_path – the LocalizedStrings element (the translations sit under Localization/<Code>);
-    name, values – ONE key: the key (one word) and {language: text}. A language is named any
+    yaml_path - the LocalizedStrings element (the translations sit under Localization/<Code>);
+    name, values - ONE key: the key (one word) and {language: text}. A language is named any
                 way it reasonably holds it - Russian/English in either project spelling, or
                 the folder code Ru/En.
-    entries   – MANY keys in one call instead: {key: values}, values shaped like the ones
+    entries   - MANY keys in one call instead: {key: values}, values shaped like the ones
                 above. Composes with name/values (one extra key on top of the batch); a key
                 named by both is refused rather than letting one silently win. Every file
                 touched by more than one key is still read once and written once - a batch
@@ -1166,9 +1166,9 @@ def meta_set_localization(
     without a translation file is refused, naming meta_add_localization; an existing language
     a key says nothing about still gets the row, with the default text and a note, so no
     translation is left a key short.
-    section   – Rows or Templates, in either spelling; left out, a key keeps the section it
+    section   - Rows or Templates, in either spelling; left out, a key keeps the section it
                 already lives in and a new one goes to Rows.
-    dry_run   – report without writing: `summary`, one entry per file per key - key,
+    dry_run   - report without writing: `summary`, one entry per file per key - key,
                 language, file, the text before and after. A single key used to mean
                 printing the WHOLE of every touched file to show a one-line change (over
                 100 KB for one key on a two-language project); the summary is what changed,
@@ -1284,10 +1284,10 @@ def meta_add_form(
 ) -> dict:
     """Generate interface forms for an object and register them in its Интерфейс section.
 
-    root – the caller's project or repository root (absolute): the object is searched under
+    root - the caller's project or repository root (absolute): the object is searched under
     it by name, a relative yaml_path resolves against it, and the answer names it as `root`
     next to the absolute paths written.
-    forms – subset of ["object", "list", "list-cards", "record", "report", "processing"];
+    forms - subset of ["object", "list", "list-cards", "record", "report", "processing"];
     default: object+list for data objects, report for Report, processing for Processing.
     "record" is the information register's record form (`RecordForm<Register.Record>`, the
     fields bound to `Record`): a register has no object form, and its record is the editable
@@ -1299,16 +1299,16 @@ def meta_add_form(
     "list-cards" builds the list form as a card grid (ПроизвольныйСписок with a matrix
     КонтейнерСтрок) instead of a table, and adds the row component СтрокаСписка<Имя>: the
     card shows a title, a photo (ДвоичныйОбъект.Ссылка attribute) and up to three more
-    fields – notes report what landed on the card and what did not. It replaces "list"
-    (same form file), so passing both is an error. card_min_width – grid column width
-    (default 400, 250 with a photo); card_placeholder – image expression used when the photo
+    fields - notes report what landed on the card and what did not. It replaces "list"
+    (same form file), so passing both is an error. card_min_width - grid column width
+    (default 400, 250 with a photo); card_placeholder - image expression used when the photo
     is empty, e.g. "Ресурс{Аккаунт.svg}.Ссылка".
 
     Captions go through the project's dictionary: when the subsystem folder holds ONE
     LocalizedStrings element and the project declares two localization languages, the form's
     caption and every column caption are written as `$Dictionary.Name` and the keys the
     references need are added to that dictionary (and echoed into the translations it already
-    has) in the same operation – a reference to a key nobody declares fails the apply. Without
+    has) in the same operation - a reference to a key nobody declares fails the apply. Without
     such a dictionary the captions stay literals, as before.
 
     Existing form files are skipped unless overwrite=true.
@@ -1334,9 +1334,9 @@ def meta_add_dependency(
     version: str,
     project_yaml: str | None = None,
 ) -> dict:
-    """Attach a library to the project – the Библиотеки section of Проект.yaml.
+    """Attach a library to the project descriptor's Libraries section.
 
-    root – the caller's project or repository root (absolute): the project descriptor is
+    root - the caller's project or repository root (absolute): the project descriptor is
     searched under it, a relative project_yaml resolves against it, and the answer names it
     as `root` next to the absolute path written.
     version is the library's RELEASE version (digits and dots, e.g. "2.0"), not a build
@@ -1371,20 +1371,20 @@ def meta_set_access(
 ) -> dict:
     """Set КонтрольДоступа.Разрешения on an object (a precise yaml edit, kind-aware).
 
-    root – the caller's project or repository root (absolute): the object is searched under
+    root - the caller's project or repository root (absolute): the object is searched under
     it by name, a relative yaml_path resolves against it, and the answer names it as `root`
     next to the absolute path written.
-    default – the method for the ПоУмолчанию right (the common case); permissions – methods
+    default - the method for the default right (the common case); permissions - methods
     for individual rights, e.g. {"Чтение": "РазрешеноВсем"} (custom rights of a ПравоНаЭлемент
     are written as "ПравоНаX.ИмяПрава"). Methods: РазрешеноВсем, РазрешеноАутентифицированным,
     РазрешеноАдминистраторам, РазрешенияВычисляются, РазрешенияВычисляютсяДляКаждогоОбъекта.
-    calc_by fills РасчетРазрешенийПо – mandatory for РазрешенияВычисляютсяДляКаждогоОбъекта
+    calc_by sets the calculation basis - mandatory when permissions are calculated per object
     (per-object/RLS rights).
 
     Rights per kind and the current state come from meta_object_info (access / access_rights)
     and meta_project_info (access_default per object; no section means the platform applies
     РазрешеноАдминистраторам). The computed-permission handlers are business logic and are NOT
-    written here – notes remind which ones the object then needs.
+    written here - notes remind which ones the object then needs.
     """
     base = _base(root)
     return _meta(
@@ -1410,7 +1410,7 @@ def meta_rename_object(
 ) -> dict:
     """Rename a configuration object and update every reference across the sources.
 
-    root – the caller's project or repository root (absolute): the references are rewritten
+    root - the caller's project or repository root (absolute): the references are rewritten
     under it, a relative yaml_path resolves against it, and the answer names it as `root`
     next to absolute paths.
     Renames the object's files (yaml, modules, its forms `<Имя>Форма*`, the card-list row
@@ -1477,7 +1477,7 @@ def meta_delete_object(
     Every REMAINING mention of the name across the project is listed by file and line
     (string literals and comments included - a router string, seeding, dictionary keys)
     and deliberately NOT edited: which mention is dead code is the author's call.
-    root – the caller's project or repository root (absolute): the object is searched under
+    root - the caller's project or repository root (absolute): the object is searched under
     it, a relative yaml_path resolves against it, and the answer names it as `root` next to
     absolute paths. yaml_path resolves ambiguity between namesakes. Deletion is irreversible,
     so dry_run defaults to TRUE - the first call returns the plan; repeat with
@@ -1510,7 +1510,7 @@ def meta_move_object(
 ) -> dict:
     """Move a configuration object into another folder of its project and keep it reachable.
 
-    target_dir – a package of the object's subsystem (a folder that does not exist yet becomes a
+    target_dir - a package of the object's subsystem (a folder that does not exist yet becomes a
     new package), another package, the subsystem root or a folder of another subsystem. The
     object moves with its forms `<Имя>Форма*`, modules, list row and list table (and the
     translations of a localized-strings element, the WSDL descriptions of a SOAP service
@@ -1526,7 +1526,7 @@ def meta_move_object(
     is made by the linter's own import rules run before and after the move. Refused: a target
     outside the project's subsystems, a taken name, and a non-public element left reachable
     from another subsystem. An import the move made unnecessary is named in notes, not removed.
-    root – the caller's project or repository root (absolute): references are looked for under
+    root - the caller's project or repository root (absolute): references are looked for under
     it, relative paths resolve against it, and the answer names it as `root`. dry_run=true
     returns the plan (renames, files, notes) without writing.
 
@@ -1554,15 +1554,15 @@ def meta_rename_package(
 ) -> dict:
     """Rename a package of a subsystem: its folder and every name that spells it.
 
-    package_dir – the package folder inside a subsystem folder (a nested package works too);
-    new_name – an identifier. Every file under the folder moves (nested packages, resources,
+    package_dir - the package folder inside a subsystem folder (a nested package works too);
+    new_name - an identifier. Every file under the folder moves (nested packages, resources,
     translations), and the sources under root get `импорт Subsystem::Old[::Nested]`, the
     `Import` items and the qualified names `Subsystem::Old::Element` (with the project's
     `Vendor::Project::` prefix or without) rewritten to the new name. A file of another project
     under root is edited only where it spells the full name with this project's prefix. Short
     names need nothing. Notes remind of the translation dictionary pair a new Cyrillic name
     needs when the project has a dictionary.
-    root – the caller's project or repository root (absolute); relative paths resolve against
+    root - the caller's project or repository root (absolute); relative paths resolve against
     it, and the answer names it as `root`. dry_run=true returns the plan without writing.
 
     See also: meta_move_object moves an object into a package, meta_project_info lists the
@@ -1587,8 +1587,8 @@ def meta_move_resource(
 ) -> dict:
     """Move a resource file - or a folder of them - into another folder of its `Resources` folder.
 
-    resource_path – a file or a folder inside the `Resources` folder of a subsystem or a package;
-    target_dir – that `Resources` folder itself or a folder in it (a folder that does not exist
+    resource_path - a file or a folder inside the `Resources` folder of a subsystem or a package;
+    target_dir - that `Resources` folder itself or a folder in it (a folder that does not exist
     yet is created: the platform keeps no empty folder, so a folder starts with its first file).
     A resource is addressed by its path under the folder, so the move rewrites the static
     references that resolve to the moved files: `Resource{Old/file.svg}` literals of modules and
@@ -1600,7 +1600,7 @@ def meta_move_resource(
     target in the `Resources` folder of another subsystem or package (the file would change its
     namespace, and a lookup by a string in the old place has nothing to rewrite), a taken name,
     the resources description `Resources.yaml`.
-    root – the caller's project or repository root (absolute): references are looked for under
+    root - the caller's project or repository root (absolute): references are looked for under
     it, relative paths resolve against it, and the answer names it as `root`. dry_run=true
     returns the plan (renames, files, notes) without writing.
 
@@ -1628,14 +1628,14 @@ def meta_rename_resource_folder(
 ) -> dict:
     """Rename a folder inside a `Resources` folder: every file under it and every key naming one.
 
-    folder_dir – a folder inside the `Resources` folder of a subsystem or a package (the
-    `Resources` folder itself is refused); new_name – the new folder name, a segment of the keys.
+    folder_dir - a folder inside the `Resources` folder of a subsystem or a package (the
+    `Resources` folder itself is refused); new_name - the new folder name, a segment of the keys.
     The files move under the new name, the static references that resolve to them are
     rewritten (the same reading as meta_move_resource), and the string literals that spell the
     old path are listed in notes by file and line - a lookup by a computed string is left to
     the author. Notes remind of the translation dictionary pair a new Cyrillic name needs when
     the project has a dictionary.
-    root – the caller's project or repository root (absolute); relative paths resolve against
+    root - the caller's project or repository root (absolute); relative paths resolve against
     it, and the answer names it as `root`. dry_run=true returns the plan without writing.
 
     See also: meta_move_resource moves a resource into a folder, meta_delete_resource_folder
@@ -1655,22 +1655,22 @@ def meta_rename_resource_folder(
 def meta_resource_references(root: str, resource_path: str, limit: int = 100) -> dict:
     """Find every place in the sources that names a resource file or a folder of them.
 
-    resource_path – a file or a folder inside the `Resources` folder of a subsystem or a
+    resource_path - a file or a folder inside the `Resources` folder of a subsystem or a
     package. The reading is the one meta_move_resource makes, so the answer lists what a move
     would rewrite or name. Each place has `path`, a zero-based LSP `range` (characters counted
     in UTF-16 code units), the `text` of its line and a `kind`:
-    `reference` – a `Resource{...}` literal of a module or a yaml binding, or the bare value of
+    `reference` - a `Resource{...}` literal of a module or a yaml binding, or the bare value of
     an image property, that resolves to the file, with a namespace or without one;
-    `ambiguous` – a key that two resources folders visible from the file hold, this one among
-    them; `string` – a string literal that spells the path, read at run time by
-    `ResourcesPackage.Current().Get()` or a wrapper of the project; `computed` – a string with
-    the folder of the file and a computed name, which may name the file; `stem` – a whole string
+    `ambiguous` - a key that two resources folders visible from the file hold, this one among
+    them; `string` - a string literal that spells the path, read at run time by
+    `ResourcesPackage.Current().Get()` or a wrapper of the project; `computed` - a string with
+    the folder of the file and a computed name, which may name the file; `stem` - a whole string
     that spells the key of the file without its extension, in a module, a yaml or a JSON file of
     the project's resources: seed data names a picture by its code, and the code adds the
     extension at run time.
     For a folder, every file under it counts. `total` is the number of places; `references`
     holds the first `limit` of them, sorted by file and position.
-    root – the caller's project or repository root (absolute): references are looked for under
+    root - the caller's project or repository root (absolute): references are looked for under
     it, relative paths resolve against it, and the answer names it as `root`.
 
     See also: meta_move_resource moves a resource and rewrites its keys,
@@ -1699,7 +1699,7 @@ def meta_delete_resource_folder(
     author's call. The folder goes away with its last file. Deletion is irreversible, so
     dry_run defaults to TRUE - the first call returns the plan; repeat with dry_run=false to
     perform it.
-    root – the caller's project or repository root (absolute); relative paths resolve against
+    root - the caller's project or repository root (absolute); relative paths resolve against
     it, and the answer names it as `root`.
 
     See also: meta_rename_resource_folder when the folder stays under another name,
@@ -1728,8 +1728,8 @@ def meta_add_subsystem(
     uses: list[str] | None = None,
     root: str | None = None,
 ) -> dict:
-    """Create a subsystem: a folder with Подсистема.yaml. uses – names of other subsystems
-    for the Использование block; representation – the navigation caption.
+    """Create a subsystem: a folder with Подсистема.yaml. uses - names of other subsystems
+    for the usage block; representation - the navigation caption.
 
     See also: meta_new_object creates an object INSIDE such a folder - the folder is what
     its `directory` names; meta_project_info lists the subsystems already there. A subsystem
@@ -2087,10 +2087,10 @@ def meta_add_handler(
 def translate_status(root: str, against: str = "") -> dict:
     """Coverage of the project's translation dictionary: how much is done and what is left.
 
-    root – the project directory (the one with the project descriptor), next to which - or
+    root - the project directory (the one with the project descriptor), next to which - or
     above which - the xbsl-translation dictionary sits; a root without one is refused with
     the places looked at, and the answer names the absolute `dictionary` read.
-    against – a git ref (say `origin/master`): the answer then carries `collisions`, the keys
+    against - a git ref (say `origin/master`): the answer then carries `collisions`, the keys
     the working tree's dictionary files and the ref's translate in more than one place -
     differently (`conflicts`, what the load of the merged dictionary would refuse) or the same
     way (`duplicates`) - so a branch sees a collision with the target branch before the merge.
@@ -2161,13 +2161,13 @@ def translate_gaps(
 ) -> dict:
     """What the dictionary does not cover yet, most frequent first.
 
-    root   – the project directory (the one with the project descriptor); a root without a
+    root   - the project directory (the one with the project descriptor); a root without a
              dictionary next to or above it is refused with the places looked at, and the
              answer names the absolute `dictionary` read;
-    kind   – 'token' (names), 'phrase' (comment lines), 'literal' (string literals) or 'any';
-    filter – a substring of the key;
-    limit/offset – the page (limit 0 means all, which can be thousands of rows);
-    compact – each row is only {key, kind, count}: the shape of a translator's worklist.
+    kind   - 'token' (names), 'phrase' (comment lines), 'literal' (string literals) or 'any';
+    filter - a substring of the key;
+    limit/offset - the page (limit 0 means all, which can be thousands of rows);
+    compact - each row is only {key, kind, count}: the shape of a translator's worklist.
     A full page of hundreds of gaps does not fit an answer - places and suggestions are
     the bulk - while the keys alone do; ask for one full row by `filter` when needed.
     A page that does not carry everything says so: `truncated` is true, `remaining` counts
@@ -2218,14 +2218,14 @@ def translate_entries(
 ) -> dict:
     """What the dictionary already says - the way to keep a new entry consistent with it.
 
-    root   – the project directory (a root without a dictionary next to or above it is
+    root   - the project directory (a root without a dictionary next to or above it is
              refused with the places looked at);
-    filter – a substring of the key OR of the value (look up a root before inventing a word);
-    kind   – 'token', 'phrase', 'literal' or 'any';
-    limit/offset – the page (limit 0 means all). Ten rows by default: the question this
+    filter - a substring of the key OR of the value (look up a root before inventing a word);
+    kind   - 'token', 'phrase', 'literal' or 'any';
+    limit/offset - the page (limit 0 means all). Ten rows by default: the question this
              answers is how a word is translated already, and ten rows settle it, while
              fifty full rows on a common stem came to ten kilobytes per call;
-    compact – each row is only {key, kind, value}: the shape of an answer to "how is this
+    compact - each row is only {key, kind, value}: the shape of an answer to "how is this
              term translated". The file, the line and the scope are the bulk of a full
              row, and they matter only when an entry is to be corrected in place - ask for
              full rows then.
@@ -2279,15 +2279,15 @@ def translate_unused(
     a substring reading called a stale comment line live (the old line is contained in the
     new one whole), and keys written in single quotes were never looked at.
 
-    root   – the project directory (a root without a dictionary next to or above it is
+    root   - the project directory (a root without a dictionary next to or above it is
              refused with the places looked at);
-    kind   – 'token' (names), 'phrase' (comment lines), 'literal' or 'any';
-    filter – a substring of the key OR of the value, or a LIST of them (a row matches any):
+    kind   - 'token' (names), 'phrase' (comment lines), 'literal' or 'any';
+    filter - a substring of the key OR of the value, or a LIST of them (a row matches any):
              the way to ask about the names of one component that has just been deleted, or
              about the ten lines a comment sweep took out, in one call rather than ten. The
              answer then carries `unmatched` - the substrings no orphan fell under, which
              for a sweep means the dictionary keeps nothing of those lines;
-    since  – the orphans of ONE change, which is what a task cleaning up after itself asks:
+    since  - the orphans of ONE change, which is what a task cleaning up after itself asks:
              the keys that occurred nowhere but in the lines the change REMOVED, and the
              entries the change itself ADDED to the dictionary - a comment line written and
              reworded inside one branch shows neither wording in the diff against the base,
@@ -2299,19 +2299,19 @@ def translate_unused(
              dictionary diff. Without it the answer covers the whole accumulated dictionary
              - a live project answers with thousands of rows, every one of them somebody's
              old deletion - and says so in `note`;
-    limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
-    prune  – REMOVE the entries from the dictionary files. Off by default and named
+    limit/offset - the page (limit 0 means all); a cut page says so in `truncated`;
+    prune  - REMOVE the entries from the dictionary files. Off by default and named
              separately from the listing on purpose: this is the one direction where a
              mistaken reading destroys a translation. `kind` and `filter` select the keys -
              ALL of them, whatever the page, since `limit`/`offset` shape only the listing -
              and every dictionary occurrence of those keys is removed. `pruned.keys` counts
              the pairs removed, `removed` the physical occurrences;
-    compact – omitted: a preview lists full rows, a successful prune returns only counts.
+    compact - omitted: a preview lists full rows, a successful prune returns only counts.
              False always includes full rows; True shortens preview rows to {key, kind,
              file, line} and omits the list after pruning. `pruned` counts the removed
              occurrences by kind and dictionary file; `counts` still covers all candidates.
              A partial scan lists its candidates and never claims a removal;
-    budget_seconds – how long the walk over the sources may take (300 by default). Past it
+    budget_seconds - how long the walk over the sources may take (300 by default). Past it
              the tool answers with what it has read: `partial` is true, `sources` counts the
              files read of the total, and `note` says how to go on (a larger budget, or a
              narrower `filter` / `kind`). A partial list holds candidates, not a verdict -
@@ -2430,11 +2430,11 @@ def translate_redundant(
     languages of its project that way, and the half-translated enumeration behind that pair
     was found by a test on an empty dictionary, never by the project itself.
 
-    root   – the project directory (a root without a dictionary next to or above it is
+    root   - the project directory (a root without a dictionary next to or above it is
              refused with the places looked at);
-    filter – a substring of the key OR of the value;
-    limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
-    prune  – REMOVE the entries from the dictionary files (off by default). `filter` selects
+    filter - a substring of the key OR of the value;
+    limit/offset - the page (limit 0 means all); a cut page says so in `truncated`;
+    prune  - REMOVE the entries from the dictionary files (off by default). `filter` selects
              them - all of them, whatever the page; `pruned.keys` counts the pairs removed,
              `removed` the physical occurrences.
 
@@ -2478,13 +2478,13 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
                   target: str = "", comment: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.
 
-    root   – the project directory (a root without a dictionary next to or above it is
+    root   - the project directory (a root without a dictionary next to or above it is
              refused with the places looked at - the tools never start a dictionary);
-    edits_file – a FILE with the batch, and the way to send one of any size: either the
+    edits_file - a FILE with the batch, and the way to send one of any size: either the
              dictionary's own yaml format (tokens/phrases/literals sections, the same
              quoting as the dictionary files, an empty value removes the entry) or the
              JSON list below. Combines with inline `edits` (the file goes first).
-    edits  – [{key, value, kind}]; `kind` is 'token' (default), 'phrase' or 'literal'. The key
+    edits  - [{key, value, kind}]; `kind` is 'token' (default), 'phrase' or 'literal'. The key
              AND the value of a literal are the text between the quotes exactly as the source
              writes it - interpolations and escaping alike: an inner quote is \\", a backslash
              is \\\\, a line break is \\n. Escape once, the way the code already does, never
@@ -2499,7 +2499,7 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
     target - filename without a path for NEW entries (default 090-manual.yaml). An entry that already
              exists is corrected where it lives, whatever the target says - in every place
              the dictionary declares it, so a copy of the key keeps the value it shares.
-    comment – the head line a NEWLY created file gets: say what the batch is for ("Names of
+    comment - the head line a NEWLY created file gets: say what the batch is for ("Names of
              the feature icons"), since only the caller knows. Without it the file gets a
              neutral line naming no author.
     The answer carries `collisions` when a value written here is ALREADY the translation of

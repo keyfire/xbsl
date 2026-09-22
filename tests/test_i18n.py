@@ -1,7 +1,7 @@
 """Bilingual output: catalog integrity and language selection.
 
 The catalog is assembled from the rule modules on import, so these checks cover every rule
-that registered itself – including the ones an external package contributes.
+that registered itself - including the ones an external package contributes.
 """
 
 import re
@@ -96,7 +96,7 @@ def test_every_template_can_be_formatted():
 
 
 def test_field_names_are_plain_ascii_identifiers():
-    """Rules pass ASCII keywords. A Cyrillic 'field' is really a brace that was not doubled –
+    """Rules pass ASCII keywords. A Cyrillic 'field' is really a brace that was not doubled -
     e.g. '${выражение}' inside a message about string interpolation."""
     for key in i18n.registered_keys():
         for lang in i18n.LANGS:
@@ -134,7 +134,7 @@ def test_builtin_titles_are_translated_not_echoed():
 
 
 def test_titles_actually_differ_between_languages():
-    """Guards against an 'en' entry copied from 'ru' – at least most titles must differ."""
+    """Guards against an 'en' entry copied from 'ru' - at least most titles must differ."""
     same = 0
     for r in _builtin_rules():
         entry = i18n.translations(r.title_key)

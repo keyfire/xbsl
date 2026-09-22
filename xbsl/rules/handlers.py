@@ -1,7 +1,7 @@
 """Tier D: form handlers reference methods that exist in the module.
 
 In a form's yaml description an event is given by a handler key whose value is a method name
-in the paired module (`Name.yaml` ↔ `Name.xbsl`). The rule catches the "renamed a method –
+in the paired module (`Name.yaml` ↔ `Name.xbsl`). The rule catches the "renamed a method -
 forgot to fix the form" drift (and vice versa) before the server-side compilation on deploy.
 
 For every handler key of the set the identifier value must match a method of the paired
@@ -131,7 +131,7 @@ def _handler_mapper(source: SourceFile) -> dict | None:
     for m in _handler_re().finditer(source.text):
         name = m.group(1).strip()
         if not _IDENT_RE.match(name):
-            continue  # FQN reference to an external module or a non-identifier – skip
+            continue  # FQN reference to an external module or a non-identifier - skip
         if lm is None:
             lm = linemap(source)
         line, col = lm.linecol(m.start(1))
@@ -160,7 +160,7 @@ def unknown_handler(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             continue
         methods = methods_by_stem.get(fact["stem"])
         if methods is None:
-            continue  # no paired module – nothing to resolve handlers against
+            continue  # no paired module - nothing to resolve handlers against
         for name, line, col in fact["refs"]:
             if name not in methods:
                 yield Diagnostic(

@@ -1,7 +1,7 @@
 """Apply the mechanical fixes a rule attached to its findings (--fix).
 
 A fixable finding carries either a span edit (Diagnostic.fix, a TextEdit into the file's
-decoded text) or, for whole-file rules like whitespace/mixed-newline, no span edit – the
+decoded text) or, for whole-file rules like whitespace/mixed-newline, no span edit - the
 fixer recognizes it by id and normalizes newlines. Only unambiguous, reversible mechanical
 fixes are attached (whitespace, typography, redundant casts and other code edits); anything
 that needs judgment is left to the author.
@@ -42,7 +42,7 @@ def _dominant_newline(text: str) -> str:
     crlf = text.count("\r\n")
     cr = text.count("\r") - crlf
     lf = text.count("\n") - crlf
-    # Prefer CRLF, then LF, then CR on ties – a stable, platform-neutral order.
+    # Prefer CRLF, then LF, then CR on ties - a stable, platform-neutral order.
     return max((("\r\n", crlf), ("\n", lf), ("\r", cr)), key=lambda kv: kv[1])[0]
 
 

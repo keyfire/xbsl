@@ -6,7 +6,7 @@ shapes the platform grammar rules out, never on ones it merely makes unusual. So
 - methods (topics/methods-in-built-in-script-language): a parameter is
   `имя-параметра: тип-параметра[ = значение-по-умолчанию]`. The type is not optional in the
   grammar, but real code omits it when a default value is given (the platform infers the type
-  from it) – so only a parameter with neither a type nor a default is reported;
+  from it) - so only a parameter with neither a type nor a default is reported;
 - loops (topics/for-in-loop, topics/for-loop): `для значение-элемента из коллекция` or
   `для счетчик = выражение [вниз] по выражение [шаг N]`. A `для` header with neither `из`
   nor `=` after the name cannot compile;
@@ -90,7 +90,7 @@ def _next_word(toks: list, i: int) -> int:
 
 @rule("code/loop-header", "code/loop-header.title", "C", severity=Severity.ERROR)
 def loop_header(source: SourceFile) -> Iterable[Diagnostic]:
-    """`для X` continues with `из` (collection) or `=` (counter) – nothing else compiles."""
+    """`для X` continues with `из` (collection) or `=` (counter) - nothing else compiles."""
     if source.kind != "xbsl":
         return
     toks = code_tokens(source)

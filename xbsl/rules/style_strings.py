@@ -220,7 +220,7 @@ def _string_before(toks: list[Token], plus: int) -> bool:
 @rule("style/redundant-tostring", "style/redundant-tostring.title", "C",
       severity=Severity.WARNING)
 def redundant_tostring(source: SourceFile) -> Iterable[Diagnostic]:
-    """5.1: `Текст + Счетчик`, not `Текст + Счетчик.ВСтроку()` – the conversion is implicit.
+    """5.1: `Текст + Счетчик`, not `Текст + Счетчик.ВСтроку()` - the conversion is implicit.
 
     The call is redundant only where the platform performs it anyway. The addition table of
     the documentation lists one form with a string, `Строка + Объект`, whose right operand is
@@ -284,7 +284,7 @@ def interpolation(source: SourceFile) -> Iterable[Diagnostic]:
             if len(reported) > 1:
                 reported.pop()
             continue
-        if _is_op(tok, ",", ";", "="):  # a new operand/statement – a new chain
+        if _is_op(tok, ",", ";", "="):  # a new operand/statement - a new chain
             reported[-1] = False
             continue
         if not _is_op(tok, "+") or i == 0 or i + 1 >= len(toks) or reported[-1]:

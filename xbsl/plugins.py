@@ -1,9 +1,9 @@
 """Extension points: external packages add rules, data and severity overrides via entry points.
 
-The "xbsl.rules" group – the value points to a module whose import registers rules with
-the @rule decorator (see xbsl/engine.py). The "xbsl.data" group – the value points to
+The "xbsl.rules" group - the value points to a module whose import registers rules with
+the @rule decorator (see xbsl/engine.py). The "xbsl.data" group - the value points to
 a data root: a path (Path/str) or a zero-argument callable returning a path. The
-"xbsl.severity" group – the value points to a dict {rule id: "error"|"warning"|"info"|"off"}
+"xbsl.severity" group - the value points to a dict {rule id: "error"|"warning"|"info"|"off"}
 or a zero-argument callable returning one; the levels replace the rules' defaults for this
 installation ("off" removes a rule from the default set; an explicit --select/--enable still
 turns it on, with its base severity when a level is not given).
@@ -19,7 +19,7 @@ Declaration in a third-party package's pyproject.toml:
     [project.entry-points."xbsl.severity"]
     package-name = "my_package:severity_overrides"
 
-The XBSL_NO_PLUGINS=1 environment variable disables all groups – a run with the built-in
+The XBSL_NO_PLUGINS=1 environment variable disables all groups - a run with the built-in
 rules, data and severities only (the pre-rename name XBSLLINT_NO_PLUGINS still works).
 
 Plugins published against the old package name keep working: the legacy groups
@@ -82,7 +82,7 @@ def _scan(group: str, scan: Callable) -> tuple[EntryPoint, ...]:
     found = list(scan(group=group))
     legacy = _LEGACY_GROUPS.get(group)
     if legacy:
-        # A package published for the transition period may declare both groups –
+        # A package published for the transition period may declare both groups -
         # count each (name, target) once, the new group wins.
         seen = {(ep.name, ep.value) for ep in found}
         found.extend(ep for ep in scan(group=legacy) if (ep.name, ep.value) not in seen)

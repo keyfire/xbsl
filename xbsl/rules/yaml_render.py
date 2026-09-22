@@ -1,26 +1,26 @@
-"""Tier D: what the renderer silently drops – an empty sized group, an over-long hint, a
+"""Tier D: what the renderer silently drops - an empty sized group, an over-long hint, a
 nullable date input.
 
 The gotchas here share a shape: the file is valid, the compiler is happy, the application
 deploys, and the screen simply does not show what the author wrote. Nothing but a rule catches
 that before a human notices it in a browser.
 
-- `yaml/empty-group-sized` – a `Группа` with a fixed `Высота`/`Ширина` and no `Содержимое` is
+- `yaml/empty-group-sized` - a `Group` with a fixed `Height`/`Width` and no `Content` is
   thrown out of the DOM entirely: the spacer it was meant to be leaves no gap at all (found
-  twice on the same page of a live project). The cure is a non-empty transparent insert – a
+  twice on the same page of a live project). The cure is a non-empty transparent insert - a
   `КонтейнерHtml` of the same height whose content only paints nothing.
 
-  A size given as a binding (`Высота: =ОтступСнизу`) is the same defect in disguise – the node
-  is dropped whatever the binding yields – but it is judged only on a group WITHOUT a `Name`:
+  A size given as a binding (`Высота: =ОтступСнизу`) is the same defect in disguise - the node
+  is dropped whatever the binding yields - but it is judged only on a group WITHOUT a `Name`:
   a named empty container is a legitimate pattern, code fills it through the name
   (`Компоненты.<Имя>.Содержимое.Добавить`), while an unnamed one is unreachable from code and
   stays empty forever (a spacer of exactly this shape sat unnoticed on a live public page for
   a month and a half). The cure there is a spacer label of the same height, or a
   `VerticalIndent` on the element the gap was meant for.
-- `yaml/hint-too-long` – the renderer cuts a `Подсказка` off with an ellipsis at about 290
+- `yaml/hint-too-long` - the renderer cuts a `Tooltip` off with an ellipsis at about 290
   characters, and the tail is not shown at all: there is no scroll and no "more" affordance,
   so the end of a long explanation is simply lost.
-- `yaml/insert-row-needs-align` – a horizontal group with no explicit vertical alignment lays
+- `yaml/insert-row-needs-align` - a horizontal group with no explicit vertical alignment lays
   its children out on the BASELINE, and an insert frame (`HtmlContainer`) carries a baseline
   of its own: the card holding it slides down against its neighbours (50 px on a live bento
   row, 2026-08). Nothing but an eye catches it - the file, the compile and the apply are all
@@ -42,17 +42,17 @@ that before a human notices it in a browser.
   statically horizontal branches. The pair is judged when one of the two is shown
   unconditionally or both are shown under the same conditions; two different conditions may
   exclude each other in the program, so such a pair is left alone (xbsl/rules/_rows.py).
-- `yaml/component-row-needs-align` – the same pair when a neighbour is DRAWN by a project
+- `yaml/component-row-needs-align` - the same pair when a neighbour is DRAWN by a project
   component: a wrapper that shows a native button or picture, or picks between the two by
   its own property. The component description lies in another file, so this half is a
   project rule; the file rule keeps the rows it can judge alone, and the project rule leaves
   them to it. A component is expanded only as far as xbsl/rules/_rows.py can read it, and a
   child it cannot resolve takes no part in a pair.
 
-- `yaml/date-input-needs-plain-date` – `Edit<Date?>` is silently not rendered: no field,
+- `yaml/date-input-needs-plain-date` - `Edit<Date?>` is silently not rendered: no field,
   no apply-time error, and a group that held only such fields disappears entirely (found on a
   live project, 2026-08: two date fields read as "the change did not apply"). The cure is a
-  plain type – the attribute `Type: Date`, the field `Edit<Date>`, "not set" expressed as
+  plain type - the attribute `Type: Date`, the field `Edit<Date>`, "not set" expressed as
   the empty date. Only `Date` is judged: the `DateTime`/`Time` siblings have not been
   verified on a live stand, and silence is the safe side until they are.
 
@@ -222,10 +222,10 @@ def _fixed_size(node) -> bool:
 
 
 def _binding_size(node) -> bool:
-    """Whether the scalar is a size binding (`=...`) – a value computed at run time.
+    """Whether the scalar is a size binding (`=...`) - a value computed at run time.
 
     A block scalar (`|`, `>`) is text, not a binding, and is skipped the way the other
-    binding-aware rules skip it; a quote style does not matter – the platform reads the
+    binding-aware rules skip it; a quote style does not matter - the platform reads the
     string the same either way.
     """
     if not isinstance(node, yaml.ScalarNode) or node.style in ("|", ">"):
@@ -409,18 +409,18 @@ def component_row_needs_align(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
 @rule("yaml/empty-group-sized", "yaml/empty-group-sized.title", "D", severity=Severity.WARNING)
 def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
-    """A `Группа` with a size and no content – the renderer drops it, the spacer never appears.
+    """A `Group` with a size and no content - the renderer drops it, the spacer never appears.
 
     Only a group whose `Содержимое` key is absent altogether or holds an empty sequence is
     judged: a group filled by a binding (`Содержимое: =...`) or by anything else is content
     the rule cannot weigh.
 
-    The size comes in two flavours. A positive literal is judged on any such group – the node
+    The size comes in two flavours. A positive literal is judged on any such group - the node
     is dropped regardless of what else it declares. A binding (`Высота: =ОтступСнизу`) is
     judged only on a group WITHOUT a `Name`: a named empty container is filled from code
-    through its name (`Компоненты.<Имя>.Содержимое.Добавить` – both live near-misses of the wider
+    through its name (`Компоненты.<Имя>.Содержимое.Добавить` - both live near-misses of the wider
     predicate on real projects are exactly that), while an unnamed one is unreachable from
-    code, so the renderer drops it whatever the binding yields – the exact spacer shape that
+    code, so the renderer drops it whatever the binding yields - the exact spacer shape that
     sat unnoticed on a live public page for a month and a half. The literal flavour keeps its
     original reach on purpose: it has live findings behind it and no name-shaped
     counter-example on the corpora.
@@ -455,7 +455,7 @@ def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
             )
             return  # one finding per node: both axes are the same defect
         if "Имя" in keys:
-            continue  # a named empty container is filled from code – a legitimate pattern
+            continue  # a named empty container is filled from code - a legitimate pattern
         for size_key in _SIZE_KEYS:
             entry = keys.get(size_key)
             if entry is None or not _binding_size(entry[1]):
@@ -478,9 +478,9 @@ def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
     severity=Severity.WARNING,
 )
 def date_input_needs_plain_date(source: SourceFile) -> Iterable[Diagnostic]:
-    """`ПолеВвода<Дата?>` – the renderer silently drops the field; the type must be plain.
+    """`ПолеВвода<Дата?>` - the renderer silently drops the field; the type must be plain.
 
-    The position points at the argument inside the value – the place to actually edit. A
+    The position points at the argument inside the value - the place to actually edit. A
     block scalar is text, not a type, and is skipped the same way the reference rule does.
     """
     for mapping in _object_mappings(source):
@@ -508,7 +508,7 @@ def date_input_needs_plain_date(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule("yaml/hint-too-long", "yaml/hint-too-long.title", "D", severity=Severity.WARNING)
 def hint_too_long(source: SourceFile) -> Iterable[Diagnostic]:
-    """A `Подсказка` longer than the render limit – the tail is lost without a trace.
+    """A `Tooltip` longer than the render limit - the tail is lost without a trace.
 
     A binding (`=...`) is skipped: the text is computed, and its length is not in the file.
     """
