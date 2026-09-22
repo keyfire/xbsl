@@ -873,6 +873,12 @@ def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:
     for raw in diff.splitlines():
         if raw.startswith("diff --git "):
             path, in_hunk = "", False
+        elif not in_hunk and raw.startswith("rename from "):
+            name = raw[len("rename from "):]
+            # A pure rename has no --- header or hunk. Git still names the old path.
+            if name.startswith('"'):
+                name = json.loads(name)
+            seen.add(name)
         elif raw.startswith("@@"):
             in_hunk = True
         elif not in_hunk and raw.startswith("--- "):

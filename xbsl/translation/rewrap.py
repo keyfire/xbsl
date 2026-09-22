@@ -300,26 +300,25 @@ def _rewrap_groups(lines: list[str], source: list[str], groups: list[str], parts
     """
     out: list[str] = []
     start = 0
+    inside_item = False
     while start < len(lines):
         end = start + 1
         while end < len(lines) and groups[end] == groups[start]:
             end += 1
         run = slice(start, end)
-        out.extend(_rewrap_paragraphs(
-            lines[run], source[run], parts[run], groups[start], limit, newline))
+        wrapped, inside_item = _rewrap_paragraphs(
+            lines[run], source[run], parts[run], groups[start], limit, newline, inside_item)
+        out.extend(wrapped)
         start = end
     return out
 
 
 def _rewrap_paragraphs(
     lines: list[str], source: list[str], parts: list[_Parts], prefix: str, limit: int,
-    newline: str,
-) -> list[str]:
+    newline: str, inside_item: bool = False,
+) -> tuple[list[str], bool]:
     out: list[str] = []
     paragraph: list[int] = []
-    #: Set by a list item: the lines under it are its continuation until an empty comment
-    #: line closes the item.
-    inside_item = False
     for index, part in enumerate(parts):
         # Where a list can BEGIN: no paragraph is running yet, or the line above announced
         # one with a colon. Only there does a dash open an item - see `_DASH_RE`.
@@ -335,7 +334,7 @@ def _rewrap_paragraphs(
             continue
         paragraph.append(index)
     out.extend(_wrap_paragraph(paragraph, lines, source, parts, prefix, limit, newline))
-    return out
+    return out, inside_item
 
 
 def _protected(payload: str, source_line: str, limit: int, *, opens: bool) -> str:

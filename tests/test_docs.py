@@ -314,6 +314,19 @@ def test_member_block_joins_the_overloads_and_keeps_the_examples(members_root):
     assert docs.member_block(page["html"], "Объект") is None  # the inherited list again
 
 
+def test_one_page_with_a_property_and_method_of_the_same_name_has_one_owner(members_root, mcp_module):
+    html = docs.page(_STRING)["html"]
+    html += "<h2>Свойства</h2><h3>Подстрока</h3><p>Описание свойства.</p>"
+    with sqlite3.connect(members_root / _VER / "docs.sqlite") as con:
+        con.execute("UPDATE pages SET html=? WHERE id=?", (html, _STRING))
+
+    assert docs.member_places("Подстрока")[1] == [("Строка", _STRING)]
+    answer = mcp_module.docs_symbol("Подстрока")
+    assert "owners" not in answer
+    assert "Пример подстроки" in answer["text"]
+    assert "Описание свойства" in answer["text"]
+
+
 def test_the_member_index_is_read_again_when_the_database_is_rebuilt(members_root):
     """A long-lived server must not answer from an index built over the previous file."""
     assert docs.member_places("Подстрока")[1] == [("Строка", _STRING)]
