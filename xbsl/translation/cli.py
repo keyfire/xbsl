@@ -77,8 +77,8 @@ MESSAGES = {
               " stands, with no escaping at all",
     },
     "translate.help.target": {
-        "ru": "файл словаря для НОВЫХ записей (по умолчанию 090-manual.yaml)",
-        "en": "the dictionary file NEW entries go to (default 090-manual.yaml)",
+        "ru": "имя файла словаря без пути для НОВЫХ записей (по умолчанию 090-manual.yaml)",
+        "en": "dictionary filename without a path for NEW entries (default 090-manual.yaml)",
     },
     "translate.help.comment": {
         "ru": "заголовок НОВОГО файла словаря: чему посвящена порция записей",
@@ -1266,13 +1266,13 @@ def _apply_edits(args, root: Path, loaded) -> int:
         return _no_dictionary(root)
     try:
         edits = entries_module.read_edits_file(Path(args.set_file))
+        result = entries_module.write_entries(
+            path, edits, target=args.target or entries_module.DEFAULT_TARGET,
+            comment=getattr(args, "comment", "") or "",
+        )
     except (OSError, ValueError) as exc:
         print(i18n.t("translate.set-unreadable", error=exc), file=sys.stderr)
         return 2
-    result = entries_module.write_entries(
-        path, edits, target=args.target or entries_module.DEFAULT_TARGET,
-        comment=getattr(args, "comment", "") or "",
-    )
     refused = result.get("refused") or []
     corrected = result.get("normalized") or []
     if args.format == "json":

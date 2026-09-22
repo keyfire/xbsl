@@ -29,6 +29,19 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`translate --unused --since` finds removed lines inside block comments.** It reads the
+  old file from Git, including unchanged block delimiters. Removing a block opening no longer
+  hides later comments, and removing a line inside an unchanged block finds its phrase.
+  ([#123](https://github.com/keyfire/xbsl/pull/123))
+- **`translate --since` reads dictionary changes when the project path is relative.** The
+  dictionary path is resolved before Git is called from the project directory. Pairs added and
+  left unused by the same change are included in the result.
+  ([#123](https://github.com/keyfire/xbsl/pull/123))
+- **`translate --set --target` rejects paths when writing to a dictionary directory.** It
+  expects a filename such as `020-names.yaml`. The CLI and MCP report the error before writing
+  any edits, instead of creating an unintended nested dictionary.
+  ([#123](https://github.com/keyfire/xbsl/pull/123))
+
 - **`--compare` pairs one folder typed relative and absolute.** The key of a finding took the
   path as typed, so two runs of one folder spelled two ways compared nothing and named both paths
   as left out. Paths are now paired by the folder they name, and by spelling when the folders
