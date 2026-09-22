@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,6 +51,10 @@ MESSAGES = {
               " тело литерала, смотря по виду записи.",
         "en": "an entry without a key is not written. The key is a name, a comment line or"
               " a literal body, depending on the kind.",
+    },
+    "translate.entries.invalid-target": {
+        "ru": "--target ожидает имя файла внутри каталога словаря, без пути: {target}",
+        "en": "--target expects a filename inside the dictionary directory, not a path: {target}",
     },
     "translate.entries.platform-type": {
         "ru": "ключ \"{key}\" – имя типа платформы ({platform}). Пара переименует и этот тип,"
@@ -678,7 +683,7 @@ def removed_surfaces(root: Path, since: str, dictionary_path: Path | None = None
         code, merged, _error = _git(root, "merge-base", since, "HEAD")
         spec = merged.strip() or since
     code, diff, error = _git(
-        root, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--find-renames",
+        root, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--find-renames", "--full-index",
         spec, "--", ".",
     )
     if code != 0:
@@ -707,8 +712,9 @@ def _dictionary_side(root: Path, toplevel: Path, spec: str, since: str,
 
     A dictionary outside the repository has no diff to read and adds nothing.
     """
+    dictionary_path = dictionary_path.resolve()
     try:
-        dictionary_path.resolve().relative_to(toplevel.resolve())
+        dictionary_path.relative_to(toplevel.resolve())
     except ValueError:
         return
     code, diff, error = _git(
@@ -866,36 +872,65 @@ def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:
     with `--` arrives as `--- ...` and is a line of source, not a header - reading it as a
     header would attribute the rest of the hunk to nothing.
     """
-    removed: dict[str, list[str]] = {}
+    removed: dict[str, list[tuple[int, str]]] = {}
+    objects: dict[str, str] = {}
     seen: set[str] = set()
-    path = ""
+    path = old_object = ""
+    old_line = 0
     in_hunk = False
     for raw in diff.splitlines():
         if raw.startswith("diff --git "):
-            path, in_hunk = "", False
+            path, old_object, in_hunk = "", "", False
+        elif not in_hunk and raw.startswith("index "):
+            old_object = raw.split()[1].split("..", 1)[0]
         elif raw.startswith("@@"):
             in_hunk = True
+            match = re.match(r"@@ -(\d+)(?:,\d+)? \+", raw)
+            old_line = int(match.group(1)) if match else 0
         elif not in_hunk and raw.startswith("--- "):
             name = raw[4:].strip()
             path = "" if name == "/dev/null" else name[2:] if name[:2] == "a/" else name
             if path:
                 seen.add(path)
+                objects[path] = old_object
         elif in_hunk and path and raw.startswith("-"):
-            removed.setdefault(path, []).append(raw[1:])
+            removed.setdefault(path, []).append((old_line, raw[1:]))
+            old_line += 1
+        elif in_hunk and raw.startswith(" "):
+            old_line += 1
     from xbsl.translation import resourcefile as resource_module
 
+    # Read old blobs together: block delimiters may be outside every changed hunk.
+    # Blob ids also select the correct old side of both two-dot and three-dot ranges.
+    names = [rel for rel in removed if objects.get(rel)
+             and (Path(rel).suffix in (".xbsl", ".xbql")
+                  or Path(rel).suffix.lower() in resource_module.SUFFIXES)]
+    originals = {}
+    if names:
+        feed = "".join(f"{objects[rel]}\n" for rel in names).encode("utf-8")
+        code, blob, error = _git_bytes(toplevel, "cat-file", "--batch", feed=feed)
+        if code != 0:
+            raise ValueError(i18n.t("translate.since.diff-failed", rev=base, error=error.strip()))
+        originals = dict(_batched_blobs(blob, names, ""))
+        if len(originals) != len(names):
+            raise ValueError(i18n.t("translate.since.diff-failed", rev=base,
+                                    error="git cat-file: missing source blob"))
     out = Removal(base=base, files=len(seen))
     for rel, body in removed.items():
         suffix = Path(rel).suffix
         resource = suffix.lower() in resource_module.SUFFIXES
         if not resource and suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
             continue
-        text = "\n".join(body)
+        text = "\n".join(line for _number, line in body)
         if not resource:
             out.names.update(_WORD_RE.findall(text))
             out.literals.update(_LITERAL_RE.findall(text))
             out.literals.update(_fragment_literal_keys(suffix, text))
-        out.lines.update(_comment_bodies_of(suffix, text))
+        if rel in originals:
+            out.lines.update(_removed_comment_bodies(suffix, originals[rel],
+                                                     {number for number, _line in body}))
+        else:
+            out.lines.update(_comment_bodies_of(suffix, text))
     for rel in seen:
         # A file that is gone took its PATH with it, and a path is a place a name may live -
         # the icon named by its file name alone is exactly that. A rename is the same event
@@ -904,6 +939,29 @@ def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:
             for part in Path(rel).parts:
                 out.names.update(_WORD_RE.findall(part))
     return out
+
+
+def _removed_comment_bodies(suffix: str, text: str, lines: set[int]) -> set[str]:
+    """Phrase keys on removed lines, parsed in the complete old file's context."""
+    from xbsl.translation import code as code_module
+    from xbsl.translation import resourcefile as resource_module
+
+    if suffix.lower() in resource_module.SUFFIXES:
+        starts = [0] + [match.end() for match in re.finditer("\n", text)]
+        return {payload for start, end, payload in resource_module.resource_payloads(suffix, text)
+                if any(line in lines for line in range(bisect_right(starts, start),
+                                                       bisect_right(starts, max(start, end - 1)) + 1))}
+    from xbsl import lexer
+
+    try:
+        tokens = lexer.tokenize(text)
+    except Exception:
+        fragment = "\n".join(line for number, line in enumerate(text.splitlines(), 1)
+                             if number in lines)
+        return _marked_bodies(fragment, "//", code_module._LINE_COMMENT_RE)
+    return {payload for token in tokens if token.kind == "COMMENT"
+            for _offset, index, payload in code_module.comment_payloads(token)
+            if token.line + index in lines and payload}
 
 
 def unused_entries(root: Path, dictionary_path: Path, dictionary=None,
@@ -1134,6 +1192,9 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     than writes are what an editor needs: the language server never writes to disk, so the
     client applies the result as a workspace edit and the user keeps undo.
     """
+    if dictionary_path.is_dir() and (target in ("", ".", "..")
+                                      or any(separator in target for separator in ("/", "\\", ":"))):
+        raise ValueError(i18n.t("translate.entries.invalid-target", target=target))
     # Every place of a key, in file order: the lookups keep the last one, the writer needs all.
     places: dict[tuple[str, str], list[Entry]] = {}
     for entry in read_entries(dictionary_path):
