@@ -607,6 +607,7 @@ def _member_as_text(name: str) -> dict:
     page = dict(found["page"])
     page.pop("html", None)
     page["member"] = found["member"]
+    page["section"] = found["section"]
     page["text"] = docs.plain_text(found["block"])
     return page
 
@@ -621,11 +622,12 @@ def docs_symbol(name: str, brief: bool = False, section: str = "") -> dict:
     and what is it about", `section="Properties"` (or another standard section, the pages'
     Russian heading works too) for one question about it.
 
-    A member has no page of its own - it is documented inside the type that declares it - and
-    answers with that page's record plus `member` and the `text` of that member alone, every
-    overload of it joined; `brief` and `section` do not apply there, the block being one
-    member's worth of text already. A member several types declare answers {"member",
-    "owners", "note"} instead of guessing: ask again as "Type.Member", or read type_members.
+    A member has no page of its own - it is documented inside the type or guide section that
+    defines it - and answers with that page's record plus `member`, `section`, and the `text`
+    of that member alone. `brief` and the requested `section` do not apply there, because the
+    returned block already has one member's documentation. A member several types declare
+    answers {"member", "owners", "note"} instead of guessing: ask again as "Type.Member",
+    or read type_members.
 
     Either spelling of a name works (`Array`, `Substring`). It does not guess - when nothing
     matches, the answer is an empty object and docs_search is the way to candidates.

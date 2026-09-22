@@ -29,6 +29,24 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`translate --unused --since` includes pure resource renames.** Git emits no content
+  hunk for an unchanged file moved to a new name. Its old path now contributes candidates,
+  so a translation used only in the old filename can be removed.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
+- **`docs_symbol` finds members generated for interface components.** It reads member
+  headings in the component type guide and returns the page, member block and section name.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
+- **Comment wrapping preserves deeper-indented list continuations.** Lines beneath a list
+  item stay separate in both `//` and `/* ... */` comments when their translation grows.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
+- **Typed exception members keep their platform spelling during translation.** A catch
+  declaration now recognizes `Exception` as a type. A project dictionary entry for the same
+  member name no longer changes `Error.Cause` into an unknown property.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
+- **Method-qualified dictionary entries no longer rename query aliases.** A parameter
+  entry applies to that method's locals. Query aliases and accesses to their result fields
+  keep the same spelling. ([#124](https://github.com/keyfire/xbsl/pull/124))
+
 - **`translate --unused --since` finds removed lines inside block comments.** It reads the
   old file from Git, including unchanged block delimiters. Removing a block opening no longer
   hides later comments, and removing a line inside an unchanged block finds its phrase.

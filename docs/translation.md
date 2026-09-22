@@ -177,6 +177,16 @@ working tree carries unchanged are not parsed again.
 **A qualified entry** (`Dictionary.Key: SignIn`) applies inside one namespace only. A key of a
 localized-strings dictionary may need a spelling the same word cannot have in code.
 
+A method-qualified entry applies to that method's locals, including its parameters. It does
+not rename aliases inside `Query{...}`: the alias and an access to its result field use their
+common spelling. A catch variable annotated with `Exception` also participates in typed member
+resolution, so its `Cause` property keeps the platform spelling when a project field uses a
+different dictionary entry for the same source name.
+
+When translated comments are wrapped, deeper-indented lines under a list item stay separate.
+This applies to both line comments and block comments. A blank comment line ends the list
+continuation; ordinary prose after it can be wrapped again.
+
 ## Names the project declares are the project's
 
 A word the platform dictionaries also know may be what the project called its own thing: an

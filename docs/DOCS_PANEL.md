@@ -79,6 +79,10 @@ The same reference is available outside the editor:
   panel on top of them. The last two answer a member the way `docs_symbol` does: the page of the
   declaring type plus the member's name and the id of its heading.
 
+`docs_symbol` also finds members generated for project interface components, such as
+`SelfModified`, `ComputedModified`, and `TrackDataModification`. Their definitions live in
+the component type guide. The response includes that page, the member block and its `section`.
+
 ## Related
 
 - [Visual form designer](/DESIGNER) - the palette and the properties panel that link here.

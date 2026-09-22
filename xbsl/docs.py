@@ -21,6 +21,7 @@ import sqlite3
 from functools import lru_cache
 from html import unescape
 from pathlib import Path
+from typing import NamedTuple
 
 from xbsl import dataset, i18n, terms
 
@@ -90,6 +91,9 @@ SECTION_ALIASES = {
 MEMBER_SECTIONS = frozenset({
     "Свойства", "Методы", "События", "Элементы", "Поля", "Динамические свойства",
 })
+# A component's generated members live in guide topics, below the type syntax rather than in a
+# reference-page member section. Other topic headings are prose structure, not symbol entries.
+_TOPIC_MEMBER_SECTION_RE = re.compile(r"^Тип\s*<[^>]+>$")
 # Any heading down to h3: the member index and the member block both walk the same boundaries
 # (h1/h2 open a section, h3 opens a member), while h4 stays inside its member.
 _HEADING_RE = re.compile(r"<h([123])\b[^>]*>(.*?)</h\1>", re.S)
@@ -100,6 +104,15 @@ _MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp",
 }
+
+
+class _MemberPlace(NamedTuple):
+    """A documentation heading that defines a member, and the section that contains it."""
+
+    title: str
+    page_id: str
+    section: str
+    member: str
 
 
 def available(version: str | None = None) -> bool:
@@ -311,25 +324,37 @@ def _page_of(con: sqlite3.Connection, name: str) -> str | None:
 
 
 def member_places(name: str, version: str | None = None) -> tuple[str, list[tuple[str, str]]]:
-    """(the spelling the PAGES use, [(type, page id)] of the types that DECLARE the member).
+    """(the spelling the PAGES use, [(title, page id)] of the pages that define the member).
 
-    A member has no page of its own - it is an h3 heading inside the type that declares it -
-    so asking for one by name used to answer with nothing at all, and the semantics of an
-    argument cost a deploy to find out. Only the OWN sections of a page count: the inherited
-    lists repeat a member under every heir, and it is documented where it is declared.
+    A member has no page of its own - it is an h3 heading inside a type reference or a guide
+    section that defines the generated type - so asking for one by name used to answer with
+    nothing at all. Only OWN reference-page sections count: inherited lists repeat a member
+    under every heir, and it is documented where it is declared.
 
     Both spellings are taken, and the first half of the answer is the one the pages are
     written in: an English name comes back as the Russian one the headings carry, and the
     block of the member is looked up under that. Empty for a name no type declares.
     """
+    member, places = _member_places(name, version)
+    return member, list(dict.fromkeys((place.title, place.page_id) for place in places))
+
+
+def _member_places(name: str, version: str | None = None) -> tuple[str, list[_MemberPlace]]:
+    """The member spelling used by its heading and every page section that defines it."""
     index = _member_index(version)
     for spelling in (name, terms.common_russian(name) if name else None):
-        if spelling and spelling in index:
-            return spelling, list(index[spelling])
+        places = index.get(_member_key(spelling)) if spelling else None
+        if places:
+            return places[0].member, list(places)
     return name, []
 
 
-def member_block(html: str, member: str) -> tuple[str, str] | None:
+def _member_key(name: str) -> str:
+    """A member lookup key, without the empty call suffix some guide headings carry."""
+    return (name or "").strip().removesuffix("()")
+
+
+def member_block(html: str, member: str, section: str | set[str] | None = None) -> tuple[str, str] | None:
     """(the heading as the page writes it, the html of the member's block) - pure, no database.
 
     Every OVERLOAD of the member is joined: the page opens an h3 of its own for each, and one
@@ -341,15 +366,16 @@ def member_block(html: str, member: str) -> tuple[str, str] | None:
     if not wanted:
         return None
     headings = list(_HEADING_RE.finditer(html or ""))
-    section: str | None = None
+    allowed = MEMBER_SECTIONS if section is None else {section} if isinstance(section, str) else section
+    current_section: str | None = None
     title = ""
     blocks: list[str] = []
     for index, heading in enumerate(headings):
         text = _text(heading.group(2))
         if heading.group(1) != "3":
-            section = text if text in MEMBER_SECTIONS else None
+            current_section = text
             continue
-        if section is None or text.lower() != wanted:
+        if current_section not in allowed or _member_key(text).lower() != _member_key(wanted).lower():
             continue
         end = headings[index + 1].start() if index + 1 < len(headings) else len(html)
         title = title or text
@@ -375,19 +401,28 @@ def member_doc(name: str, version: str | None = None) -> dict:
     happened to rank first.
     """
     hint, dot, tail = (name or "").strip().rpartition(".")
-    member, owners = member_places(tail if dot else (name or "").strip(), version)
-    if not owners:
+    member, places = _member_places(tail if dot else (name or "").strip(), version)
+    if not places:
         return {}
     if dot and hint:
-        owners = _declaring_places(owners, hint) or owners
+        places = _declaring_places(places, hint) or places
+    owners = list(dict.fromkeys((place.title, place.page_id) for place in places))
     if len(owners) > 1:
-        return {"member": member, "owners": [title for title, _ in owners]}
-    rec = page(owners[0][1], version)
-    found = member_block((rec or {}).get("html") or "", member)
+        return {"member": member, "owners": [title for title, _page in owners]}
+    place = places[0]
+    sections = {item.section for item in places}
+    rec = page(place.page_id, version)
+    found = member_block((rec or {}).get("html") or "", place.member, section=sections)
     if rec is None or found is None:  # pragma: no cover - the index is built from that page
         return {}
     title, block = found
-    return {"member": title, "anchor": _heading_anchor(block), "block": block, "page": rec}
+    return {
+        "member": title,
+        "anchor": _heading_anchor(block),
+        "block": block,
+        "page": rec,
+        "section": place.section if len(sections) == 1 else "",
+    }
 
 
 def _heading_anchor(block: str) -> str:
@@ -396,7 +431,7 @@ def _heading_anchor(block: str) -> str:
     return match.group(1) if match else ""
 
 
-def _declaring_places(owners: list[tuple[str, str]], hint: str) -> list[tuple[str, str]]:
+def _declaring_places(owners: list[_MemberPlace], hint: str) -> list[_MemberPlace]:
     """The places of the type `hint` names, or of the ancestor that declares the member for it.
 
     `Массив.Размер` names a type that only inherits the member: the page that documents it is
@@ -404,7 +439,7 @@ def _declaring_places(owners: list[tuple[str, str]], hint: str) -> list[tuple[st
     """
     spellings = {form.lower() for form in (hint, terms.russian(hint, "types"),
                                            terms.common_russian(hint)) if form}
-    direct = [place for place in owners if place[0].lower() in spellings]
+    direct = [place for place in owners if place.title.lower() in spellings]
     if direct:
         return direct
     try:
@@ -414,10 +449,10 @@ def _declaring_places(owners: list[tuple[str, str]], hint: str) -> list[tuple[st
     ancestors = {ancestor.lower() for spelling in (hint, terms.russian(hint, "types"),
                                                    terms.common_russian(hint)) if spelling
                  for ancestor in bases.get(spelling) or ()}
-    return [place for place in owners if place[0].lower() in ancestors]
+    return [place for place in owners if place.title.lower() in ancestors]
 
 
-def _member_index(version: str | None = None) -> dict[str, tuple[tuple[str, str], ...]]:
+def _member_index(version: str | None = None) -> dict[str, tuple[_MemberPlace, ...]]:
     """The member index of the data version, built once per file and rebuilt when it changes."""
     if not available(version):
         return {}
@@ -430,34 +465,36 @@ def _member_index(version: str | None = None) -> dict[str, tuple[tuple[str, str]
 
 
 @lru_cache(maxsize=4)
-def _member_index_cached(path: str, mtime: float, size: int) -> dict[str, tuple[tuple[str, str], ...]]:
-    """{member: ((type, page id), ...)} over every reference page of a type.
+def _member_index_cached(path: str, mtime: float, size: int) -> dict[str, tuple[_MemberPlace, ...]]:
+    """{member: (place, ...)} over member sections of reference pages and guides.
 
     Keyed by the file's own stamp the way the library archives are (libs.py): the database is
     regenerated in place by the extractor, and a long-lived server must not keep answering
-    from an index built over the previous one. The walk reads 1151 pages in a tenth of a
-    second, so it is done whole rather than guessed at with a full-text query, which would
+    from an index built over the previous one. The walk reads the documentation whole rather
+    than guessing with a full-text query, which would
     also match the pages that merely MENTION the word.
     """
     del mtime, size  # the stamp is the cache key, nothing else
-    index: dict[str, list[tuple[str, str]]] = {}
+    index: dict[str, list[_MemberPlace]] = {}
     con = sqlite3.connect(Path(path).as_uri() + "?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     try:
-        rows = con.execute("SELECT id, title, html FROM pages WHERE kind = 'type'").fetchall()
+        rows = con.execute("SELECT id, title, kind, html FROM pages").fetchall()
     finally:
         con.close()
     for row in rows:
-        section: str | None = None
+        section = ""
         for heading in _HEADING_RE.finditer(row["html"] or ""):
             text = _text(heading.group(2))
             if heading.group(1) != "3":
-                section = text if text in MEMBER_SECTIONS else None
+                section = text
                 continue
-            if section is None:
+            is_reference_member = row["kind"] == "type" and section in MEMBER_SECTIONS
+            is_topic_member = row["kind"] != "type" and _TOPIC_MEMBER_SECTION_RE.match(section)
+            if not (is_reference_member or is_topic_member):
                 continue
-            place = (row["title"], row["id"])
-            places = index.setdefault(text, [])
+            place = _MemberPlace(row["title"], row["id"], section, text)
+            places = index.setdefault(_member_key(text), [])
             if place not in places:
                 places.append(place)
     return {name: tuple(sorted(places)) for name, places in index.items()}

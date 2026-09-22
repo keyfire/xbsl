@@ -324,6 +324,20 @@ def _next_code_token(toks: list, index: int):
     return toks[position] if position < len(toks) else None
 
 
+def _previous_code_token(toks: list, index: int):
+    """The token before `index`, comments skipped, or None."""
+    position = index - 1
+    while position >= 0 and toks[position].kind == "COMMENT":
+        position -= 1
+    return toks[position] if position >= 0 else None
+
+
+def _is_query_parameter(toks: list, index: int) -> bool:
+    """Whether the name at `index` follows the ampersand of a query parameter."""
+    previous = _previous_code_token(toks, index)
+    return previous is not None and previous.kind == "OP" and previous.value == "&"
+
+
 def _chain_start(toks: list, dot: int) -> int | None:
     """The index of the root of the chain that ends right before the dot at `dot`, or None.
 
@@ -935,7 +949,8 @@ def collect_token_edits(
                         prev_ident, base + tok.start if place is None else place)
                 if not prev_dot and ctor_stack and _is_named_argument(toks, index):
                     scope = ctor_stack[-1][0]
-                elif not prev_dot and tok.value in local_names and method_name:
+                elif (not prev_dot and tok.value in local_names and method_name
+                      and (not in_query or _is_query_parameter(toks, index))):
                     # A LOCAL name lives in the namespace of its method: two words that share
                     # one English spelling collide only there, and only there may the project
                     # need a different word for one of them.
@@ -1233,7 +1248,7 @@ def _declared_type(toks: list, index: int, project_names: frozenset[str] = froze
     parts: list[str] = []
     while position < len(toks):
         tok = toks[position]
-        if tok.kind == "IDENT":
+        if tok.kind == "IDENT" or (tok.kind == "KEYWORD" and tok.canonical == "EXCEPTION"):
             parts.append(tok.value)
             position += 1
             if (
