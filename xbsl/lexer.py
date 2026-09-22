@@ -43,13 +43,13 @@ def _keyword_forms() -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _operators() -> list[str]:
-    # By descending length – for the longest match (?? and ?. before ?, :: before :, etc.)
+    # By descending length - for the longest match (?? and ?. before ?, :: before :, etc.)
     return sorted(_language()["operators"], key=lambda s: (-len(s), s))
 
 
 @lru_cache(maxsize=1)
 def _operator_re() -> re.Pattern:
-    # One compiled alternation instead of a startswith() loop per punctuation char –
+    # One compiled alternation instead of a startswith() loop per punctuation char -
     # the loop was visible in the whole-project profile. Alternatives keep the
     # longest-match order of _operators().
     return re.compile("|".join(re.escape(op) for op in _operators()))
@@ -65,8 +65,8 @@ class Token:
     col: int  # 1-based
     end_line: int
     end_col: int
-    canonical: str | None = None  # for KEYWORD – the canonical form (IF/METHOD/...)
-    subkind: str | None = None  # for COMMENT – line|block|doc
+    canonical: str | None = None  # for KEYWORD - the canonical form (IF/METHOD/...)
+    subkind: str | None = None  # for COMMENT - line|block|doc
     flags: dict = field(default_factory=dict)  # e.g. {'unterminated': True}
 
     def __repr__(self) -> str:  # compact for debugging
@@ -165,7 +165,7 @@ def tokenize(text: str, lm: "_LineMap | None" = None) -> list[Token]:
             i += 1
             continue
 
-        # Whitespace and line breaks are trivia – skip them
+        # Whitespace and line breaks are trivia - skip them
         if c in " \t":
             i += 1
             continue
@@ -271,7 +271,7 @@ def tokenize(text: str, lm: "_LineMap | None" = None) -> list[Token]:
             i = m.end()
             continue
 
-        # An unknown character – a single token (let a rule flag it)
+        # An unknown character - a single token (let a rule flag it)
         emit("UNKNOWN", i, i + 1)
         i += 1
 

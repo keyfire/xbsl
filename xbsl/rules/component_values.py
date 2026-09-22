@@ -2,13 +2,13 @@
 
 Four rules live here:
 
-- yaml/unknown-enum-value (tier D) – a value outside the property's enumeration;
-- yaml/no-expression-in-literal (tier A) – a binding inside a node the platform wants literal;
-- yaml/bare-object-value (tier D) – a bare word where a literal or a binding is expected;
-- yaml/unexpected-type-argument (tier D) – a type argument on a property declared without one.
+- yaml/unknown-enum-value (tier D) - a value outside the property's enumeration;
+- yaml/no-expression-in-literal (tier A) - a binding inside a node the platform wants literal;
+- yaml/bare-object-value (tier D) - a bare word where a literal or a binding is expected;
+- yaml/unexpected-type-argument (tier D) - a type argument on a property declared without one.
 
 The yaml/unknown-enum-value rule. A component property whose type is an enumeration accepts
-only the elements of that enumeration; anything else is rejected when the build is applied –
+only the elements of that enumeration; anything else is rejected when the build is applied -
 `Неизвестный элемент "Анонимный" перечисления "РежимАутентификации"`, the class that also covers the alignment gotcha: the horizontal axis
 has `Начало|Центр|Конец|ПоШирине` while the vertical one has `Верх|Центр|Низ|ПоБазовойЛинии`,
 so a `ВыравниваниеСодержимогоПоВертикали: Конец` copied over from a neighbouring property
@@ -24,18 +24,18 @@ Zero-false-positive guards:
   is taken: `ПолеВвода<Строка>` -> `ПолеВвода`); a project component is skipped, so its own
   properties can never be mistaken for the platform's;
 - a property is judged only when EVERY member of its type union is either an enumeration of
-  the schema or the literal `Авто` – the only non-enumeration member the schema uses next to
+  the schema or the literal `Авто` - the only non-enumeration member the schema uses next to
   an `enum` (354 occurrences, no other). One `Строка`/`Булево`/`Число` member and the
   property is skipped: such a value may be anything;
 - a binding (`=...`), an interpolation (`%...`), a qualified value
-  (`ВыравниваниеПоГоризонтали.Центр` – the enumeration spelled out) and a non-scalar are
+  (`ВыравниваниеПоГоризонтали.Центр` - the enumeration spelled out) and a non-scalar are
   skipped, as is a block scalar (text, not a value).
 
 Working code follows the schema, so the rule guards against regressions and against a value
 invented from a neighbouring axis.
 
-The yaml/no-expression-in-literal rule. A value object nested in a component property –
-`Шрифт: {Тип: АбсолютныйШрифт, ...}`, `ЦветФона: {Тип: АбсолютныйЦвет, ...}` – must be spelled
+The yaml/no-expression-in-literal rule. A value object nested in a component property -
+`Шрифт: {Тип: АбсолютныйШрифт, ...}`, `ЦветФона: {Тип: АбсолютныйЦвет, ...}` - must be spelled
 out literally: a binding inside it is rejected when the build is applied. Measured on the same
 probe, with two different wordings from the compiler:
 
@@ -44,23 +44,23 @@ probe, with two different wordings from the compiler:
                                        литерала
 
 The restriction is about the nesting, not about a particular property: `Размер` was the known
-case, `Полужирный` behaves the same. The way out is to compute the WHOLE object – the control
+case, `Полужирный` behaves the same. The way out is to compute the WHOLE object - the control
 form with `Шрифт: =ШрифтНадписи()` applied cleanly.
 
-Which types are literal cannot be derived from the data – checked in all three sources: the ui
+Which types are literal cannot be derived from the data - checked in all three sources: the ui
 schema describes components only, `stdlib.json` keeps a flat name list, and the metamodel has no
 such flag (it does hold `AbsoluteFontModel`, but nothing marking it literal). So the set is an
 explicit list of types proven by the compiler, extended as new ones are proven. Judging by "not
 a component" instead would be wrong: `UsualCommand` and the project's own components are not in
 the schema either, and bindings inside them are legal and common. Inside the two
-listed types a binding does not occur – the rule guards a convention the code already follows.
+listed types a binding does not occur - the rule guards a convention the code already follows.
 
 The yaml/bare-object-value rule. A property whose type union includes `Объект` (`Значение` of a
 label, `ДополнительныеДанные`, ...) takes a quoted literal, an `=` binding or a `$` reference
 to a localized string (`$ЛокализованныеСтроки.Заголовок`, qualified
-`$НС::ЛокализованныеСтроки.Ключ` – the documented identifier syntax, and the platform's own
+`$НС::ЛокализованныеСтроки.Ключ` - the documented identifier syntax, and the platform's own
 editor writes such values when a text is localized); a bare word is rejected outright. The probe settled what the backlog had guessed wrong: the platform does
-NOT read the bare word as an expression to be resolved – `Значение: Титул` fails even when
+NOT read the bare word as an expression to be resolved - `Значение: Титул` fails even when
 `Титул` is a declared property of that very form, with exactly the message an unknown name gets:
 
     ФормаГолоеИмяРеквизита.yaml   [16:21]: Ожидалось Неопределено или указание типа
@@ -69,7 +69,7 @@ NOT read the bare word as an expression to be resolved – `Значение: Т
 while `Значение: =Титул` and `Значение: "Титул"` in the same project applied cleanly. So no name
 resolution is needed and the rule stays file-scoped: the shape of the value decides. Values that
 yaml reads as a number or a boolean are left alone (a plain `42` is not a word), as are block
-scalars. A bare word does not occur on such properties – the rule guards a convention the code
+scalars. A bare word does not occur on such properties - the rule guards a convention the code
 already follows. The compiler points at the
 property key; the rule points at the value, where the fix goes.
 
@@ -77,12 +77,12 @@ The yaml/unexpected-type-argument rule. A generic written with an argument is AN
 the platform's generics are invariant: a form's `ДополнительныеКоманды` takes
 `ФрагментКомандногоИнтерфейса`, and `ФрагментКомандногоИнтерфейса<ОбычнаяКоманда>` broke the
 build with `не может быть присвоено в ФрагментКомандногоИнтерфейса?`. The same slot is written
-parametrized in other places and is right there – `КомандыСтроки` of a Таблица declares
-`ФрагментКомандногоИнтерфейса<КомандаСПараметром<ТипИсточника.ItemDataType>>` – so the schema,
+parametrized in other places and is right there - `КомандыСтроки` of a Таблица declares
+`ФрагментКомандногоИнтерфейса<КомандаСПараметром<ТипИсточника.ItemDataType>>` - so the schema,
 not a name, decides.
 
 This rule needs `type_params` in the ui schema. Comparing "bare in the schema" against
-"parametrized in the source" alone reports `ФрагментКомандногоИнтерфейса<Команда>` – and the
+"parametrized in the source" alone reports `ФрагментКомандногоИнтерфейса<Команда>` - and the
 docs settle it: ТипКоманды has the DEFAULT `Команда`, so that spelling is the very same type.
 With the defaults extracted such a spelling is silent, while a genuinely different argument
 is still reported.
@@ -90,7 +90,7 @@ is still reported.
 Zero-false-positive guards, beyond the default: the head must be declared bare AND not
 parametrized by any other member of the same union; every parameter of the type must have a
 documented default (otherwise the comparison has no ground); a value whose head the property
-does not declare at all is skipped – a subtype written in a `Массив<КолонкаТаблицы<...>>` slot
+does not declare at all is skipped - a subtype written in a `Массив<КолонкаТаблицы<...>>` slot
 is legal and this rule is not the one to judge it.
 
 An English form is read against the same schema. The `Type:` key, the owning component and
@@ -210,7 +210,7 @@ def _allowed_values(prop: dict, enums: dict) -> frozenset[str] | None:
         elif name in enums:
             allowed.update(enums[name].get("values") or ())
         else:
-            return None  # a real type among the members – the value may be anything
+            return None  # a real type among the members - the value may be anything
     return frozenset(allowed)
 
 
@@ -236,7 +236,7 @@ def _enumerated_props() -> tuple[dict[str, dict[str, frozenset[str]]], "re.Patte
     """({component: {property: allowed values}}, a key regex), both empty without a schema.
 
     Built once: resolving the dataset is not free (it walks the installed data plugins), and
-    the value sets are the same for every file. The regex is the fast path – composing the
+    the value sets are the same for every file. The regex is the fast path - composing the
     node graph costs a second, pure-python parse of the file, so it only happens when the
     text carries at least one key the rule could judge.
     """
@@ -409,7 +409,7 @@ def bare_object_value(source: SourceFile) -> Iterable[Diagnostic]:
         return
     table = _object_props()
     if not table:
-        return  # no ui schema – the property types are unknown
+        return  # no ui schema - the property types are unknown
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
         return

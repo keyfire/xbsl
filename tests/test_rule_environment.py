@@ -413,7 +413,7 @@ def test_client_available_contextual_ok(tmp_path):
 
 
 def test_client_available_in_common_module_not_checked(tmp_path):
-    """A common module is a singleton type – the plain form is correct there."""
+    """A common module is a singleton type - the plain form is correct there."""
     (tmp_path / "Модуль.yaml").write_text(
         "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\nОкружение: КлиентИСервер\n",
         encoding="utf-8",
@@ -445,7 +445,7 @@ def test_client_available_english_contextual_ok(tmp_path):
 
 
 def test_client_available_in_structure_member_not_checked(tmp_path):
-    """Only module-level methods are judged – a structure member belongs to its own type."""
+    """Only module-level methods are judged - a structure member belongs to its own type."""
     d = _component(
         tmp_path,
         "структура Данные\n"
@@ -532,7 +532,7 @@ def test_mixed_environment_module_ok(tmp_path):
 
 
 def test_server_kind_caller_not_checked(tmp_path):
-    """A catalog module lives on the server – the access is legal there."""
+    """A catalog module lives on the server - the access is legal there."""
     d = _environment_pair(tmp_path, "ВидЭлемента: Справочник\nИмя: Панель\n")
     assert not _has(d, _RULE_SRV)
 

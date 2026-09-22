@@ -1,9 +1,9 @@
 """Tier B: typography in comments, in string literals and in the resource files.
 
 The typography rules:
-- dash: en dash – (U+2013), NOT em dash — (U+2014);  scope: prose/comments;
+- dash: en dash - (U+2013), NOT em dash — (U+2014);  scope: prose/comments;
 - ellipsis: three dots ..., NOT the … character (U+2026);  scope: prose/comments;
-- quotes: straight " (the widest rule – code and comments alike), neither curly nor guillemets;
+- quotes: straight " (the widest rule - code and comments alike), neither curly nor guillemets;
   EXCEPTION: guillemets «» are fine inside UI strings shown to the user.
 
 Hence:

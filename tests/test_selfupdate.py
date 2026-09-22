@@ -133,7 +133,7 @@ def _stub_download(monkeypatch, payload=None):
 
 
 def test_busy_installation_is_refused_before_anything_is_removed(fake_site, monkeypatch):
-    """Переименование – ворота процедуры: файл занят, а удалять ещё нечего."""
+    """Переименование - ворота процедуры: файл занят, а удалять ещё нечего."""
     _stub_download(monkeypatch)
     original = selfupdate.Path.rename
 
@@ -157,7 +157,7 @@ def test_busy_installation_is_refused_before_anything_is_removed(fake_site, monk
 
 
 def test_unknown_holders_still_produce_an_honest_message(fake_site, monkeypatch):
-    """Имён может не быть – тогда так и сказано, а не молчание."""
+    """Имён может не быть - тогда так и сказано, а не молчание."""
     _stub_download(monkeypatch)
     monkeypatch.setattr(selfupdate.Path, "rename",
                         lambda self, target: (_ for _ in ()).throw(OSError("занято")))
@@ -209,10 +209,10 @@ def test_the_wheel_of_this_platform_is_preferred(monkeypatch):
 
 
 def test_portable_install_is_healed_with_the_native_wheel(fake_site, monkeypatch):
-    """Выбор от вида УСТАНОВКИ делал храповик: одно переносимое обновление – и навсегда.
+    """Выбор от вида УСТАНОВКИ делал храповик: одно переносимое обновление - и навсегда.
 
     Поймано на релизе 0.53.0: установка, ставшая переносимой в эпоху дефекта cache_tag,
-    обновилась переносимым колесом при живом нативном – без единого слова. Колесо
+    обновилась переносимым колесом при живом нативном - без единого слова. Колесо
     выбирается по платформе, а прежний вид установки только определяет, о чём сказать.
     """
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
@@ -233,7 +233,7 @@ def test_portable_install_is_healed_with_the_native_wheel(fake_site, monkeypatch
 
 
 def test_platform_without_a_native_wheel_falls_back(monkeypatch):
-    """Отрицательный контроль: чужая платформа – переносимое колесо, и об этом говорят."""
+    """Отрицательный контроль: чужая платформа - переносимое колесо, и об этом говорят."""
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp312", ("macosx", "arm64")))
     assert selfupdate._pick_wheel(WHEELS) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
 
@@ -271,7 +271,7 @@ def test_holders_are_our_own_processes_only(monkeypatch):
 
 
 def test_holders_exclude_own_process_tree(monkeypatch):
-    """Обёртка, запустившая команду, и её дерево – не держатели.
+    """Обёртка, запустившая команду, и её дерево - не держатели.
 
     Живой отказ 28.07: `--stop-holders` снял собственный родительский `xbsl.exe`,
     обрыв обновления, версия осталась прежней. Свои: предки (обёртка и то, что её
@@ -307,7 +307,7 @@ def test_family_pids_survives_a_parent_loop():
 #
 # mypyc кладёт общую библиотеку РЯДОМ с пакетом, в корень site-packages, под именем,
 # одинаковым между версиями. Живой отказ 28.07: распаковка перезаписывала её на месте и
-# падала Errno 13 – файл держит импорт самого процесса self-update (переименование
+# падала Errno 13 - файл держит импорт самого процесса self-update (переименование
 # занятого модуля проходит, перезапись нет). Список своих корневых файлов берётся из
 # RECORD: голый glob зацепил бы mypyc-библиотеку ЧУЖОГО пакета в том же корне.
 
@@ -527,7 +527,7 @@ def test_a_version_the_index_does_not_carry_is_named_as_such(monkeypatch):
 
 
 def test_interpreter_tag_is_the_wheel_spelling():
-    """cache_tag пишет тот же интерпретатор как cpython-314 – колёс с таким именем нет."""
+    """cache_tag пишет тот же интерпретатор как cpython-314 - колёс с таким именем нет."""
     interpreter, keywords = selfupdate.platform_tags()
     assert interpreter.startswith(("cp", "pp")) and interpreter[2:].isdigit()
     assert "-" not in interpreter and keywords
@@ -547,7 +547,7 @@ def test_every_message_is_translated(monkeypatch, fake_site, capsys):
     """Пакет публичный: --lang en обязан отвечать по-английски, а не по-русски.
 
     Проверяется не наличие ключей, а ФАКТ вывода: отказ занятой установки и строка
-    завершения – самые длинные тексты команды, и оба собираются из нескольких ключей.
+    завершения - самые длинные тексты команды, и оба собираются из нескольких ключей.
     """
     from xbsl import i18n
 

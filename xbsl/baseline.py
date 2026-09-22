@@ -2,7 +2,7 @@
 
 The intended flow: enable a rule (or a whole group) over a codebase with legacy debt,
 write the current findings once (`--write-baseline`), commit the file, and lint with
-`--baseline` from then on – frozen findings are suppressed, anything new surfaces.
+`--baseline` from then on - frozen findings are suppressed, anything new surfaces.
 
 A finding's identity is line-independent on purpose: (file path, rule id, message text),
 with an allowed COUNT per identity. Moving a line keeps its finding suppressed; a new
@@ -11,7 +11,7 @@ the extra occurrences (in line order, the last ones) are reported. Paths are sto
 POSIX paths relative to the baseline file's directory, so the file can be committed and
 the linter run from any working directory.
 
-An entry's value is either a bare count or `{"count": N, "reason": "..."}` – the reason
+An entry's value is either a bare count or `{"count": N, "reason": "..."}` - the reason
 records WHY the finding is excluded (a deliberate project decision, not just frozen debt).
 Reasons are written by the editor tooling (the VS Code extension's "exclude the finding"
 action) or by hand; `--write-baseline` keeps the reasons of the identities that survive
@@ -340,7 +340,7 @@ def build(
     """The baseline payload for the given findings: {files: {path: {rule: {message: count}}}}.
 
     An identity present in `reasons` is written as {"count": N, "reason": ...} instead of a
-    bare count – this is how a rewrite keeps the reasons of the entries that survive it.
+    bare count - this is how a rewrite keeps the reasons of the entries that survive it.
     """
     files: dict[str, dict[str, dict[str, object]]] = {}
     for d in sorted(diags, key=lambda x: x.sort_key()):

@@ -18,6 +18,13 @@ pytest                      # tests (data-dependent ones are skipped without dat
 python -m xbsl <path>   # run over sources
 ```
 
+### Checking a real library archive
+
+Set `XBSL_XLIB_CORPUS` to a local `.xlib` file or a directory containing library
+deliveries, then run `pytest tests/test_libs.py`. The integration test checks public
+and internal types through both YAML and XBSL. Keep library archives outside Git.
+Without this variable, the optional integration test is skipped.
+
 ### Checking in the editor before a release
 
 The VS Code extension can show an engine change live without reinstalling the package. Point the

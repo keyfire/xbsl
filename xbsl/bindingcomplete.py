@@ -1,13 +1,13 @@
 """Completion of component-reference binding expressions for the form designer.
 
-In a form yaml a component property value may be a BINDING written as ``=<expr>`` –
+In a form yaml a component property value may be a BINDING written as ``=<expr>`` -
 for example ``=Компоненты.Кнопка.Значение``. The VS Code binding editor already
 completes the bindings already used in the form, the owner-object attributes
 (``=Объект.<attr>``) and project enum values; this module supplies the missing piece,
 component references and their members:
 
-    =Компоненты.<part>          –> the form's components (``=Компоненты.<name>``)
-    =Компоненты.<comp>.<part>   –> members of that component's TYPE, taken from the
+    =Компоненты.<part>          -> the form's components (``=Компоненты.<name>``)
+    =Компоненты.<comp>.<part>   -> members of that component's TYPE, taken from the
                                    stdlib members map (properties first, then methods)
 
 The module is PURE: the caller passes in the components (an ``IndexLookup`` or a plain
@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from typing import Iterable, Optional
 
-# The identifier alphabet of the platform – Latin and Cyrillic, as elsewhere in the LSP core.
+# The identifier alphabet of the platform - Latin and Cyrillic, as elsewhere in the LSP core.
 _IDENT = r"[A-Za-zА-Яа-яЁё_][A-Za-z0-9А-Яа-яЁё_]*"
 _ROOT = "Компоненты"
 
@@ -31,7 +31,7 @@ _ROOT = "Компоненты"
 _MEMBER_RE = re.compile(rf"^{_ROOT}\.({_IDENT})\.({_IDENT})?$")
 _COMPONENT_RE = re.compile(rf"^{_ROOT}\.({_IDENT})?$")
 
-#: A permissive cap – the editor filters the list further, but an unbounded list is never useful.
+#: A permissive cap - the editor filters the list further, but an unbounded list is never useful.
 DEFAULT_LIMIT = 200
 
 
@@ -48,8 +48,8 @@ def _component_dicts(components: Optional[object], form_stem: str) -> list[dict]
 def _type_root(type_name: Optional[str]) -> Optional[str]:
     """The bare type of a component for the members lookup.
 
-    The generic argument and the nullable mark are dropped (``Таблица<...>`` –> ``Таблица``,
-    ``Строка?`` –> ``Строка``); a facet type (``ДвоичныйОбъект.Ссылка``) is kept whole, since
+    The generic argument and the nullable mark are dropped (``Таблица<...>`` -> ``Таблица``,
+    ``Строка?`` -> ``Строка``); a facet type (``ДвоичныйОбъект.Ссылка``) is kept whole, since
     it is a key of the members map in its own right.
     """
     if not type_name:

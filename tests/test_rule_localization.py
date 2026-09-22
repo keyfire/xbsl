@@ -155,7 +155,7 @@ def test_call_of_a_module_that_is_not_a_dictionary_ok(tmp_path):
 
 
 def test_map_phase_ships_candidates_not_the_file(tmp_path):
-    """Факт правила едет между процессами – в нём не должно быть исходника.
+    """Факт правила едет между процессами - в нём не должно быть исходника.
 
     Раньше маппер клал в факт целый SourceFile: пикл рос вместе с проектом, а родитель
     заново токенизировал каждый модуль в редьюсе.
@@ -171,7 +171,7 @@ def test_map_phase_ships_candidates_not_the_file(tmp_path):
     assert fact is not None and "source" not in fact
     assert [span["what"] for span in fact["spans"]] == ["Словарь.Новость"]
 
-    # Размер факта не зависит от размера модуля – только от числа сравнений.
+    # Размер факта не зависит от размера модуля - только от числа сравнений.
     padding = "".join("метод Пустой%d()\n;\n" % n for n in range(300))
     big = tmp_path / "Большой.xbsl"
     big.write_text(module.read_text(encoding="utf-8") + padding, encoding="utf-8")

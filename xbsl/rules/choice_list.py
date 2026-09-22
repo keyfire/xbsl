@@ -1,21 +1,21 @@
 """Tier D: a ВыборЗначения component must carry a static СписокВыбора in yaml.
 
 A platform gotcha caught only at runtime (the form initialisation fails): filling the choice
-list programmatically does not work for `ВыборЗначения<...>` – the list must be a static
+list programmatically does not work for `ВыборЗначения<...>` - the list must be a static
 `СписокВыбора` key right on the yaml node. When the list has to be computed, the component to
 use is `ПолеВвода<Тип>`. So a form-tree node whose `Тип` is `ВыборЗначения<...>` and which has
 no `СписокВыбора` key in the same node is diagnosed.
 
 Zero-false-positive guards (narrowings):
 - only yaml objects (files with `ВидЭлемента`) are looked at;
-- the generic parameter must consist of primitive alternatives only – Строка, Число, Дата,
+- the generic parameter must consist of primitive alternatives only - Строка, Число, Дата,
   Время, ДатаВремя, or Массив<такой примитив> (plus the nullable markers). For a parameter
   deriving from Перечисление (or Массив<Перечисление>) the platform builds the list itself
-  (СписокВыбора: Авто – see the ВыборЗначения stdlib doc), and in per-file mode a project
-  type cannot be resolved – such nodes are skipped rather than guessed. Булево is skipped
+  (СписокВыбора: Авто - see the ВыборЗначения stdlib doc), and in per-file mode a project
+  type cannot be resolved - such nodes are skipped rather than guessed. Булево is skipped
   for the same reason (two values, the platform may render them without a list);
 - a bare `ВыборЗначения` without a generic parameter is skipped (the data type is unknown);
-- the `СписокВыбора` key satisfies the rule with any value (a binding `=...` included) –
+- the `СписокВыбора` key satisfies the rule with any value (a binding `=...` included) -
   only the presence of the key on the node is checked, not its content;
 - positions come from a text search for the `Тип: <значение>` lines (CRLF-safe) zipped with
   the document-order tree walk; when the counts diverge (anchors, flow style), the value is
@@ -108,8 +108,8 @@ def _requires_static_list(type_value: str) -> bool:
     """Whether the ВыборЗначения data type certainly needs a static СписокВыбора.
 
     True only when every alternative of the generic parameter is a known primitive
-    (or Массив<примитив>); everything else – an enumeration, a project type, a bare
-    ВыборЗначения – is skipped rather than guessed.
+    (or Массив<примитив>); everything else - an enumeration, a project type, a bare
+    ВыборЗначения - is skipped rather than guessed.
     """
     head = next((name for name in _choice_names()
                  if type_value.startswith(name + "<")), None)
@@ -173,7 +173,7 @@ def choice_needs_static_list(source: SourceFile) -> Iterable[Diagnostic]:
         if all(flags) or not _requires_static_list(value):
             continue
         positions = _value_positions(source, value)
-        if len(positions) != len(flags):  # anchors or flow style – skip rather than misplace
+        if len(positions) != len(flags):  # anchors or flow style - skip rather than misplace
             continue
         for (line, col), has_list in zip(positions, flags):
             if has_list:

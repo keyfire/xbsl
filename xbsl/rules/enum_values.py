@@ -1,17 +1,17 @@
 """Tier D: enumeration values against the project enum declarations.
 
-The code/unknown-enum-value rule: a member access on a project enumeration –
-`ВидСообщения.Важное` in code or `=ВидСообщения.Важное` in a yaml binding – must name a
+The code/unknown-enum-value rule: a member access on a project enumeration -
+`ВидСообщения.Важное` in code or `=ВидСообщения.Важное` in a yaml binding - must name a
 declared value of that enumeration (yaml `Элементы[].Имя`), a built-in member reachable
 through the name (see _enum_builtin_members), or a method or a local type of the
 enumeration's own paired module - a structure declared there is spelled
 `Перечисление.Структура` from the outside, and that is a type, not a value. Only
 enumerations declared as project objects (`ВидЭлемента: Перечисление`) are
-checked; module-local `перечисление` declarations are left alone – their values live in code
+checked; module-local `перечисление` declarations are left alone - their values live in code
 the compiler already sees locally.
 
 Zero-false-positive guards. In code, an identifier may shadow the enumeration (a local
-variable, a parameter, a loop variable – the platform resolves the name to the nearest
+variable, a parameter, a loop variable - the platform resolves the name to the nearest
 binding), so a module where the enum name is ever declared or assigned (`знч/пер/конст/обз/
 поймать/для <Имя>`, `<Имя> =`, `<Имя>:`, `<Имя> ->`) is skipped for that name; comments and
 `Запрос{...}` blocks are excluded via code_tokens; an access whose root is itself preceded by
@@ -136,7 +136,7 @@ def _project_enums(sources: list[SourceFile]) -> dict[str, set[str]]:
 def _shadowed_names(toks: list) -> set[str]:
     """Names bound anywhere in the module: declarations, assignments, annotations, lambdas.
 
-    Wider than necessary on purpose – a shadowed name only makes the rule skip, never report.
+    Wider than necessary on purpose - a shadowed name only makes the rule skip, never report.
     """
     names: set[str] = set()
     n = len(toks)

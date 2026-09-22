@@ -1,8 +1,8 @@
 """The linter core: source loading, the rule registry and the run.
 
 Rules register themselves with the @rule(...) decorator (id, tier, severity, scope). Scope:
-- 'file'    – per-file rule: (SourceFile) -> Iterable[Diagnostic];
-- 'project' – cross-file rule (e.g. Ид uniqueness): (list[SourceFile]) -> Iterable[Diagnostic].
+- 'file'    - per-file rule: (SourceFile) -> Iterable[Diagnostic];
+- 'project' - cross-file rule (e.g. Ид uniqueness): (list[SourceFile]) -> Iterable[Diagnostic].
 
 Tiers: 'A' structure/YAML, 'B' text/conventions, 'C' parser/code structure, 'D' semantics.
 """
@@ -33,7 +33,7 @@ class SourceFile:
     had_bom: bool
     newline: str  # '\n', '\r\n', '\r', 'mixed', or '' when there are no line breaks
     decode_error: str | None = None
-    # Cache of the expensive representations (tokens, AST, YAML) – filled on demand
+    # Cache of the expensive representations (tokens, AST, YAML) - filled on demand
     cache: dict = field(default_factory=dict)
 
     @property
@@ -46,13 +46,13 @@ class SourceFile:
         A source crosses a process boundary only through the worker pool, and there the
         cache is worse than useless. It is rebuilt on demand from `text` anyway, it
         multiplies the payload several times over (tokens, AST and yaml of every file),
-        and – the reason this is not merely an optimization – not everything in it can be
+        and - the reason this is not merely an optimization - not everything in it can be
         reconstructed on the other side. In the native build (mypyc, `XBSL_MYPYC=1`)
         `lexer._LineMap` is a C extension class: it pickles, but unpickling calls
         `cls.__new__(cls)` with no arguments and its generated constructor refuses
         ("missing required argument 'text'"). That exception is raised in the parent's
         result reader, so the pool dies as `BrokenProcessPool` with the real cause buried
-        in the child's traceback – and only in the released wheel, never in a pure-Python
+        in the child's traceback - and only in the released wheel, never in a pure-Python
         run. Keeping derived data out of the pickle closes the whole class of failure
         instead of the one entry that happened to trip it.
         """

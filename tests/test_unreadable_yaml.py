@@ -7,6 +7,8 @@ them `code/undefined-name`), and one broken catalog yaml 180 instead of 50 (63
 `yaml/unknown-type`, 31 `query/unknown-table`).
 """
 
+import pytest
+
 from xbsl import engine
 from xbsl.cli import discover
 
@@ -99,6 +101,35 @@ def test_a_client_declaration_of_an_unreadable_pair_is_not_unused(tmp_path):
     good = "ВидЭлемента: КомпонентИнтерфейса\nИмя: Карточка\n"
     assert run(good) == []
     assert run(good + "Заголовок: Условие ? Да : Нет\n") == []
+
+
+@pytest.mark.parametrize("yaml_head", (
+    "ВидЭлемента: КомпонентИнтерфейса\n",
+    "ElementKind: InterfaceComponent\n",
+))
+def test_a_client_declaration_of_an_unreadable_pair_without_a_name_is_not_unused(
+        tmp_path, yaml_head,
+):
+    module = (
+        "@ДоступноСКлиента\n"
+        "метод Обновить(): Пусто\n"
+        ";\n"
+        "\n"
+        "метод Показать(): Пусто\n"
+        "    Обновить()\n"
+        ";\n"
+    )
+    (tmp_path / "Карточка.yaml").write_text(
+        yaml_head + "Заголовок: Условие ? Да : Нет\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Карточка.xbsl").write_text(module, encoding="utf-8")
+
+    diags = engine.run(
+        discover([str(tmp_path)]), select={"code/client-available-unused"},
+    )
+
+    assert diags == []
 
 
 def test_an_import_of_the_subsystem_that_holds_it_is_not_unused(tmp_path):

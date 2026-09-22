@@ -195,7 +195,7 @@ def path_matches_descriptor(source: SourceFile) -> Iterable[Diagnostic]:
 
     A build packs the project files under `{vendor}/{name}/...` taken from the descriptor and
     demands the same layout on disk, so a mismatch is refused before the sources ever reach the
-    compiler – and the symptom (a build error about a layout) looks like nothing else. Renaming
+    compiler - and the symptom (a build error about a layout) looks like nothing else. Renaming
     a project therefore means renaming the directories too.
 
     Case matters: `acme/tasks` under a descriptor saying `Acme`/`Tasks` is refused just as a

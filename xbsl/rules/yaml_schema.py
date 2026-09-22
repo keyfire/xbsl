@@ -1,11 +1,11 @@
 """Tier A: checks on the YAML descriptions of elements.
 
-- yaml/valid            – the YAML parses correctly;
-- yaml/id-uuid          – every Ид (including the nested attributes) is a valid UUID;
-- yaml/id-unique        – Ид values are unique within the project (a cross-file rule);
-- yaml/id-required      – an object (has ВидЭлемента) carries a top-level Ид;
-- yaml/name-matches-file – the object Имя matches the file name;
-- yaml/standard-field-length – Наименование/Код stay within the platform limits.
+- yaml/valid            - the YAML parses correctly;
+- yaml/id-uuid          - every Ид (including the nested attributes) is a valid UUID;
+- yaml/id-unique        - Ид values are unique within the project (a cross-file rule);
+- yaml/id-required      - an object (has ВидЭлемента) carries a top-level Ид;
+- yaml/name-matches-file - the object Имя matches the file name;
+- yaml/standard-field-length - Наименование/Код stay within the platform limits.
 
 Structural files (Проект/Подсистема/Ресурсы) are recognised by the absence of ВидЭлемента and
 are exempt from the Имя/required-Ид rules; the Ид checks (format/uniqueness) apply to every Ид
@@ -107,7 +107,7 @@ _ID_LINE_RE = re.compile(r"(?m)^[ \t]*(?:Ид|Id):[ \t]*(\S+)")
 # A line with the `Имя:` key in either spelling (a translated description writes `Name:`):
 # the indent (a list-item dash counts as indent), the value with or without quotes, an
 # optional trailing comment (per YAML it is not part of the value); `\r?` lets CRLF files
-# match (`$` anchors before `\n`). Groups: 1 – indent, 2 – quote, 3 – value.
+# match (`$` anchors before `\n`). Groups: 1 - indent, 2 - quote, 3 - value.
 # Shared by the naming rules and the indexer.
 _NAME_LINE_RE = re.compile(
     r"(?m)^([ \t]*(?:-[ \t]+)?)(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\2[ \t]*(?:#.*)?\r?$"
@@ -189,7 +189,11 @@ def _parsed(source: SourceFile):
 
 
 _TOP_KIND_RE = re.compile(r"^(?:ВидЭлемента|ElementKind):", re.M)
+_TOP_KIND_VALUE_RE = re.compile(
+    r"^(?:ВидЭлемента|ElementKind):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?\r?$", re.M,
+)
 _TOP_NAME_RE = re.compile(r"^(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?\r?$", re.M)
+_IDENTIFIER_RE = re.compile(r"[^\W\d]\w*", re.UNICODE)
 _MISSING = object()
 
 
@@ -206,6 +210,62 @@ def object_name_fast(s: SourceFile) -> str | None:
     s.cache["object_name_fast"] = name
     return name
 
+
+def object_kind_fast(s: SourceFile) -> str | None:
+    """The metadata-object kind without a full yaml parse, cached."""
+    cached = s.cache.get("object_kind_fast", _MISSING)
+    if cached is not _MISSING:
+        return cached
+    kind = None
+    m = _TOP_KIND_VALUE_RE.search(s.text)
+    if m and _IDENTIFIER_RE.fullmatch(m.group(2)):
+        kind = metamodel.canonical_kind(m.group(2))
+    s.cache["object_kind_fast"] = kind
+    return kind
+
+
+def declaration_names_fast(source: SourceFile) -> frozenset[str]:
+    """Readable declaration names of an element description without parsing the whole yaml.
+
+    This fallback is only for a malformed object description. It considers standalone
+    `Имя`/`Name` fields with identifier values, not text or comment fragments that happen to
+    contain those words.
+    """
+    cache_key = "declaration_names_fast"
+    cached = source.cache.get(cache_key, _MISSING)
+    if cached is not _MISSING:
+        return cached
+    names: set[str] = set()
+    if _HAVE_YAML and _TOP_KIND_RE.search(source.text):
+        mapping_key = None
+        take_value = False
+        try:
+            for token in yaml.scan(source.text, Loader=_LOADER):
+                if isinstance(token, yaml.tokens.KeyToken):
+                    mapping_key = None
+                    take_value = False
+                elif isinstance(token, yaml.tokens.ValueToken):
+                    take_value = mapping_key in ("Имя", "Name")
+                elif isinstance(token, yaml.tokens.ScalarToken):
+                    if mapping_key is None:
+                        mapping_key = token.value
+                    elif take_value:
+                        if _IDENTIFIER_RE.fullmatch(token.value):
+                            names.add(token.value)
+                        mapping_key = None
+                        take_value = False
+                    else:
+                        mapping_key = None
+                else:
+                    mapping_key = None
+                    take_value = False
+        except yaml.YAMLError:
+            pass
+    result = frozenset(names)
+    source.cache[cache_key] = result
+    return result
+
+
 def unreadable_object(source: SourceFile) -> str | None:
     """The object a yaml declares when the file itself did not parse - the name alone.
 
@@ -221,6 +281,14 @@ def unreadable_object(source: SourceFile) -> str | None:
         return None
     _data, err = _parsed(source)
     return object_name_fast(source) if err is not None else None
+
+
+def unreadable_object_kind(source: SourceFile) -> str | None:
+    """The readable kind of an object YAML that did not parse."""
+    if source.kind != "yaml":
+        return None
+    _data, err = _parsed(source)
+    return object_kind_fast(source) if err is not None else None
 
 
 def _id_lines(source: SourceFile) -> list[tuple[str, int, int]]:

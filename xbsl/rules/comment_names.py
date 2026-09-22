@@ -64,7 +64,12 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import tokens
 from xbsl.rules import _comments
 from xbsl.rules.semantics import _stdlib_names
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, is_translation_dictionary
+from xbsl.rules.yaml_schema import (
+    _HAVE_YAML,
+    _parsed,
+    declaration_names_fast,
+    is_translation_dictionary,
+)
 
 MESSAGES = {
     "comment/unknown-name.title": {
@@ -243,6 +248,8 @@ def _unknown_name_mapper(source: SourceFile) -> dict | None:
         data, err = _parsed(source)
         if err is None:
             _strings_of(data, names)
+        else:
+            names.update(declaration_names_fast(source))
         cands = _candidates(source) if _stdlib_names() else []
         if not names and not library and not cands:
             return None

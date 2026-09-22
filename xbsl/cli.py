@@ -1561,7 +1561,7 @@ def _check_main(argv: list[str]) -> int:
             files = requested  # the counters below speak of what was asked for
 
     if args.write_baseline:
-        # Freeze mode: the findings become the baseline instead of a report. Deliberate debt –
+        # Freeze mode: the findings become the baseline instead of a report. Deliberate debt -
         # the run itself succeeds regardless of severities.
         target = Path(args.write_baseline)
         data = baseline.write(target, diagnostics)
@@ -1666,7 +1666,7 @@ def _check_main(argv: list[str]) -> int:
         _emit_report(json.dumps(payload, ensure_ascii=False), args.out)
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
-        # Paths are made relative to the current directory – run from the repository root.
+        # Paths are made relative to the current directory - run from the repository root.
         _emit_report(json.dumps(report.codeclimate(diagnostics), ensure_ascii=False), args.out)
     else:
         if args.out:

@@ -94,7 +94,7 @@ def _lint_english(tmp_path, module: str):
 def test_the_english_spelling_is_judged_too(tmp_path):
     """A translated module reaches the member through the English spelling of the type and
     of the member alike; the kinds table is keyed by the catalog's Russian names, and both
-    are taken back through the term dictionary – the rule used to go silent right there."""
+    are taken back through the term dictionary - the rule used to go silent right there."""
     d = _lint_english(tmp_path, "@OnServer\nmethod F()\n    val Zone = TimeZone.Current\n;\n")
 
     assert len(d) == 1 and "Current" in d[0].message

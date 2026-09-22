@@ -1,8 +1,8 @@
 """A rule that is off by default has to say WHY, right where the reader looks.
 
 The guard exists because a bare `off` in `--list-rules` tells the reader nothing: the reason
-used to live in three unrelated places – the rule's docstring, a column in `docs/RULES.md` and
-somebody's backlog – and none of them is the listing. The user of the toolkit hit exactly this:
+used to live in three unrelated places - the rule's docstring, a column in `docs/RULES.md` and
+somebody's backlog - and none of them is the listing. The user of the toolkit hit exactly this:
 "part of the rules is disabled and I do not understand why".
 """
 
@@ -16,7 +16,7 @@ from xbsl import engine, i18n
 def _own():
     """Правила САМОГО движка.
 
-    В реестре могут лежать и правила надстроек – их автор отвечает за свои тексты сам,
+    В реестре могут лежать и правила надстроек - их автор отвечает за свои тексты сам,
     и падение здесь означало бы, что набор движка зависит от установленных плагинов.
     Свои узнаём по модулю, в котором объявлена функция правила.
     """
@@ -47,7 +47,7 @@ def test_every_disabled_rule_explains_itself(lang):
 
 
 def test_reason_is_translated_not_a_bare_key():
-    """A missing catalog entry comes back as the key itself – that must not pass for a reason."""
+    """A missing catalog entry comes back as the key itself - that must not pass for a reason."""
     for r in _disabled():
         assert r.off_reason_text != r.off_reason, (
             "у правила %s причина не переведена: в каталоге нет записи '%s'" % (r.id, r.off_reason)

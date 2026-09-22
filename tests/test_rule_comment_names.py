@@ -10,6 +10,7 @@ import pytest
 
 from xbsl import engine, i18n
 from xbsl.rules import comment_names
+from xbsl.rules.yaml_schema import declaration_names_fast
 
 RULE = "comment/unknown-name"
 
@@ -238,6 +239,58 @@ def test_unknown_name_in_a_yaml_comment_is_reported():
 
     assert diag.path.replace("\\", "/").endswith("КарточкаСклада.yaml")
     assert (diag.line, diag.col) == (1, card.index("ОткрытьКарточкуСклада") + 1)
+
+
+@pytest.mark.parametrize(("text", "expected"), (
+    (
+        "# Name: CommentName\r\n"
+        "ElementKind: CommonComponent\r\n"
+        "Name: CardView\r\n"
+        "Content:\r\n"
+        "  - Name: EntryField\r\n"
+        "  - Name:\r\n"
+        "      - not-an-identifier\r\n"
+        "      - LeakedName\r\n"
+        "Hint: |\r\n"
+        "  Name: BlockText\r\n"
+        "Title: \"First line\r\n"
+        "  Name: QuotedText\r\n"
+        "  last line\"\r\n"
+        "Title2: Condition ? Yes : No\r\n",
+        {"CardView", "EntryField"},
+    ),
+    (
+        "ВидЭлемента: ОбщийКомпонент\n"
+        "Имя: Карточка\n"
+        "Содержимое:\n"
+        "  - Имя: Поле\n"
+        "Подсказка: |\n"
+        "  Имя: ТекстБлока\n"
+        "Заголовок: Условие ? Да : Нет\n",
+        {"Карточка", "Поле"},
+    ),
+))
+def test_unreadable_yaml_declaration_fallback_ignores_comments_and_scalars(text, expected):
+    source = engine.load_text("Card.yaml", text)
+
+    assert declaration_names_fast(source) == expected
+    assert source.cache["declaration_names_fast"] == frozenset(expected)
+    assert declaration_names_fast(source) == expected
+
+
+@pytest.mark.needs_data
+def test_unknown_name_keeps_declaration_names_from_an_unreadable_yaml():
+    card = (
+        _CARD
+        + "Подсказка: |\n"
+        + "  Имя: ТекстЗаглушки\n"
+        + "Заголовок: Условие ? Да : Нет\n"
+    )
+    comments = "// КарточкаСклада показывает ИмяСклада и ТекстЗаглушки.\n"
+
+    names = _names(_module(comments, **{"КарточкаСклада.yaml": card}))
+
+    assert names == ["ТекстЗаглушки"]
 
 
 @pytest.mark.needs_data

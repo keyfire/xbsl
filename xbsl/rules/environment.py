@@ -1,15 +1,15 @@
 """Tier D: environment (client/server) consistency checks.
 
-The platform assigns every module an environment – Клиент, Сервер or КлиентИСервер (docs
-"Исполнение модуля") – and the annotations @НаСервере/@НаКлиенте/@ДоступноСКлиента refine
+The platform assigns every module an environment - Клиент, Сервер or КлиентИСервер (docs
+"Исполнение модуля") - and the annotations @НаСервере/@НаКлиенте/@ДоступноСКлиента refine
 it per method or type. An environment mismatch is among the most painful failures: the
 server-side apply silently rolls the whole project back without pointing at the line.
 The checks are all narrow by design (a skipped case is a false negative, never a false
 positive); each is project-wide because it needs the paired yaml of the module.
 
-- code/server-call-from-handler: in an interface component module (a form – environment
-  Клиент) a client handler – a method named by a handler key in the form's yaml or
-  annotated @Обработчик – calls a method of the same module declared @НаСервере without
+- code/server-call-from-handler: in an interface component module (a form - environment
+  Клиент) a client handler - a method named by a handler key in the form's yaml or
+  annotated @Обработчик - calls a method of the same module declared @НаСервере without
   @ДоступноСКлиента/@НаКлиенте. The handler runs on the client, so the call fails
   ("unavailable (Клиент)"). Guards: a handler itself annotated @НаСервере runs on the
   server and is skipped; member calls (`х.Имя(...)`) are not bare-module calls; shadowed
@@ -17,7 +17,7 @@ positive); each is project-wide because it needs the paired yaml of the module.
 
 - code/client-annotation-in-server-module: a common module with `Окружение: Сервер` may
   use only the @НаСервере annotation (docs "Исполнение модуля"), so @ДоступноСКлиента or
-  @НаКлиенте in its module contradicts the declared environment – the module has to be
+  @НаКлиенте in its module contradicts the declared environment - the module has to be
   `ClientAndServer`. The apply refuses it: `Cannot use modifier "OnClient" for items
   whose type availability is "Server"`.
 
@@ -75,7 +75,7 @@ whole project back, and a warning would let the pass through.
   that cannot be resolved in the module is skipped rather than guessed.
 
 - code/component-in-server-context: a `Компонент.Член(...)` access from code compiled
-  for the server – a `@НаСервере` method anywhere, or an unannotated method of a module
+  for the server - a `@НаСервере` method anywhere, or an unannotated method of a module
   whose environment includes the server. The component's type lives on the client, so
   the server compilation refuses with "Переменная X не определена". A name the module's
   own element declares is not read as a component: in an object module the bare name is
@@ -101,7 +101,7 @@ from xbsl.rules._syntax import code_tokens, element_pair_stem
 from xbsl.rules.enum_values import _shadowed_names
 from xbsl.rules.handlers import _handler_re, _IDENT_RE
 from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, element_own_names, object_kind,
-                                    unreadable_object, value_of)
+                                    unreadable_object, unreadable_object_kind, value_of)
 
 MESSAGES = {
     "code/client-available-unused.title": {
@@ -226,7 +226,7 @@ def _module_decls(toks: list) -> tuple[dict[str, frozenset[str]], list[tuple[str
     Returns (decls, methods): decls maps a declared name (method, constructor, structure,
     enumeration, exception, constant) to the frozenset of its annotation names; methods is
     the ordered list of (name, annotations, anchor) for method/constructor declarations,
-    where anchor is the token index of the declaring keyword – consecutive anchors of any
+    where anchor is the token index of the declaring keyword - consecutive anchors of any
     declaration kind delimit method bodies.
     """
     decls: dict[str, frozenset[str]] = {}
@@ -1166,7 +1166,7 @@ def _component_env_mapper(source: SourceFile) -> dict | None:
     each with the execution side of its method, exactly as in _global_env_mapper.
 
     The roles differ from that mapper in one value: a common module (or a structure) with
-    `Environment: ClientAndServer` is `both` – an unannotated method of such a module is
+    `Environment: ClientAndServer` is `both` - an unannotated method of such a module is
     compiled for BOTH environments, so a component reference in it fails the server half
     even when every runtime path is client-side. That is the exact shape of the live
     failure this rule encodes. An enumeration module is `both` by the standard
@@ -1251,7 +1251,7 @@ def component_in_server_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
     The component's type lives in the Client environment (docs topics/module-execution),
     so its name is simply not declared on the server: the apply refuses with
-    "Переменная X не определена" – after the linter said nothing and the stand silently
+    "Переменная X не определена" - after the linter said nothing and the stand silently
     rolled back to the previous build. Flagged are the accesses of `@НаСервере` methods
     anywhere and of unannotated methods in server or client-and-server modules; a name
     that also belongs to a non-component element somewhere in the project (a namesake
@@ -1324,7 +1324,8 @@ def _client_use_mapper(source: SourceFile) -> dict | None:
         return None
     if source.kind == "yaml":
         words = sorted(set(_WORDS_RE.findall(source.text)))
-        if unreadable_object(source) is not None:
+        if (unreadable_object(source) is not None
+                or unreadable_object_kind(source) in _CLIENT_ENV_KINDS):
             # The file did not parse: its words are still readable (they are text), its
             # environment is not - so the pair is marked unreadable and its declarations are
             # left unjudged instead of being called unused. The unknown environment counts

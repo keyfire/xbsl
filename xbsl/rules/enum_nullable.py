@@ -1,8 +1,8 @@
 """Tier D: project enumerations in yaml type positions must be nullable.
 
 The yaml/enum-needs-nullable rule: a `Тип` value naming a project enumeration without the
-nullable marker – an object attribute, a tabular-section attribute, a component property or
-a parameter `Тип: ВидОплаты`, or an input field `Тип: ПолеВвода<ВидОплаты>` – does not
+nullable marker - an object attribute, a tabular-section attribute, a component property or
+a parameter `Тип: ВидОплаты`, or an input field `Тип: ПолеВвода<ВидОплаты>` - does not
 compile on the server: an enumeration has no implicit default value, so the platform demands
 one ('...cannot be initialized with a default value'; the fix is `ВидОплаты?` /
 `ПолеВвода<ВидОплаты?>`).
@@ -23,13 +23,13 @@ Legal non-nullable forms (per the platform docs) are skipped:
   is typed `Объект?` in the ui schema.
 
 Narrowing (deliberate, to keep the zero-false-positive bar): only the two exact shapes are
-flagged – a value that is the bare enumeration name, and `ПолеВвода<Имя>` with the bare name
+flagged - a value that is the bare enumeration name, and `ПолеВвода<Имя>` with the bare name
 as the only argument (the component under either spelling the data names - `Edit<Имя>` in an
 English form). Unions (`ВидОплаты|Строка`), other generics (`Массив<ВидОплаты>`)
-and qualified names are left alone – whether the compiler demands a default there is not
+and qualified names are left alone - whether the compiler demands a default there is not
 certain. Only yaml files with `ВидЭлемента` are checked; the values are taken from the parsed
 yaml tree, so a `Тип: ...` line inside a literal block scalar cannot false-match. The rule is
-project-wide – it needs the enumerations of the whole project (it does not run in single-file
+project-wide - it needs the enumerations of the whole project (it does not run in single-file
 mode).
 """
 

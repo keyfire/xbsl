@@ -4,7 +4,7 @@ A thin adapter over the core (like the CLI and MCP), on the standard library (ht
 no external dependencies). Listens on 127.0.0.1 only. Start with xbsl-web (or
 python -m xbsl.web), then open http://127.0.0.1:8771/.
 
-Look and feel: dark/light theme; the content is tailored to the linter – path input, rule
+Look and feel: dark/light theme; the content is tailored to the linter - path input, rule
 settings by tier, a summary, and filters by severity and text.
 
 The UI text lives in two places: strings the server produces are looked up in the i18n

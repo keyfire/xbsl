@@ -1,14 +1,14 @@
 """Tests of the pure binding-completion module (component references and their members).
 
 The module works over the form's components (an IndexLookup or a plain list) and the stdlib
-members map – no Element data is needed, so these run in a checkout without the data bundle.
+members map - no Element data is needed, so these run in a checkout without the data bundle.
 """
 
 from xbsl.bindingcomplete import complete_binding
 from xbsl.lsp_nav import IndexLookup
 
 # A form with components of different types: two ordinary component types that carry members,
-# one facet type (a dotted key in the members map) and – in a second form – a namesake that
+# one facet type (a dotted key in the members map) and - in a second form - a namesake that
 # must not leak across forms.
 INDEX = {
     "components": [
@@ -30,7 +30,7 @@ MEMBERS = {
     "ПолеВвода": {"properties": ["Значение", "ТолькоПросмотр"], "methods": ["Очистить"]},
     # a facet type keyed with a dot, exactly as facet_members stores it
     "ДвоичныйОбъект.Ссылка": {"properties": ["Существует"], "methods": []},
-    # the old dataset shape – a flat list of member names – is understood too
+    # the old dataset shape - a flat list of member names - is understood too
     "Флажок": ["Пометка", "Доступность"],
 }
 
@@ -114,7 +114,7 @@ def test_unknown_component_has_no_members():
 
 
 def test_component_without_a_member_page_yields_nothing():
-    # the type has no entry in the members map – no members, but not an error
+    # the type has no entry in the members map - no members, but not an error
     idx = {"components": [
         {"form": "Ф", "name": "Группа", "type": "АвтоматическаяГруппа", "path": "p", "line": 1},
     ]}
@@ -151,12 +151,12 @@ def test_unrecognized_prefix_is_empty():
     assert bind("") == []
     assert bind("=") == []
     assert bind("=Объект.") == []
-    assert bind("=Компоненты") == []  # no dot yet – nothing to complete
+    assert bind("=Компоненты") == []  # no dot yet - nothing to complete
     assert bind("мусор") == []
 
 
 def test_deeper_chain_is_out_of_scope():
-    # a member's own members would need type inference – not this module's job
+    # a member's own members would need type inference - not this module's job
     assert bind("=Компоненты.КнопкаСохранить.Заголовок.") == []
 
 

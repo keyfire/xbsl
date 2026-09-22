@@ -2,9 +2,9 @@
 
 Three rules live here:
 
-- code/resource-bare-name (tier C, file) – the key spells out the Ресурсы folder itself;
-- code/unknown-resource (tier D, project) – the key resolves to nothing;
-- code/package-resources-missing (tier D, project) – `ПакетРесурсов.Текущий()` in a module of
+- code/resource-bare-name (tier C, file) - the key spells out the Ресурсы folder itself;
+- code/unknown-resource (tier D, project) - the key resolves to nothing;
+- code/package-resources-missing (tier D, project) - `ПакетРесурсов.Текущий()` in a module of
   a package or at the root of a subsystem that keeps no resources of its own (see the docstring
   of the rule).
 

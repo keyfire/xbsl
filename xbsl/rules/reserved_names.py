@@ -5,7 +5,7 @@ The code/reserved-name rule: the names `Тип` and `type` are rejected by the s
 `структура ... ;` block) or as a method/constructor parameter name. The check is
 token-based: structure blocks are delimited from the lowercase `структура` keyword to the
 terminating `;` at bracket depth 0 (or, as a safety stop, to the next lowercase
-метод/конструктор/структура/перечисление/исключение keyword – a structure holds only field
+метод/конструктор/структура/перечисление/исключение keyword - a structure holds only field
 declarations); parameters come from the shared signature parser. The lexer classifies `Тип`
 as a keyword (the type literal), so for the name scan the TYPE keyword is downgraded to an
 identifier locally. Three spellings are checked: the two above and the capitalized `Type`
@@ -18,18 +18,18 @@ produce false positives.
 The yaml/builtin-property-name rule: in a `ВидЭлемента: КомпонентИнтерфейса` yaml, declaring
 an own property (`Свойства: - Имя: X`) whose name matches a built-in property of the BASE
 component type (`Наследует.Тип`, the root before the generic arguments) is rejected by the
-server apply ("Invalid property name") – the classic case is `Заголовок` on an inheritor of
+server apply ("Invalid property name") - the classic case is `Заголовок` on an inheritor of
 СтандартнаяКарточка. The built-in property set of the base type is taken from the metamodel
 class (transitively over inheritance, as in yaml/unknown-property) when the type is present
 there; the current metamodel (configuration .xcore) does not describe UI component types, so
 the sets come from the versioned catalog (stdlib.json component_props, extracted from the
 distribution docs by tools/extract_stdlib.py: the type's own properties plus the inherited
 ones the page lists itself), with the module's vetted СтандартнаяКарточка table kept as the
-safety net for data generated before that key existed – per base type the two sources are
-unioned. A base type found in no source is skipped rather than guessed – in particular a
+safety net for data generated before that key existed - per base type the two sources are
+unioned. A base type found in no source is skipped rather than guessed - in particular a
 base that is itself a project component (unresolvable in file scope). The check is strictly
 per base type: a property `Заголовок` on an inheritor of КонтейнерHtml (whose documented set
-has no Заголовок) is legal, so no cross-type generalization is allowed. Positions are searched only inside the top-level `Свойства:` block – the same name
+has no Заголовок) is legal, so no cross-type generalization is allowed. Positions are searched only inside the top-level `Свойства:` block - the same name
 as an event or a nested component name cannot false-match.
 """
 
@@ -81,7 +81,7 @@ i18n.register(MESSAGES)
 # The exact spellings the server apply is confirmed to reject in field/parameter positions.
 _RESERVED_NAMES = frozenset({"Тип", "type", "Type"})
 
-# Keywords that cannot occur inside a structure body – a safety stop for an unterminated block.
+# Keywords that cannot occur inside a structure body - a safety stop for an unterminated block.
 _BLOCK_BREAK_KW = ("METHOD", "CONSTRUCTOR", "STRUCTURE", "ENUMERATION", "EXCEPTION")
 
 
@@ -89,7 +89,7 @@ def _name_tokens(toks: list) -> list:
     """Tokens with the TYPE keyword (`Тип`/`Type`) downgraded to an identifier.
 
     The lexer classifies `Тип` as a keyword, so the shared declaration/signature parsers
-    would not see it in a name position – which is exactly where this rule looks for it.
+    would not see it in a name position - which is exactly where this rule looks for it.
     The downgrade is local to this rule and does not affect other checks.
     """
     return [
@@ -273,7 +273,7 @@ def builtin_property_name(source: SourceFile) -> Iterable[Diagnostic]:
     # written in English answer to the same entry through the ui schema.
     builtin = _builtin_props(uischema.canonical_component(base))
     if not builtin:
-        return []  # the base type is not vetted – skip, do not guess
+        return []  # the base type is not vetted - skip, do not guess
     props = value_of(data, "Свойства", kind)
     if not isinstance(props, list):
         return []

@@ -1,14 +1,14 @@
 """Tier D: a method declared in the project but referenced nowhere (dead code).
 
-The check is deliberately built from exceptions – any doubt silences the finding. A method
+The check is deliberately built from exceptions - any doubt silences the finding. A method
 is reported only when its name, apart from the declaration itself, occurs nowhere in the
 project: neither in xbsl code (a call, a reference, a callback), nor in yaml descriptions
 (handler keys, bindings), nor in string literals (HTML-container bridges call methods by
 name inside strings). The mention search counts raw word tokens over the text of every
-project file, so a name inside a string counts as a use – deliberately conservative: better
+project file, so a name inside a string counts as a use - deliberately conservative: better
 silence than a false positive.
 
-A COMMENT is never a mention, wherever it lies – in the module that declares the method, in
+A COMMENT is never a mention, wherever it lies - in the module that declares the method, in
 the yaml paired with it, in any other element. A name written in prose is not a call. While
 every comment counted, a header listing the methods of its own module kept them all alive:
 on one 1300-file project three methods without a single caller went unreported until the
@@ -18,8 +18,8 @@ finding says exactly that, so the reader is not sent looking for a call that nev
 A method that really is called from somewhere the search cannot see has two answers, and
 both are older than this rule. An annotation naming a caller outside the project code (the
 list below: @Handler, @Subscription, @Implementation and the rest) silences the method
-outright. Everything else – a name assembled at run time, a client entry point kept on
-purpose – belongs in the baseline, where an entry carries its reason next to the count
+outright. Everything else - a name assembled at run time, a client entry point kept on
+purpose - belongs in the baseline, where an entry carries its reason next to the count
 (`--write-baseline` to freeze, `--baseline` to check against).
 
 The translation dictionary is not a project file in that sense, wherever it lies. It names
@@ -34,12 +34,12 @@ Guards (such methods are never reported):
   platform calls it itself (@Handler, @Subscription, @ProjectUpdate, @ApplicationSetup),
   a contract calls it through the base type (@Implementation, @Override), or the method is
   deliberately kept for compatibility (@Deprecated). An annotation the dictionary does not
-  know is treated the same way – a project may declare its own, and doubt silences the
+  know is treated the same way - a project may declare its own, and doubt silences the
   finding;
-- names of the platform's own events (ПередЗаписью, ПослеСоздания, ...) – called by the
+- names of the platform's own events (ПередЗаписью, ПослеСоздания, ...) - called by the
   platform even when the annotation was forgotten;
-- object modules (`X.Объект.xbsl`) – object event handlers live there;
-- modules paired with an `HttpСервис` yaml – their methods are wired to endpoints;
+- object modules (`X.Объект.xbsl`) - object event handlers live there;
+- modules paired with an `HttpСервис` yaml - their methods are wired to endpoints;
 - a qualified use `Модуль.Метод` of a static manager method is an ordinary mention and is
   covered by the name search.
 
@@ -48,8 +48,8 @@ ENVIRONMENT (@OnServer, @OnClient, @AvailableFromClient, @Contextual) do NOT sil
 rule, and this is the whole point of the guard being a list rather than "any annotation".
 Both say WHO may call the method and WHERE it runs, not that anybody outside the project
 does: the caller is the project's own code, so a mention has to be somewhere among its
-files. Silencing them left the public API of the common modules – exactly where dead code
-piles up – unjudged: on a 400-file corpus the rule saw 1540 declarations and reported none,
+files. Silencing them left the public API of the common modules - exactly where dead code
+piles up - unjudged: on a 400-file corpus the rule saw 1540 declarations and reported none,
 while a manual count of the callers found seven declarations with no caller at all.
 
 The rule is cross-file (scope=project): a single module cannot tell a dead method from one
@@ -102,19 +102,19 @@ _HTTP_SERVICE_RE = re.compile(r"(?m)^ВидЭлемента:[ \t]*HttpСерви
 def _internal_annotations() -> frozenset[str]:
     """Both spellings of the annotations that leave the caller INSIDE the project.
 
-    Everything else – the platform's own (@Handler, @Subscription, @ProjectUpdate,
+    Everything else - the platform's own (@Handler, @Subscription, @ProjectUpdate,
     @ApplicationSetup), a contract's (@Implementation, @Override), compatibility
     (@Deprecated) and any annotation the dictionary does not know (a project may declare
-    its own) – means a caller the mention search cannot see, and silences the method.
+    its own) - means a caller the mention search cannot see, and silences the method.
     Without the data file only the Russian spellings are known, so an English project
     degrades into silence rather than into false findings.
     """
     return frozenset(terms.key_forms(
-        # Std::Annotations::VisibilityScopes – WHO may call the method
+        # Std::Annotations::VisibilityScopes - WHO may call the method
         "Локально", "ВПодсистеме", "ВПроекте", "ВТипе", "Глобально",
-        # Std::Annotations::Environments and Contextual – WHERE the method runs
+        # Std::Annotations::Environments and Contextual - WHERE the method runs
         "НаКлиенте", "НаСервере", "ДоступноСКлиента", "Контекстный",
-        # the call form and a compiler check – neither says anything about the caller
+        # the call form and a compiler check - neither says anything about the caller
         "ИменованныеПараметры", "ПроверятьИспользованиеЗначения",
     ))
 
@@ -206,7 +206,7 @@ def _unused_mapper(source: SourceFile) -> dict | None:
     if source.kind != "xbsl":
         return fact
     if source.path.stem.endswith(".Объект"):
-        return fact  # object module – platform event handlers, no declarations to check
+        return fact  # object module - platform event handlers, no declarations to check
     decls: list[tuple[str, int, int]] = []
     toks = code_tokens(source)
     for i, t in enumerate(toks):
@@ -243,7 +243,7 @@ def unused_method(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["k"] != "xbsl" or "decls" not in fact:
             continue
         if fact["stem"] in http_stems:
-            continue  # HTTP service module – methods are wired to endpoints
+            continue  # HTTP service module - methods are wired to endpoints
         for name, line, col in fact["decls"]:
             if mentions[name] > 1:  # more than the declaration itself
                 continue

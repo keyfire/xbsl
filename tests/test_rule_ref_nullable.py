@@ -65,7 +65,7 @@ def test_input_field_nullable_argument_not_flagged(tmp_path):
 
 @pytest.mark.needs_data
 def test_english_facet_flagged(tmp_path):
-    """A translated description spells the facet the platform's way – the Russian word alone
+    """A translated description spells the facet the platform's way - the Russian word alone
     went blind there, exactly as the code half of the family once did."""
     d = _run(
         tmp_path,

@@ -119,7 +119,7 @@ def line_length(source: SourceFile) -> Iterable[Diagnostic]:
     """1.2: the maximum line length is 120 characters.
 
     String literals are excluded: the docs allow long lines when splitting them hurts
-    readability, and in this project that is HTML/CSS/SVG in inserts. The marker – the
+    readability, and in this project that is HTML/CSS/SVG in inserts. The marker - the
     character at position 121 lies inside a string literal.
     """
     if source.kind != "xbsl":
@@ -182,7 +182,7 @@ def wrap_comma(source: SourceFile) -> Iterable[Diagnostic]:
         if not (tok.kind == "OP" and tok.value == ","):
             continue
         if i > 0 and toks[i - 1].end_line == tok.line:
-            continue  # the comma continues the line – all good
+            continue  # the comma continues the line - all good
         yield Diagnostic(
             source.rel, tok.line, tok.col, "style/wrap-comma", Severity.WARNING,
             i18n.t("style/wrap-comma.leading"),

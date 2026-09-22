@@ -126,7 +126,7 @@ def test_project_resource_not_flagged(tmp_path, library):
 
 
 def test_platform_library_name_not_flagged(tmp_path, library):
-    # the file is not in the project – the platform ships it
+    # the file is not in the project - the platform ships it
     assert not _run(tmp_path, _method("Ресурс{Настройки.svg}.Ссылка"), _UNKNOWN)
 
 

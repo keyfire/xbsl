@@ -83,7 +83,7 @@ def trailing_whitespace(source: SourceFile) -> Iterable[Diagnostic]:
 @rule("whitespace/mixed-newline", "whitespace/mixed-newline.title", "B", severity=Severity.WARNING)
 def mixed_newline(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind in _SOURCE_KINDS and source.newline == "mixed":
-        # A whole-file fix (normalize every newline to the dominant style), not a span edit –
+        # A whole-file fix (normalize every newline to the dominant style), not a span edit -
         # the fixer applies it by rule id, so no TextEdit is attached here.
         yield Diagnostic(
             source.rel, 1, 1, "whitespace/mixed-newline", Severity.WARNING,

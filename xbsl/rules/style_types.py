@@ -4,7 +4,7 @@
 - 3.2 no spaces around `|` in a union type;
 - 3.3 `Неопределено` in a type is written with the `?` shorthand;
 - 3.4 on initialization by a literal or a constructor the type is omitted;
-- 7.1 optional parameters – after the required ones.
+- 7.1 optional parameters - after the required ones.
 """
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ def _text(source: SourceFile, toks: list[Token]) -> str:
 
 @rule("style/type-colon-space", "style/type-colon-space.title", "C", severity=Severity.WARNING)
 def type_colon_space(source: SourceFile) -> Iterable[Diagnostic]:
-    """3.1: `пер Переменная: Строка` – no space before `:` and a space after."""
+    """3.1: `пер Переменная: Строка` - no space before `:` and a space after."""
     if source.kind != "xbsl":
         return
     text = source.text
@@ -156,7 +156,7 @@ def union_spaces(source: SourceFile) -> Iterable[Diagnostic]:
 @rule("style/nullable-shorthand", "style/nullable-shorthand.title", "C",
       severity=Severity.WARNING)
 def nullable_shorthand(source: SourceFile) -> Iterable[Diagnostic]:
-    """3.3: two types – joined (`Строка?`), three or more – via `|` (`Строка|Число|?`)."""
+    """3.3: two types - joined (`Строка?`), three or more - via `|` (`Строка|Число|?`)."""
     if source.kind != "xbsl":
         return
     for te in _type_exprs(code_tokens(source)):
@@ -189,7 +189,7 @@ def nullable_shorthand(source: SourceFile) -> Iterable[Diagnostic]:
 
 
 def _typed_empty_array(source: SourceFile, toks, start: int) -> str | None:
-    """`<Т>[]` – an empty array literal that names its own element type.
+    """`<Т>[]` - an empty array literal that names its own element type.
 
     The platform documents the form in "Идиомы" (`знч Артикулы = <Число>[]`), and it makes the
     annotation redundant exactly like a constructor does: `пер А: Массив<Число> = <Число>[]`
@@ -223,7 +223,7 @@ def redundant_type(source: SourceFile) -> Iterable[Diagnostic]:
 
     We report only when the annotation is bound to match the inferred type: a string or a
     number literal against the type `Строка`/`Число`, `Истина`/`Ложь` against `Булево`, the
-    constructor `новый Т(...)` against the same `Т`. Empty literals `[]`/`{}` are left alone –
+    constructor `новый Т(...)` against the same `Т`. Empty literals `[]`/`{}` are left alone -
     the type cannot be inferred for them and the annotation is required.
     """
     if source.kind != "xbsl":
@@ -236,7 +236,7 @@ def redundant_type(source: SourceFile) -> Iterable[Diagnostic]:
         if te is None or len(te.alternatives) != 1:
             continue
         annotation = _text(source, te.toks)
-        if annotation.endswith("?"):  # nullable is wider than the inferred type – annotation needed
+        if annotation.endswith("?"):  # nullable is wider than the inferred type - annotation needed
             continue
 
         value = toks[decl.value_start]

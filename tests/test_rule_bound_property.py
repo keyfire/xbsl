@@ -56,7 +56,7 @@ def test_computed_property_assignment_flagged(tmp_path):
 
 
 def test_data_binding_assignment_is_not_flagged(tmp_path):
-    """Связь с данными двунаправленная – так редактор и отдаёт значение обратно."""
+    """Связь с данными двунаправленная - так редактор и отдаёт значение обратно."""
     diags = _pair(
         tmp_path,
         value="Значение: =Запись.Значение",
@@ -87,7 +87,7 @@ def test_comparison_is_not_an_assignment(tmp_path):
 
 
 def test_assignment_through_an_event_source_is_left_alone(tmp_path):
-    """Источник обработчика – это тот же компонент, но статически лишь параметр."""
+    """Источник обработчика - это тот же компонент, но статически лишь параметр."""
     diags = _pair(
         tmp_path,
         value="Значение: =Запись.Значение",

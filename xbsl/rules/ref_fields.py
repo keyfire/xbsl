@@ -1,27 +1,27 @@
-"""Reference types must not rely on a default value – the code side and the yaml side.
+"""Reference types must not rely on a default value - the code side and the yaml side.
 
 A reference type has no default value on the platform, so every position that needs one
 must say so explicitly. Two rules of the same family live here:
 
-- code/ref-field-needs-req (tier C) – a structure field in a module;
-- yaml/ref-needs-nullable (tier A) – a `Тип` value in a yaml description.
+- code/ref-field-needs-req (tier C) - a structure field in a module;
+- yaml/ref-needs-nullable (tier A) - a `Тип` value in a yaml description.
 
 The code side. A structure field whose type is a project-object
-reference (`Программа.Ссылка`, `Справочник.Товары.Ссылка` – the last segment of the dotted
+reference (`Программа.Ссылка`, `Справочник.Товары.Ссылка` - the last segment of the dotted
 chain is `Ссылка`) has no default value on the platform, so the server-side apply fails with
 "cannot be initialized with a default value". The correct forms are:
 
-- `обз пер Ссылка: Программа.Ссылка` – the field is required in the constructor;
-- `пер Ссылка: Программа.Ссылка?` – a nullable type has the default `Неопределено`;
-- `пер Ссылка: Программа.Ссылка = <выражение>` – an explicit initializer.
+- `обз пер Ссылка: Программа.Ссылка` - the field is required in the constructor;
+- `пер Ссылка: Программа.Ссылка?` - a nullable type has the default `Неопределено`;
+- `пер Ссылка: Программа.Ссылка = <выражение>` - an explicit initializer.
 
-Detection is token-based: inside a `структура ... ;` block (nesting-aware – fields are taken
+Detection is token-based: inside a `структура ... ;` block (nesting-aware - fields are taken
 only at the top level of the structure body, not inside its methods or constructors) every
 `пер`/`знч` declaration is checked; a declaration is flagged when its type annotation is a
 plain dotted chain ending in `Ссылка`, with no `?`, no `= ...` initializer and no `обз`
 before the declaration keyword.
 
-Deliberate narrowings (skip rather than guess – no false positives):
+Deliberate narrowings (skip rather than guess - no false positives):
 
 - union types (`А.Ссылка|Б.Ссылка`, `А.Ссылка|?`) are skipped: the platform's defaulting
   rules for unions are not encoded here, and a `|?` union is nullable anyway;
@@ -31,9 +31,9 @@ Deliberate narrowings (skip rather than guess – no false positives):
   project-object reference;
 - an alternative that is not a plain IDENT(.IDENT)* chain is skipped.
 
-The yaml side (yaml/ref-needs-nullable). The same reference type in a `Тип` value – an
+The yaml side (yaml/ref-needs-nullable). The same reference type in a `Тип` value - an
 object attribute, a component property, a structure field or an input field
-`ПолеВвода<Товары.Ссылка>` – is rejected by the compiler for the same reason, in four
+`ПолеВвода<Товары.Ссылка>` - is rejected by the compiler for the same reason, in four
 positions and both flavours of the message:
 
     СпрРеквизитБезЗнака.yaml  [9:14]  Default value initialization is not supported for
@@ -44,34 +44,34 @@ positions and both flavours of the message:
     СпрСтдСсылка.yaml         [9:14]  ... for type ДвоичныйОбъект.Ссылка
 
 The nullable counterparts of all four applied cleanly, so the marker is what the compiler
-is after. A stdlib reference (`ДвоичныйОбъект.Ссылка`) behaves exactly like a project one –
+is after. A stdlib reference (`ДвоичныйОбъект.Ссылка`) behaves exactly like a project one -
 hence the rule needs no project knowledge and stays file-scoped (tier A, instant in the
 editor). Positions match the compiler's on the attribute and the property; on the input
 field the compiler points at the component node while the rule points at the argument
-inside the value – the place to actually edit.
+inside the value - the place to actually edit.
 
-Unions are judged too – a second probe (2026-08-13) showed the compiler rejects a union
+Unions are judged too - a second probe (2026-08-13) showed the compiler rejects a union
 that carries a reference member and has no nullable member, and a MIXED union fails the
 same way (a value-typed member does not provide the default):
 
     Пробы.yaml      [15] Default value initialization is not supported for types
                          "ЦелиДругие.Ссылка|ЦелиОдни.Ссылка". Explicitly specify a value or
                          add it to the set of types "Неопределено"
-    Пробы.yaml      [23] (the same for "Строка|ЦелиОдни.Ссылка" – a mixed union)
+    Пробы.yaml      [23] (the same for "Строка|ЦелиОдни.Ссылка" - a mixed union)
     ФормаПробы.yaml [10] Parameter "ТипДанных" of type
                          "ПолеВвода<ЦелиДругие.Ссылка|ЦелиОдни.Ссылка>" must have a
                          default value
 
 The `...|?` counterparts of both applied cleanly in the same run. A union is nullable when
 any alternative is `?`, the `Undefined` literal (either spelling) or ends with `?` (a
-nullable member injects the empty value into the whole set) – such unions are skipped. A
+nullable member injects the empty value into the whole set) - such unions are skipped. A
 union whose every alternative is a plain chain but none is a reference is left alone: the
 probe has not established whether a reference-free union defaults, and silence is the safe
 side.
 
-Other narrowing mirrors the code side – other generics are left alone, and
+Other narrowing mirrors the code side - other generics are left alone, and
 `Массив<Товары.Ссылка>` is not merely unproven but legal: the same probe applied it without
-a complaint (a collection has its own default – the empty collection). A union with a
+a complaint (a collection has its own default - the empty collection). A union with a
 generic or a qualified `Поставщик::Проект::Объект.Ссылка` member is skipped as a whole. On
 the CODE side (structure fields) unions stay skipped: the probe covered the yaml positions
 only.
@@ -159,12 +159,12 @@ _IDENT_RE = r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*"
 
 @lru_cache(maxsize=1)
 def _yaml_patterns() -> tuple[re.Pattern, re.Pattern, re.Pattern]:
-    """(the chain, a bare value, an input-field value) – the yaml shapes of a reference.
+    """(the chain, a bare value, an input-field value) - the yaml shapes of a reference.
 
     A plain dotted chain of at least two segments ending in the reference facet. The facet is
     taken in both spellings from the platform dictionary, so the patterns are built once the
     data is known rather than at import: a translated description spells the chain with the
-    English facet, and the Russian word alone went blind there – the same gap the code half
+    English facet, and the Russian word alone went blind there - the same gap the code half
     of the family had closed before.
     """
     facet = "|".join(re.escape(name) for name in sorted(_reference_facets()))
@@ -177,7 +177,7 @@ def _yaml_patterns() -> tuple[re.Pattern, re.Pattern, re.Pattern]:
 
 
 dataset.register_reset(_yaml_patterns.cache_clear)
-#: An input field with ANY argument – the union check parses the inside itself.
+#: An input field with ANY argument - the union check parses the inside itself.
 _YAML_INPUT_ANY_RE = re.compile(r"^\s*(ПолеВвода|Edit)\s*<\s*(.+?)\s*>\s*$")
 #: A union alternative the rule understands: a plain dotted chain, optionally nullable.
 _YAML_UNION_ALT_RE = re.compile(
@@ -193,7 +193,7 @@ _FIELD_KEYWORDS = ("VAR", "VAL")
 def _structure_field_decls(toks: list[Token]) -> list[tuple[int, bool]]:
     """Indices of `пер`/`знч` keywords at the top level of structure bodies.
 
-    Returns (index, has_req) pairs; has_req – the declaration is preceded by `обз`.
+    Returns (index, has_req) pairs; has_req - the declaration is preceded by `обз`.
     Block tracking mirrors code_structure: a lowercase opener keyword pushes a block,
     `;` pops one; `иначе если` on one line continues the same `если` block. Query-block
     contents and comments are already stripped by code_tokens, so a `;` inside a query
@@ -261,7 +261,7 @@ def _plain_ref_chain(alt: list[Token]) -> list[Token] | None:
     """The IDENT tokens of a plain dotted chain ending in `Ссылка`, else None.
 
     The alternative must strictly alternate IDENT and '.', have at least two segments
-    and no other tokens (`?`, `<...>`, `Неопределено` – not a plain reference chain).
+    and no other tokens (`?`, `<...>`, `Неопределено` - not a plain reference chain).
     """
     idents: list[Token] = []
     expect_ident = True
@@ -314,7 +314,7 @@ def ref_field_needs_req(source: SourceFile) -> Iterable[Diagnostic]:
             continue
         te = type_expr(toks, j + 1)
         if te is None or len(te.alternatives) != 1:
-            continue  # no type, or a union – skip (see the module docstring)
+            continue  # no type, or a union - skip (see the module docstring)
         if te.end < n and toks[te.end].kind == "OP" and toks[te.end].value == "=":
             continue  # an explicit initializer
         chain = _plain_ref_chain(te.alternatives[0])
@@ -337,8 +337,8 @@ def _union_needs_nullable(text: str) -> bool:
     """A union of plain chains with a reference member and no nullable member.
 
     Any alternative that is `?`, the `Undefined` literal (either spelling) or ends with `?`
-    makes the whole union nullable – skipped. Any alternative outside the plain-chain shape
-    (a generic, a qualified name) makes the union something the rule does not judge –
+    makes the whole union nullable - skipped. Any alternative outside the plain-chain shape
+    (a generic, a qualified name) makes the union something the rule does not judge -
     skipped too.
     """
     if "|" not in text:

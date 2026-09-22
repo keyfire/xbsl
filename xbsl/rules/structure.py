@@ -82,7 +82,7 @@ def _owner_yaml(source: SourceFile):
 
 @rule("structure/xbsl-pair", "structure/xbsl-pair.title", "A", severity=Severity.WARNING)
 def xbsl_pair(source: SourceFile) -> Iterable[Diagnostic]:
-    # A module (.xbsl) is the code of an element described by a paired .yaml – a lone .xbsl is orphaned.
+    # A module (.xbsl) is the code of an element described by a paired .yaml - a lone .xbsl is orphaned.
     # This checks files on disk: for in-memory content (lint_source) we do not check the pairing.
     if source.kind != "xbsl" or not source.path.exists():
         return

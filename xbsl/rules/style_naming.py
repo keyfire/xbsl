@@ -2,9 +2,9 @@
 
 - 2.1 UpperCamelCase for names (except constants);
 - 2.2 in abbreviations only the first letter is capital (`ТелоJson`, not `ТелоJSON`);
-- 2.3 constants – ALL_CAPS_WITH_UNDERSCORES;
-- 2.4 exception types – with the "Исключение" prefix;
-- 2.5 enumeration names – "Вид", not "Тип".
+- 2.3 constants - ALL_CAPS_WITH_UNDERSCORES;
+- 2.4 exception types - with the "Исключение" prefix;
+- 2.5 enumeration names - "Вид", not "Тип".
 
 Only names the module declares itself are checked (methods and their parameters, value/variable
 declarations, structures, enumerations, exceptions). References to foreign names are left alone:
@@ -90,7 +90,7 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# Two or more consecutive capitals (either script) inside a name – an all-caps abbreviation
+# Two or more consecutive capitals (either script) inside a name - an all-caps abbreviation
 # candidate. The core logic (naming._abbrev_core) hands the trailing capital to the next word
 # and dismisses a single-letter remainder as a glued conjunction (СтрокаИЧисло is clean).
 _ABBREV_RE = re.compile(r"[А-ЯЁA-Z]{2,}")
@@ -150,7 +150,7 @@ def _declared_names(source: SourceFile) -> list[Token]:
 
 
 def _structure_ranges(toks: list[Token]) -> list[tuple[int, int]]:
-    """Offsets [start, end) of structure bodies – the `структура ... ;` block (nesting-aware)."""
+    """Offsets [start, end) of structure bodies - the `структура ... ;` block (nesting-aware)."""
     from xbsl.rules.code_structure import _OPENERS
 
     ranges: list[tuple[int, int]] = []
@@ -173,8 +173,8 @@ def camel_case(source: SourceFile) -> Iterable[Diagnostic]:
     """2.1: `ВходящееСообщение`, not `входящееСообщение` and not `Степень_Важности`.
 
     Structure fields and method parameters are not checked: their names are often dictated by
-    an external contract (JSON keys of a third-party service – `access_token`, `Ref_Key`),
-    and cannot be renamed – serialization goes by field names.
+    an external contract (JSON keys of a third-party service - `access_token`, `Ref_Key`),
+    and cannot be renamed - serialization goes by field names.
     """
     if source.kind != "xbsl":
         return
@@ -187,7 +187,7 @@ def camel_case(source: SourceFile) -> Iterable[Diagnostic]:
         if decl.keyword.canonical == "CONST":
             continue  # constants have their own rule (2.3)
         if any(start <= decl.keyword.start < end for start, end in structures):
-            continue  # structure field – the name is set by the contract
+            continue  # structure field - the name is set by the contract
         names.extend(decl.names)
 
     for tok in names:
