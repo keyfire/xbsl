@@ -39,16 +39,20 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`translate --unused --since` includes pure resource renames.** Git emits no content
   hunk for an unchanged file moved to a new name. Its old path now contributes candidates,
   so a translation used only in the old filename can be removed.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
 - **`docs_symbol` finds members generated for interface components.** It reads member
   headings in the component type guide and returns the page, member block and section name.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
 - **Comment wrapping preserves deeper-indented list continuations.** Lines beneath a list
   item stay separate in both `//` and `/* ... */` comments when their translation grows.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
 - **Typed exception members keep their platform spelling during translation.** A catch
   declaration now recognizes `Exception` as a type. A project dictionary entry for the same
   member name no longer changes `Error.Cause` into an unknown property.
+  ([#124](https://github.com/keyfire/xbsl/pull/124))
 - **Method-qualified dictionary entries no longer rename query aliases.** A parameter
   entry applies to that method's locals. Query aliases and accesses to their result fields
-  keep the same spelling.
+  keep the same spelling. ([#124](https://github.com/keyfire/xbsl/pull/124))
 
 - **`--compare` pairs one folder typed relative and absolute.** The key of a finding took the
   path as typed, so two runs of one folder spelled two ways compared nothing and named both paths
