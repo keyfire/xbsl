@@ -27,6 +27,24 @@ plus the pure `sections` and `summarize` over a page's HTML. With no database th
 empty. The MCP tools run on this API, and later the reference panel of the VS Code extension will
 too.
 
+## Retired interface components
+
+The optional `retired_components` section of `stdlib.json` retains runtime descriptions
+for components whose help page is a tombstone. Each record carries `term`, `namespace`,
+`baseType`, the compatibility limit `to`, typed properties, and named events from the
+distribution. The UI schema uses it only when the term matches a retired help page and the
+limit is stated. It marks the result with `source: runtime`, `retired: true`, and `until`.
+Known property types and inherited properties become `props`; a known key whose type or
+event signature is unavailable remains in `yaml_props` without a guessed type.
+
+Re-extract both stdlib and uischema to obtain these records. A dataset without the optional
+section keeps the previous behavior, and a current help page is never replaced by a runtime
+description.
+
+Component and property queries retain these definitions for existing compatibility markup.
+Catalog entries preserve `retired` and `until`. The insertion palette excludes retired
+components and containers; it does not assume that the active project's mode permits them.
+
 ## Element versions
 
 The data is versioned by platform version:

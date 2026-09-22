@@ -87,6 +87,8 @@ function kindDescription(kind: string): string | undefined {
       return vscode.l10n.t("by a string");
     case "computed":
       return vscode.l10n.t("computed name");
+    case "stem":
+      return vscode.l10n.t("name without extension");
     default:
       return undefined;
   }
@@ -100,6 +102,8 @@ function kindTooltip(kind: string): string | undefined {
       return vscode.l10n.t("A string with the path: the file is looked up by it at run time.");
     case "computed":
       return vscode.l10n.t("A string with the folder and a computed file name: at run time it may name this file.");
+    case "stem":
+      return vscode.l10n.t("A file name without an extension: at run time it may refer to this resource.");
     default:
       return undefined;
   }

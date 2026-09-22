@@ -4672,6 +4672,68 @@ SEEDS: list[Seed] = [
     ),
     # --- computed access control -------------------------------------------------------
     Seed(
+        rule="code/access-key-handler-flavour",
+        expect=FINDING,
+        note="a computed access key whose manager module has no key-presence handler",
+        files={"КлючПробы.yaml": "ВидЭлемента: КлючДоступа\n"
+                                  "Ид: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                  "Имя: КлючПробы\n"
+                                  "РучнаяВыдача: Ложь\n"},
+        english={"ProbeAccessKey.yaml": "ElementKind: AccessKey\n"
+                                        "Id: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                        "Name: ProbeAccessKey\n"
+                                        "ManualGrant: False\n"},
+        tokens={"КлючПробы": "ProbeAccessKey"},
+    ),
+    Seed(
+        rule="code/access-key-handler-flavour",
+        expect=CLEAN,
+        note="a computed access key whose manager module declares the key-presence handler",
+        files={"КлючПробы.yaml": "ВидЭлемента: КлючДоступа\n"
+                                  "Ид: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                  "Имя: КлючПробы\n"
+                                  "РучнаяВыдача: Ложь\n",
+               "КлючПробы.xbsl": "@Обработчик\nметод ПроверитьНаличиеКлючейДоступа()\n;\n"},
+        english={"ProbeAccessKey.yaml": "ElementKind: AccessKey\n"
+                                        "Id: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                        "Name: ProbeAccessKey\n"
+                                        "ManualGrant: False\n",
+                 "ProbeAccessKey.xbsl": "@Handler\nmethod CheckHasAccessKeys()\n;\n"},
+        tokens={"КлючПробы": "ProbeAccessKey"},
+    ),
+    Seed(
+        rule="code/access-key-handler-flavour",
+        expect=FINDING,
+        note="a manually granted access key that declares the key-presence handler",
+        files={"КлючПробы.yaml": "ВидЭлемента: КлючДоступа\n"
+                                  "Ид: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                  "Имя: КлючПробы\n"
+                                  "РучнаяВыдача: Истина\n",
+               "КлючПробы.xbsl": "@Обработчик\nметод ПроверитьНаличиеКлючейДоступа()\n;\n"},
+        english={"ProbeAccessKey.yaml": "ElementKind: AccessKey\n"
+                                        "Id: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                        "Name: ProbeAccessKey\n"
+                                        "ManualGrant: True\n",
+                 "ProbeAccessKey.xbsl": "@Handler\nmethod CheckHasAccessKeys()\n;\n"},
+        tokens={"КлючПробы": "ProbeAccessKey"},
+    ),
+    Seed(
+        rule="code/access-key-handler-flavour",
+        expect=CLEAN,
+        note="a manually granted access key whose manager module declares another method",
+        files={"КлючПробы.yaml": "ВидЭлемента: КлючДоступа\n"
+                                  "Ид: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                  "Имя: КлючПробы\n"
+                                  "РучнаяВыдача: Истина\n",
+               "КлючПробы.xbsl": "метод Проба()\n;\n"},
+        english={"ProbeAccessKey.yaml": "ElementKind: AccessKey\n"
+                                        "Id: 1d1f5c60-0000-4000-8000-000000000f70\n"
+                                        "Name: ProbeAccessKey\n"
+                                        "ManualGrant: True\n",
+                 "ProbeAccessKey.xbsl": "method Probe()\n;\n"},
+        tokens={"КлючПробы": "ProbeAccessKey", "Проба": "Probe"},
+    ),
+    Seed(
         rule="code/permission-field-not-declared",
         expect=FINDING,
         note="the per-object handler reads a field the yaml does not list as computed by",

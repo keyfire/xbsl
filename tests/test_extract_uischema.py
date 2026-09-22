@@ -230,6 +230,29 @@ _GUIDE_PAGES = [
 ]
 
 
+# The reference page is a tombstone.  The runtime descriptor is the only source that still
+# states the component's own properties, while the ordinary Group page supplies inherited ones.
+_RETIRED_GROUP_ID = _STD + "Interface/Groups/RetiredGroup_ru"
+_RETIRED_GROUP_PAGE = _page(
+    _RETIRED_GROUP_ID,
+    "УстаревшаяГруппа",
+    "Стд::Интерфейс::Группы::УстаревшаяГруппа",
+    "<h1><del>УстаревшаяГруппа</del></h1><p><code>Версия 8.0 и ниже</code></p>",
+)
+_RETIRED_COMPONENTS = {
+    "УстаревшаяГруппа": {
+        "term": {"ru": "УстаревшаяГруппа", "en": "RetiredGroup"},
+        "namespace": {"ru": "Стд::Интерфейс::Группы", "en": "Std::Interface::Groups"},
+        "baseType": "Группа",
+        "to": 8.0,
+        "properties": [
+            {"term": {"ru": "Заголовок", "en": "Title"}, "type": "Строка"},
+        ],
+        "events": [{"term": {"ru": "ПриНажатии", "en": "OnClick"}}],
+    },
+}
+
+
 def _schema() -> dict:
     return ux.build_schema(_PAGES, "9.9.9+0", _GUIDE_PAGES)
 
@@ -406,6 +429,44 @@ def test_yaml_props_carry_documented_names_outside_the_typed_set():
 def test_schema_without_guides_has_no_yaml_props_from_topics():
     comps = ux.build_schema(_PAGES, "9.9.9+0")["components"]
     assert "ВключатьВАвтоИнтерфейс" not in (comps["КарточкаАкме"].get("yaml_props") or [])
+
+
+def test_a_retired_component_uses_the_runtime_descriptor_only_at_a_tombstone():
+    schema = ux.build_schema(
+        _PAGES, "9.9.9+0", [_RETIRED_GROUP_PAGE], retired_components=_RETIRED_COMPONENTS
+    )
+
+    retired = schema["components"]["УстаревшаяГруппа"]
+    assert retired["package"] == "Стд::Интерфейс::Группы"
+    assert retired["until"] == "8.0"
+    assert retired["props"]["Заголовок"] == {"types": ["Строка"]}
+    assert "ПриНажатии" in retired["yaml_props"]
+
+
+def test_a_runtime_descriptor_without_a_tombstone_or_compatibility_limit_is_ignored():
+    no_tombstone = ux.build_schema(_PAGES, "9.9.9+0", retired_components=_RETIRED_COMPONENTS)
+    assert "УстаревшаяГруппа" not in no_tombstone["components"]
+
+    no_limit = {"УстаревшаяГруппа": {**_RETIRED_COMPONENTS["УстаревшаяГруппа"]}}
+    no_limit["УстаревшаяГруппа"].pop("to")
+    schema = ux.build_schema(
+        _PAGES, "9.9.9+0", [_RETIRED_GROUP_PAGE], retired_components=no_limit
+    )
+    assert "УстаревшаяГруппа" not in schema["components"]
+
+
+def test_a_runtime_property_with_an_untranslated_type_stays_a_known_yaml_key():
+    descriptor = {"УстаревшаяГруппа": {**_RETIRED_COMPONENTS["УстаревшаяГруппа"]}}
+    descriptor["УстаревшаяГруппа"]["properties"] = [
+        {"term": {"ru": "Неизвестное", "en": "Unknown"}, "type": "Std::Unknown"},
+    ]
+    schema = ux.build_schema(
+        _PAGES, "9.9.9+0", [_RETIRED_GROUP_PAGE], retired_components=descriptor
+    )
+
+    retired = schema["components"]["УстаревшаяГруппа"]
+    assert "Неизвестное" not in retired["props"]
+    assert "Неизвестное" in retired["yaml_props"]
 
 
 def test_component_since_only_without_deleted_overloads():

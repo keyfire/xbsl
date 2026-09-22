@@ -22,12 +22,22 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`code/access-key-handler-flavour` checks the handler required by an access key's flavour.**
+  A computed key needs `CheckHasAccessKeys` in its manager module. A manually granted key cannot
+  declare it. Both rejected combinations are reported before compilation.
+  ([#125](https://github.com/keyfire/xbsl/pull/125))
+
 - **`lint_paths` compares with the previous call, like `--compare`.** The `compare` parameter
   names the file. The first call saves the run, and each later one answers with the findings that
   appeared and disappeared and a row per changed rule, all as data. The difference used to be
   available only in the CLI, and agents check projects through MCP more often. ([#122](https://github.com/keyfire/xbsl/pull/122))
 
 ### Fixed
+
+- **The UI schema restores retired components from their runtime descriptions.** A tombstone
+  help page is supplemented with known properties and the stated compatibility limit. Current
+  help pages retain priority, and an older dataset without runtime descriptions works as before.
+  ([#125](https://github.com/keyfire/xbsl/pull/125))
 
 - **`translate --unused --since` includes pure resource renames.** Git emits no content
   hunk for an unchanged file moved to a new name. Its old path now contributes candidates,

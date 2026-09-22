@@ -6,7 +6,7 @@
 // What a place is, as the engine tells: a static reference that resolves to the file, a key two
 // visible resources folders hold, a string that spells the path, a string with the folder and a
 // computed name. An engine newer than the extension may add a kind, so the type stays open.
-export type ResourceReferenceKind = "reference" | "ambiguous" | "string" | "computed";
+export type ResourceReferenceKind = "reference" | "ambiguous" | "string" | "computed" | "stem";
 
 export interface EnginePosition {
   line: number; // zero-based

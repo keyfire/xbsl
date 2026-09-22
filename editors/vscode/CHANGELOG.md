@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+
+- **Resource references identify names without a file extension.** References of kind `stem`
+  now have a description and tooltip instead of appearing as ordinary direct references.
+  ([#125](https://github.com/keyfire/xbsl/pull/125))
+
 ## 0.75.0
 
 ### Fixed

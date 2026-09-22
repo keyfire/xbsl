@@ -55,6 +55,19 @@ test("abstract components are dropped from the insertable set", () => {
   assert.ok(!concrete.has("Компонент"));
 });
 
+test("retired components are dropped while normal components stay insertable", () => {
+  const catalog: UiCatalogResponse = {
+    available: true,
+    components: {
+      Обычный: { package: "Стд::Интерфейс::Группы" },
+      Устаревший: { package: "Стд::Интерфейс::Группы", retired: true, until: "8.0" },
+    },
+  };
+  const concrete = concreteCatalog(catalog);
+  assert.ok(concrete.has("Обычный"));
+  assert.ok(!concrete.has("Устаревший"));
+});
+
 test("sections: frequent, favorites, project, then packages sorted by segment", () => {
   const sections = buildPalette(
     CATALOG,
@@ -123,6 +136,7 @@ test("container candidates come straight from catalog flags when the data has th
       Группа: { package: "Стд::Интерфейс::ОбщиеКомпоненты", container: true },
       Кнопка: { package: "Стд::Интерфейс::ОбщиеКомпоненты" },
       БазовыйКонтейнер: { package: "Стд::Интерфейс", container: true, abstract: true },
+      УстаревшийКонтейнер: { package: "Стд::Интерфейс", container: true, retired: true },
     },
   };
   // ru-sorted, the abstract container dropped (it cannot be written as a wrapper type)
@@ -150,6 +164,7 @@ test("container candidates come from records with a Содержимое slot", 
     ["Группа", { props: { Содержимое: { slot: true } } }],
     ["Кнопка", { props: { Заголовок: {} } }],
     ["СтандартнаяКарточка", { props: { Содержимое: { slot: true } } }],
+    ["УстаревшийКонтейнер", { props: { Содержимое: { slot: true } }, retired: true }],
     ["Сломанный", undefined],
   ]);
   assert.deepStrictEqual(containersFromRecords(records, ["Группа"]), ["Группа", "СтандартнаяКарточка"]);

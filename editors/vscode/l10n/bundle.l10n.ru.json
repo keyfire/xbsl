@@ -627,6 +627,8 @@
   "key in several folders": "ключ в нескольких каталогах",
   "by a string": "по строке",
   "computed name": "вычисляемое имя",
+  "name without extension": "имя без расширения",
+  "A file name without an extension: at run time it may refer to this resource.": "Имя файла без расширения: при выполнении оно может указывать на этот ресурс.",
   "Another resources folder this file sees holds the same key, so the reference may lead to either file.": "Такой же ключ есть ещё в одном каталоге ресурсов, видимом из этого файла, поэтому ссылка может вести к любому из файлов.",
   "A string with the path: the file is looked up by it at run time.": "Строка с путём: по ней файл ищется при выполнении.",
   "A string with the folder and a computed file name: at run time it may name this file.": "Строка с папкой и вычисляемым именем файла: при выполнении она может указать на этот файл.",
