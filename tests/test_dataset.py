@@ -136,6 +136,8 @@ def _ru_only_dataset():
         "bases": {"Запрос": ["Объект"], "Объект": []},
         "type_members": {"Запрос": {"methods": ["Выполнить"]}, "Объект": {"methods": ["ВСтроку"]}},
         "member_types": {"Запрос": {"Выполнить": "РезультатЗапроса"}},
+        "type_param_variance": {"Запрос": ["out"]},
+        "generic_bases": {"Запрос": {"Объект": []}},
     }
 
 
@@ -147,6 +149,8 @@ def test_add_english_keys_copies_the_russian_entry():
     assert data["type_members"]["Query"] == data["type_members"]["Запрос"]
     assert data["bases"]["Query"] == ["Объект"]  # bases stay Russian - they are values, not keys
     assert data["member_types"]["Query"] == {"Выполнить": "РезультатЗапроса"}
+    assert data["type_param_variance"]["Query"] == ["out"]
+    assert data["generic_bases"]["Query"] == {"Объект": []}
 
 
 def test_english_type_inherits_like_the_russian_one():
@@ -162,6 +166,17 @@ def test_bilingual_expansion_skipped_without_marker_or_terms():
     assert "Query" not in dataset._add_english_keys(no_marker, PAIRS)["type_members"]
     # marker present but terms.json absent (empty pairs) - Russian still works, no crash
     assert "Query" not in dataset._add_english_keys(_ru_only_dataset(), {})["type_members"]
+
+
+@pytest.mark.parametrize("section", ["type_param_variance", "generic_bases"])
+@pytest.mark.parametrize("malformed", [None, 7, "value", []])
+def test_malformed_optional_bilingual_sections_are_left_for_the_consumer(section, malformed):
+    data = _ru_only_dataset()
+    data[section] = malformed
+
+    expanded = dataset._add_english_keys(data, PAIRS)
+
+    assert expanded[section] is malformed
 
 
 # --- in-place regeneration is picked up without a restart (no distribution data needed) -----

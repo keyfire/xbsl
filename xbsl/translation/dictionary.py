@@ -66,6 +66,10 @@ except ImportError:  # pragma: no cover
 _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader) if _HAVE_YAML else None
 
 MESSAGES = {
+    "translate.dictionary.three-way": {
+        "ru": "трехстороннее слияние словаря неоднозначно для {name}; согласуйте изменения обеих веток",
+        "en": "the dictionary three-way merge is ambiguous for {name}",
+    },
     "translate.dictionary.no-yaml": {
         "ru": "для чтения словаря нужен пакет pyyaml",
         "en": "reading a dictionary requires the pyyaml package",
@@ -547,6 +551,73 @@ def overlay(
         if extra:
             out.append((f"{prefix}:{name}", extra))
     return out
+
+
+def three_way(working: Sequence[tuple[str, Sections]], base: Sequence[tuple[str, Sections]],
+              other: Sequence[tuple[str, Sections]], prefix: str, *,
+              working_renames: dict[str, str] | None = None,
+              other_renames: dict[str, str] | None = None) -> list[tuple[str, Sections]]:
+    """Project translated keys, preserving both sides of a real value conflict.
+
+    Line numbers are locations, not edits. Every selected pair keeps its original location;
+    target records are labelled with the ref instead of pretending to exist on disk.
+    File deletion versus modification cannot be expressed as a duplicate, so it is refused.
+    """
+    wr, tr = working_renames or {}, other_renames or {}
+    w, b, t = dict(working), dict(base), dict(other)
+    for identity in set(wr) & set(tr):
+        if wr[identity] != tr[identity]:
+            raise DictionaryError(i18n.t("translate.dictionary.three-way", name=identity))
+    for renames, side, opposite, opposite_renames in ((wr, w, t, tr), (tr, t, w, wr)):
+        for old, new in renames.items():
+            if (old not in b or new not in side or new in b
+                    or (new in opposite and opposite_renames.get(old) != new)):
+                raise DictionaryError(i18n.t("translate.dictionary.three-way", name=new))
+
+    def records(sections):
+        grouped = {}
+        for section, pairs in (sections or {}).items():
+            for pair in pairs:
+                grouped.setdefault((section, pair[0]), []).append(pair)
+        return grouped
+
+    def values(pairs):
+        return [pair[1] for pair in pairs]
+
+    def semantic(grouped):
+        return {key: values(pairs) for key, pairs in grouped.items()}
+
+    ours: dict[str, Sections] = {}
+    theirs: dict[str, Sections] = {}
+
+    def keep(destination, name, section, pairs):
+        if pairs:
+            destination.setdefault(name, {}).setdefault(section, []).extend(pairs)
+
+    identities = set(b) | (set(w) - set(wr.values())) | (set(t) - set(tr.values()))
+    for identity in sorted(identities):
+        wn, tn = wr.get(identity, identity), tr.get(identity, identity)
+        ws, bs, ts = w.get(wn), b.get(identity), t.get(tn)
+        wg, bg, tg = records(ws), records(bs), records(ts)
+        if bs is not None and ((ws is None and ts is not None and semantic(tg) != semantic(bg))
+                               or (ts is None and ws is not None and semantic(wg) != semantic(bg))):
+            raise DictionaryError(i18n.t("translate.dictionary.three-way", name=identity))
+        for key in sorted(set(wg) | set(bg) | set(tg)):
+            section, name = key
+            wp, bp, tp = wg.get(key, []), bg.get(key, []), tg.get(key, [])
+            if values(wp) == values(tp):
+                keep(ours, wn, section, wp)
+            elif values(tp) == values(bp):
+                keep(ours, wn, section, wp)
+            elif values(wp) == values(bp):
+                keep(theirs, tn, section, tp)
+            elif not wp or not tp:
+                raise DictionaryError(i18n.t("translate.dictionary.three-way", name=f"{identity}:{name}"))
+            else:
+                keep(ours, wn, section, wp)
+                keep(theirs, tn, section, tp)
+    return ([(name, ours[name]) for name in w if name in ours]
+            + [(f"{prefix}:{name}", theirs[name]) for name in t if name in theirs])
 
 
 def conflicts_message(conflicts: list[dict]) -> str:

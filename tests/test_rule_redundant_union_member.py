@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from xbsl import cli, engine, i18n
+from xbsl.rules import style_unions
 
 pytestmark = pytest.mark.needs_data
 
@@ -143,18 +144,142 @@ def test_the_english_module_names_the_empty_value_in_english():
     "Объект?",
     "Массив<Строка>|Массив<Число>",
     "Массив<Строка?>|ЧитаемыйМассив<Строка>",
-    # a wider argument: the IDE judges it by the variance of the parameter, which the catalog lacks
-    "Массив<Строка>|ЧитаемыйМассив<Объект>",
     "Массив<Строка>|Массив<Объект>",
     "ИзменяемыйМассив<Объект>|Массив<Строка>",
     "(Строка|Строка)->Число",
     "()->Строка|Строка",
     "()->Массив<Строка|Строка>",
-    # the catalog does not say which argument the base takes from a map
-    "Соответствие<Строка, Число>|Обходимое<КлючИЗначение<Строка, Число>>",
 ])
 def test_unions_that_add_something_with_each_member_are_not_reported(written):
     assert _lint(_param(written)) == []
+
+
+def _variance_catalog():
+    return (
+        {
+            "Массив": frozenset({"ЧитаемыйМассив", "Обходимое", "Объект"}),
+            "ЧитаемыйМассив": frozenset({"Обходимое", "Объект"}),
+            "Соответствие": frozenset({"ЧитаемоеСоответствие", "Обходимое", "Объект"}),
+            "ЧитаемоеСоответствие": frozenset({"Обходимое", "Объект"}),
+            "КлючИЗначение": frozenset({"Объект"}),
+        },
+        {
+            "Массив": ("ТипЭлемента",),
+            "ЧитаемыйМассив": ("ТипЭлемента",),
+            "Обходимое": ("ТипЭлемента",),
+            "Соответствие": ("ТипКлюча", "ТипЗначения"),
+            "ЧитаемоеСоответствие": ("ТипКлюча", "ТипЗначения"),
+            "КлючИЗначение": ("ТипКлюча", "ТипЗначения"),
+        },
+        {
+            "ЧитаемыйМассив": ("out",),
+            "Обходимое": ("out",),
+            "ЧитаемоеСоответствие": ("out", "out"),
+            "КлючИЗначение": ("out", "out"),
+        },
+        {
+            "Массив": {
+                "ЧитаемыйМассив": ("ТипЭлемента",),
+            },
+            "ЧитаемыйМассив": {
+                "Обходимое": ("ТипЭлемента",),
+            },
+            "Соответствие": {
+                "ЧитаемоеСоответствие": ("ТипКлюча", "ТипЗначения"),
+            },
+            "ЧитаемоеСоответствие": {
+                "Обходимое": ("КлючИЗначение<ТипКлюча, ТипЗначения>",),
+            },
+        },
+    )
+
+
+@pytest.mark.parametrize(("written", "rewritten"), [
+    ("Массив<Строка>|ЧитаемыйМассив<Объект>", "ЧитаемыйМассив<Объект>"),
+    ("Обходимое<Объект>|Массив<Строка>", "Обходимое<Объект>"),
+    ("Соответствие<Строка, Число>|ЧитаемоеСоответствие<Объект, Объект>",
+     "ЧитаемоеСоответствие<Объект, Объект>"),
+    ("Соответствие<Строка, Число>|Обходимое<КлючИЗначение<Объект, Объект>>",
+     "Обходимое<КлючИЗначение<Объект, Объект>>"),
+])
+def test_covariant_parameters_and_nested_base_formulas_cover_narrow_members(
+        written, rewritten, monkeypatch):
+    monkeypatch.setattr(style_unions, "_catalog", _variance_catalog)
+    text = _param(written)
+
+    found = _lint(text)
+
+    assert len(found) == 1, [d.message for d in found]
+    assert _fixed(text, found[0]) == _param(rewritten)
+
+
+def test_unknown_and_invariant_parameters_still_require_equal_arguments(monkeypatch):
+    monkeypatch.setattr(style_unions, "_catalog", _variance_catalog)
+
+    assert _lint(_param("Массив<Строка>|Массив<Объект>")) == []
+
+
+def test_missing_base_formula_does_not_borrow_the_legacy_name_mapping(monkeypatch):
+    bases, params, variance, _formulas = _variance_catalog()
+    monkeypatch.setattr(style_unions, "_catalog", lambda: (bases, params, variance, {}))
+
+    assert _lint(_param("Массив<Строка>|ЧитаемыйМассив<Объект>")) == []
+
+
+def test_nullable_base_formula_is_not_treated_as_a_plain_narrow_argument(monkeypatch):
+    bases, params, variance, formulas = _variance_catalog()
+    formulas = {name: dict(items) for name, items in formulas.items()}
+    formulas["Массив"]["ЧитаемыйМассив"] = ("ТипЭлемента?",)
+    monkeypatch.setattr(style_unions, "_catalog", lambda: (bases, params, variance, formulas))
+
+    assert _lint(_param("Массив<Строка>|ЧитаемыйМассив<Объект>")) == []
+
+
+@pytest.mark.parametrize("formula", ["ТипЭлемента|Неопределено", "()->ТипЭлемента"])
+def test_non_nominal_base_formula_is_left_unproven(monkeypatch, formula):
+    bases, params, variance, formulas = _variance_catalog()
+    formulas = {name: dict(items) for name, items in formulas.items()}
+    formulas["Массив"]["ЧитаемыйМассив"] = (formula,)
+    monkeypatch.setattr(style_unions, "_catalog", lambda: (bases, params, variance, formulas))
+
+    assert _lint(_param("Массив<Строка>|ЧитаемыйМассив<Объект>")) == []
+
+
+def test_modern_metadata_keeps_a_proven_non_generic_base(monkeypatch):
+    catalog = (
+        {"Строка": frozenset({"Представляемое", "Объект"})},
+        {},
+        {"ЧитаемыйМассив": ("out",)},
+        {},
+    )
+    monkeypatch.setattr(style_unions, "_catalog", lambda: catalog)
+    text = _param("Строка|Представляемое")
+
+    found = _lint(text)
+
+    assert len(found) == 1, [d.message for d in found]
+    assert _fixed(text, found[0]) == _param("Представляемое")
+
+
+def test_modern_metadata_keeps_object_covering_a_project_type(monkeypatch):
+    monkeypatch.setattr(style_unions, "_catalog", _variance_catalog)
+    text = "структура Точка\n    пер Икс: Число = 0\n;\n\n" + _param("Точка|Объект")
+
+    found = _lint(text)
+
+    assert len(found) == 1, [d.message for d in found]
+    assert _fixed(text, found[0]).endswith(_param("Объект"))
+
+
+def test_an_old_catalog_keeps_equal_argument_base_coverage(monkeypatch):
+    bases, params, _variance, _formulas = _variance_catalog()
+    monkeypatch.setattr(style_unions, "_catalog", lambda: (bases, params, {}, {}))
+    text = _param("Массив<Строка>|ЧитаемыйМассив<Строка>")
+
+    found = _lint(text)
+
+    assert len(found) == 1, [d.message for d in found]
+    assert _fixed(text, found[0]) == _param("ЧитаемыйМассив<Строка>")
 
 
 def test_a_module_that_does_not_parse_is_not_judged():

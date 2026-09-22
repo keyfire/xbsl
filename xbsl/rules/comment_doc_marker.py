@@ -34,7 +34,7 @@ from collections.abc import Iterable
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
-from xbsl.lexer import linemap, tokens
+from xbsl.lexer import Token, linemap, tokens
 from xbsl.parser import Enum, Structure, parse
 
 MESSAGES = {
@@ -64,6 +64,17 @@ MESSAGES = {
               "declaration. A `/* ... */` block never reaches the hover - rewrite the description "
               "as `///` lines.",
     },
+    "comment/doc-marker.slash-frame": {
+        "ru": "Строка с `////` перед объявлением тоже считается документирующим комментарием: "
+              "среда снимает только первые три слэша и показывает оставшуюся рамку в подсказке. "
+              "Отделите шапку от объявления пустой строкой и запишите ее обычным комментарием "
+              "`//`, либо замените рамку содержательным описанием `///`.",
+        "en": "A `////` line before a declaration is a documentation comment too: the "
+              "environment removes only the first three slashes and shows the rest of the "
+              "frame in the hover. Separate the header from the declaration with a blank line "
+              "and write it as an ordinary `//` comment, or replace the frame with a meaningful "
+              "`///` description.",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -79,22 +90,23 @@ def _declarations(module) -> Iterable:
             yield from member.methods
 
 
-@rule(
-    "comment/doc-marker", "comment/doc-marker.title", "B",
-    severity=Severity.WARNING, enabled_by_default=False, off_reason="comment/doc-marker.off",
-)
-def doc_marker(source: SourceFile) -> Iterable[Diagnostic]:
-    """A `//` or `/* */` block right above a declaration - see the module docstring."""
+def declaration_comment_blocks(source: SourceFile) -> list[list[Token]]:
+    """Whole-line comment groups attached directly to declarations in a module.
+
+    The declaration parser decides which nodes can carry documentation and where their first
+    token stands. Keeping that walk here lets project rules judge other shapes without a second
+    approximation of the attachment rules.
+    """
     if source.kind != "xbsl" or "//" not in source.text and "/*" not in source.text:
-        return
+        return []
     module, _errors = parse(source)
     if module is None:
-        return
+        return []
     lm = linemap(source)
     text_lines = source.text.split("\n")
     # Own-line comment tokens by the line they END on: a block comment is found by its last
     # line, which is the one that touches the declaration.
-    by_last_line: dict[int, object] = {}
+    by_last_line: dict[int, Token] = {}
     for tok in tokens(source):
         if tok.kind != "COMMENT":
             continue
@@ -102,13 +114,14 @@ def doc_marker(source: SourceFile) -> Iterable[Diagnostic]:
             continue  # a trailing comment after code
         by_last_line[tok.line + tok.value.count("\n")] = tok
     if not by_last_line:
-        return
+        return []
+    out: list[list[Token]] = []
     seen: set[int] = set()
     for decl in _declarations(module):
-        line, _col = lm.linecol(decl.start)
-        if text_lines[line - 1][: _col - 1].strip():
+        line, col = lm.linecol(decl.start)
+        if text_lines[line - 1][: col - 1].strip():
             continue  # a declaration that does not start its line (an enumeration item in a row)
-        block = []
+        block: list[Token] = []
         cursor = line - 1
         while cursor in by_last_line:
             tok = by_last_line[cursor]
@@ -117,18 +130,39 @@ def doc_marker(source: SourceFile) -> Iterable[Diagnostic]:
         if not block:
             continue
         block.reverse()
+        if block[0].start in seen:
+            continue
+        seen.add(block[0].start)
+        out.append(block)
+    return out
+
+
+@rule(
+    "comment/doc-marker", "comment/doc-marker.title", "B",
+    severity=Severity.WARNING, enabled_by_default=False, off_reason="comment/doc-marker.off",
+)
+def doc_marker(source: SourceFile) -> Iterable[Diagnostic]:
+    """A `//` or `/* */` block right above a declaration - see the module docstring."""
+    for block in declaration_comment_blocks(source):
+        frames = [tok for tok in block
+                  if tok.subkind == "line" and tok.value.startswith("////")]
         plain = [tok for tok in block if tok.subkind == "line" and not tok.value.startswith("///")]
         blocks = [tok for tok in block if tok.subkind != "line"]
-        head = (plain or blocks or [None])[0]
-        if head is None or head.start in seen:
+        if frames:
+            first = frames[0]
+            yield Diagnostic(
+                source.rel, first.line, first.col, "comment/doc-marker", Severity.WARNING,
+                i18n.t("comment/doc-marker.slash-frame"),
+            )
             continue
-        seen.add(head.start)
         if blocks:
             first = blocks[0]
             yield Diagnostic(
                 source.rel, first.line, first.col, "comment/doc-marker", Severity.WARNING,
                 i18n.t("comment/doc-marker.block"),
             )
+            continue
+        if not plain:
             continue
         start = plain[0].start
         end = plain[-1].start + len(plain[-1].value)

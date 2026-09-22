@@ -13,10 +13,9 @@ and the rule repeats what the IDE judges, checked on probe projects variant by v
 - a member is covered by an equal member, by `Object` (any type but the empty value, a type of
   the project too) and by a base type from the platform catalog - `Presentable` covers `String`,
   `Iterable<String>` and `ReadableArray<String>` cover `Array<String>`. The arguments of a
-  generic type are matched to the base by the names of the type parameters and have to be
-  equal: the IDE lets a read-only base take a wider argument (`ReadableArray<Object>` covers
-  `Array<String>`, `Array<Object>` does not), and the catalog does not say which parameters
-  those are, so a wider argument is left alone;
+  generic type follow the variance and base-argument formulas extracted from the platform
+  descriptors: a read-only base may take a wider argument (`ReadableArray<Object>` covers
+  `Array<String>`), while a mutable `Array<Object>` does not cover `Array<String>`;
 - the parameters and the result of a function type (`(Строка|Строка)->Число`) and a type
   written in yaml are not judged.
 
@@ -29,13 +28,14 @@ The fix writes the union without the members that add nothing: the rest in their
 empty value once, as `Т?` after a single type and as `|?` after several (the forms
 style/nullable-shorthand asks for). A union spread over lines or holding a comment keeps the
 findings without a fix. What the rule leaves alone: a qualified name compares only with the same
-text, a generic base whose parameters the catalog names differently (`Map` over
-`Iterable<KeyAndValue<...>>`) is not matched, and a module that does not parse is not judged.
+text, a generic relation whose variance or base-argument formula the catalog does not prove is
+invariant, and a module that does not parse is not judged.
 """
 
 from __future__ import annotations
 
 import bisect
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -102,15 +102,39 @@ class _Union:
 
 
 @lru_cache(maxsize=1)
-def _catalog() -> tuple[dict[str, frozenset[str]], dict[str, tuple[str, ...]]]:
-    """({type: its bases}, {type: its type parameters}) of the platform catalog, Russian names."""
+def _catalog() -> tuple[
+        dict[str, frozenset[str]], dict[str, tuple[str, ...]], dict[str, tuple[str, ...]],
+        dict[str, dict[str, tuple[str, ...]]]]:
+    """Hierarchy, parameters, variance and generic base formulas of the platform catalog."""
     try:
         data = dataset.load_json("stdlib.json")
     except Exception:  # noqa: BLE001 - no data: equal members only
-        return {}, {}
+        return {}, {}, {}, {}
     bases = {name: frozenset(items) for name, items in (data.get("bases") or {}).items()}
     params = {name: tuple(items) for name, items in (data.get("type_params") or {}).items()}
-    return bases, params
+    variance: dict[str, tuple[str, ...]] = {}
+    raw_variance = data.get("type_param_variance")
+    if isinstance(raw_variance, dict):
+        for name, items in raw_variance.items():
+            if (isinstance(name, str) and name and isinstance(items, list) and items
+                    and all(isinstance(item, str) and item in {"out", "in", "in_out"}
+                            for item in items)):
+                variance[name] = tuple(items)
+    generic_bases: dict[str, dict[str, tuple[str, ...]]] = {}
+    raw_generic_bases = data.get("generic_bases")
+    if isinstance(raw_generic_bases, dict):
+        for name, items in raw_generic_bases.items():
+            if not isinstance(name, str) or not name or not isinstance(items, dict):
+                continue
+            valid = {
+                base: tuple(args)
+                for base, args in items.items()
+                if isinstance(base, str) and base and isinstance(args, list) and args
+                and all(isinstance(arg, str) and arg.strip() for arg in args)
+            }
+            if valid:
+                generic_bases[name] = valid
+    return bases, params, variance, generic_bases
 
 
 dataset.register_reset(_catalog.cache_clear)
@@ -270,6 +294,124 @@ def _set_key(entries: list[_Entry]) -> str:
     return "|".join(names)
 
 
+def _split_top(text: str, separator: str) -> list[str]:
+    """Split a type expression at top-level separators only."""
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(text):
+        if char == "<":
+            depth += 1
+        elif char == ">":
+            depth -= 1
+        elif char == separator and depth == 0:
+            parts.append(text[start:index].strip())
+            start = index + 1
+    parts.append(text[start:].strip())
+    return parts
+
+
+def _nominal_key(text: str) -> tuple[str, tuple[str, ...]]:
+    """A canonical key split into its head and top-level arguments."""
+    text = text.strip()
+    if "<" not in text or not text.endswith(">"):
+        return text, ()
+    head, tail = text.split("<", 1)
+    return head.strip(), tuple(_split_top(tail[:-1], ","))
+
+
+def _substitute(formula: str, values: dict[str, str]) -> str | None:
+    """Substitute a supported base formula, leaving nullable shorthand unproven."""
+    if any(marker in formula for marker in ("?", "|", "(", ")")):
+        return None
+    if re.search(r"\b(?:Undefined|Неопределено)\b", formula):
+        return None
+    return re.sub(
+        r"[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*",
+        lambda match: values.get(match.group(0), match.group(0)),
+        formula,
+    ).replace(" ", "")
+
+
+def _base_arguments(
+        head: str, args: tuple[str, ...], target: str, seen: frozenset[str] = frozenset(),
+) -> tuple[str, ...] | None:
+    """Arguments a written generic type supplies to one of its generic bases."""
+    bases, params, variances, formulas = _catalog()
+    if head == target:
+        return args
+    if head in seen or target not in bases.get(head, ()):
+        return None
+    own_params = params.get(head, ())
+    if len(own_params) != len(args):
+        return None
+    values = dict(zip(own_params, args))
+    for base, base_formulas in formulas.get(head, {}).items():
+        substituted = [_substitute(formula, values) for formula in base_formulas]
+        if any(formula is None for formula in substituted):
+            if base == target:
+                return None
+            continue
+        mapped = tuple(formula for formula in substituted if formula is not None)
+        if base == target:
+            return mapped
+        found = _base_arguments(base, mapped, target, seen | {head})
+        if found is not None:
+            return found
+    # Older catalogs had no formulas. Equal parameter names are the only mapping they prove.
+    target_params = params.get(target, ())
+    if not target_params:
+        return ()
+    if variances or formulas:
+        return None
+    if target_params and all(name in values for name in target_params):
+        return tuple(values[name] for name in target_params)
+    return None
+
+
+def _arguments_cover(head: str, wide: tuple[str, ...], narrow: tuple[str, ...]) -> bool:
+    """Compare arguments by declared variance, invariant when the catalog is silent."""
+    _bases, params, variances, _formulas = _catalog()
+    if len(wide) != len(narrow) or len(wide) != len(params.get(head, ())):
+        return False
+    kinds = variances.get(head)
+    if kinds is None or len(kinds) != len(wide):
+        kinds = ("in_out",) * len(wide)
+    for kind, wide_arg, narrow_arg in zip(kinds, wide, narrow):
+        if kind == "out":
+            if not _union_key_covers(wide_arg, narrow_arg):
+                return False
+        elif kind == "in":
+            if not _union_key_covers(narrow_arg, wide_arg):
+                return False
+        elif wide_arg != narrow_arg:
+            return False
+    return True
+
+
+def _union_key_covers(wide: str, narrow: str) -> bool:
+    wide_members = _split_top(wide, "|")
+    narrow_members = _split_top(narrow, "|")
+    return all(any(_key_covers(w, n) for w in wide_members) for n in narrow_members)
+
+
+def _key_covers(wide: str, narrow: str) -> bool:
+    """Coverage of two canonical, non-opaque type keys."""
+    if wide == narrow:
+        return True
+    if wide == "?" or narrow == "?":
+        return False
+    wide_head, wide_args = _nominal_key(wide)
+    narrow_head, narrow_args = _nominal_key(narrow)
+    if wide_head == _OBJECT:
+        return True
+    bases, _params, _variance, _formulas = _catalog()
+    if wide_head != narrow_head and wide_head not in bases.get(narrow_head, ()):
+        return False
+    mapped = _base_arguments(narrow_head, narrow_args, wide_head)
+    return mapped is not None and _arguments_cover(wide_head, wide_args, mapped)
+
+
 def _covers(wide: _Entry, narrow: _Entry) -> bool:
     """Whether every value of `narrow` is a value of `wide` (the relation the IDE judges by)."""
     if wide.undefined or narrow.undefined:
@@ -278,23 +420,7 @@ def _covers(wide: _Entry, narrow: _Entry) -> bool:
         return True
     if wide.opaque or narrow.opaque:
         return False
-    if wide.key == _OBJECT:
-        return True
-    bases, params = _catalog()
-    if wide.head not in bases.get(narrow.head, ()):
-        return False
-    wide_params = params.get(wide.head, ())
-    if not wide_params:
-        return not wide.args
-    narrow_params = params.get(narrow.head, ())
-    if len(wide.args) != len(wide_params) or len(narrow.args) != len(narrow_params):
-        return False
-    narrow_by_name = dict(zip(narrow_params, narrow.args))
-    for name, wide_arg in zip(wide_params, wide.args):
-        narrow_arg = narrow_by_name.get(name)
-        if narrow_arg is None or _set_key(narrow_arg) != _set_key(wide_arg):
-            return False
-    return True
+    return _key_covers(wide.key, narrow.key)
 
 
 @dataclass

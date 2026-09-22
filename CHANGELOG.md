@@ -22,6 +22,17 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`--check-duplicates --against` compares dictionaries through their common Git base.**
+  One-sided removals and renames no longer recreate stale translations; competing key edits
+  remain visible, with `merge_base` included in the JSON report.
+  ([#128](https://github.com/keyfire/xbsl/pull/128))
+- **Comment checks recognize an attached `////` frame.** Comment rewrapping also handles
+  `/** ... */` and consistent star frames while preserving their kind, text and line endings.
+  ([#128](https://github.com/keyfire/xbsl/pull/128))
+- **Generic union checks use extracted variance and base-argument formulas.**
+  Read-only covariant bases and nested mappings are recognized after re-extracting stdlib;
+  old catalogs retain the conservative behavior. ([#128](https://github.com/keyfire/xbsl/pull/128))
+
 - **`comment/unknown-name` retains readable declarations from malformed YAML.**
   A syntax error in an object description no longer makes its known names appear missing
   in comments. Text inside scalar values is excluded from this recovery.

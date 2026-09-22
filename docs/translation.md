@@ -157,22 +157,23 @@ two sections is not a repeat, and a section head written twice in one file reads
 way the entries table reads it. Measured on a live dictionary of 167 files: no key repeats inside a
 file, and the load takes no longer than before.
 
-`--check-duplicates` asks the same question of the dictionary files without loading them, and before
-the merge. It lists the keys translated differently (a conflict, exit code 1) and the keys
-translated the same way in several places (a redundant copy, exit code 0 - listed because the second
-copy is what a person takes out). `--against REF` adds the dictionary files as a git ref has them,
-`origin/master` say, so a branch sees the collision it would bring to its target while it is still a
-branch. The same file at the ref and in the working tree counts as one file: a key the working tree
-spells differently is that file's own edit, while a key living only at the ref - in a file the
-working tree removed too - counts. Such a key comes in with every place the ref declares it at, so a
-repeat inside a file at the ref counts too. `--format json` carries `conflicts` and `duplicates` as
-`{section, key, places: [{file, line, value}]}` (the text report prints a place as `file:line`) and
-`against` with the ref, its file count and how many of its entries the working tree does not carry.
-`--strict` has no flag for this: a dictionary with a conflict does not load, so the strict pass
-fails on its own and names every conflict at once. The plain report counts the redundant copies in
-its summary. Measured on a live dictionary of 167 files: no conflicts, six keys translated the same
-way twice, two seconds alone and under three against the target branch - the copies whose text the
-working tree carries unchanged are not parsed again.
+`--check-duplicates` reports conflicting translations with exit code 1 and identical
+duplicates with exit code 0. Every occurrence retains its file and line.
+
+`--against REF` compares the working dictionary and the ref through their common Git base.
+One-sided edits, removals and tracked renames do not resurrect an unchanged base copy.
+Competing values for the same key and independent new duplicates are reported. Delete/edit
+and ambiguous rename cases are refused. Stage a rename before comparing it: an untracked
+destination is a new file, not proof of a rename. Unrelated histories are refused too.
+
+`--format json` returns `conflicts` and `duplicates` as
+`{section, key, places: [{file, line, value}]}`. The `against` object contains `ref`,
+`merge_base`, `files` and `added`; `added` counts records selected from the ref. Such
+records use `REF:file` labels and their original line numbers. This checks translated keys,
+not all Git merge conflicts in file headers or comments.
+
+`--strict` needs no separate flag: a conflicting working dictionary cannot be loaded.
+Identical duplicates are counted in the ordinary summary.
 
 **A qualified entry** (`Dictionary.Key: SignIn`) applies inside one namespace only. A key of a
 localized-strings dictionary may need a spelling the same word cannot have in code.

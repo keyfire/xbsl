@@ -2096,8 +2096,8 @@ def translate_status(root: str, against: str = "") -> dict:
     way (`duplicates`) - so a branch sees a collision with the target branch before the merge.
     A place is a file and a line (`places: [{file, line, value}]`), so a key one file declares
     twice is reported too. The same report as `xbsl translate --check-duplicates --against
-    REF`, with `against` naming the ref, its file count and how many of its entries the
-    working tree does not carry. A dictionary that does not load - a conflict already in the
+    REF`, with `against` naming the ref, common `merge_base`, file count and number of
+    selected ref entries. One-sided edits and removals do not resurrect the base copy. A dictionary that does not load - a conflict already in the
     working tree - answers with the `error` naming every conflict and, when a ref was given,
     the `collisions` report next to it.
     Returns the totals only - a cheap health check before deciding what to fill.
