@@ -108,7 +108,7 @@ def run(args: list[str], lang: str) -> str:
             timeout=30,
         )
     except subprocess.TimeoutExpired:
-        return ""          # справки нет - раздел такой команды просто не появится
+        return ""          # No help output means no section for this command.
     text = (out.stdout or out.stderr).rstrip()
     # An environment without the extra answers "needs the [lsp] extra" INSTEAD of the flags,
     # and the page would silently come out short - the generated file then differs from the

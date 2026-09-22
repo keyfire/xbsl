@@ -14,11 +14,11 @@ from xbsl import engine, i18n
 
 
 def _own():
-    """Правила САМОГО движка.
+    """Rules owned by the engine itself.
 
-    В реестре могут лежать и правила надстроек - их автор отвечает за свои тексты сам,
-    и падение здесь означало бы, что набор движка зависит от установленных плагинов.
-    Свои узнаём по модулю, в котором объявлена функция правила.
+    The registry may also contain plugin rules. Their authors own their texts, and a failure
+    here would make the engine suite depend on installed plugins. The rule function's module
+    identifies engine-owned rules.
     """
     return [r for r in engine.RULES if getattr(r.func, "__module__", "").startswith("xbsl.")]
 

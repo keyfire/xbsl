@@ -1,11 +1,11 @@
 """Tier A: checks on the YAML descriptions of elements.
 
 - yaml/valid            - the YAML parses correctly;
-- yaml/id-uuid          - every Ид (including the nested attributes) is a valid UUID;
-- yaml/id-unique        - Ид values are unique within the project (a cross-file rule);
-- yaml/id-required      - an object (has ВидЭлемента) carries a top-level Ид;
-- yaml/name-matches-file - the object Имя matches the file name;
-- yaml/standard-field-length - Наименование/Код stay within the platform limits.
+- yaml/id-uuid          - every Id (including the nested attributes) is a valid UUID;
+- yaml/id-unique        - Id values are unique within the project (a cross-file rule);
+- yaml/id-required      - an object (has ElementKind) carries a top-level Id;
+- yaml/name-matches-file - the object Name matches the file name;
+- yaml/standard-field-length - Name/Code stay within the platform limits.
 
 Structural files (Проект/Подсистема/Ресурсы) are recognised by the absence of ВидЭлемента and
 are exempt from the Имя/required-Ид rules; the Ид checks (format/uniqueness) apply to every Ид
@@ -228,7 +228,7 @@ def declaration_names_fast(source: SourceFile) -> frozenset[str]:
     """Readable declaration names of an element description without parsing the whole yaml.
 
     This fallback is only for a malformed object description. It considers standalone
-    `Имя`/`Name` fields with identifier values, not text or comment fragments that happen to
+    `Name` fields in either spelling with identifier values, not text or comment fragments that happen to
     contain those words.
     """
     cache_key = "declaration_names_fast"

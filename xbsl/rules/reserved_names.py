@@ -4,8 +4,8 @@ The code/reserved-name rule: the names `Тип` and `type` are rejected by the s
 ("Invalid field name") when used as a structure field name (`пер/знч/обз` inside a
 `структура ... ;` block) or as a method/constructor parameter name. The check is
 token-based: structure blocks are delimited from the lowercase `структура` keyword to the
-terminating `;` at bracket depth 0 (or, as a safety stop, to the next lowercase
-метод/конструктор/структура/перечисление/исключение keyword - a structure holds only field
+terminating `;` at bracket depth 0 (or, as a safety stop, to the next declaration keyword
+for a method, constructor, structure, enumeration or exception - a structure holds only field
 declarations); parameters come from the shared signature parser. The lexer classifies `Тип`
 as a keyword (the type literal), so for the name scan the TYPE keyword is downgraded to an
 identifier locally. Three spellings are checked: the two above and the capitalized `Type`
@@ -18,7 +18,7 @@ produce false positives.
 The yaml/builtin-property-name rule: in a `ВидЭлемента: КомпонентИнтерфейса` yaml, declaring
 an own property (`Свойства: - Имя: X`) whose name matches a built-in property of the BASE
 component type (`Наследует.Тип`, the root before the generic arguments) is rejected by the
-server apply ("Invalid property name") - the classic case is `Заголовок` on an inheritor of
+server apply ("Invalid property name") - the classic case is `Title` on an inheritor of
 СтандартнаяКарточка. The built-in property set of the base type is taken from the metamodel
 class (transitively over inheritance, as in yaml/unknown-property) when the type is present
 there; the current metamodel (configuration .xcore) does not describe UI component types, so
@@ -29,7 +29,7 @@ safety net for data generated before that key existed - per base type the two so
 unioned. A base type found in no source is skipped rather than guessed - in particular a
 base that is itself a project component (unresolvable in file scope). The check is strictly
 per base type: a property `Заголовок` on an inheritor of КонтейнерHtml (whose documented set
-has no Заголовок) is legal, so no cross-type generalization is allowed. Positions are searched only inside the top-level `Свойства:` block - the same name
+has no Title) is legal, so no cross-type generalization is allowed. Positions are searched only inside the top-level `Properties:` block - the same name
 as an event or a nested component name cannot false-match.
 """
 

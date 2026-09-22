@@ -5,7 +5,7 @@ The gotchas here share a shape: the file is valid, the compiler is happy, the ap
 deploys, and the screen simply does not show what the author wrote. Nothing but a rule catches
 that before a human notices it in a browser.
 
-- `yaml/empty-group-sized` - a `Группа` with a fixed `Высота`/`Ширина` and no `Содержимое` is
+- `yaml/empty-group-sized` - a `Group` with a fixed `Height`/`Width` and no `Content` is
   thrown out of the DOM entirely: the spacer it was meant to be leaves no gap at all (found
   twice on the same page of a live project). The cure is a non-empty transparent insert - a
   `КонтейнерHtml` of the same height whose content only paints nothing.
@@ -17,7 +17,7 @@ that before a human notices it in a browser.
   stays empty forever (a spacer of exactly this shape sat unnoticed on a live public page for
   a month and a half). The cure there is a spacer label of the same height, or a
   `VerticalIndent` on the element the gap was meant for.
-- `yaml/hint-too-long` - the renderer cuts a `Подсказка` off with an ellipsis at about 290
+- `yaml/hint-too-long` - the renderer cuts a `Tooltip` off with an ellipsis at about 290
   characters, and the tail is not shown at all: there is no scroll and no "more" affordance,
   so the end of a long explanation is simply lost.
 - `yaml/insert-row-needs-align` - a horizontal group with no explicit vertical alignment lays
@@ -409,7 +409,7 @@ def component_row_needs_align(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
 @rule("yaml/empty-group-sized", "yaml/empty-group-sized.title", "D", severity=Severity.WARNING)
 def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
-    """A `Группа` with a size and no content - the renderer drops it, the spacer never appears.
+    """A `Group` with a size and no content - the renderer drops it, the spacer never appears.
 
     Only a group whose `Содержимое` key is absent altogether or holds an empty sequence is
     judged: a group filled by a binding (`Содержимое: =...`) or by anything else is content
@@ -508,7 +508,7 @@ def date_input_needs_plain_date(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule("yaml/hint-too-long", "yaml/hint-too-long.title", "D", severity=Severity.WARNING)
 def hint_too_long(source: SourceFile) -> Iterable[Diagnostic]:
-    """A `Подсказка` longer than the render limit - the tail is lost without a trace.
+    """A `Tooltip` longer than the render limit - the tail is lost without a trace.
 
     A binding (`=...`) is skipped: the text is computed, and its length is not in the file.
     """

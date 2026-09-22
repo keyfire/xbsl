@@ -26,7 +26,7 @@ Zero-false-positive guards:
 - collection-typed attributes (Массив/Соответствие/Множество/СписокЗначений) and binary
   ones (ДвоичныйОбъект) are not required: a typed selection cannot carry them at all
   (the compiler rejects "references a collection attribute", so such lists stay untyped) - a typed list over such an object is a documented false negative;
-- `Ссылка` and standard fields not declared in `Реквизиты` are not required - the rule
+- `Link` and standard fields not declared in `Attributes` are not required - the rule
   checks only what the object's yaml declares;
 - an attribute counts as present when its name matches a field's `Выражение` (bare or
   the last segment of a qualified `Псевдоним.Имя`) or the field's `Псевдоним`.
@@ -202,7 +202,7 @@ def _declared_names(fields: list) -> set[str] | None:
 
     A name is the `Выражение` itself, the last segment of a qualified expression
     (`Псевдоним.Имя`) and the `Псевдоним` when present. A field without a string
-    `Выражение` makes the whole set unreliable - the caller skips the node.
+    `Expression` makes the whole set unreliable - the caller skips the node.
     """
     names: set[str] = set()
     for f in fields:
@@ -506,5 +506,4 @@ def dynlist_missing_field(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                         rel, line, col, "yaml/dynlist-missing-field", Severity.WARNING,
                         i18n.t("yaml/dynlist-missing-field.missing", attr=attr, obj=obj),
                     )
-
 

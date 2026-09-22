@@ -8,14 +8,14 @@ no `СписокВыбора` key in the same node is diagnosed.
 
 Zero-false-positive guards (narrowings):
 - only yaml objects (files with `ВидЭлемента`) are looked at;
-- the generic parameter must consist of primitive alternatives only - Строка, Число, Дата,
+- the generic parameter must consist of primitive alternatives only - String, Number, Date,
   Время, ДатаВремя, or Массив<такой примитив> (plus the nullable markers). For a parameter
   deriving from Перечисление (or Массив<Перечисление>) the platform builds the list itself
-  (СписокВыбора: Авто - see the ВыборЗначения stdlib doc), and in per-file mode a project
-  type cannot be resolved - such nodes are skipped rather than guessed. Булево is skipped
+  (ChoiceList: Auto - see the ValueChoice stdlib doc), and in per-file mode a project
+  type cannot be resolved - such nodes are skipped rather than guessed. Boolean is skipped
   for the same reason (two values, the platform may render them without a list);
 - a bare `ВыборЗначения` without a generic parameter is skipped (the data type is unknown);
-- the `СписокВыбора` key satisfies the rule with any value (a binding `=...` included) -
+- the `ChoiceList` key satisfies the rule with any value (a binding `=...` included) -
   only the presence of the key on the node is checked, not its content;
 - positions come from a text search for the `Тип: <значение>` lines (CRLF-safe) zipped with
   the document-order tree walk; when the counts diverge (anchors, flow style), the value is
@@ -108,8 +108,8 @@ def _requires_static_list(type_value: str) -> bool:
     """Whether the ВыборЗначения data type certainly needs a static СписокВыбора.
 
     True only when every alternative of the generic parameter is a known primitive
-    (or Массив<примитив>); everything else - an enumeration, a project type, a bare
-    ВыборЗначения - is skipped rather than guessed.
+    (or an Array of primitives); everything else - an enumeration, a project type, a bare
+    choice component - is skipped rather than guessed.
     """
     head = next((name for name in _choice_names()
                  if type_value.startswith(name + "<")), None)

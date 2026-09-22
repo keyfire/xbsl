@@ -2,7 +2,7 @@
 
 Rules register themselves with the @rule(...) decorator (id, tier, severity, scope). Scope:
 - 'file'    - per-file rule: (SourceFile) -> Iterable[Diagnostic];
-- 'project' - cross-file rule (e.g. Ид uniqueness): (list[SourceFile]) -> Iterable[Diagnostic].
+- 'project' - cross-file rule (e.g. Id uniqueness): (list[SourceFile]) -> Iterable[Diagnostic].
 
 Tiers: 'A' structure/YAML, 'B' text/conventions, 'C' parser/code structure, 'D' semantics.
 """

@@ -1,7 +1,7 @@
 """Tier D: type expressions in yaml against the stdlib catalog and the project objects.
 
 The yaml/unknown-type rule mirrors code/unknown-type and code/unknown-object-type on the yaml
-side of a project: every string value of a `Тип` key is a type expression - the component type
+side of a project: every string value of a `Type` key is a type expression - the component type
 of a form node (`Группа`, `ПолеВвода<Строка>`), the type of an attribute, a tabular-section
 attribute, a property or a client-work parameter (`Число`, `Товары.Ссылка?`), a wrapper value
 (`АбсолютныйЦвет`), a form base (`ФормаОбъекта<Товары.Объект>`)... The expression is parsed at

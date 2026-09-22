@@ -877,13 +877,13 @@ def meta_object_info(root: str, name: str | None = None, yaml_path: str | None =
     hierarchy, existing forms, suggested form layout, subsystem, package (null at the subsystem
     root) and namespace (`Vendor::Project::Subsystem[::Package]`), plus:
 
-    - access - the КонтрольДоступа summary (null means no section: РазрешеноАдминистраторам)
+    - access - the access-control summary (null means the default administrator access)
       and access_rights - the rights this kind has;
-    - access_handlers - whether the object's module declares ВычислитьРазрешенияДоступа
+    - access_handlers - whether the object's module declares the access-calculation handler
       (level 1, needed for РазрешенияВычисляются) and ВычислитьРазрешенияДоступаДляОбъектов
       (level 2, needed for РазрешенияВычисляютсяДляКаждогоОбъекта);
-    - register - for registers only: register_kind (Остатки/Обороты), periodicity, and
-      needs_record_type - whether a movement needs ВидЗаписи (Приход/Расход): only a
+    - register - for registers only: register_kind (balances or turnovers), periodicity, and
+      needs_record_type - whether a movement needs a receipt/expense direction: only a
       РегистрНакопления of kind Остатки does.
 
     root - the caller's project or repository root (absolute); a relative yaml_path resolves
@@ -954,8 +954,8 @@ def meta_new_object(
     контракты, права, команды ...). Kinds whose module has a mandatory handler get it
     stubbed; ВиртуальнаяТаблица gets a paired empty .xbql (its query is mandatory).
     Anything the platform will not infer is reported in notes.
-    scope overrides ОбластьВидимости; environment - Окружение (ОбщийМодуль/Структура);
-    access - КонтрольДоступа (РазрешеноАутентифицированным etc.); routes - HttpСервис
+    scope overrides visibility; environment selects the context of common modules/structures;
+    access sets access control (authenticated users, etc.); routes configures HTTP services
     routes like "GET /, POST /, GET /{id}" (handlers are stubbed in the module);
     report_spec - for Report: {source, rows: [...], columns: [...], measures: [{expr, title}], title};
     presentation - Presentation of the element. Beware of what the kind means by it: a
@@ -1018,7 +1018,7 @@ def meta_add_field(
     enforced ("Номер" takes "Строка" or "Число"), and "Владелец" needs the owner's reference
     type explicitly.
 
-    tabular - target tabular-section name when adding a реквизит into it.
+    tabular - target tabular-section name when adding an attribute into it.
 
     names - several items of this kind in one call, with the same type, props and tabular:
     the values of an enumeration, a row of attributes. Composes with `name`, which goes
@@ -1334,7 +1334,7 @@ def meta_add_dependency(
     version: str,
     project_yaml: str | None = None,
 ) -> dict:
-    """Attach a library to the project - the Библиотеки section of Проект.yaml.
+    """Attach a library to the project descriptor's Libraries section.
 
     root - the caller's project or repository root (absolute): the project descriptor is
     searched under it, a relative project_yaml resolves against it, and the answer names it
@@ -1374,11 +1374,11 @@ def meta_set_access(
     root - the caller's project or repository root (absolute): the object is searched under
     it by name, a relative yaml_path resolves against it, and the answer names it as `root`
     next to the absolute path written.
-    default - the method for the ПоУмолчанию right (the common case); permissions - methods
+    default - the method for the default right (the common case); permissions - methods
     for individual rights, e.g. {"Чтение": "РазрешеноВсем"} (custom rights of a ПравоНаЭлемент
     are written as "ПравоНаX.ИмяПрава"). Methods: РазрешеноВсем, РазрешеноАутентифицированным,
     РазрешеноАдминистраторам, РазрешенияВычисляются, РазрешенияВычисляютсяДляКаждогоОбъекта.
-    calc_by fills РасчетРазрешенийПо - mandatory for РазрешенияВычисляютсяДляКаждогоОбъекта
+    calc_by sets the calculation basis - mandatory when permissions are calculated per object
     (per-object/RLS rights).
 
     Rights per kind and the current state come from meta_object_info (access / access_rights)
@@ -1729,7 +1729,7 @@ def meta_add_subsystem(
     root: str | None = None,
 ) -> dict:
     """Create a subsystem: a folder with Подсистема.yaml. uses - names of other subsystems
-    for the Использование block; representation - the navigation caption.
+    for the usage block; representation - the navigation caption.
 
     See also: meta_new_object creates an object INSIDE such a folder - the folder is what
     its `directory` names; meta_project_info lists the subsystems already there. A subsystem

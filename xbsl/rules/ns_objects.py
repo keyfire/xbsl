@@ -2,7 +2,7 @@
 
 The code/unknown-ns-object rule: a type-position chain whose root is the Russian name of an
 object kind used as a namespace - `Справочник.Программа.Ссылка`, `Перечисление.Категория`,
-`Массив<Документ.Заказ.Объект>` in code, the same expressions in yaml `Тип` values - must
+`Массив<Документ.Заказ.Объект>` in code, the same expressions in yaml `Type` values - must
 name a project object of exactly that kind in the second segment. The third segment, when
 present, must belong to the family of types the object generates - the same table as
 code/unknown-object-type: the catalog object_members plus the safety-net union, the object's

@@ -4,7 +4,7 @@ A reference type has no default value on the platform, so every position that ne
 must say so explicitly. Two rules of the same family live here:
 
 - code/ref-field-needs-req (tier C) - a structure field in a module;
-- yaml/ref-needs-nullable (tier A) - a `Тип` value in a yaml description.
+- yaml/ref-needs-nullable (tier A) - a `Type` value in a yaml description.
 
 The code side. A structure field whose type is a project-object
 reference (`Программа.Ссылка`, `Справочник.Товары.Ссылка` - the last segment of the dotted
@@ -12,7 +12,7 @@ chain is `Ссылка`) has no default value on the platform, so the server-sid
 "cannot be initialized with a default value". The correct forms are:
 
 - `обз пер Ссылка: Программа.Ссылка` - the field is required in the constructor;
-- `пер Ссылка: Программа.Ссылка?` - a nullable type has the default `Неопределено`;
+- `пер Ссылка: Программа.Ссылка?` - a nullable type has the default `Undefined`;
 - `пер Ссылка: Программа.Ссылка = <выражение>` - an explicit initializer.
 
 Detection is token-based: inside a `структура ... ;` block (nesting-aware - fields are taken
@@ -31,7 +31,7 @@ Deliberate narrowings (skip rather than guess - no false positives):
   project-object reference;
 - an alternative that is not a plain IDENT(.IDENT)* chain is skipped.
 
-The yaml side (yaml/ref-needs-nullable). The same reference type in a `Тип` value - an
+The yaml side (yaml/ref-needs-nullable). The same reference type in a `Type` value - an
 object attribute, a component property, a structure field or an input field
 `ПолеВвода<Товары.Ссылка>` - is rejected by the compiler for the same reason, in four
 positions and both flavours of the message:
@@ -261,7 +261,7 @@ def _plain_ref_chain(alt: list[Token]) -> list[Token] | None:
     """The IDENT tokens of a plain dotted chain ending in `Ссылка`, else None.
 
     The alternative must strictly alternate IDENT and '.', have at least two segments
-    and no other tokens (`?`, `<...>`, `Неопределено` - not a plain reference chain).
+    and no other tokens (`?`, `<...>`, `Undefined` - not a plain reference chain).
     """
     idents: list[Token] = []
     expect_ident = True

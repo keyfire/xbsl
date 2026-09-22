@@ -1,23 +1,23 @@
 """Tier D: environment (client/server) consistency checks.
 
-The platform assigns every module an environment - Клиент, Сервер or КлиентИСервер (docs
-"Исполнение модуля") - and the annotations @НаСервере/@НаКлиенте/@ДоступноСКлиента refine
+The platform assigns every module an environment - Client, Server or ClientAndServer (docs
+"Module execution") - and the annotations @OnServer/@OnClient/@AvailableFromClient refine
 it per method or type. An environment mismatch is among the most painful failures: the
 server-side apply silently rolls the whole project back without pointing at the line.
 The checks are all narrow by design (a skipped case is a false negative, never a false
 positive); each is project-wide because it needs the paired yaml of the module.
 
 - code/server-call-from-handler: in an interface component module (a form - environment
-  Клиент) a client handler - a method named by a handler key in the form's yaml or
-  annotated @Обработчик - calls a method of the same module declared @НаСервере without
-  @ДоступноСКлиента/@НаКлиенте. The handler runs on the client, so the call fails
-  ("unavailable (Клиент)"). Guards: a handler itself annotated @НаСервере runs on the
-  server and is skipped; member calls (`х.Имя(...)`) are not bare-module calls; shadowed
+  Client) a client handler - a method named by a handler key in the form's yaml or
+  annotated @Handler - calls a method of the same module declared @OnServer without
+  @AvailableFromClient/@OnClient. The handler runs on the client, so the call fails.
+  A handler itself annotated @OnServer runs on the server and is skipped;
+  member calls (`x.Name(...)`) are not bare-module calls; shadowed
   names (see enum_values._shadowed_names), query blocks and comments are excluded.
 
-- code/client-annotation-in-server-module: a common module with `Окружение: Сервер` may
-  use only the @НаСервере annotation (docs "Исполнение модуля"), so @ДоступноСКлиента or
-  @НаКлиенте in its module contradicts the declared environment - the module has to be
+- code/client-annotation-in-server-module: a common module with `Environment: Server` may
+  use only the @OnServer annotation, so @AvailableFromClient or
+  @OnClient in its module contradicts the declared environment - the module has to be
   `ClientAndServer`. The apply refuses it: `Cannot use modifier "OnClient" for items
   whose type availability is "Server"`.
 

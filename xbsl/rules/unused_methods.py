@@ -36,10 +36,10 @@ Guards (such methods are never reported):
   deliberately kept for compatibility (@Deprecated). An annotation the dictionary does not
   know is treated the same way - a project may declare its own, and doubt silences the
   finding;
-- names of the platform's own events (ПередЗаписью, ПослеСоздания, ...) - called by the
+- names of the platform's own lifecycle events - called by the
   platform even when the annotation was forgotten;
 - object modules (`X.Объект.xbsl`) - object event handlers live there;
-- modules paired with an `HttpСервис` yaml - their methods are wired to endpoints;
+- modules paired with an `HttpService` yaml - their methods are wired to endpoints;
 - a qualified use `Модуль.Метод` of a static manager method is an ordinary mention and is
   covered by the name search.
 

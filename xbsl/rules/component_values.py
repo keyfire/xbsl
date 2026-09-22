@@ -24,7 +24,7 @@ Zero-false-positive guards:
   is taken: `ПолеВвода<Строка>` -> `ПолеВвода`); a project component is skipped, so its own
   properties can never be mistaken for the platform's;
 - a property is judged only when EVERY member of its type union is either an enumeration of
-  the schema or the literal `Авто` - the only non-enumeration member the schema uses next to
+  the schema or the literal `Auto` - the only non-enumeration member the schema uses next to
   an `enum` (354 occurrences, no other). One `Строка`/`Булево`/`Число` member and the
   property is skipped: such a value may be anything;
 - a binding (`=...`), an interpolation (`%...`), a qualified value
@@ -44,7 +44,7 @@ probe, with two different wordings from the compiler:
                                        литерала
 
 The restriction is about the nesting, not about a particular property: `Размер` was the known
-case, `Полужирный` behaves the same. The way out is to compute the WHOLE object - the control
+case, `Bold` behaves the same. The way out is to compute the WHOLE object - the control
 form with `Шрифт: =ШрифтНадписи()` applied cleanly.
 
 Which types are literal cannot be derived from the data - checked in all three sources: the ui
@@ -77,7 +77,7 @@ The yaml/unexpected-type-argument rule. A generic written with an argument is AN
 the platform's generics are invariant: a form's `ДополнительныеКоманды` takes
 `ФрагментКомандногоИнтерфейса`, and `ФрагментКомандногоИнтерфейса<ОбычнаяКоманда>` broke the
 build with `не может быть присвоено в ФрагментКомандногоИнтерфейса?`. The same slot is written
-parametrized in other places and is right there - `КомандыСтроки` of a Таблица declares
+parametrized in other places and is right there - `RowCommands` of a Table declares
 `ФрагментКомандногоИнтерфейса<КомандаСПараметром<ТипИсточника.ItemDataType>>` - so the schema,
 not a name, decides.
 

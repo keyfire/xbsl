@@ -6,8 +6,8 @@ completes the bindings already used in the form, the owner-object attributes
 (``=Объект.<attr>``) and project enum values; this module supplies the missing piece,
 component references and their members:
 
-    =Компоненты.<part>          -> the form's components (``=Компоненты.<name>``)
-    =Компоненты.<comp>.<part>   -> members of that component's TYPE, taken from the
+    =Components.<part>         -> the form's components (``=Components.<name>``)
+    =Components.<comp>.<part>   -> members of that component's TYPE, taken from the
                                    stdlib members map (properties first, then methods)
 
 The module is PURE: the caller passes in the components (an ``IndexLookup`` or a plain
@@ -48,8 +48,8 @@ def _component_dicts(components: Optional[object], form_stem: str) -> list[dict]
 def _type_root(type_name: Optional[str]) -> Optional[str]:
     """The bare type of a component for the members lookup.
 
-    The generic argument and the nullable mark are dropped (``Таблица<...>`` -> ``Таблица``,
-    ``Строка?`` -> ``Строка``); a facet type (``ДвоичныйОбъект.Ссылка``) is kept whole, since
+    The generic argument and the nullable mark are dropped (``Table<...>`` -> ``Table``,
+    ``String?`` -> ``String``); a qualified facet type is kept whole, since
     it is a key of the members map in its own right.
     """
     if not type_name:

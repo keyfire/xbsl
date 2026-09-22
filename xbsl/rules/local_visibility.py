@@ -1,25 +1,23 @@
 """Tier D: a call from outside a module must target a method visible outside it.
 
-Two rules, one invariant of the platform: @Локально is the DEFAULT visibility of a language
-construct (docs: topic "Модульная разработка" - "@Локально - конструкция видна только в своем
-модуле (значение по умолчанию)"), so a method with no visibility annotation is reachable from
+Two rules, one invariant of the platform: local visibility is the DEFAULT for a language
+construct, so a method with no visibility annotation is reachable from
 its own module alone. The rules differ in how the call reaches the method:
-code/local-method-cross-component goes through a component INSTANCE (`Компоненты.X.Метод(...)`,
+code/local-method-cross-component goes through a component INSTANCE (`Components.X.Method(...)`,
 which fails at runtime) and code/local-method-cross-module through the MODULE NAME
-(`Модуль.Метод(...)`, which the compiler rejects on deploy).
+(`Module.Method(...)`, which the compiler rejects on deploy).
 
 The code/local-method-cross-component rule: a method of an interface component is
-@Локально by default - a call `Компоненты.X.Метод(...)` from ANOTHER component's module
+local by default - a call `Components.X.Method(...)` from ANOTHER component's module
 fails at runtime with "Method is invisible due to visibility modifier @Локально" unless
-the method carries a visibility annotation wider than local: @ВПодсистеме, @ВПроекте,
-@ВТипе or @Глобально (docs: Стд::Аннотации::ОбластиВидимости, topic "Модульная
-разработка" - @Локально is the default for language constructs).
+the method carries a visibility annotation allowing subsystem, project, type or global access.
+The platform's modular-development documentation defines the local default.
 
 The pattern the rule encodes: every cross-component call targets a method
-annotated @ВПодсистеме (a router page-switch is the reference shape -
-`Компоненты.КарточкаЗадачи.Загрузить(...)`); every other `Компоненты.X.Y(...)` call
+visible within its subsystem (a router page-switch is the reference shape -
+`Components.TaskCard.Load(...)`); every other `Components.X.Y(...)` call
 hits a form-local instance (an HTML container, a table) whose X is not a project
-component, so those are skipped by construction. Yaml bindings (`=Компоненты...`)
+component, so those are skipped by construction. Yaml bindings (`=Components...`)
 reference form-local tables and platform built-ins only, never project components -
 bindings are not checked.
 
@@ -80,10 +78,9 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# The visibility-scope annotations (Стд::Аннотации::ОбластиВидимости). Anything from
-# _WIDE makes the method callable from another component's module; @ВТипе is counted as
-# wide too - the docs describe it as visible "в данном типе, его наследниках и внешних
-# объектах", so treating it as local could produce false positives.
+# The visibility-scope annotations. Anything from _WIDE makes the method callable from
+# another component's module. Type visibility includes derived types and external objects,
+# so treating it as local could produce false positives.
 #
 # BOTH spellings of every name, from the platform's own dictionary. The sources are
 # bilingual and a project mixes the forms freely - sometimes within one declaration, an

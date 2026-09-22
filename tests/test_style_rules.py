@@ -446,10 +446,10 @@ def test_variable_holding_a_composite_call_result_comparison_ok():
 
 
 def test_plain_boolean_property_comparison_flagged():
-    """Отрицательный контроль отсева: у свойства в каталоге ровно Булево - нарушение остаётся.
+    """Negative filter check: the catalog gives the property exactly `Boolean`, so it stays.
 
-    Шрифт.Полужирный объявлен именно так, поэтому здесь краткая форма компилируется,
-    и отсев по каталогу молчать не должен.
+    `Font.Bold` is declared that way, so the short form compiles and the catalog filter must
+    not silence the violation.
     """
     d = _lint(
         "метод Ф(Шрифт: АбсолютныйШрифт)\n"
