@@ -32,15 +32,19 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`comment/unknown-name` retains readable declarations from malformed YAML.**
   A syntax error in an object description no longer makes its known names appear missing
   in comments. Text inside scalar values is excluded from this recovery.
+  ([#127](https://github.com/keyfire/xbsl/pull/127))
 - **`code/client-available-unused` keeps malformed client descriptions without a readable
   object name unjudged.** The readable element kind still identifies the client module
   in either language, so the YAML error does not cause an unrelated unused-method warning.
+  ([#127](https://github.com/keyfire/xbsl/pull/127))
 
 ### Changed
 
 - Library tests can use a local `.xlib` corpus to check exported and internal types
   through both YAML and XBSL. Proprietary archives remain outside the repository.
+  ([#127](https://github.com/keyfire/xbsl/pull/127))
 - Python comments and docstrings consistently use hyphens. Ordinary string literals remain unchanged.
+  ([#127](https://github.com/keyfire/xbsl/pull/127))
 
 ## 2026-09-22 – 0.114.0
 
