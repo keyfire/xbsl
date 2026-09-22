@@ -2496,7 +2496,7 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
              will actually fire and listed in `normalized`; one that spans lines comes back in
              `refused`. An empty value REMOVES the entry - a half-filled stub is not a
              translation.
-    target – the file NEW entries go to (default 090-manual.yaml). An entry that already
+    target - filename without a path for NEW entries (default 090-manual.yaml). An entry that already
              exists is corrected where it lives, whatever the target says - in every place
              the dictionary declares it, so a copy of the key keeps the value it shares.
     comment – the head line a NEWLY created file gets: say what the batch is for ("Names of
@@ -2529,10 +2529,13 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
         except (OSError, ValueError) as exc:
             return {"error": i18n.t("translate.set-unreadable", error=exc)}
     batch.extend(edits or [])
-    result = entries_module.write_entries(
-        path, batch, target=target or entries_module.DEFAULT_TARGET,
-        comment=comment,
-    )
+    try:
+        result = entries_module.write_entries(
+            path, batch, target=target or entries_module.DEFAULT_TARGET,
+            comment=comment,
+        )
+    except (OSError, ValueError) as exc:
+        return {"error": str(exc)}
     return {**result, "dictionary": str(path)}
 
 

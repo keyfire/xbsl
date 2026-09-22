@@ -389,7 +389,9 @@ they really are data.
 The dictionary is discovered next to the project and above it. A root with none is refused, and
 the message names the places looked at, plus a dictionary found below the root if there is one.
 `--dictionary` names the dictionary explicitly, as a file or a directory. `--target` names the
-file new entries land in, `090-manual.yaml` by default. `--comment` is the head line such a file
+file new entries land in, `090-manual.yaml` by default. For a dictionary directory, pass a
+filename only: paths with `/`, `\` or a drive prefix are rejected before any edits are written.
+The MCP `translate_set` tool applies the same check. `--comment` is the head line such a file
 is created with, which is the place to say what the batch is about. `--format json` hands the
 whole report to a machine. `--no-localization-swap` leaves the localized-strings layout as it is,
 for a project that translates its sources but keeps its language layout.
@@ -570,7 +572,10 @@ key the project spells nowhere is answered with. The header, and the `since` blo
 `--format json`, size both sides: the files of the change, the dictionary files its diff names and
 the entries on their added lines.
 
-The removed lines come from `git diff`. A git that has not answered within a minute is refused,
+Removed lines come from `git diff`. Comments are read in the old file from Git, so unchanged
+block delimiters still determine which phrase each removed line belongs to. Relative project
+and dictionary paths resolve from the directory where the command was called.
+A git that has not answered within a minute is refused,
 and the refusal names the other way round: the same list without git is narrowed by `--filter`.
 
 The walk over the sources reports its progress on stderr every 200 files, so a long run is seen to
