@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from xbsl import engine
 from xbsl.translation.code import Resolver, translate_code
 from xbsl.translation.dictionary import Dictionary
 from xbsl.translation.project import translate_project
 from xbsl.translation.reporting import FileReport
+
+pytestmark = pytest.mark.needs_data
 
 
 def _translate(text: str, tokens: dict[str, str], *, project_names: frozenset[str] = frozenset()
