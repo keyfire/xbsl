@@ -31,17 +31,21 @@ entry either - say what the behaviour was, not which class name was compared.
 
 - **New checks catch project procedures used as values and mismatched contract parameter names.**
   They report only resolved project methods; uncertain targets stay unjudged.
+  ([#129](https://github.com/keyfire/xbsl/pull/129))
 - **A declaration that blocks a platform translation points to its missing dictionary pair.**
   The warning runs only in projects with a translation dictionary and excludes local names.
+  ([#129](https://github.com/keyfire/xbsl/pull/129))
 
 ### Fixed
 
 - **Resource checks follow namespace priority and visibility.** A resource in the current
   subsystem wins over an imported namesake. The linter reports hidden and ambiguous resources,
   and resource moves use the same resolution order.
+  ([#129](https://github.com/keyfire/xbsl/pull/129))
 
 - **SOAP client schemas stay with their object.** Move, rename and delete now include
   imported XSD files. Renaming updates local schema links while preserving external URLs.
+  ([#129](https://github.com/keyfire/xbsl/pull/129))
 
 - **`--check-duplicates --against` compares dictionaries through their common Git base.**
   One-sided removals and renames no longer recreate stale translations; competing key edits

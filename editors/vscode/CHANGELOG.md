@@ -15,6 +15,7 @@
 
 - **The SOAP client tree includes imported XSD schemas.** They appear beside WSDL files
   and open as XML. Creating or deleting a schema refreshes the tree.
+  ([#129](https://github.com/keyfire/xbsl/pull/129))
 
 ## 0.75.1
 
