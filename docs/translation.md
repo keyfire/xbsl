@@ -139,6 +139,14 @@ and to a `/* ... */` comment alike. Such a comment keeps `/*` at the head of its
 `*/` at the end of its last one. Frames and separators, lists, tables and code samples stay as
 they were, and so do lines that were long in the source already.
 
+A line of code that the English names pushed past the limit is wrapped the way the style guide
+wraps an expression: after a comma between arguments, parameters or collection items, after the
+opening bracket of such a list, or before an operator, which then opens the next line. The places
+come from the parse tree, so a comma between type arguments never becomes one. The continuation
+is indented one step deeper. A line with a comment after the code stays as it is, and so does a
+line that `style/line-length` reports in the source already. The pass checks its own result: the
+tokens of the module and its parse tree must not change.
+
 The dictionary is a directory of yaml files, or one file, named `xbsl-translation` and discovered
 next to the project or above it. To fill it, drop a completed stub next to the ones already there.
 Two files disagreeing about one key are refused at load time, and so is one file that declares a key

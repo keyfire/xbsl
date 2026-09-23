@@ -30,6 +30,9 @@ byte-identical. What changes:
   literal is listed as data KEPT, with its place, so the translator sees it and knows why no
   entry moves it.
 
+A line of code that the longer English names pushed over the width limit is then wrapped where
+the grammar parts the expression (codewrap.py).
+
 An entry of the literals plane spells its key and its value the way the source spells the
 text between the quotes, escaping and all (`\\"` for an inner quote): one escaping, and the
 dictionary refuses a value that would not survive being pasted back between two quotes.
@@ -53,6 +56,7 @@ from xbsl.translation import platform_map
 from xbsl.translation.dictionary import Dictionary
 from xbsl.translation.names import ModuleOwner
 from xbsl.translation.reporting import FileReport
+from xbsl.translation.codewrap import wrap_code
 from xbsl.translation.rewrap import rewrap_comments
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
@@ -734,10 +738,12 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
                         chain_scopes=(owner_scopes(source, chains.owner(owner))
                                       if chains is not None else None))
     text = apply_edits(source.text, edits)
-    # Span edits keep the author's line breaks, and an English sentence is the longer one:
-    # a comment that fitted the width limit in Russian stops fitting it here. The blocks
-    # that the translation pushed over are split again - see rewrap.py for what it spares.
-    return rewrap_comments(text, source.text)
+    # Span edits keep the author's line breaks, and English is the longer language: a line that
+    # fitted the width limit in Russian stops fitting it here. The lines of code that the
+    # translation pushed over are wrapped (codewrap.py), then the comment blocks are split
+    # again (rewrap.py) - each module says what it spares.
+    text, lined_up = wrap_code(text, source.text, path=Path(source.path))
+    return rewrap_comments(text, lined_up)
 
 
 def collect_token_edits(

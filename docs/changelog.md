@@ -27,6 +27,14 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **The translator wraps a line of code that grew past the limit.** English names are longer than
+  Russian ones, and on a project of about four hundred modules 26 lines of code ran past 120
+  columns after translation. Such a line now breaks where the style guide breaks an expression:
+  after a comma or the opening bracket of a list, or before an operator.
+  ([#133](https://github.com/keyfire/xbsl/pull/133))
+
 ### Fixed
 
 - **`self-update --version X` installs a release the simple index does not list yet.** After

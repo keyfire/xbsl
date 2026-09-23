@@ -1717,6 +1717,26 @@ def test_a_comment_after_code_keeps_its_line():
     assert _long_lines(out) == [2], "over the limit and still left where it is"
 
 
+def test_a_line_of_code_the_names_pushed_over_the_limit_is_wrapped(monkeypatch):
+    """The code wrap runs inside the translation, and the rule agrees with its result."""
+    from xbsl.rules import style_layout
+
+    monkeypatch.setattr(style_layout, "MAX_LINE", 50)
+    module = "метод Ф()\n    знч Итог = Р.Взять(Тело, Род, З.Опции())\n;\n"
+    assert _long_lines(module) == [], "the source itself is within the limit"
+    names = {"Итог": "Answer", "Р": "Serializer", "Взять": "ReadObject", "Тело": "ResponseBody",
+             "Род": "RowType", "З": "Requests", "Опции": "ReadingSettings"}
+
+    out, _ = _code(module, tokens=names)
+
+    assert out.splitlines()[1:4] == [
+        "    val Answer = Serializer.ReadObject(",
+        "        ResponseBody, RowType,",
+        "        Requests.ReadingSettings())",
+    ]
+    assert _long_lines(out) == []
+
+
 def test_the_windows_line_ending_of_a_block_survives_the_rewrap():
     module = "метод Ф()\r\n" + "".join(f"    // {line}\r\n" for line in _RU_PARAGRAPH) + ";\r\n"
     out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
