@@ -104,6 +104,11 @@ _H3_RE = re.compile(r"<h3[^>]*>(.*?)</h3>", re.S)
 _LINK_RE = re.compile(r"<a[^>]*>(.*?)</a>", re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
 _JUNK_RE = re.compile(r"[\x00-\x1f​﻿]")  # control characters and Docusaurus anchors
+# The same characters cut out of a whole page on reading, as docs.py does: the pages of some
+# builds carry NUL characters in the middle of words on almost every page ("КлиентИ\x00Сервер",
+# "ИспользоватьИмяФайлаБез\x00Пути"), and a pattern over the raw HTML sees another word. Tabs
+# and line breaks stay: code blocks are split into lines by them.
+_RAW_JUNK_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f​‌‍﻿­]")
 # A member name. Underscores are part of it: the constant-style properties
 # (`Символы.НОВАЯ_СТРОКА`, `ВОЗВРАТ_КАРЕТКИ`, `НЕРАЗРЫВНЫЙ_ПРОБЕЛ`) are documented and must
 # not be dropped. The opening letter may be lowercase: `ВидПлатформыКлиента.iOS` is spelled
@@ -186,6 +191,11 @@ def _template_kinds(car: zipfile.ZipFile) -> tuple[dict[str, str], list[str]]:
         else:
             unmapped.append(name)
     return kinds, unmapped
+
+
+def _read_page(archive: zipfile.ZipFile, name: str) -> str:
+    """A documentation page of the archive without control characters inside its words."""
+    return _RAW_JUNK_RE.sub("", archive.read(name).decode("utf-8", "replace"))
 
 
 def _plain_text(html: str) -> str:
@@ -961,8 +971,10 @@ def package_members(raw: str) -> set[str]:
 
 
 # The availability line right under a member heading: `Доступность: Клиент`. The longest
-# alternative goes first - `Клиент` is a prefix of `КлиентИСервер`.
-_AVAILABILITY_RE = re.compile(r"Доступность:\s*(КлиентИСервер|Клиент|Сервер)")
+# alternative goes first: the client word is a prefix of the word of both sides. A word that
+# only starts like one of them names no environment and is not read as its prefix: an unknown
+# environment leaves the type out, a guessed one makes the rules judge by it.
+_AVAILABILITY_RE = re.compile(r"Доступность:\s*(КлиентИСервер|Клиент|Сервер)(?!\w)")
 
 # Both member heading levels of a package page, split with the heading text captured.
 _H23_SPLIT_RE = re.compile(r"<h[23][^>]*>(.*?)</h[23]>", re.S)
@@ -1073,7 +1085,7 @@ def extract(dist: Path) -> tuple:
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
-            raw = z.read(n).decode("utf-8", "replace")
+            raw = _read_page(z, n)
             title = ""
             mt = _TITLE_RE.search(raw)
             if mt:
@@ -1184,7 +1196,7 @@ def extract(dist: Path) -> tuple:
                 # The template's own page (<Kind>Name_ru) is the kind's MANAGER: its methods
                 # (Записать, Заблокировать, НайтиПоКоду...) are available by bare name in
                 # the object's manager module.
-                raw = z.read(n).decode("utf-8", "replace")
+                raw = _read_page(z, n)
                 props, methods, events = page_members(raw)
                 if props or methods:
                     # A manager has no events; nothing is dropped silently - the pages of the
@@ -1198,7 +1210,7 @@ def extract(dist: Path) -> tuple:
                     manager_returns.setdefault(kind, {}).update(rets)
                 folds.extend((kind, member, spellings) for member, spellings in folded)
                 continue
-            raw = z.read(n).decode("utf-8", "replace")
+            raw = _read_page(z, n)
             mt = _TITLE_RE.search(raw)
             if not mt:
                 continue
