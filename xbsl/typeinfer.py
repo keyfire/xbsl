@@ -840,14 +840,9 @@ def _split_params(text: str) -> list[str] | None:
     return parts
 
 
-@lru_cache(maxsize=None)
-def _signature(text: str) -> tuple[int, int, str | None, bool] | None:
-    """(fewest arguments, most arguments, the written result, generic) of a printed signature."""
-    open_at = text.find("(")
-    if open_at <= 0:
-        return None
-    generic = "<" in text[:open_at]
-    depth, close_at = 0, -1
+def _closing_paren(text: str, open_at: int) -> int:
+    """The index of the parenthesis that closes the one at `open_at`, -1 when there is none."""
+    depth = 0
     quoted = False
     for index in range(open_at, len(text)):
         char = text[index]
@@ -861,8 +856,45 @@ def _signature(text: str) -> tuple[int, int, str | None, bool] | None:
         elif char == ")":
             depth -= 1
             if depth == 0:
-                close_at = index
-                break
+                return index
+    return -1
+
+
+@lru_cache(maxsize=None)
+def _signature_params(text: str) -> tuple[str, ...] | None:
+    """The parameters of a printed signature as written, None when the text does not read."""
+    open_at = text.find("(")
+    if open_at <= 0:
+        return None
+    close_at = _closing_paren(text, open_at)
+    if close_at < 0:
+        return None
+    params = _split_params(text[open_at + 1: close_at])
+    return tuple(params) if params is not None else None
+
+
+def _function_params(param: str) -> list[str] | None:
+    """The parameters of a printed parameter of a function type, `Имя: (А, Б)->Результат`;
+    None for a parameter of any other type."""
+    _name, colon, written = param.partition(":")
+    written = written.strip()
+    if not colon or not written.startswith("("):
+        return None
+    close_at = _closing_paren(written, 0)
+    if close_at < 0 or not written[close_at + 1:].lstrip().startswith("->"):
+        return None
+    inner = written[1:close_at].strip()
+    return _split_params(inner) if inner else []
+
+
+@lru_cache(maxsize=None)
+def _signature(text: str) -> tuple[int, int, str | None, bool] | None:
+    """(fewest arguments, most arguments, the written result, generic) of a printed signature."""
+    open_at = text.find("(")
+    if open_at <= 0:
+        return None
+    generic = "<" in text[:open_at]
+    close_at = _closing_paren(text, open_at)
     if close_at < 0:
         return None
     params = _split_params(text[open_at + 1: close_at])
@@ -1010,9 +1042,10 @@ class ProjectCatalog:
     - `elements` - `{name: {"kind", "attributes", "tabular", "dimensions", "resources",
       "properties", "fields", "values", "contracts", "row_keys", "components"}}`, every member
       section `{name: written type or None}` (None: a standard attribute written without a type);
-    - `modules` - `{module: {"methods": {name: [written result per overload]}, "structures":
-      {name: {"fields": {...}, "methods": {...}}}, "enums": {name: [values]}, "fields": {...}}}`,
-      the module named by its file (`Товары` for `Товары.xbsl`).
+    - `modules` - `{module: {"methods": {name: [written result per overload]}, "params": {name:
+      [[[parameter, written type or None], ...] per overload]}, "structures": {name: {"fields":
+      {...}, "methods": {...}}}, "enums": {name: [values]}, "fields": {...}}}`, the module named
+      by its file (`Товары` for `Товары.xbsl`).
 
     `open_world` is the file reach: a written name the facts do not resolve is kept in its
     canonical spelling instead of making the type unknown (see `canonical_name`).
@@ -1027,6 +1060,8 @@ class ProjectCatalog:
         self.modules: dict[str, dict] = dict(modules or {})
         self.open_world = open_world
         self.rows: dict[str, dict[str, TypeSet | None]] = {}
+        # {row key: {column: querytypes.NullOrigin}} - why a plain path column may be Null
+        self.row_nulls: dict[str, dict] = {}
         self._members: dict[tuple, TypeSet | None] = {}
         # {row data type of a dynamic list (`Форма.ДанныеСтроки`): the list's main table}
         self.row_keys: dict[str, str] = {
@@ -1276,6 +1311,15 @@ class ProjectCatalog:
     def own_method(self, module: str | None, method: str) -> TypeSet | None:
         return self._module_method_of(module or "", method)
 
+    def method_params(self, module: str, method: str) -> list[list[str | None]] | None:
+        """The parameters of a method of a module as [name, written type] pairs, when the module
+        declares it once; None for an unknown method or for overloads (which one a call reaches
+        is not read here)."""
+        overloads = ((self.modules.get(module) or {}).get("params") or {}).get(method)
+        if not overloads or len(overloads) != 1:
+            return None
+        return overloads[0]
+
     def _overloads(self, results, module: str | None) -> TypeSet | None:
         """The result of a method by its overloads: known only when they all agree."""
         if not results:
@@ -1325,8 +1369,50 @@ class ProjectCatalog:
             return None
         return parse_type(args[0], self.resolver(None))
 
-    def register_row(self, key: str, columns: dict[str, TypeSet | None]) -> str:
+    def callback_parameter(self, owner: str, name: str, index: int, arity: int,
+                           position: int) -> TypeSet | None:
+        """The type of parameter `position` of a lambda of `arity` parameters passed as argument
+        `index` to the platform method `<value of owner>.name`, the arguments of the receiver bound.
+
+        Read off the printed signatures: `Преобразовать(Функция: (ТипЭлемента)->ТипРезультата)`
+        gives a one-parameter lambda the element of the receiver - a row of `РезультатЗапроса<Т>`.
+        Every overload whose argument there is a function of that many parameters must agree on
+        the type, and a parameter of the method's own (`ResultType`) binds nothing and leaves
+        the type unknown."""
+        head, args = split_nominal(owner)
+        if head in self.rows:
+            return None
+        member = _member_names(head).get(name)
+        if member is None:
+            return None
+        catalog = _catalog()
+        signatures = ((catalog.get("member_signatures") or {}).get(head) or {}).get(member) or ()
+        found: set[str] = set()
+        for signature in signatures:
+            params = _signature_params(signature)
+            if params is None:
+                return None
+            if index >= len(params):
+                continue
+            function = _function_params(params[index])
+            if function is None or len(function) != arity:
+                continue
+            found.add(function[position].strip())
+        if len(found) != 1:
+            return None
+        bindings = _type_param_bindings(head, args, self.resolver(None))
+        if bindings is None:
+            return None
+        unbound = frozenset(((catalog.get("member_type_params") or {}).get(head) or {}).get(member) or ())
+        return parse_type(found.pop(), self.resolver(None, strict=True), bindings, unbound)
+
+    def register_row(self, key: str, columns: dict[str, TypeSet | None],
+                     nulls: dict | None = None) -> str:
+        """Register the row type of a query literal; `nulls` - {column: querytypes.NullOrigin}
+        for the plain path columns that may hold Null."""
         self.rows[key] = columns
+        if nulls:
+            self.row_nulls[key] = dict(nulls)
         return key
 
 
@@ -1539,12 +1625,15 @@ def module_fact(rel: str, tree: object) -> dict:
     from pathlib import PurePosixPath
 
     methods: dict[str, list[str | None]] = {}
+    params: dict[str, list[list[list[str | None]]]] = {}
     structures: dict[str, dict] = {}
     enums: dict[str, list[str]] = {}
     fields: dict[str, str | None] = {}
     for member in getattr(tree, "members", ()) or ():
         if isinstance(member, P.Method):
             methods.setdefault(member.name, []).append(_written_ref(member.return_type))
+            params.setdefault(member.name, []).append(
+                [[param.name, _written_ref(param.type)] for param in member.params])
         elif isinstance(member, P.Structure):
             own_methods: dict[str, list[str | None]] = {}
             for inner in member.members:
@@ -1562,6 +1651,7 @@ def module_fact(rel: str, tree: object) -> dict:
     return {
         "module": PurePosixPath(rel.replace("\\", "/")).stem,
         "methods": methods,
+        "params": params,
         "structures": structures,
         "enums": enums,
         "fields": fields,
@@ -1875,7 +1965,8 @@ class _Declared:
 
     `kind` says where the type comes from: "written" (the text of a type), "init" (the
     expression a declaration without a type is initialized by), "element" (the collection a
-    loop walks) or "fixed" (a set known in advance)."""
+    loop walks), "fixed" (a set known in advance) or "callback" (an untyped lambda parameter,
+    typed by the signature of the platform method the lambda is passed to)."""
 
     __slots__ = ("block", "pos", "kind", "payload", "done", "value")
 
@@ -1896,11 +1987,19 @@ class _MethodScope:
     names of the module: a place that sees no declaration of such a name answers unknown rather
     than falling through to a property or a field of the same name. The type of a declaration
     is computed the first time a place asks for it - most declarations never feed a site.
+
+    `callbacks` types an untyped parameter of a lambda passed to a platform method by the
+    signature the catalog prints for that method (see `ProjectCatalog.callback_parameter`):
+    `Результат.Преобразовать(Э -> ...)` hands `Э` a row of the query. Off by default - the
+    rules of the casts and the guards judge their sites without it.
     """
 
-    def __init__(self, method: object, nodes: list) -> None:
+    def __init__(self, method: object, nodes: list, callbacks: bool = False) -> None:
         self.entries: dict[str, list[_Declared]] = {}
         self.names = _method_names(method, nodes)
+        self.callbacks = callbacks
+        # {id of a lambda passed positionally: (the call, the index of the argument)}
+        self._callers: dict[int, tuple[object, int]] = {}
         span = (int(getattr(method, "start", 0)), int(getattr(method, "end", 0)))
         for param in getattr(method, "params", ()) or ():
             self._add(param.name, _Declared(span, span[0], "written", _written_ref(param.type)))
@@ -1967,11 +2066,23 @@ class _MethodScope:
             return
         if isinstance(node, P.Lambda):
             span = (int(node.start), int(node.end))
-            for param in node.params:
-                self._add(param.name, _Declared(span, span[0], "written", _written_ref(param.type)))
+            caller = self._callers.get(id(node))
+            for position, param in enumerate(node.params):
+                written = _written_ref(param.type)
+                if written is None and caller is not None:
+                    call, index = caller
+                    entry = _Declared(span, span[0], "callback",
+                                      (call, index, len(node.params), position))
+                else:
+                    entry = _Declared(span, span[0], "written", written)
+                self._add(param.name, entry)
             self._walk(node.body_expr, span)
             self._walk(node.body_stmts, span)
             return
+        if self.callbacks and isinstance(node, P.Call):
+            for index, argument in enumerate(node.args):
+                if isinstance(argument.value, P.Lambda) and not argument.name:
+                    self._callers[id(argument.value)] = (node, index)
         for name in _field_names(type(node)):
             value = getattr(node, name, None)
             if isinstance(value, (P.Node, list, tuple)):
@@ -2012,8 +2123,27 @@ class _Evaluator:
                 got = self.typer.catalog.element_of(collection) if isinstance(collection, TypeSet) else None
             elif entry.kind == "fixed":
                 got = entry.payload
+            elif entry.kind == "callback":
+                got = self._callback_parameter(*entry.payload)
             entry.value = got if isinstance(got, TypeSet) else None
         return entry.value
+
+    def _callback_parameter(self, call, index: int, arity: int, position: int) -> TypeSet | None:
+        """An untyped parameter of a lambda passed positionally to a method of a platform type.
+
+        The receiver must be one known type (a `?.` call may hold the empty value, the lambda
+        still gets an element); a named argument anywhere in the call leaves the parameter
+        unknown, since the index no longer says which parameter of the method it is."""
+        callee = call.callee
+        if not isinstance(callee, P.Member) or any(argument.name for argument in call.args):
+            return None
+        owner = self.value(callee.obj)
+        if not isinstance(owner, TypeSet) or len(owner.names) != 1 or owner.null:
+            return None
+        if owner.undefined and not callee.safe:
+            return None
+        return self.typer.catalog.callback_parameter(
+            next(iter(owner.names)), callee.name, index, arity, position)
 
     def value(self, node: object):
         """The type of an expression: a TypeSet, a StaticName, or None when it cannot be named."""

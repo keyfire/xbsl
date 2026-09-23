@@ -330,6 +330,8 @@ def test_english_messages_carry_no_untranslated_metadata_names():
 #: follows the reader's language).
 _VERBATIM_QUOTES = {
     "code/row-field-null.assign",          # '.ЗаменитьNull(...)' - the member has no English pair
+    "code/row-field-null.query",           # the same member, the query half of the rule
+    "code/row-field-null.query-outer",     # the same member, the outer join variant
     "query/deletion-mark-immediate.absent",  # 'Поле не найдено' - the compiler's own wording
     "yaml/bare-object-value.bare",           # 'Ожидалось Неопределено...' - the same
     "yaml/ref-needs-nullable.input",         # 'Parameter "ТипДанных" ... must' - the same

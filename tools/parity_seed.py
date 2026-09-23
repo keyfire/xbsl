@@ -2019,6 +2019,60 @@ def _labels_files(more: str) -> dict[str, str]:
             "Основное/Оформление.xbsl": _LABELS_XBSL_RU % more}
 
 
+#: Two catalogs, a reference between them and a common module whose query reads a field THROUGH
+#: that reference, which types the column `<тип>|Null`; `{guard}` is appended to the column.
+_QUERY_NULL_BATCHES_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000fa1
+Имя: Партии
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000fa2
+        Имя: Вес
+        Тип: Число
+"""
+_QUERY_NULL_SHIPMENTS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000fa3
+Имя: Отгрузки
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000fa4
+        Имя: Партия
+        Тип: Партии.Ссылка?
+"""
+_QUERY_NULL_MODULE_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000fa5
+Имя: Расчеты
+ОбластьВидимости: ВПроекте
+Окружение: Сервер
+"""
+#: A lambda of `Transform` fills a typed structure field from the column of the query row.
+_QUERY_NULL_MODULE_RU = (
+    "структура Сводка\n    знч Вес: Число = 0\n;\n"
+    "метод Сводки(): Массив<Сводка>\n"
+    "    возврат Запрос{{ВЫБРАТЬ Отгрузка.Партия.Вес{guard} КАК Вес ИЗ Отгрузки КАК Отгрузка}}.Выполнить()\n"
+    "        .Преобразовать(Строчка -> новый Сводка(Вес = Строчка.Вес))\n"
+    ";\n"
+)
+_QUERY_NULL_TOKENS = {"Партии": "Batches", "Вес": "Weight", "Отгрузки": "Shipments",
+                      "Партия": "Batch", "Отгрузка": "Shipment", "Расчеты": "Calculations",
+                      "Сводка": "Summary", "Сводки": "Summaries", "Строчка": "Line"}
+
+
+def _query_null_files(guard: str) -> dict[str, str]:
+    """The seed tree of the query half of code/row-field-null, `guard` after the column."""
+    return {
+        "Партии.yaml": _QUERY_NULL_BATCHES_RU,
+        "Отгрузки.yaml": _QUERY_NULL_SHIPMENTS_RU,
+        "Расчеты.yaml": _QUERY_NULL_MODULE_YAML_RU,
+        "Расчеты.xbsl": _QUERY_NULL_MODULE_RU.format(guard=guard),
+    }
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -4042,6 +4096,22 @@ SEEDS: list[Seed] = [
             "MarkPanel.xbsl": _ROW_FILL_EN.format(field="SectionAmount"),
         },
         tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=FINDING,
+        note="a query column read through a reference fills a typed structure field in a "
+             "lambda of the transform - the parameter is typed by the platform signature, "
+             "which the English tree spells with its own member names",
+        files=_query_null_files(""),
+        tokens=_QUERY_NULL_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=CLEAN,
+        note="the same column guarded by the null replacement in the query",
+        files=_query_null_files(".ЗаменитьNull(0)"),
+        tokens=_QUERY_NULL_TOKENS,
     ),
     Seed(
         rule="code/unknown-structure-field",

@@ -53,6 +53,23 @@ NULL_THROUGH_REFERENCE = True
 NULL_ON_OUTER_JOIN_SIDE = True
 
 
+@dataclass(frozen=True)
+class NullOrigin:
+    """Why a column that reads a plain path may hold Null, and the path as the query writes it.
+
+    `kind` is "reference" for a field read through a reference (`Т.Группа.Наименование`) and
+    "outer" for a field of the joined side of an outer join. Both were shown to the compiler:
+    such a column passed to a parameter, a structure field, a variable or a result declared
+    without Null is refused with `Incompatible types: type "Null" cannot be assigned`, a type
+    that admits the empty value (`ДвоичныйОбъект.Ссылка?`) included. A computed column carries
+    no origin: the compiler narrows `ВЫБОР КОГДА Х ЕСТЬ NULL ТОГДА ... ИНАЧЕ Х КОНЕЦ` to a
+    value without Null, and the reading here does not follow that.
+    """
+
+    kind: str
+    path: str
+
+
 def _words(*english: str) -> frozenset[str]:
     from xbsl.rules._syntax import query_words
 
@@ -63,7 +80,8 @@ def row_type(scope: ModuleScope, start: int, end: int, parameter=None) -> str | 
     """The canonical name of the row type of the query literal at [start, end), registered in
     the catalog of the scope, or None when the literal is not read.
 
-    `parameter(name)` types a `%Имя` of the literal by the code value of that name."""
+    `parameter(name)` types a `%Имя` of the literal by the code value of that name. Along with
+    the row, the catalog learns where a plain path column gets its Null (see `NullOrigin`)."""
     catalog = scope.catalog
     key = f"#Q{len(catalog.rows)}"
     cache = getattr(catalog, "_row_keys", None)
@@ -73,6 +91,7 @@ def row_type(scope: ModuleScope, start: int, end: int, parameter=None) -> str | 
     marker = (scope.module, start, end, hash(scope.text[start:end]))
     if marker in cache:
         return cache[marker]
+    origins: dict[str, NullOrigin] = {}
     if scope.tokens is not None:
         starts = getattr(scope, "_token_starts", None)
         if starts is None:
@@ -80,10 +99,10 @@ def row_type(scope: ModuleScope, start: int, end: int, parameter=None) -> str | 
             scope._token_starts = starts  # type: ignore[attr-defined]
         first = bisect.bisect_left(starts, start)
         last = bisect.bisect_left(starts, end)
-        columns = row_columns_from_tokens(scope.tokens[first:last], scope, parameter)
+        columns = row_columns_from_tokens(scope.tokens[first:last], scope, parameter, origins)
     else:
-        columns = row_columns(scope.text[start:end], scope, parameter)
-    got = catalog.register_row(key, columns) if columns is not None else None
+        columns = row_columns(scope.text[start:end], scope, parameter, origins)
+    got = catalog.register_row(key, columns, origins) if columns is not None else None
     cache[marker] = got
     return got
 
@@ -105,17 +124,22 @@ class _Table:
     nullable: bool = False       # the joined side of an outer join
 
 
-def row_columns(text: str, scope: ModuleScope, parameter=None) -> dict[str, TypeSet | None] | None:
-    """{column: its type or None} of the query literal text, or None for a block not read."""
+def row_columns(text: str, scope: ModuleScope, parameter=None,
+                origins: dict[str, NullOrigin] | None = None) -> dict[str, TypeSet | None] | None:
+    """{column: its type or None} of the query literal text, or None for a block not read.
+
+    `origins`, when given, receives the origin of the Null of every plain path column that may
+    hold it (see `NullOrigin`); a union of several parts records none."""
     try:
         tokens = lexer.tokenize(text)
     except Exception:  # noqa: BLE001 - no data, no query reading
         return None
-    return row_columns_from_tokens(tokens, scope, parameter)
+    return row_columns_from_tokens(tokens, scope, parameter, origins)
 
 
-def row_columns_from_tokens(tokens: list, scope: ModuleScope,
-                            parameter=None) -> dict[str, TypeSet | None] | None:
+def row_columns_from_tokens(tokens: list, scope: ModuleScope, parameter=None,
+                            origins: dict[str, NullOrigin] | None = None,
+                            ) -> dict[str, TypeSet | None] | None:
     """`row_columns` over the tokens of the literal, `Запрос{` to `}`."""
     tokens = [t for t in tokens if t.kind not in ("COMMENT", "BOM", "EOF")]
     # `Запрос { ... }`: the block without the keyword and the braces.
@@ -133,9 +157,11 @@ def row_columns_from_tokens(tokens: list, scope: ModuleScope,
         return None
     merged: dict[str, TypeSet | None] | None = None
     order: list[str] = []
+    # A column of a union is typed by all its parts together: its Null has no single origin.
+    found: dict[str, NullOrigin] | None = {} if origins is not None and len(parts) == 1 else None
     for number, part in enumerate(parts):
         try:
-            columns = _select_columns(part, scope, parameter, named=number == 0)
+            columns = _select_columns(part, scope, parameter, named=number == 0, origins=found)
         except _BrokenQuery:
             return None
         if columns is None:
@@ -150,6 +176,8 @@ def row_columns_from_tokens(tokens: list, scope: ModuleScope,
         for name, (_other, got) in zip(order, columns.items()):
             known = merged[name]
             merged[name] = known.union(got) if known is not None and got is not None else None
+    if merged is not None and found and origins is not None:
+        origins.update(found)
     return merged
 
 
@@ -196,11 +224,11 @@ def _is_word(token, spellings: frozenset[str]) -> bool:
     return token.kind in _WORD_KINDS and token.value.upper() in spellings
 
 
-def _select_columns(part: list, scope: ModuleScope, parameter=None,
-                    named: bool = True) -> dict[str, TypeSet | None] | None:
+def _select_columns(part: list, scope: ModuleScope, parameter=None, named: bool = True,
+                    origins: dict[str, NullOrigin] | None = None) -> dict[str, TypeSet | None] | None:
     """{column: its type} of one SELECT part. Only the first part of a union names the columns:
     a later one is read by position (`named` off), so its expressions need no alias of their own
-    and may repeat a name."""
+    and may repeat a name. `origins` receives the origin of the Null of a plain path column."""
     select = _words("SELECT")
     if not part or not _is_word(part[0], select):
         return None
@@ -247,7 +275,35 @@ def _select_columns(part: list, scope: ModuleScope, parameter=None,
         if name in columns:
             return None
         columns[name] = _expression_type(expression, tables, scope, parameter)
+        if origins is not None and named:
+            origin = _null_origin(expression, tables, columns[name])
+            if origin is not None:
+                origins[name] = origin
     return columns
+
+
+def _null_origin(expression: list, tables: dict[str, "_Table"],
+                 typed: TypeSet | None) -> NullOrigin | None:
+    """Why a column that reads a plain path may be Null; None for any other column.
+
+    The table of the path is found the way `_path` finds it: by the alias the path starts with,
+    or the only table of the query when the path names a field alone."""
+    if typed is None or not typed.null or not _is_path(expression):
+        return None
+    names = [token.value for token in expression[::2]]
+    table = tables.get(names[0])
+    rest = names[1:]
+    if table is None:
+        if len(tables) != 1:
+            return None
+        table = next(iter(tables.values()))
+        rest = names
+    path = ".".join(names)
+    if len(rest) > 1 and NULL_THROUGH_REFERENCE:
+        return NullOrigin("reference", path)
+    if table.nullable and NULL_ON_OUTER_JOIN_SIDE:
+        return NullOrigin("outer", path)
+    return None
 
 
 def _check_paths(tokens: list, tables: dict[str, "_Table"], scope: ModuleScope) -> None:
