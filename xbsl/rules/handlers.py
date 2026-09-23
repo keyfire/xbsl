@@ -599,7 +599,8 @@ def handler_signature(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     rel, ref["line"], ref["col"], "form/handler-signature", Severity.WARNING,
                     i18n.t(
                         "form/handler-signature.mismatch",
-                        handler=ref["handler"], event=ref["event"], component=ref["component"],
-                        position=position, expected=want, actual=got,
+                        handler=ref["handler"], event=i18n.name(ref["event"]),
+                        component=i18n.name(ref["component"]),
+                        position=position, expected=_shown(want), actual=got,
                     ),
                 )

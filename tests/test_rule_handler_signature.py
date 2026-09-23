@@ -213,10 +213,17 @@ Content:
     Type: Group
     Content:
         -
-            Type: Group
-            Name: Panel
-            OnHover: Highlight
+{component}
 """
+
+
+def _lint_en(tmp_path, component: str, module: str):
+    (tmp_path / "Form.yaml").write_text(_FORM_EN.format(component=component), encoding="utf-8")
+    (tmp_path / "Form.xbsl").write_text(module, encoding="utf-8")
+    i18n.set_lang("en")
+    return [
+        d for d in engine.run(discover([str(tmp_path)]), select={RULE}) if d.rule_id == RULE
+    ]
 
 
 def test_an_english_narrowed_source_is_reported_in_the_english_spelling(tmp_path):
@@ -224,16 +231,27 @@ def test_an_english_narrowed_source_is_reported_in_the_english_spelling(tmp_path
 
     The message spells the signature the way an English project writes it.
     """
-    (tmp_path / "Form.yaml").write_text(_FORM_EN, encoding="utf-8")
-    (tmp_path / "Form.xbsl").write_text(
-        "method Highlight(Source: Group, Event: ComponentEvent)\n;\n", encoding="utf-8",
+    diags = _lint_en(
+        tmp_path,
+        "            Type: Group\n            Name: Panel\n            OnHover: Highlight",
+        "method Highlight(Source: Group, Event: ComponentEvent)\n;\n",
     )
-    i18n.set_lang("en")
-
-    diags = [
-        d for d in engine.run(discover([str(tmp_path)]), select={RULE}) if d.rule_id == RULE
-    ]
 
     assert len(diags) == 1
     assert "OnHover(Source: Component, Event: ComponentEvent)" in diags[0].message
     assert "'Group' is a descendant of 'Component'" in diags[0].message
+
+
+def test_an_english_mismatch_names_the_event_the_component_and_the_type_in_english(tmp_path):
+    """The schema keeps the event, the component and the delegate in Russian, and an English
+    message printed them as they were: the reader of an English project met words their own
+    sources do not use."""
+    diags = _lint_en(
+        tmp_path,
+        "            Type: Checkbox\n            Name: Flag\n            OnChange: FlagChanged",
+        "method FlagChanged(Source: Checkbox, Event: OnChangeEvent<Boolean>)\n;\n",
+    )
+
+    assert len(diags) == 1
+    assert ("the 'OnChange' event of 'Checkbox' passes 'OnChangeEvent<Boolean?>'"
+            in diags[0].message)
