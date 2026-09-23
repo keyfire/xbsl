@@ -156,7 +156,7 @@ def test_the_nullable_event_argument_may_widen_to_the_nullable_root(tmp_path):
 
 
 def test_an_ancestor_that_drops_the_null_is_reported(tmp_path):
-    """The root takes every value but the absent one: `Объект` for `Булево?` narrows."""
+    """The root takes every value but the absent one: `Object` for `Boolean?` narrows."""
     diags = _lint(
         tmp_path, _CHECKBOX,
         _handler("Источник: Флажок, Событие: СобытиеПриИзменении<Объект>"),
@@ -180,7 +180,7 @@ def test_the_data_event_widens_its_argument_too(tmp_path):
 
 
 def test_the_argument_of_the_source_must_match_exactly(tmp_path):
-    """A component also takes a value in: `ПолеВвода<Строка?>` is not a wider source."""
+    """A component also takes a value in: `Edit<String?>` is not a wider source."""
     diags = _lint(
         tmp_path, _INPUT_STRING,
         "метод ПолеИзменено(Источник: ПолеВвода<Строка?>, "

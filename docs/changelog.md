@@ -41,6 +41,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`form/handler-signature` accepts a wider data type of the event.** A handler may take the
+  event data as the same type with `?`, as its ancestor or as `Object`, and the compiler accepts
+  that. The rule reported any difference in the argument and fired falsely on two third-party
+  libraries. The type of the source must still match exactly. ([#142](https://github.com/keyfire/xbsl/pull/142))
 - **`xbsl data-diff` names the generated types and the kinds with a manager that came or
   went.** Member lists were compared only for the names both versions have, so a new generated
   type never made it into the report. Such types and kinds are now listed apart, the way facets

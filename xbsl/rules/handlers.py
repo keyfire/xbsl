@@ -401,7 +401,7 @@ def _widens(written: str, expected: str) -> bool:
 def _event_widens(written: str, expected: str) -> bool:
     """Whether the written event type takes what the delegate passes (both folded, one head).
 
-    `СобытиеПриИзменении<Объект?>` takes a `СобытиеПриИзменении<Строка>`: every type argument
+    `OnChangeEvent<Object?>` takes an `OnChangeEvent<String>`: every type argument
     may widen, and the event type itself may become nullable but not lose its `?`.
     """
     if expected.endswith("?") and not written.endswith("?"):
