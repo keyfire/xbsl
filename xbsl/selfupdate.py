@@ -48,7 +48,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from xbsl import __version__, i18n
+from xbsl import __version__, i18n, mcpjournal
 
 #: Where the files come from. The simple index (PEP 691) is served straight from the upload,
 #: while the JSON metadata below is a cache that lags behind a release by minutes - see
@@ -379,8 +379,13 @@ def _process_listing() -> list[tuple[int, int, str, str]]:
     ]
 
 
-def stop_holders(processes: list[dict], log) -> list[dict]:
-    """End the listed processes; returns those that survived."""
+def stop_holders(processes: list[dict], log, reason: str = "self-update --stop-holders") -> list[dict]:
+    """End the listed processes; returns those that survived.
+
+    A forced stop leaves the stopped server no chance to write its own end, so the MCP
+    journal gets the record from here: a client of that server sees only a closed transport,
+    and `xbsl mcp-log` then names the update that ended it.
+    """
     alive = []
     for process in processes:
         pid = int(process["pid"])
@@ -390,6 +395,7 @@ def stop_holders(processes: list[dict], log) -> list[dict]:
                                timeout=30, stdin=subprocess.DEVNULL)
             else:
                 os.kill(pid, 15)
+            mcpjournal.record("stopped", target=pid, name=process.get("name") or "", reason=reason)
             log(i18n.t("selfupdate.holder-stopped", name=process.get("name") or "", pid=pid))
         except (OSError, subprocess.SubprocessError) as error:
             alive.append({**process, "error": str(error)})
@@ -564,7 +570,7 @@ def self_update(version: str | None = None, log=print, *, stop_busy: bool = Fals
     if stop_busy:
         busy = holders()
         if busy:
-            stop_holders(busy, log)
+            stop_holders(busy, log, reason=f"self-update {__version__} -> {target}")
 
     try:
         moved = _move_aside(site)

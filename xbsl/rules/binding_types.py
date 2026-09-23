@@ -1,4 +1,4 @@
-"""Tier D: a nullable method binding on a component property that has no empty value.
+"""Tier D: component binding values checked against their declared UI property types.
 
 The yaml/binding-needs-auto rule. "Not set" for a component property is the `Авто` value,
 not `Неопределено`: the palette declares properties as unions WITHOUT the empty value (the
@@ -40,7 +40,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from xbsl import dataset, i18n, uischema
-from xbsl.diagnostics import Diagnostic, Severity
+from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.rules._syntax import code_tokens, signatures, type_expr
 from xbsl.rules.component_props import _markup_nodes, _type_value
@@ -54,6 +54,18 @@ from xbsl.rules.yaml_schema import (
 )
 
 MESSAGES = {
+    "yaml/double-quoted-binding.title": {
+        "ru": "Привязка нестрокового свойства в двойных кавычках",
+        "en": "A nonstring property binding uses double quotes",
+    },
+    "yaml/double-quoted-binding.invalid": {
+        "ru": "Привязка свойства '{prop}' компонента '{component}' записана в двойных "
+              "кавычках. Сервер отвергает такое значение для нестрокового свойства. "
+              "Используйте значение без кавычек или одинарные кавычки, если их требует YAML.",
+        "en": "The binding of property '{prop}' on component '{component}' uses double "
+              "quotes. The server rejects that spelling for a nonstring property. "
+              "Use a bare value or single quotes when YAML requires quoting.",
+    },
     "yaml/binding-needs-auto.title": {
         "ru": "Биндинг свойства возвращает Неопределено вместо Авто",
         "en": "A property binding returns the empty value instead of Auto",
@@ -114,6 +126,84 @@ def _prop_table() -> dict[str, dict[str, tuple[str, ...]]]:
 
 
 dataset.register_reset(_prop_table.cache_clear)
+
+
+@lru_cache(maxsize=1)
+def _double_quoted_props() -> dict[str, frozenset[str]]:
+    """Properties with a known nonstring union; unknown or string-capable ones stay silent."""
+    schema = dataset.load_ui_schema() or {}
+    table: dict[str, frozenset[str]] = {}
+    for component, record in (schema.get("components") or {}).items():
+        names = set()
+        for prop, spec in (record.get("props") or {}).items():
+            types = spec.get("types") or []
+            if spec.get("slot") or spec.get("event") or not types:
+                continue
+            if any(
+                str(type_).strip().rstrip("?") in {"Строка", "Объект", "String", "Object"}
+                for type_ in types
+            ):
+                continue
+            names.add(prop)
+        if names:
+            table[component] = frozenset(names)
+    return table
+
+
+dataset.register_reset(_double_quoted_props.cache_clear)
+
+
+@rule(
+    "yaml/double-quoted-binding", "yaml/double-quoted-binding.title", "D",
+    severity=Severity.ERROR,
+)
+def double_quoted_binding(source: SourceFile) -> Iterable[Diagnostic]:
+    """Reject only double-quoted bindings of schema-proven nonstring UI properties."""
+    if source.kind != "yaml" or not _HAVE_YAML or '"' not in source.text:
+        return
+    table = _double_quoted_props()
+    if not table:
+        return
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:
+        return
+    for mapping in _markup_nodes(root):
+        written_type = _type_value(mapping)
+        if written_type is None:
+            continue
+        component = uischema.canonical_component(written_type.value.split("<", 1)[0].strip())
+        props = table.get(component)
+        if not props:
+            continue
+        for key, (key_node, value_node) in _scalar_entries(mapping).items():
+            if key not in props or not isinstance(value_node, yaml.ScalarNode):
+                continue
+            if value_node.style != '"' or not value_node.value.startswith("="):
+                continue
+            start, end = value_node.start_mark.index, value_node.end_mark.index
+            raw = source.text[start:end]
+            fix = None
+            if raw.startswith('"') and raw.endswith('"') and "\n" not in value_node.value:
+                replacement = "'" + value_node.value.replace("'", "''") + "'"
+                try:
+                    safe = yaml.safe_load("value: " + replacement + "\n")
+                except yaml.YAMLError:
+                    safe = None
+                if isinstance(safe, dict) and safe.get("value") == value_node.value:
+                    fix = TextEdit(start, end, replacement)
+            yield Diagnostic(
+                source.rel, value_node.start_mark.line + 1,
+                value_node.start_mark.column + 1,
+                "yaml/double-quoted-binding", Severity.ERROR,
+                i18n.t(
+                    "yaml/double-quoted-binding.invalid",
+                    prop=key_node.value, component=component,
+                ),
+                fix=fix,
+            )
 
 
 def _pair_stem(rel: str) -> str:

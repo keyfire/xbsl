@@ -609,6 +609,39 @@ _CORE_MESSAGES = {
         "ru": "обновить xbsl распаковкой колеса с PyPI",
         "en": "update xbsl by unpacking the wheel from PyPI",
     },
+    "cli.help.commands.mcp-log": {
+        "ru": "журнал MCP-сервера: когда серверы запускались, как завершились и кто их остановил",
+        "en": "the MCP server journal: when servers started, how they ended and who stopped them",
+    },
+    "cli.help.mcplog-last": {
+        "ru": "сколько последних событий показать (по умолчанию 20; 0 – все)",
+        "en": "how many newest events to show (default 20; 0 - all)",
+    },
+    "cli.help.mcplog-json": {
+        "ru": "события в JSON, по объекту на строку журнала",
+        "en": "the events as JSON, an object per journal line",
+    },
+    # -- mcp-log: the journal of MCP server lives (mcpjournal.py) --
+    "mcplog.path": {"ru": "журнал: {path}", "en": "journal: {path}"},
+    "mcplog.empty": {
+        "ru": "записей нет: сервер с этим журналом еще не запускался",
+        "en": "no records: no server has started with this journal yet",
+    },
+    "mcplog.start": {
+        "ru": "запущен сервер xbsl {version}, родительский процесс {parent}",
+        "en": "server xbsl {version} started, parent process {parent}",
+    },
+    "mcplog.exit.input-closed": {
+        "ru": "завершился: клиент закрыл соединение",
+        "en": "ended: the client closed the connection",
+    },
+    "mcplog.exit.interrupted": {"ru": "завершился: прерван", "en": "ended: interrupted"},
+    "mcplog.exit.failed": {"ru": "завершился сбоем: {error}", "en": "ended with a failure: {error}"},
+    "mcplog.stopped": {
+        "ru": "остановлен процесс {target} ({name}): {reason}",
+        "en": "process {target} ({name}) stopped: {reason}",
+    },
+    "mcplog.unknown": {"ru": "событие {event}", "en": "event {event}"},
     "cli.help.commands.extract": {
         "ru": "сгенерировать данные о языке из дистрибутива Элемента (--dist)",
         "en": "generate the language data from an Element distribution (--dist)",

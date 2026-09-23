@@ -177,6 +177,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "code/server-call-from-handler"
       || r === "code/query-needs-server"
       || r === "code/global-unavailable"
+      || r === "code/type-unavailable"
       || r === "code/image-binding-server-call",
     page: EXEC,
   },

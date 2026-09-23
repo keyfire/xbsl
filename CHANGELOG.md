@@ -18,6 +18,33 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **`yaml/double-quoted-binding` finds a nonstring binding in double quotes.** The server rejects
+  such a value, while a value without quotes or in single quotes compiles. The rule checks only
+  properties that the UI schema declares nonstring, and its quick fix switches to single quotes.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
+- **`code/type-unavailable` finds a standard type used outside its environment.** A server-only
+  type such as `Encodings` in a client method passed the linter and failed when the build was
+  applied. The check needs data extracted again with `type_availability`; with older data it
+  reports nothing. ([#131](https://github.com/keyfire/xbsl/pull/131))
+- **`xbsl mcp-log` names the cause of a closed MCP connection.** The server writes its start and
+  end to a journal, and `self-update --stop-holders` writes which servers it stopped. The journal
+  shows whether the server failed, the client closed it or an update stopped it.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
+
+### Fixed
+
+- **`form-edit wrap` keeps a list where the slot is declared as an array.** Wrapping a single
+  `Picture` in a `Group` wrote the content as one mapping, and the server rejected the form. The
+  slot type from the UI schema now decides how the content is written.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
+- **`form-edit set-property` writes a typed binding without double quotes.** A width binding kept
+  its quotes, and the server rejected it. A value that YAML accepts without quotes is written
+  without them, otherwise in single quotes. ([#131](https://github.com/keyfire/xbsl/pull/131))
+
 ## 2026-09-23 – 0.115.0
 
 ### Added

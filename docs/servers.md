@@ -59,6 +59,14 @@ files and findings, and up to ten findings one line each. `lint_paths` on the wr
 gives the whole report. The core and the CLI do not need `mcp`
 at all; it lives only in the `[mcp]` extra.
 
+**When the client says the transport closed.** The server keeps a short journal in the user's
+local state folder: when it started, how it ended and what stopped it. `xbsl self-update
+--stop-holders` stops the servers of every session to replace the package, and a client of such
+a server then hears only that the transport closed. `xbsl mcp-log` prints the journal and names
+the cause. Restarting the MCP client starts a new server. The journal is
+`%LOCALAPPDATA%\xbsl\mcp-journal.jsonl` on Windows and `$XDG_STATE_HOME/xbsl/mcp-journal.jsonl`
+elsewhere; the `XBSL_MCP_JOURNAL` variable points to another file.
+
 Every `meta_*` tool and `lint_paths` take `root`, the caller's project root. An agent working in
 a git worktree does not share the server's working directory, which is why the parameter exists.
 Relative `directory`, `yaml_path`, `module_path`, `paths`, `baseline` and `compare` resolve

@@ -2,6 +2,14 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Добавлено
+
+- **Замечание `code/type-unavailable` ведет в документацию.** Его код в панели "Проблемы"
+  открывает страницу о том, где исполняются модули.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
+
 ## 0.76.0
 
 ### Добавлено

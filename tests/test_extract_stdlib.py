@@ -538,6 +538,34 @@ def test_main_writes_generic_formulas_and_proven_runtime_variance(tmp_path):
     assert data["type_param_variance"] == {"Образец": ["out"]}
 
 
+def test_main_stores_type_header_availability_without_member_availability(tmp_path):
+    """A server-only singleton must not inherit a client's member environment or vice versa."""
+    import json
+    import zipfile
+
+    page = (
+        "<html><head><title>Кодировки | Product</title></head><body><article>"
+        "<h1>Кодировки</h1><p><code>Стд::Кодирование::Кодировки</code> "
+        "<code>Доступность: Сервер</code></p>"
+        "<h2>Свойства</h2><h3>Base64</h3><p><code>Доступность: Клиент</code></p>"
+        "</article></body></html>"
+    )
+    undocumented = (
+        "<html><head><title>Пример | Product</title></head><body><article>"
+        "<h1>Пример</h1><h2>Свойства</h2><h3>Значение</h3>"
+        "<p><code>Доступность: Клиент</code></p></article></body></html>"
+    )
+    with zipfile.ZipFile(tmp_path / "element-server-with-ide-9.9.9-test.car", "w") as archive:
+        archive.writestr(_MODULE.STD_BASE + "Encoding/Encodings_ru/index.html", page)
+        archive.writestr(_MODULE.STD_BASE + "Example_ru/index.html", undocumented)
+    output = tmp_path / "stdlib.json"
+
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["type_availability"] == {"Кодировки": "Сервер"}
+
+
 def test_the_type_parameters_are_read_from_the_page_header():
     """A generic type names the result of its members BY THE PARAMETER, so the parameter list
     is what turns such a result into a type."""

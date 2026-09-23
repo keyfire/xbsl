@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+
+- **The `code/type-unavailable` finding links to the documentation.** Its code in the
+  Problems panel opens the page about where modules run.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
+
 ## 0.76.0
 
 ### Added

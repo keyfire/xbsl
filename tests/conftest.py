@@ -34,6 +34,14 @@ def _pinned_language(monkeypatch):
     monkeypatch.setenv("XBSL_LANG", "ru")
     i18n.set_lang("ru")
 
+
+@pytest.fixture(autouse=True)
+def _private_mcp_journal(monkeypatch, tmp_path):
+    # A test that starts or stops a server must not write into the developer's own MCP journal:
+    # `xbsl mcp-log` would then report test processes as real server lives.
+    monkeypatch.setenv("XBSL_MCP_JOURNAL", str(tmp_path / "mcp-journal.jsonl"))
+
+
 _DATA_DEPENDENT = {
     "test_lexer",
     "test_language",
