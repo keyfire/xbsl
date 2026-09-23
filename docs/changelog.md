@@ -29,6 +29,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`code/deprecated-project` finds uses of project declarations marked deprecated.** A method,
+  property, constructor, parameter or enumeration value with `@Deprecated` is reported where it
+  is used and the target is certain, as the platform IDE warns. The parser now keeps the
+  annotations of an enumeration value.
 - **`yaml/double-quoted-binding` finds a nonstring binding in double quotes.** The server rejects
   such a value, while a value without quotes or in single quotes compiles. The rule checks only
   properties that the UI schema declares nonstring, and its quick fix switches to single quotes.

@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 247.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 248.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -491,6 +491,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Проверка `Х это Тип`, результат которой решает тип `Х`: проверка проходит всегда, а `это не` никогда [подробнее](#d-code-redundant-type-check) [доки](https://1cmycloud.com/docs/help/topics/is/) |
 | `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Имя в комментарии, которого нет ни в проекте, ни у платформы: метод переименован, объект заменён, опечатка [подробнее](#d-comment-unknown-name) |
 | `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Вызов, который привязывается только к устаревшей форме метода платформы: IDE платформы о нём предупреждает [подробнее](#d-code-deprecated-api) [доки](https://1cmycloud.com/docs/help/topics/update-app-data/) |
+| `code/deprecated-project` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Использование метода, свойства, конструктора, параметра или значения перечисления проекта, помеченного устаревшим: IDE платформы о нем предупреждает [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru/) |
 
 #### Подробнее о правилах тира D
 

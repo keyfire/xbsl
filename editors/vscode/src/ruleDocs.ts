@@ -34,6 +34,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "code/computed-property-server-call", page: "topics/calculated-property-values-for-ui-components" },
   { match: (r) => r === "code/resource-read-without-cache", page: "stdlib/element/xbsl/Std/Annotations/Environments/AvailableFromClient_ru" },
   { match: (r) => r === "code/deprecated-api", page: "topics/update-app-data" },
+  { match: (r) => r === "code/deprecated-project", page: "stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru" },
   // --- project element names (standard) ---
   { match: (r) => r === "naming/presentation", page: NAMES, anchor: "2-представления-элементов-проекта" },
   // Environment postfix, number in a name and per-kind prefix live in section 3, not in general 1.

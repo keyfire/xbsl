@@ -140,3 +140,5 @@ from . import platform_translation_shadow  # noqa: F401
 from . import procedure_value  # noqa: F401
 
 from . import contract_parameters  # noqa: F401
+
+from . import deprecated_project  # noqa: F401

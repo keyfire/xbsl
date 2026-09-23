@@ -326,6 +326,7 @@ class Structure(Node):  # rulebslStructure / rulebslException
 class EnumItem(Node):  # rulebslEnumItem
     name: str
     is_default: bool = False
+    annotations: list[Annotation] = field(default_factory=list)
 
 
 @dataclass
@@ -952,7 +953,7 @@ class _Parser:
                 continue
             is_default = self.eat_kw("DEFAULT") is not None
             node.items.append(EnumItem(item.start, self.toks[self.pos - 1].end,
-                                       item.value, is_default))
+                                       item.value, is_default, annotations=member_anns))
             self.eat_op(",")
         self.expect_op(";", "parser.expected-semicolon-enum")
         node.end = self.toks[self.pos - 1].end
