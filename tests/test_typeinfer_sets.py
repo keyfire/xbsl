@@ -274,12 +274,21 @@ def test_a_property_folded_from_two_versions_is_left_untyped():
 
 @pytest.mark.needs_data
 def test_a_disputed_property_is_left_untyped_while_the_data_still_calls_it_plain():
-    """The entry is evidence from the editor; once the data admits the empty value it is redundant."""
+    """The entry is evidence from the editor. It matters only in a data version that calls the
+    property plain, and once no available version does, it is redundant."""
     from xbsl import dataset
 
     catalog = _file_catalog()
     for owner, member in ti._DISPUTED_PROPERTIES:
-        written = (dataset.load_json("stdlib.json")["member_types"].get(owner) or {}).get(member)
-        got = catalog.written(written, None)
-        assert got is not None and not got.undefined, f"{owner}.{member} is no longer plain - drop it"
-        assert catalog.platform_member(owner, member, False) is None
+        plain_in = []
+        for version in dataset.available_versions():
+            types = dataset.load_json("stdlib.json", version).get("member_types", {})
+            got = catalog.written((types.get(owner) or {}).get(member), None)
+            if got is not None and not got.undefined:
+                plain_in.append(version)
+        assert plain_in, f"{owner}.{member} is no longer plain in any data version - drop it"
+        dataset.set_version(plain_in[0])
+        try:
+            assert _file_catalog().platform_member(owner, member, False) is None
+        finally:
+            dataset.set_version(None)
