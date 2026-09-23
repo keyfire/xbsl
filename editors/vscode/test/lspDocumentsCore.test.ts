@@ -16,6 +16,7 @@ import {
   DICTIONARY_PATTERNS,
   DocumentFilterShape,
   lspDocumentSelector,
+  missingRoot,
   rootBase,
   rootSegments,
   rootYamlPattern,
@@ -183,6 +184,15 @@ test("without a root the folder changes nothing: every yaml goes to the server",
 test("a relative root with no folder open keeps the pattern of its directory names", () => {
   assert.strictEqual(rootFilter("src/app"), "**/src/app/**/*.yaml");
   assert.strictEqual(rootBase("src/app"), undefined);
+});
+
+test("a root that is not on disk is named, so the silent loss of yaml findings is not silent", () => {
+  const folder = path.resolve("workspace");
+  const present = new Set([path.resolve(folder, "e1c/Project")]);
+  const exists = (dir: string): boolean => present.has(dir);
+  assert.strictEqual(missingRoot("e1c/Old", folder, exists), path.resolve(folder, "e1c/Old"));
+  assert.strictEqual(missingRoot("e1c/Project", folder, exists), undefined);
+  assert.strictEqual(missingRoot("", folder, exists), undefined);
 });
 
 test("the language client stays on the major version that passes a RelativePattern through", () => {

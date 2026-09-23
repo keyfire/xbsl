@@ -13,6 +13,9 @@
 
 ### Added
 
+- **The extension warns when the folder in `xbsl.projectRoot` does not exist.** Without that
+  folder, for example after the project was renamed, the language server checks none of the
+  project's yaml. It used to stay silent; now the extension warns at startup. ([#136](https://github.com/keyfire/xbsl/pull/136))
 - **Hovering an object in the metadata tree shows its documentation comment.** The tooltip of
   an object or a form adds the comment from its yaml below the namespace, the kind and the
   problems. ([#136](https://github.com/keyfire/xbsl/pull/136))

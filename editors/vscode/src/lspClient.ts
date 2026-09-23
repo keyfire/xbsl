@@ -4,6 +4,7 @@
 // and the project index live in the server's memory - typing feedback does not pay for
 // interpreter startup.
 
+import * as fs from "fs";
 import * as vscode from "vscode";
 import {
   LanguageClient,
@@ -13,7 +14,7 @@ import {
 import { baselineForLint } from "./excludeAction";
 import { ciJobArgs, ciSettings } from "./report";
 import { pipInstallCommand, runInstallTask } from "./installer";
-import { DocumentFilterShape, lspDocumentSelector } from "./lspDocumentsCore";
+import { DocumentFilterShape, lspDocumentSelector, missingRoot } from "./lspDocumentsCore";
 import { needsServerRestart } from "./lspRestartCore";
 import { applyOverride, engineRuleArgs } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
@@ -134,6 +135,14 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   const projectRoot = (cfg.get<string>("projectRoot") || "").trim();
   if (projectRoot) {
     args.push("--project-root", projectRoot);
+    const missing = missingRoot(projectRoot, folder?.uri.fsPath, fs.existsSync);
+    if (missing) {
+      output.appendLine(`xbsl.projectRoot: ${missing} does not exist`);
+      void vscode.window.showWarningMessage(vscode.l10n.t(
+        "XBSL: the project folder {0} (xbsl.projectRoot) does not exist, so the yaml files of the project are not checked. Point the setting at the project folder.",
+        projectRoot,
+      ));
+    }
   }
   // Empty setting -> the VS Code display language (see resolveMessageLanguage): otherwise the
   // engine falls back to the OS locale and an English editor shows Russian diagnostics.

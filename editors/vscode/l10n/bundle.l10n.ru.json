@@ -652,5 +652,6 @@
   "The YAML changed while the comment was being saved. Review it and try again.": "YAML изменился во время сохранения комментария. Проверьте его и повторите попытку.",
   "The documentation comment could not be saved.": "Не удалось сохранить документирующий комментарий.",
   "The documentation service is unavailable. Try again.": "Сервис документации недоступен. Повторите попытку.",
-  "The documentation service returned an unsupported edit.": "Сервис документации вернул неподдерживаемую правку."
+  "The documentation service returned an unsupported edit.": "Сервис документации вернул неподдерживаемую правку.",
+  "XBSL: the project folder {0} (xbsl.projectRoot) does not exist, so the yaml files of the project are not checked. Point the setting at the project folder.": "XBSL: папки проекта {0} (xbsl.projectRoot) нет, поэтому yaml проекта не проверяются. Укажите в настройке папку проекта."
 }
