@@ -104,6 +104,11 @@ _H3_RE = re.compile(r"<h3[^>]*>(.*?)</h3>", re.S)
 _LINK_RE = re.compile(r"<a[^>]*>(.*?)</a>", re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
 _JUNK_RE = re.compile(r"[\x00-\x1f​﻿]")  # control characters and Docusaurus anchors
+# The same characters cut out of a whole page on reading, as docs.py does: the pages of some
+# builds carry NUL characters in the middle of words on almost every page ("КлиентИ\x00Сервер",
+# "ИспользоватьИмяФайлаБез\x00Пути"), and a pattern over the raw HTML sees another word. Tabs
+# and line breaks stay: code blocks are split into lines by them.
+_RAW_JUNK_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f​‌‍﻿­]")
 # A member name. Underscores are part of it: the constant-style properties
 # (`Символы.НОВАЯ_СТРОКА`, `ВОЗВРАТ_КАРЕТКИ`, `НЕРАЗРЫВНЫЙ_ПРОБЕЛ`) are documented and must
 # not be dropped. The opening letter may be lowercase: `ВидПлатформыКлиента.iOS` is spelled
@@ -1001,8 +1006,10 @@ def package_members(raw: str) -> set[str]:
 
 
 # The availability line right under a member heading: `Доступность: Клиент`. The longest
-# alternative goes first - `Клиент` is a prefix of `КлиентИСервер`.
-_AVAILABILITY_RE = re.compile(r"Доступность:\s*(КлиентИСервер|Клиент|Сервер)")
+# alternative goes first: the client word is a prefix of the word of both sides. A word that
+# only starts like one of them names no environment and is not read as its prefix: an unknown
+# environment leaves the type out, a guessed one makes the rules judge by it.
+_AVAILABILITY_RE = re.compile(r"Доступность:\s*(КлиентИСервер|Клиент|Сервер)(?!\w)")
 
 # Both member heading levels of a package page, split with the heading text captured.
 _H23_SPLIT_RE = re.compile(r"<h[23][^>]*>(.*?)</h[23]>", re.S)
@@ -1080,8 +1087,9 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
 
 
 def _page(z: zipfile.ZipFile, entry: str) -> str:
-    """A docs page as text, in the markup the parsers expect (see _distro.normalize_markup)."""
-    return _distro.normalize_markup(z.read(entry).decode("utf-8", "replace"))
+    """A docs page as text, in the markup the parsers expect (see _distro.normalize_markup),
+    with the control characters inside its words cut out first (_RAW_JUNK_RE)."""
+    return _distro.normalize_markup(_RAW_JUNK_RE.sub("", z.read(entry).decode("utf-8", "replace")))
 
 
 def extract(dist: Path) -> tuple:

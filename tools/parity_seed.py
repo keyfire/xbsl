@@ -189,6 +189,11 @@ _INPUT_RU = _FORM_RU + "    Содержимое:\n        Тип: ПолеВв�
 _INPUT_EN = _FORM_EN + "    Content:\n        Type: Edit<String>\n        Name: Field\n        OnChange: Change\n"
 _INPUT_TOKENS = {**_FORM_TOKENS, "Поле": "Field", "Изменение": "Change", "Источник": "Source",
                  "Событие": "Event"}
+#: A label whose hover names a handler - the event is declared on the base component.
+_LABEL_HOVER_RU = _FORM_RU + "    Содержимое:\n        Тип: Надпись\n        Имя: Отметка\n        ПриНаведении: Наведение\n"
+_LABEL_HOVER_EN = _FORM_EN + "    Content:\n        Type: Label\n        Name: Mark\n        OnHover: Hover\n"
+_LABEL_HOVER_TOKENS = {**_FORM_TOKENS, "Отметка": "Mark", "Наведение": "Hover", "Источник": "Source",
+                       "Событие": "Event"}
 #: A number attribute of the catalog - a regular attribute, judged by the keys of its own class.
 _NUMBER_ATTRIBUTE_RU = """\
 Реквизиты:
@@ -363,6 +368,10 @@ Attributes:
 #: An insert of a fixed height under the form's content.
 _INSET_RU = "    Содержимое:\n        Тип: КонтейнерHtml\n        Имя: Вставка\n        Высота: 480\n"
 _INSET_EN = "    Content:\n        Type: HtmlContainer\n        Name: Inset\n        Height: 480\n"
+#: The same insert with its height bound to a form attribute instead of a number.
+_INSET_BOUND_RU = _INSET_RU.replace("Высота: 480", "Высота: =ВысотаРамкиПикс")
+_INSET_BOUND_EN = _INSET_EN.replace("Height: 480", "Height: =FrameHeightPx")
+_INSET_BOUND_TOKENS = {**_FORM_TOKENS, "Вставка": "Inset", "ВысотаРамкиПикс": "FrameHeightPx"}
 #: A horizontal row holding an insert next to a label (a single child has nothing to slide
 #: against); `{align}` is the alignment line or nothing.
 _ROW_RU = ("    Содержимое:\n        Тип: Группа\n        Имя: Ряд\n        Компоновка: Горизонтальная\n"
@@ -2010,6 +2019,60 @@ def _labels_files(more: str) -> dict[str, str]:
             "Основное/Оформление.xbsl": _LABELS_XBSL_RU % more}
 
 
+#: Two catalogs, a reference between them and a common module whose query reads a field THROUGH
+#: that reference, which types the column `<тип>|Null`; `{guard}` is appended to the column.
+_QUERY_NULL_BATCHES_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000fa1
+Имя: Партии
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000fa2
+        Имя: Вес
+        Тип: Число
+"""
+_QUERY_NULL_SHIPMENTS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000fa3
+Имя: Отгрузки
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000fa4
+        Имя: Партия
+        Тип: Партии.Ссылка?
+"""
+_QUERY_NULL_MODULE_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000fa5
+Имя: Расчеты
+ОбластьВидимости: ВПроекте
+Окружение: Сервер
+"""
+#: A lambda of `Transform` fills a typed structure field from the column of the query row.
+_QUERY_NULL_MODULE_RU = (
+    "структура Сводка\n    знч Вес: Число = 0\n;\n"
+    "метод Сводки(): Массив<Сводка>\n"
+    "    возврат Запрос{{ВЫБРАТЬ Отгрузка.Партия.Вес{guard} КАК Вес ИЗ Отгрузки КАК Отгрузка}}.Выполнить()\n"
+    "        .Преобразовать(Строчка -> новый Сводка(Вес = Строчка.Вес))\n"
+    ";\n"
+)
+_QUERY_NULL_TOKENS = {"Партии": "Batches", "Вес": "Weight", "Отгрузки": "Shipments",
+                      "Партия": "Batch", "Отгрузка": "Shipment", "Расчеты": "Calculations",
+                      "Сводка": "Summary", "Сводки": "Summaries", "Строчка": "Line"}
+
+
+def _query_null_files(guard: str) -> dict[str, str]:
+    """The seed tree of the query half of code/row-field-null, `guard` after the column."""
+    return {
+        "Партии.yaml": _QUERY_NULL_BATCHES_RU,
+        "Отгрузки.yaml": _QUERY_NULL_SHIPMENTS_RU,
+        "Расчеты.yaml": _QUERY_NULL_MODULE_YAML_RU,
+        "Расчеты.xbsl": _QUERY_NULL_MODULE_RU.format(guard=guard),
+    }
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -2473,6 +2536,37 @@ SEEDS: list[Seed] = [
                                     "Event: OnChangeEvent<Number>)\n;\n",
         },
         tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=FINDING,
+        note="a hover handler that narrows the source to the label is reported: the event is "
+             "declared on the base component, and the ancestry is read in both spellings",
+        files={
+            "ФормаЗаявки.yaml": _LABEL_HOVER_RU,
+            "ФормаЗаявки.xbsl": "метод Наведение(Источник: Надпись, "
+                                "Событие: СобытиеКомпонента)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _LABEL_HOVER_EN,
+            "ApplicationForm.xbsl": "method Hover(Source: Label, Event: ComponentEvent)\n;\n",
+        },
+        tokens=_LABEL_HOVER_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=CLEAN,
+        note="a hover handler that takes the base component, as the event declares it, passes",
+        files={
+            "ФормаЗаявки.yaml": _LABEL_HOVER_RU,
+            "ФормаЗаявки.xbsl": "метод Наведение(Источник: Компонент, "
+                                "Событие: СобытиеКомпонента)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _LABEL_HOVER_EN,
+            "ApplicationForm.xbsl": "method Hover(Source: Component, Event: ComponentEvent)\n;\n",
+        },
+        tokens=_LABEL_HOVER_TOKENS,
     ),
     Seed(
         rule="code/catch-non-exception",
@@ -3097,6 +3191,15 @@ SEEDS: list[Seed] = [
         files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_RU},
         english={"ApplicationForm.yaml": _FORM_EN + _INSET_EN},
         tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=FINDING,
+        note="a height bound to an attribute is a set size too – the stretch overrides the "
+             "number the binding yields",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_BOUND_RU},
+        english={"ApplicationForm.yaml": _FORM_EN + _INSET_BOUND_EN},
+        tokens=_INSET_BOUND_TOKENS,
     ),
     Seed(
         rule="yaml/col-width-needs-no-stretch",
@@ -3993,6 +4096,22 @@ SEEDS: list[Seed] = [
             "MarkPanel.xbsl": _ROW_FILL_EN.format(field="SectionAmount"),
         },
         tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=FINDING,
+        note="a query column read through a reference fills a typed structure field in a "
+             "lambda of the transform - the parameter is typed by the platform signature, "
+             "which the English tree spells with its own member names",
+        files=_query_null_files(""),
+        tokens=_QUERY_NULL_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=CLEAN,
+        note="the same column guarded by the null replacement in the query",
+        files=_query_null_files(".ЗаменитьNull(0)"),
+        tokens=_QUERY_NULL_TOKENS,
     ),
     Seed(
         rule="code/unknown-structure-field",

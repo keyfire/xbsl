@@ -38,7 +38,9 @@ Model conventions (documented decisions):
       value span (`value_span`) comes from the composer marks.
     - Node ids are slash paths from the root: "Наследует", "Наследует/Содержимое" (a
       slot), "Наследует/Содержимое[0]" (a component). Ids are positional and stay valid
-      only until the next edit; clients re-read the tree after every change.
+      only until the next edit; clients re-read the tree after every change. Wherever an
+      id is taken, the `Name` of a component that is unique in the form works as well
+      (get_node).
     - The top-level `Свойства:` section (the component's own properties: a "-" list of
       {Имя, Тип} records) is NOT part of the node tree - it is modelled separately as
       Form.properties_section and serialized as the "componentProperties" top field of
@@ -47,6 +49,7 @@ Model conventions (documented decisions):
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -662,11 +665,72 @@ def node_at(form: Form, offset: int) -> Node | None:
     return node
 
 
+#: How many paths the refusal of a repeated name lists before it only counts the rest.
+_NAME_MATCHES_SHOWN = 10
+
+
+def _spelled_as_path(ref: str) -> bool:
+    """Is the reference written as a tree path rather than as a component name?
+
+    A path joins keys with "/" and indexes the items of a list slot with "[i]"; a component
+    name is an identifier and holds neither. The one path without them, the root, is found by
+    the exact lookup that runs first.
+    """
+    return "/" in ref or "[" in ref
+
+
 def get_node(form: Form, node_id: str) -> Node:
-    node = form.nodes.get(node_id or "")
-    if node is None:
+    """The node a caller points at: a path from the tree or the `Name` of a component.
+
+    The tree addresses nodes by positional paths ("Наследует/Содержимое[0]/Содержимое[5]"),
+    while a caller usually knows a component by its name, which is what the yaml carries.
+    Every operation resolves its nodes here, so both spellings work everywhere a node is
+    taken. A path wins: the exact id is looked up first, and a reference spelled as a path
+    is never read as a name. A name must be unique in the form: when several components
+    carry it, the refusal lists their paths and the caller picks one.
+    """
+    ref = (node_id or "").strip()
+    node = form.nodes.get(ref)
+    if node is not None:
+        return node
+    if not ref:
         raise FormModelError(f"Узел не найден: {node_id}")
-    return node
+    if _spelled_as_path(ref):
+        raise FormModelError(
+            f"Узел не найден: {node_id}. Пути узлов позиционные и после правки могут "
+            "сдвинуться – перечитайте дерево формы или укажите имя компонента"
+        )
+    found = find_by_name(form.root, ref)
+    if len(found) == 1:
+        return found[0]
+    if found:
+        paths = ", ".join(n.id for n in found[:_NAME_MATCHES_SHOWN])
+        if len(found) > _NAME_MATCHES_SHOWN:
+            paths += f" и ещё {len(found) - _NAME_MATCHES_SHOWN}"
+        raise FormModelError(
+            f"Имя {ref} в форме не единственное, компонентов с ним: {len(found)}. "
+            f"Укажите путь нужного узла: {paths}"
+        )
+    raise FormModelError(f"Узел не найден: {node_id}. {_unknown_name_hint(form, ref)}")
+
+
+def _unknown_name_hint(form: Form, ref: str) -> str:
+    """The tail of the refusal for a name no component carries: close names or where to look.
+
+    A typo is the usual cause, and the form already holds the right spelling, so the closest
+    names are offered first. The comparison ignores case, the answer keeps it.
+    """
+    names = sorted({n.name for n in form.nodes.values() if n.kind == "component" and n.name})
+    by_fold = {name.casefold(): name for name in names}
+    close = difflib.get_close_matches(ref.casefold(), list(by_fold), n=3, cutoff=0.6)
+    if close:
+        return "Компонента с таким именем в форме нет. Похожие имена: " + ", ".join(
+            by_fold[c] for c in close
+        )
+    return (
+        "Компонента с таким именем в форме нет. Узел задаётся путём из дерева формы "
+        "или значением Имя компонента"
+    )
 
 
 def get_component(form: Form, node_id: str) -> Node:

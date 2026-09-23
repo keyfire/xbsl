@@ -47,6 +47,11 @@ Conventions (documented decisions):
       destination slot of a move, whose key survives a full reorder. move_nodes keeps
       the DOCUMENT order of the nodes, not the order of the selection, and reports the
       FIRST node of the moved run.
+    - Every node argument (parent, node, nodes, new_parent, before, after) is a path from
+      the tree or the `Name` of a component unique in the form, resolved by
+      formmodel.get_node. Where two arguments are COMPARED (a node positioned against
+      itself, a destination inside a moved node), the resolved paths are compared, never
+      the strings as given.
     - The property_* operations edit the top-level Свойства section only. The section is
       created right after the Наследует block - the accepted spelling (
       Свойства immediately after Наследует). property_rename does NOT rewrite the
@@ -320,6 +325,21 @@ def _resolve_sibling(form: Form, slot_node: Node, sib_id: str | None) -> Node | 
     return sib
 
 
+def _ref_id(form: Form, ref: str | None) -> str | None:
+    """The path a node reference resolves to, or the reference itself when it resolves to none.
+
+    For COMPARING references, such as a node against the sibling it is positioned by: a
+    reference may be a name as well as a path, so two of them cannot be compared as given.
+    An unknown or a repeated name is still refused where the node is actually looked up.
+    """
+    if ref is None:
+        return None
+    try:
+        return get_node(form, ref).id
+    except FormModelError:
+        return ref
+
+
 # --- the shared insertion planner ---------------------------------------------------------
 
 
@@ -427,12 +447,12 @@ def _plan_insert(form, parent, slot_name, item_fn, map_fn, before, after,
 
     # a single nested mapping: the slot converts to the "-" list form
     child = slot_node.children[0]
-    _resolve_sibling(form, slot_node, before)
+    sib_before = _resolve_sibling(form, slot_node, before)
     _resolve_sibling(form, slot_node, after)
     inside = [c for c in cuts if child.content_span.encloses(c)]
     converted = _convert_child_to_item(form, child, inside)
     item = item_fn(child.body_col)
-    new_first = before == child.id
+    new_first = sib_before is child
     replacement = item + converted if new_first else converted + item
     region = child.span
     anchor = region.start + shift(region.start) + (0 if new_first else len(converted))
@@ -823,9 +843,9 @@ def move_node(text: str, node_id: str, new_parent_id: str, slot: str,
     if new_parent.body_col is None:
         raise FormModelError(f"У узла {new_parent_id} нет блока свойств – вставка невозможна")
     _check_slot(slot)
-    if new_parent_id == node_id or new_parent_id.startswith(node_id + "/"):
+    if new_parent.id == node.id or new_parent.id.startswith(node.id + "/"):
         raise FormModelError("Нельзя переместить узел внутрь его собственного поддерева")
-    if node_id in (before, after):
+    if node.id in (_ref_id(form, before), _ref_id(form, after)):
         raise FormModelError("Нельзя позиционировать узел относительно самого себя")
     src_slot = get_node(form, node.parent_id)
     dest_slot = next(
@@ -926,16 +946,16 @@ def move_nodes(text: str, node_ids: list[str], new_parent_id: str, slot: str,
     moved node. The reported node is the FIRST of the moved run in the new text.
     """
     form = parse_form(text)
-    requested = {str(i) for i in node_ids if i is not None and str(i)}
+    requested = {_ref_id(form, str(i)) for i in node_ids if i is not None and str(i)}
     group = _resolve_batch(form, node_ids, "переместить")
     new_parent = get_component(form, new_parent_id)
     if new_parent.body_col is None:
         raise FormModelError(f"У узла {new_parent_id} нет блока свойств – вставка невозможна")
     _check_slot(slot)
     for node in group:
-        if new_parent_id == node.id or new_parent_id.startswith(node.id + "/"):
+        if new_parent.id == node.id or new_parent.id.startswith(node.id + "/"):
             raise FormModelError("Нельзя переместить узел внутрь его собственного поддерева")
-    if before in requested or after in requested:
+    if _ref_id(form, before) in requested or _ref_id(form, after) in requested:
         raise FormModelError("Нельзя позиционировать узел относительно самого себя")
     dest_slot = next(
         (c for c in new_parent.children if c.kind == "slot" and c.name == slot), None

@@ -567,6 +567,44 @@ def test_main_stores_type_header_availability_without_member_availability(tmp_pa
     assert data["type_availability"] == {"Кодировки": "Сервер"}
 
 
+def test_a_control_character_inside_the_availability_word_is_cut_out(tmp_path):
+    """Pages of one build carry NUL characters inside words, the availability line among them.
+
+    A NUL inside the word of both sides cut it to its client prefix, and a type available on
+    both sides was stored as client-only - `code/type-unavailable` then flagged it in server code.
+    """
+    import json
+    import zipfile
+
+    page = (
+        "<html><head><title>ВидЗаписи | Product</title></head><body><article>"
+        "<h1>ВидЗаписи</h1><p><code>Стд::Журнал::ВидЗаписи</code> "
+        "<code>Доступность: КлиентИ\x00Сервер</code></p>"
+        "<h2>Свойства</h2><h3>Тек\x00ст</h3><p><code>Доступность: Кли\x00ент</code></p>"
+        "</article></body></html>"
+    )
+    with zipfile.ZipFile(tmp_path / "element-server-with-ide-9.9.9-test.car", "w") as archive:
+        archive.writestr(_MODULE.STD_BASE + "Log/RecordKind_ru/index.html", page)
+    output = tmp_path / "stdlib.json"
+
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["type_availability"] == {"ВидЗаписи": "КлиентИСервер"}
+    assert "\\u0000" not in output.read_text(encoding="utf-8")
+
+
+def test_an_availability_word_the_docs_do_not_use_is_not_read_as_its_prefix():
+    """A word that only starts like an environment names none: guessing the client side is worse
+    than leaving the type out, since the rule stays silent on a type with no known environment."""
+    page = (
+        "<article><h1>ВидЗаписи</h1><p><code>Доступность: КлиентИ Сервер</code></p>"
+        "<h2>Свойства</h2></article>"
+    )
+
+    assert _MODULE.page_type_availability(page) is None
+
+
 def test_the_type_parameters_are_read_from_the_page_header():
     """A generic type names the result of its members BY THE PARAMETER, so the parameter list
     is what turns such a result into a type."""

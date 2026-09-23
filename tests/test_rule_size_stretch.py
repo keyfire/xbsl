@@ -95,15 +95,12 @@ def test_both_axes_flagged():
     assert len(d) == 2
 
 
-def test_non_fixed_sizes_skipped():
-    # Авто, a binding and zero are not a fixed size
+def test_auto_and_zero_sizes_skipped():
+    # The auto value and zero set no size, so there is nothing for the stretch to override
     content = _form(
         "        -\n"
         "            Тип: КонтейнерHtml\n"
         "            Высота: Авто\n"
-        "        -\n"
-        "            Тип: КонтейнерHtml\n"
-        "            Высота: =Общий.ЭтоУзкийЭкран()?330:320\n"
         "        -\n"
         "            Тип: КонтейнерHtml\n"
         "            Высота: 0\n"
@@ -166,6 +163,118 @@ def test_non_object_yaml_skipped():
 
 def test_xbsl_file_skipped():
     assert _lint("М.xbsl", "метод Ф()\n;\n", select={RULE}) == []
+
+
+# --- a size given by a binding ------------------------------------------------------------
+
+
+def test_bound_height_without_stretch_flagged():
+    """A binding yields a number at run time, and the stretch overrides it like a literal."""
+    content = _form(
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Высота: =ВысотаРамкиПикс\n"
+    )
+    d = _lint("Ф.yaml", content, select={RULE})
+    assert [(x.rule_id, x.line, x.col) for x in d] == [(RULE, 10, 13)]
+    assert "=ВысотаРамкиПикс" in d[0].message
+    assert "РастягиватьПоВертикали" in d[0].message
+
+
+def test_bound_height_with_stretch_false_ok():
+    content = _form(
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Высота: =ВысотаРамкиПикс\n"
+        "            РастягиватьПоВертикали: Ложь\n"
+    )
+    assert _lint("Ф.yaml", content, select={RULE}) == []
+
+
+def test_bound_height_next_to_horizontal_stretch_flagged():
+    """The shape of the live case: the insert follows its widget through a bound height, is
+    stretched ACROSS on purpose, and says nothing about the vertical axis - so on a phone it
+    takes the whole leftover height of the window and the button below slides to the bottom."""
+    content = _form(
+        "        -\n"
+        "            Тип: Надпись\n"
+        "            Значение: Текст\n"
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Имя: Рамка\n"
+        "            Видимость: =РамкаНужна\n"
+        "            Высота: =ВысотаРамкиПикс\n"
+        "            РастягиватьПоГоризонтали: Истина\n"
+        "            Содержимое: =РазметкаРамки\n"
+        "        -\n"
+        "            Тип: Кнопка\n"
+        "            Заголовок: Отправить\n"
+    )
+    d = _lint("Ф.yaml", content, select={RULE})
+    assert [(x.line, x.col) for x in d] == [(15, 13)]
+    assert "РастягиватьПоВертикали" in d[0].message
+
+
+def test_bound_sizes_flagged_on_both_axes():
+    content = _form(
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Высота: =ВысотаРамкиПикс\n"
+        "            Ширина: =ШиринаРамкиПикс\n"
+    )
+    d = _lint("Ф.yaml", content, select={RULE})
+    assert [x.line for x in d] == [10, 11]
+    assert "РастягиватьПоГоризонтали" in d[1].message
+
+
+def test_binding_with_an_auto_branch_flagged():
+    # The numeric branch is overridden all the same
+    content = _form(
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Высота: =Общий.ЭтоУзкийЭкран()?Авто:320\n"
+    )
+    assert len(_lint("Ф.yaml", content, select={RULE})) == 1
+
+
+def test_quoted_binding_flagged():
+    # The quote style does not matter: the platform reads the same string
+    content = _form(
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Высота: '=ВысотаРамкиПикс'\n"
+    )
+    assert len(_lint("Ф.yaml", content, select={RULE})) == 1
+
+
+def test_block_scalar_size_is_text_not_a_binding():
+    content = _form(
+        "        -\n"
+        "            Тип: КонтейнерHtml\n"
+        "            Высота: |\n"
+        "                =ВысотаРамкиПикс\n"
+    )
+    assert _lint("Ф.yaml", content, select={RULE}) == []
+
+
+@pytest.mark.needs_data  # the English spellings come from the platform dictionaries
+def test_bound_height_in_english_markup_flagged():
+    content = (
+        "ElementKind: InterfaceComponent\n"
+        "Id: 1e0e26f1-1111-4111-8111-111111111112\n"
+        "Name: Panel\n"
+        "Inherits:\n"
+        "    Type: Group\n"
+        "    Content:\n"
+        "        -\n"
+        "            Type: HtmlContainer\n"
+        "            Name: Frame\n"
+        "            Height: =FrameHeightPx\n"
+    )
+    d = _lint("Panel.yaml", content, select={RULE})
+    assert [(x.rule_id, x.line) for x in d] == [(RULE, 10)]
+    # the advice speaks the language of the file
+    assert "VerticalStretch" in d[0].message
 
 
 # --- yaml/matrix-group-max-width --------------------------------------------------------

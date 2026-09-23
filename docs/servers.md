@@ -159,6 +159,10 @@ never means reading the files.
 | `meta_set_component_property(yaml_path, node_id, key, value, value_yaml)` | set, replace or remove a property of a node |
 | `meta_add_handler(yaml_path, node_id, key, method, signature)` | bind an event property to a handler method of the paired module |
 
+Every tool that takes a node accepts its path from `meta_component_tree` or the `Name` of the
+component, when no other component in the form carries it. A path is positional and shifts after
+an edit; a name stays. A repeated name is refused with the paths to choose from.
+
 The same operations are available through the CLI ([Commands](/CLI)) and, for an editor, through
 the `xbsl/meta*` LSP requests.
 

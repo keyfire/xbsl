@@ -65,9 +65,25 @@ Hence the rule is a diagnostic hint, not a warning: severity INFO and disabled b
 style/line-length model). Enable it point-blank (`--select yaml/size-needs-no-stretch`) when a
 layout shows the symptom - blank space or inflated neighbours around a fixed-size component -
 to list the candidates. Checked are only КонтейнерHtml nodes (an iframe has no intrinsic size,
-so `Авто` most often resolves to "stretch") whose size is a fixed positive number; `Авто`,
-bindings (`=...`) and zero are skipped. Only a missing stretch key fires - an explicit
+so `Auto` most often resolves to "stretch") whose size is set: a positive number or a binding.
+The auto value and zero are skipped. Only a missing stretch key fires - an explicit
 `Авто` or `Истина` is taken as the author's deliberate choice.
+
+A binding (`Height: =FrameHeightPx`) is a set size: it yields a number at run time, and the
+stretch overrides that number exactly as it overrides a literal. Skipping bindings hid the case
+the rule exists for: an insert whose height followed its widget through a binding took the
+whole leftover height of a full-screen phone window and pushed the button below it under the
+browser toolbar, while a point-blank run over the project reported nothing. A binding with an
+`Auto` branch is judged too - its numeric branch is overridden all the same.
+
+Which kinds stretch at the auto value is not in the data. The ui schema gives both stretch
+properties a type and one line of text, no default. The documentation page of the HTML
+container does spell out what the auto value resolves to per kind: false for every kind the
+list does not name, true for a table and a matrix group, the verdict of the content for a
+group. The HTML container itself is not named there, so by the book it does not stretch - yet
+the web client gives a container without the key `flex: 1 0 auto` on a live project, along
+either axis. The checked set is therefore kept by observation rather than read from that list,
+and a kind joins it only with a measurement on a live page behind it.
 
 --- yaml/col-width-needs-no-stretch (a column width that turns into a share) ---
 
@@ -221,6 +237,20 @@ def _fixed_size(node) -> bool:
         return float(node.value) > 0
     except ValueError:
         return False
+
+
+def _set_size(node) -> bool:
+    """Whether the scalar sets a size: a fixed positive number or a binding (`=...`).
+
+    A block scalar (`|`, `>`) is text rather than a binding and is skipped, the way the other
+    binding-aware rules skip it; the quote style does not matter - the platform reads the
+    string the same either way.
+    """
+    if _fixed_size(node):
+        return True
+    if not isinstance(node, yaml.ScalarNode) or node.style in ("|", ">"):
+        return False
+    return node.value.strip().startswith("=")
 
 
 #: The layout that lays children out in automatic columns, and the settings block that
@@ -425,7 +455,7 @@ def size_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
             continue
         for size_key, stretch_key in _AXES:
             entry = keys.get(size_key)
-            if entry is None or stretch_key in keys or not _fixed_size(entry[1]):
+            if entry is None or stretch_key in keys or not _set_size(entry[1]):
                 continue
             key_node = entry[0]
             # The advice names the keys the way the file spells them: telling an English-spelled

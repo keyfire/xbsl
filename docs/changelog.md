@@ -25,6 +25,51 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Changed
+
+- **`code/row-field-null` also follows the rows of `Query{...}`.** A column read through a reference
+  or from the joined side of an outer join may be `Null`, and passing it to a structure field, a
+  parameter of a project method, a variable or a method result declared without `Null` fails the
+  build; a `?` type refuses it as well. The rule only looked at dynamic list rows, so a query without
+  `ReplaceNull` failed only when the build was applied. ([#137](https://github.com/keyfire/xbsl/pull/137))
+- **Form tools take a component's `Name` where they took only a node path.** An agent that knew the
+  component by name got "node not found" from `meta_set_component_property` and had to read the
+  tree for the path first. The name now works in every tool and `form-*` command that takes a node;
+  a repeated name is refused with its paths, an unknown one with the close names. ([#137](https://github.com/keyfire/xbsl/pull/137))
+
+### Fixed
+
+- **`xbsl extract` reads a minified documentation site.** On such a site a one-word attribute
+  value goes without quotes (`class=hash-link`, `href=/docs/help/...`), the sidebar data writes
+  some characters as JavaScript escapes that JSON rejects, and `@Deprecated` carries a message.
+  The run finished without a warning and lost most of the data: 1406 of 2156 documentation pages
+  were left, 108 of about 21,600 tree nodes and 5 of 88 components of the interface schema, with
+  no member type or method signature at all. Attribute values are now quoted on reading, the
+  sidebar data is brought to the JSON spelling, and the message of the mark is skipped. Data from
+  earlier distributions comes out the same. ([#138](https://github.com/keyfire/xbsl/pull/138))
+- **The type parameters of generic types and multi-line signatures are read from a minified
+  site too.** Such a page writes `>` in text unescaped (`Array&lt;ItemType>`), so every generic
+  type lost its parameter list and the variance of its parameters. A long signature printed over
+  several lines kept its indentation (`Load(  FileName: String?, ...)`), and the type of a
+  property was looked for after a colon that the message of `@Deprecated` may hold. The markup
+  normalization now escapes `>` in text, a signature comes out in one line, and the mark is taken
+  off before the type is read. ([#139](https://github.com/keyfire/xbsl/pull/139))
+- **The stdlib catalog no longer marks a type client-only because of a NUL on its page.** The docs
+  pages of one build carry NUL characters inside words, and the availability line of a type
+  available on both sides was read by its client prefix: `code/type-unavailable` then flagged the
+  type in server code. The extractor now cleans a page on reading, as the docs step does, and takes
+  the availability word only whole; a catalog extracted before needs extracting again. ([#137](https://github.com/keyfire/xbsl/pull/137))
+- **`form/handler-signature` reports a handler that narrows an event parameter.** `OnHover` is
+  declared on the base `Component`, so a hover handler with `Source: Label` failed the build while
+  the linter stayed silent. A parameter may take the type of the signature or its ancestor; a
+  descendant is now reported with the signature the compiler prints. ([#137](https://github.com/keyfire/xbsl/pull/137))
+- **`yaml/size-needs-no-stretch` counts a size given by a binding.** The rule skipped
+  `Height: =...`, yet the stretch overrides the number a binding yields just like a literal one. On
+  a live project an `HtmlContainer` with a bound height took the whole free height of a phone window
+  and hid the button below it. ([#137](https://github.com/keyfire/xbsl/pull/137))
+
 ## 2026-09-23 – 0.115.0, 0.116.0, 0.117.0
 
 ### Added
@@ -80,21 +125,6 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
-- **`xbsl extract` reads a minified documentation site.** On such a site a one-word attribute
-  value goes without quotes (`class=hash-link`, `href=/docs/help/...`), the sidebar data writes
-  some characters as JavaScript escapes that JSON rejects, and `@Deprecated` carries a message.
-  The run finished without a warning and lost most of the data: 1406 of 2156 documentation pages
-  were left, 108 of about 21,600 tree nodes and 5 of 88 components of the interface schema, with
-  no member type or method signature at all. Attribute values are now quoted on reading, the
-  sidebar data is brought to the JSON spelling, and the message of the mark is skipped. Data from
-  earlier distributions comes out the same. ([#138](https://github.com/keyfire/xbsl/pull/138))
-- **The type parameters of generic types and multi-line signatures are read from a minified
-  site too.** Such a page writes `>` in text unescaped (`Array&lt;ItemType>`), so every generic
-  type lost its parameter list and the variance of its parameters. A long signature printed over
-  several lines kept its indentation (`Load(  FileName: String?, ...)`), and the type of a
-  property was looked for after a colon that the message of `@Deprecated` may hold. The markup
-  normalization now escapes `>` in text, a signature comes out in one line, and the mark is taken
-  off before the type is read. ([#139](https://github.com/keyfire/xbsl/pull/139))
 - **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
   contract is covariant like a read-only one: the IDE warns about `Array<String>` in
   `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`

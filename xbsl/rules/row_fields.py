@@ -17,6 +17,11 @@ Narrowing: only the first hop through a variable is judged. A direct chain
 guessing the outer one is not worth a false positive. A name declared twice with different row
 types anywhere in the method is poisoned and skipped. The object protocol members
 (ВСтроку, ПолучитьТип, Представление) are always allowed.
+
+code/row-field-null judges the same Null in a row of a query literal as well: a column that
+reads a field through a reference or from the joined side of an outer join, passed to a place
+whose declared type refuses Null (see `_query_flows`). The row of the query is typed by
+`typeinfer`, the origin of the Null by `querytypes.NullOrigin`.
 """
 
 from __future__ import annotations
@@ -29,10 +34,14 @@ from functools import cache, lru_cache
 
 from xbsl import dataset, i18n, terms
 from xbsl import parser as P
+from xbsl import typeinfer as T
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
+from xbsl.rules._syntax import code_tokens
+from xbsl.rules.redundant_checks import _local_names, _TextSource, display
+from xbsl.rules.return_mismatch import _returns
 from xbsl.rules.unknown_members import _common_member_forms, _walk_body, _walk_expr
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
@@ -64,6 +73,44 @@ MESSAGES = {
               "'{type}|Null', while field '{target}' of structure '{struct}' is declared "
               "'{type}': the compiler refuses ('Null cannot be assigned'). Append "
               "'.ЗаменитьNull(...)' to the field expression in the list description.",
+    },
+    "code/row-field-null.query": {
+        "ru": "Колонка '{column}' запроса читает '{expr}' через ссылку, поэтому её тип – "
+              "'{type}|Null', а {target} имеет тип '{declared}': компилятор откажет "
+              "('Null cannot be assigned'). Допишите '.ЗаменитьNull(...)' к выражению колонки.",
+        "en": "Column '{column}' of the query reads '{expr}' through a reference, so its type is "
+              "'{type}|Null', while {target} is of type '{declared}': the compiler refuses "
+              "('Null cannot be assigned'). Append '.ЗаменитьNull(...)' to the column expression.",
+    },
+    "code/row-field-null.query-outer": {
+        "ru": "Колонка '{column}' запроса читает '{expr}' из присоединённой таблицы внешнего "
+              "соединения, поэтому её тип – '{type}|Null', а {target} имеет тип '{declared}': "
+              "компилятор откажет ('Null cannot be assigned'). Допишите '.ЗаменитьNull(...)' к "
+              "выражению колонки.",
+        "en": "Column '{column}' of the query reads '{expr}' from the joined side of an outer "
+              "join, so its type is '{type}|Null', while {target} is of type '{declared}': the "
+              "compiler refuses ('Null cannot be assigned'). Append '.ЗаменитьNull(...)' to the "
+              "column expression.",
+    },
+    "code/row-field-null.to-field": {
+        "ru": "поле '{name}' структуры '{owner}'",
+        "en": "field '{name}' of structure '{owner}'",
+    },
+    "code/row-field-null.to-member": {
+        "ru": "поле '{name}'",
+        "en": "field '{name}'",
+    },
+    "code/row-field-null.to-parameter": {
+        "ru": "параметр '{name}' метода '{owner}'",
+        "en": "parameter '{name}' of method '{owner}'",
+    },
+    "code/row-field-null.to-variable": {
+        "ru": "переменная '{name}'",
+        "en": "variable '{name}'",
+    },
+    "code/row-field-null.to-result": {
+        "ru": "результат метода '{owner}'",
+        "en": "the result of method '{owner}'",
     },
 }
 i18n.register(MESSAGES)
@@ -366,9 +413,28 @@ def _row_catalog(facts: dict[str, dict]) -> tuple[dict[str, dict[str, str]], dic
     return by_full, by_short
 
 
+def _has_query_literal(source) -> bool:
+    """Whether a module builds a query literal: such a module carries its text into the reduce,
+    since the rows of a query are typed there and a row never leaves the method of its query."""
+    return any(token.kind == "KEYWORD" and token.canonical == "QUERY" for token in code_tokens(source))
+
+
+T.wants_text(_has_query_literal)
+
+
+def _row_null_mapper(source: SourceFile) -> dict | None:
+    """The map phase: the dynamic list facts (`_row_fields_mapper`) and the typing facts of the
+    project (`typeinfer.project_fact`, shared with every rule that reads the typing)."""
+    rows = _row_fields_mapper(source)
+    typing = T.project_fact(source)
+    if rows is None and typing is None:
+        return None
+    return {"rows": rows, "typing": typing}
+
+
 @rule(
     "code/row-field-null", "code/row-field-null.title", "D",
-    scope="project", severity=Severity.ERROR, mapper=_row_fields_mapper,
+    scope="project", severity=Severity.ERROR, mapper=_row_null_mapper,
 )
 def row_field_null(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """A row field taken through a reference is `<тип>|Null` and cannot fill a typed field.
@@ -377,8 +443,19 @@ def row_field_null(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     field is `Исполнитель.Номер`, answers
     `Incompatible types: "Null" cannot be assigned to "Число"`. The description of the list
     itself compiles - the probe applied it cleanly - so the finding belongs to the assignment,
-    and the fix is `.ЗаменитьNull(...)` on the field expression.
+    and the fix is `.ЗаменитьNull(...)` on the field expression. A row of a query literal is
+    judged the same way (`_query_nulls`).
     """
+    rows = {rel: fact["rows"] for rel, fact in facts.items() if fact.get("rows")}
+    yield from _dynamic_list_nulls(rows)
+    typing = {rel: fact["typing"] for rel, fact in facts.items() if fact.get("typing")}
+    if typing:
+        for rel, module in T.project_typings(typing).items():
+            yield from _query_nulls(rel, module)
+
+
+def _dynamic_list_nulls(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """The fields of a dynamic list row passed to a typed field of a structure."""
     by_full, by_short = _row_catalog(facts)
     if not by_full:
         return
@@ -406,3 +483,221 @@ def row_field_null(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     field=field, expr=expr, type=declared, target=target, struct=struct,
                 ),
             )
+
+
+# --- the rows of a query literal ---------------------------------------------------------------
+
+#: Element kinds whose own name is a structure type with declared fields.
+_STRUCTURE_KINDS = frozenset({"Структура", "ХранимаяСтруктура"})
+#: The facets of an element whose values carry its attributes.
+_DATA_FACETS = frozenset({"Объект", "Данные", "Запись"})
+
+
+def _query_nulls(rel: str, typing: T.ModuleTyping) -> Iterable[Diagnostic]:
+    """A column of a query row that may hold Null, sent where the declared type refuses it.
+
+    Every place was shown to the compiler, each answering
+    `Incompatible types: type "Null" cannot be assigned to "Число"`: a named argument of a
+    structure constructor, an argument of a method of the project, an assignment to a variable
+    or a field declared with a type, such a declaration itself and the result of a method. The
+    row reaches them through a loop over the result, a lambda of `Transform` and the like
+    (the parameter typed by the signature of the platform method) or `ПервыйИлиНеопределено()`.
+    A type that admits the empty value refuses Null all the same (`ДвоичныйОбъект.Ссылка?`), and
+    only `Object` takes it. A computed column is not judged (see `querytypes.NullOrigin`).
+    """
+    queries = [token.start for token in typing.tokens
+               if token.kind == "KEYWORD" and token.canonical == "QUERY"]
+    if not queries:
+        return
+    typer = typing.typer
+    typer._prepare(typing.tree)
+    catalog = typing.catalog
+    lines = None
+    local: dict[str, str] = {}
+    for method, this_type, owner_fields in typer._methods(typing.tree, True):
+        start, end = int(method.start), int(method.end)
+        if not any(start <= offset < end for offset in queries):
+            continue  # a row never leaves the method of its query
+        nodes = T.walk_nodes(getattr(method, "body", None))
+        try:
+            scope = T._MethodScope(method, nodes, callbacks=True)
+        except RecursionError:
+            continue
+        evaluator = T._Evaluator(typer, scope, this_type, owner_fields)
+        for value, target, place in _query_flows(method, nodes, scope, evaluator, typer):
+            try:
+                column = _null_column(evaluator, catalog, value)
+            except RecursionError:
+                continue
+            if column is None or target is None or not _refuses_null(target):
+                continue
+            name, typed, origin = column
+            if lines is None:
+                lines = linemap(_TextSource(typing.text))
+                local = _local_names(typing)
+            kind, place_name, owner = place
+            line, col = lines.linecol(int(value.start))
+            key = ("code/row-field-null.query" if origin.kind == "reference"
+                   else "code/row-field-null.query-outer")
+            yield Diagnostic(
+                rel, line, col, "code/row-field-null", Severity.ERROR,
+                i18n.t(
+                    key, column=name, expr=origin.path,
+                    type=display(typed.without_null(), local),
+                    target=i18n.t(f"code/row-field-null.to-{kind}", name=place_name, owner=owner),
+                    declared=display(target, local),
+                ),
+            )
+
+
+def _null_column(evaluator: T._Evaluator, catalog: T.ProjectCatalog,
+                 value: object) -> tuple[str, T.TypeSet, object] | None:
+    """(column, its type, the origin of its Null) of `<строка>.<Колонка>`, when the column is a
+    plain path of a query row that may hold Null; None for any other value."""
+    if not isinstance(value, P.Member):
+        return None
+    owner = evaluator.value(value.obj)
+    if not isinstance(owner, T.TypeSet) or len(owner.names) != 1 or owner.null:
+        return None
+    origin = (catalog.row_nulls.get(next(iter(owner.names))) or {}).get(value.name)
+    if origin is None:
+        return None
+    typed = evaluator.types(value)
+    if typed is None or not typed.null:
+        return None
+    return value.name, typed, origin
+
+
+def _refuses_null(target: T.TypeSet) -> bool:
+    """Whether a declared type provably refuses Null: a type that names neither Null nor the
+    root of the hierarchy (a parameter declared `Объект?` takes the column as it is)."""
+    if target.null or not target.names:
+        return False
+    return not any(T.split_nominal(name)[0] in ("Null", "Объект") for name in target.names)
+
+
+def _query_flows(method: P.Method, nodes: list, scope: T._MethodScope,
+                 evaluator: T._Evaluator, typer: T.ModuleTyper):
+    """(value, declared type of the place it goes to, (kind, name, owner)) of every place of the
+    method that takes a value by a declared type: a named argument of a structure constructor,
+    an assignment, a declaration with a type, an argument of a method of the project and the
+    result of the method. Places whose type is not declared in the project are not listed."""
+    catalog = typer.catalog
+    written = typer.written
+    for node in nodes:
+        if isinstance(node, P.New) and node.args:
+            struct = written(T._written_ref(node.type))
+            if struct is None or len(struct.names) != 1 or struct.undefined:
+                continue
+            owner = next(iter(struct.names))
+            if not _is_structure(catalog, owner):
+                continue
+            for argument in node.args:
+                if argument.name and argument.value is not None:
+                    yield (argument.value, catalog.member(owner, argument.name, False),
+                           ("field", argument.name, node.type.text.strip()))
+        elif isinstance(node, P.Assign) and node.op == "=" and node.value is not None:
+            target = node.target
+            if isinstance(target, P.Name):
+                yield (node.value, _written_name(target, scope, evaluator, typer),
+                       ("variable", target.name, ""))
+            elif isinstance(target, P.Member):
+                yield (node.value, _declared_member(target, evaluator, catalog),
+                       ("member", target.name, ""))
+        elif isinstance(node, P.VarDecl) and node.init is not None and node.type is not None:
+            yield node.init, written(T._written_ref(node.type)), ("variable", node.name, "")
+        elif isinstance(node, P.Call) and node.args:
+            yield from _call_flows(node, scope, evaluator, typer)
+    if method.return_type is not None:
+        result = written(T._written_ref(method.return_type))
+        found: list[P.Return] = []
+        _returns(method.body or [], found)
+        for statement in found:
+            if statement.value is not None:
+                yield statement.value, result, ("result", "", method.name)
+
+
+def _is_structure(catalog: T.ProjectCatalog, owner: str) -> bool:
+    """Whether a canonical type name is a structure of the project: of a module or an element."""
+    first, dot, rest = owner.partition(".")
+    if dot and rest in ((catalog.modules.get(first) or {}).get("structures") or {}):
+        return True
+    return (catalog.elements.get(owner) or {}).get("kind") in _STRUCTURE_KINDS
+
+
+def _written_name(target: P.Name, scope: T._MethodScope, evaluator: T._Evaluator,
+                  typer: T.ModuleTyper) -> T.TypeSet | None:
+    """The declared type of a name assigned to: a local or a parameter with a written type, a
+    field of the structure the method belongs to, a field of the module or a property of the
+    paired yaml. A local typed by its initializer is not taken - its type is inferred."""
+    entry = scope.lookup(target.name, int(target.start))
+    if isinstance(entry, T._Declared):
+        return typer.written(entry.payload) if entry.kind == "written" and entry.payload else None
+    if entry is not T._MISSING:
+        return None
+    owner_fields = evaluator.owner_fields
+    if owner_fields is not None and target.name in owner_fields:
+        return typer.written(owner_fields[target.name])
+    field = typer.fields.get(target.name)
+    if field is not None:
+        return typer.written(T._written_ref(getattr(field, "type", None)))
+    own = typer.scope.own_properties.get(target.name)
+    return typer.written(own) if own else None
+
+
+def _declared_member(target: P.Member, evaluator: T._Evaluator,
+                     catalog: T.ProjectCatalog) -> T.TypeSet | None:
+    """The declared type of `<значение>.Поле` assigned to, when the project declares the field:
+    a field of a structure or an attribute of an element's object, data or record."""
+    owner = evaluator.value(target.obj)
+    if not isinstance(owner, T.TypeSet) or len(owner.names) != 1 or owner.undefined or owner.null:
+        return None
+    name = next(iter(owner.names))
+    element, dot, facet = name.partition(".")
+    declared = _is_structure(catalog, name) or (
+        bool(dot) and facet in _DATA_FACETS and element in catalog.elements)
+    return catalog.member(name, target.name, False) if declared else None
+
+
+def _call_flows(node: P.Call, scope: T._MethodScope, evaluator: T._Evaluator,
+                typer: T.ModuleTyper):
+    """The arguments of a call of a method a module of the project declares once: a bare call of
+    the module's own method or `Модуль.Метод(...)`. A positional argument goes to the parameter
+    of its index, a named one to the parameter of its name."""
+    catalog = typer.catalog
+    callee = node.callee
+    module: str | None = None
+    name = ""
+    if isinstance(callee, P.Name):
+        name = callee.name
+        if scope.lookup(name, int(callee.start)) is not T._MISSING:
+            return
+        if evaluator.owner_fields is not None and name in evaluator.owner_fields:
+            return
+        if catalog.structure_method(evaluator.this_type, name)[0]:
+            return  # a method of the structure itself
+        module = typer.scope.module
+    elif isinstance(callee, P.Member):
+        owner = evaluator.value(callee.obj)
+        if isinstance(owner, T.StaticName) and owner.name in catalog.modules:
+            module = owner.name
+        name = callee.name
+    if not module:
+        return
+    params = catalog.method_params(module, name)
+    if params is None:
+        return
+    named = False
+    for index, argument in enumerate(node.args):
+        if argument.value is None:
+            continue
+        if argument.name:
+            named = True
+            param = next((p for p in params if p[0] == argument.name), None)
+        elif named or index >= len(params):
+            continue
+        else:
+            param = params[index]
+        if param is None or not param[1]:
+            continue
+        yield argument.value, catalog.written(param[1], module), ("parameter", param[0], name)

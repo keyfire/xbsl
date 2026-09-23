@@ -938,7 +938,7 @@ usage: xbsl form-tree [-h] [--at OFFSET] [--node NODE] [--name NAME] [--max-dept
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--at OFFSET` | instead of the tree, return the node at a file offset (cursor sync) |
-| `--node NODE` | the subtree of this node instead of the whole form (an id from the tree) |
+| `--node NODE` | the subtree of this node instead of the whole form (a path from the tree or a component Name unique in the form) |
 | `--name NAME` | the subtree of the component with this Name; several matches come in "roots" |
 | `--max-depth LEVELS` | how many levels to unfold (0 - no limit); a cut node gets childrenOmitted |
 | `--no-properties` | no property records - names and ids only, plus propertyCount |
@@ -946,7 +946,7 @@ usage: xbsl form-tree [-h] [--at OFFSET] [--node NODE] [--name NAME] [--max-dept
 
 ### `xbsl form-edit`
 
-form-designer operation: a pinpoint edit of an interface component's yaml; see also form-tree for the node ids the edits address
+form-designer operation: a pinpoint edit of an interface component's yaml. A node is given by its path from the tree or by a component Name unique in the form; see also form-tree for the node paths the edits address
 
 ```bash
 usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name NAME]
@@ -970,17 +970,17 @@ usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--parent PARENT` | container node id (insert/insert-fragment) |
+| `--parent PARENT` | container node: a path or a component Name (insert/insert-fragment) |
 | `--slot SLOT` | children slot: Content, Pages, Columns, ... (insert/move) |
 | `--type TYPE` | Type of the new component (insert) or property (property-add) |
 | `--name NAME` | Name of the new component (insert), the wrapper (wrap) or a Properties-section property (property-*) |
-| `--node NODE` | operation node id (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property) |
-| `--nodes ID[,ID...]` | node ids of a batch operation (move-nodes/remove-nodes): comma-separated or by repeating the flag; order does not matter |
-| `--new-parent NEW_PARENT` | new container id (move/move-nodes) |
+| `--node NODE` | operation node: a path or a component Name unique in the form (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property) |
+| `--nodes ID[,ID...]` | nodes of a batch operation (move-nodes/remove-nodes): paths or component names, comma-separated or by repeating the flag; order does not matter |
+| `--new-parent NEW_PARENT` | new container: a path or a component Name (move/move-nodes) |
 | `--container CONTAINER` | Type of the wrapper container (wrap) |
 | `--new-name NEW_NAME` | the node's new Name (rename) or property's (property-rename); for rename without the flag, Name is removed |
-| `--before BEFORE` | sibling id: insert/move BEFORE it |
-| `--after AFTER` | sibling id: insert/move AFTER it |
+| `--before BEFORE` | sibling (a path or a Name): insert/move BEFORE it |
+| `--after AFTER` | sibling (a path or a Name): insert/move AFTER it |
 | `--key KEY` | node property name (set-property/reset-property) |
 | `--value VALUE` | scalar value or binding (set-property) |
 | `--value-yaml VALUE_YAML` | a composite value as a ready yaml fragment (set-property) |
@@ -1010,7 +1010,7 @@ usage: xbsl form-handlers [-h] [--node NODE] [--key KEY] [--method METHOD] [--si
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--node NODE` | node id (handler creation; without `--node`/`--key` – the module's method list) |
+| `--node NODE` | node: a path or a component Name (handler creation; without `--node`/`--key` – the module's method list) |
 | `--key KEY` | node event key: OnClick, AfterCreate, ... |
 | `--method METHOD` | handler method name (default &lt;Name узла&gt;&lt;Key&gt;; an existing method – only the binding in yaml) |
 | `--signature SIGNATURE` | event signature from the ui schema, e.g. "(Button, OnClickEvent)-&gt;ничто" (without the flag it is looked up in the local data) |
