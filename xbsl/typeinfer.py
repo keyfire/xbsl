@@ -1793,6 +1793,15 @@ class CallSite:
 
 
 @dataclass
+class MemberSite:
+    """One access of a member by name that is not a call, `<receiver>.Name`, with what the module
+    could say about the receiver: a TypeSet, a StaticName, or None."""
+
+    node: object                 # the P.Member node
+    owner: object
+
+
+@dataclass
 class CheckSite:
     """One `Х это [не] Тип` with the set of `Х` and of the checked type. The predicate form of
     `выбор Х когда это Тип` is a site of its own, and its operand is the subject of the choice."""
@@ -2385,6 +2394,42 @@ class ModuleTyper:
             sites.extend(site(level, node) for node in walk_nodes(init) if wanted(node))
         return sites
 
+    def members(self, module: object, names: frozenset[str]) -> list[MemberSite]:
+        """Every access of a member named one of `names` that is not the callee of a call, in the
+        module's methods, the methods of its structures and the initializers of its fields."""
+        if not names:
+            return []
+        self._prepare(module)
+        pattern = re.compile(r"(?<!\w)(?:%s)(?!\w)" % "|".join(sorted(map(re.escape, names))))
+
+        def wanted(node: object) -> bool:
+            if isinstance(node, P.Member):
+                return node.name in names
+            return (isinstance(node, P.Call) and isinstance(node.callee, P.Member)
+                    and node.callee.name in names)
+
+        def owner(evaluator: _Evaluator, node) -> object:
+            try:
+                return evaluator.value(node.obj)
+            except RecursionError:
+                return None
+
+        def picked(evaluator: _Evaluator, nodes: list) -> list[MemberSite]:
+            callees = {id(node.callee) for node in nodes if isinstance(node, P.Call)}
+            return [MemberSite(node, owner(evaluator, node)) for node in nodes
+                    if isinstance(node, P.Member) and id(node) not in callees]
+
+        sites: list[MemberSite] = []
+        for evaluator, nodes in self._judged(module, pattern, True, wanted):
+            sites.extend(picked(evaluator, nodes))
+        level = self._module_level
+        for member in self.fields.values():
+            init = getattr(member, "init", None)
+            if init is None or level is None:
+                continue
+            sites.extend(picked(level, [node for node in walk_nodes(init) if wanted(node)]))
+        return sites
+
     def checks(self, module: object) -> list[CheckSite]:
         """Every `это` of the module's own methods, the predicate form of `выбор` included."""
         sites: list[CheckSite] = []
@@ -2467,6 +2512,12 @@ class ModuleTyping:
         key = "calls:" + "|".join(sorted(names))
         if key not in self._sites:
             self._sites[key] = self.typer.calls(self.tree, names)
+        return self._sites[key]
+
+    def members(self, names: frozenset[str]) -> list[MemberSite]:
+        key = "members:" + "|".join(sorted(names))
+        if key not in self._sites:
+            self._sites[key] = self.typer.members(self.tree, names)
         return self._sites[key]
 
 

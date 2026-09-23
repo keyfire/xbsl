@@ -1988,6 +1988,11 @@ _DOC_COMMENT_CARD_RU = (
 _DOC_COMMENT_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "Подпись": "Caption"}
 
 
+_TASKS_YAML_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000fd2\nИмя: Задачи\nОкружение: Сервер\n"
+_DEPRECATED_TOKENS = {"Задачи": "Tasks", "Старое": "Old", "Проба": "Probe", "Значение": "Value",
+                      "Предел": "Limit", "Шаги": "Steps", "Черновик": "Draft", "Готово": "Done",
+                      "Шаг": "Step"}
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -6689,6 +6694,27 @@ SEEDS: list[Seed] = [
                 "    return Value\n;\n"
             ),
         },
+    ),
+    Seed(
+        rule="code/deprecated-project", expect=FINDING,
+        note="a call of a project method marked deprecated in its own module",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Задачи.yaml": _TASKS_YAML_RU,
+               "Основное/Задачи.xbsl": "@Устарело\nметод Старое(): Строка\n    возврат \"\"\n;\n\nметод Проба()\n    знч Значение = Старое()\n;\n"},
+        tokens=_DEPRECATED_TOKENS,
+    ),
+    Seed(
+        rule="code/deprecated-project", expect=FINDING,
+        note="a value of a project enumeration marked deprecated",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Задачи.yaml": _TASKS_YAML_RU,
+               "Основное/Задачи.xbsl": "перечисление Шаги\n    @Устарело Черновик,\n    Готово\n;\n\nметод Проба()\n    знч Шаг = Шаги.Черновик\n;\n"},
+        tokens=_DEPRECATED_TOKENS,
+    ),
+    Seed(
+        rule="code/deprecated-project", expect=CLEAN,
+        note="a parameter that shadows a deprecated module constant is not its use",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Задачи.yaml": _TASKS_YAML_RU,
+               "Основное/Задачи.xbsl": "@Устарело\nконст Предел = 10\n\nметод Проба(Предел: Число): Число\n    возврат Предел\n;\n"},
+        tokens=_DEPRECATED_TOKENS,
     ),
 ]
 
