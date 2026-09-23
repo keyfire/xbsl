@@ -189,6 +189,11 @@ _INPUT_RU = _FORM_RU + "    Содержимое:\n        Тип: ПолеВв�
 _INPUT_EN = _FORM_EN + "    Content:\n        Type: Edit<String>\n        Name: Field\n        OnChange: Change\n"
 _INPUT_TOKENS = {**_FORM_TOKENS, "Поле": "Field", "Изменение": "Change", "Источник": "Source",
                  "Событие": "Event"}
+#: A label whose hover names a handler - the event is declared on the base component.
+_LABEL_HOVER_RU = _FORM_RU + "    Содержимое:\n        Тип: Надпись\n        Имя: Отметка\n        ПриНаведении: Наведение\n"
+_LABEL_HOVER_EN = _FORM_EN + "    Content:\n        Type: Label\n        Name: Mark\n        OnHover: Hover\n"
+_LABEL_HOVER_TOKENS = {**_FORM_TOKENS, "Отметка": "Mark", "Наведение": "Hover", "Источник": "Source",
+                       "Событие": "Event"}
 #: A number attribute of the catalog - a regular attribute, judged by the keys of its own class.
 _NUMBER_ATTRIBUTE_RU = """\
 Реквизиты:
@@ -2477,6 +2482,37 @@ SEEDS: list[Seed] = [
                                     "Event: OnChangeEvent<Number>)\n;\n",
         },
         tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=FINDING,
+        note="a hover handler that narrows the source to the label is reported: the event is "
+             "declared on the base component, and the ancestry is read in both spellings",
+        files={
+            "ФормаЗаявки.yaml": _LABEL_HOVER_RU,
+            "ФормаЗаявки.xbsl": "метод Наведение(Источник: Надпись, "
+                                "Событие: СобытиеКомпонента)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _LABEL_HOVER_EN,
+            "ApplicationForm.xbsl": "method Hover(Source: Label, Event: ComponentEvent)\n;\n",
+        },
+        tokens=_LABEL_HOVER_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=CLEAN,
+        note="a hover handler that takes the base component, as the event declares it, passes",
+        files={
+            "ФормаЗаявки.yaml": _LABEL_HOVER_RU,
+            "ФормаЗаявки.xbsl": "метод Наведение(Источник: Компонент, "
+                                "Событие: СобытиеКомпонента)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _LABEL_HOVER_EN,
+            "ApplicationForm.xbsl": "method Hover(Source: Component, Event: ComponentEvent)\n;\n",
+        },
+        tokens=_LABEL_HOVER_TOKENS,
     ),
     Seed(
         rule="code/catch-non-exception",
