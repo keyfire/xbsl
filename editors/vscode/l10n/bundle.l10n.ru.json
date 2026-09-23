@@ -641,7 +641,7 @@
   "Documentation comment": "Документирующий комментарий",
   "Place the cursor on a form component or documentable declaration in the yaml editor.": "Установите курсор на компонент формы или объявление с документирующим комментарием в YAML.",
   "Preview": "Предпросмотр",
-  "Save": "Сохранить",
+  "Written to the yaml when the field loses focus or on Ctrl+Enter. Esc undoes the edit.": "Записывается в yaml, когда поле теряет фокус, и по Ctrl+Enter. Esc отменяет правку.",
   "Bold": "Полужирный",
   "Italic": "Курсив",
   "Code": "Код",

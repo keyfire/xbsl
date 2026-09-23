@@ -179,7 +179,7 @@ function labels(): Record<string, string> {
     docComment: vscode.l10n.t("Documentation comment"),
     docPreview: vscode.l10n.t("Preview"),
     docEdit: vscode.l10n.t("Edit"),
-    docSave: vscode.l10n.t("Save"),
+    docHint: vscode.l10n.t("Written to the yaml when the field loses focus or on Ctrl+Enter. Esc undoes the edit."),
     docBold: vscode.l10n.t("Bold"),
     docItalic: vscode.l10n.t("Italic"),
     docCode: vscode.l10n.t("Code"),
@@ -203,11 +203,14 @@ function errorMessage(code: "empty" | "number" | "enum" | "color"): string {
   }
 }
 
-function shell(nonce: string): string {
+// The panel draws the toolbar of the documentation comment with codicons, the same font the
+// form designer loads: the stylesheet and the font come from the extension's own resources.
+function shell(nonce: string, codicons: string, cspSource: string): string {
   const L = inlineJson(labels());
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-${cspMeta(nonce)}
+${cspMeta(nonce, { style: cspSource, font: cspSource })}
+<link rel="stylesheet" href="${codicons}">
 <style>
   body { color: var(--vscode-foreground); font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
     font-size: 13px; padding: 6px 10px 10px; margin: 0; overflow-x: hidden; overflow-wrap: anywhere; }
@@ -289,10 +292,12 @@ ${cspMeta(nonce)}
   .withreset > .rbtn { flex: none; margin-top: 2px; }
   .doc { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
   .doc-title { font-weight: 600; margin: 3px 0 6px; }
-  .doc-tools { display: flex; flex-wrap: wrap; gap: 3px; margin: 5px 0; }
-  .doc-tools button, .doc-save { background: var(--vscode-button-secondaryBackground, var(--vscode-input-background));
-    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); border: 1px solid var(--vscode-panel-border);
-    border-radius: 3px; cursor: pointer; padding: 2px 6px; }
+  .doc-tools { display: flex; flex-wrap: wrap; gap: 2px; margin: 5px 0; }
+  .doc-tools button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px;
+    padding: 0; background: transparent; color: var(--vscode-foreground); border: 1px solid transparent;
+    border-radius: 3px; cursor: pointer; opacity: .8; }
+  .doc-tools button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
+  .doc-tools button:disabled { opacity: .4; cursor: default; background: transparent; }
   .doc textarea { min-height: 100px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace); }
   .doc-preview { padding: 5px 7px; border: 1px solid var(--vscode-panel-border); border-radius: 3px;
     overflow-wrap: anywhere; }
@@ -368,11 +373,42 @@ ${cspMeta(nonce)}
     const input = document.createElement("textarea");
     input.value = docDraft;
     input.placeholder = L.docPlaceholder;
+    input.title = L.docHint;
     input.disabled = !!model.readonly;
     const preview = el("div", "doc-preview");
-    const previewButton = el("button", null, L.docPreview);
-    const editButton = el("button", null, L.docEdit);
+    // The comment is written like any other field of the panel: when the field loses focus or
+    // on Ctrl+Enter. Esc puts back the text the yaml has.
+    const commit = () => {
+      docDraft = input.value;
+      if (docDraft !== docOriginal) {
+        post({ type: "docSave", text: docDraft, expected: docOriginal, id: docId });
+      }
+    };
+    input.addEventListener("input", () => { docDraft = input.value; });
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") {
+        e.stopPropagation();
+        input.value = docOriginal; docDraft = docOriginal;
+        input.blur();
+      }
+    });
+    // A toolbar button is an icon with its name in the tooltip. It keeps the focus in the text,
+    // so pressing it neither writes the comment half-edited nor loses the selection.
+    const iconButton = (icon, label) => {
+      const button = el("button");
+      button.type = "button";
+      button.title = label;
+      button.setAttribute("aria-label", label);
+      button.appendChild(el("i", "codicon codicon-" + icon));
+      button.addEventListener("mousedown", (e) => e.preventDefault());
+      return button;
+    };
+    const previewButton = iconButton("open-preview", L.docPreview);
+    const editButton = iconButton("edit", L.docEdit);
     const showPreview = () => {
+      commit();
       preview.innerHTML = renderDocMarkdown(input.value);
       preview.hidden = false; input.hidden = true;
       previewButton.hidden = true; editButton.hidden = false;
@@ -382,9 +418,8 @@ ${cspMeta(nonce)}
       editButton.hidden = true; previewButton.hidden = false;
       input.focus();
     };
-    const action = (label, before, after, sample, linePrefix) => {
-      const button = el("button", null, label);
-      button.type = "button";
+    const action = (icon, label, before, after, sample, linePrefix) => {
+      const button = iconButton(icon, label);
       button.disabled = !!model.readonly;
       button.addEventListener("click", () => {
         const start = input.selectionStart, end = input.selectionEnd;
@@ -395,29 +430,19 @@ ${cspMeta(nonce)}
       });
       tools.appendChild(button);
     };
-    action(L.docBold, "**", "**", "text", false);
-    action(L.docItalic, "*", "*", "text", false);
-    action(L.docCode, String.fromCharCode(96), String.fromCharCode(96), "code", false);
-    action(L.docHeading, "# ", "", "Heading", true);
-    action(L.docList, "- ", "", "Item", true);
-    action(L.docLink, "[", "](https://example.com)", "link", false);
+    action("bold", L.docBold, "**", "**", "text", false);
+    action("italic", L.docItalic, "*", "*", "text", false);
+    action("code", L.docCode, String.fromCharCode(96), String.fromCharCode(96), "code", false);
+    action("text-size", L.docHeading, "# ", "", "Heading", true);
+    action("list-unordered", L.docList, "- ", "", "Item", true);
+    action("link", L.docLink, "[", "](https://example.com)", "link", false);
     previewButton.addEventListener("click", showPreview);
     editButton.addEventListener("click", showEdit);
     tools.appendChild(previewButton); tools.appendChild(editButton);
     editButton.hidden = true;
     box.appendChild(tools);
-    input.addEventListener("input", () => { docDraft = input.value; });
     box.appendChild(input); box.appendChild(preview);
     preview.hidden = true;
-    const save = el("button", "doc-save", L.docSave);
-    save.disabled = !!model.readonly;
-    save.addEventListener("click", () => {
-      docDraft = input.value;
-      if (docDraft !== docOriginal) {
-        post({ type: "docSave", text: docDraft, expected: docOriginal, id: docId });
-      }
-    });
-    box.appendChild(save);
     box.appendChild(el("div", "doc-error", docError));
     return box;
   }
@@ -2233,8 +2258,13 @@ class FormPropsViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(v: vscode.WebviewView): void {
     view = v;
-    v.webview.options = { enableScripts: true };
-    v.webview.html = shell(makeNonce());
+    const codiconsDir = vscode.Uri.joinPath(this.context.extensionUri, "resources", "codicons");
+    v.webview.options = { enableScripts: true, localResourceRoots: [codiconsDir] };
+    v.webview.html = shell(
+      makeNonce(),
+      v.webview.asWebviewUri(vscode.Uri.joinPath(codiconsDir, "codicon.css")).toString(),
+      v.webview.cspSource,
+    );
     v.onDidDispose(
       () => {
         view = undefined;

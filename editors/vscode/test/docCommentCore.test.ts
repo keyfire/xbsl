@@ -1,7 +1,12 @@
 import * as assert from "assert";
 import {
-  codePointToUtf16Offset, renderDocMarkdown, utf16ToCodePointOffset,
+  codePointToUtf16Offset, escapeMarkdown, renderDocMarkdown, utf16ToCodePointOffset,
 } from "../src/docCommentCore";
+
+// A namespace and a kind shown in a Markdown tooltip keep every character as written.
+assert.strictEqual(escapeMarkdown("e1c::Проект::Подсистема"), "e1c::Проект::Подсистема");
+assert.strictEqual(escapeMarkdown("*a* _b_ [c](d) #e `f` <g>"),
+  "\\*a\\* \\_b\\_ \\[c\\]\\(d\\) \\#e \\`f\\` \\<g\\>");
 
 const rendered = renderDocMarkdown("# Heading\n\n**Bold** *italic* `code`\n- one\n- two\n[site](https://example.com)");
 assert.ok(rendered.includes("<h1>Heading</h1>"));

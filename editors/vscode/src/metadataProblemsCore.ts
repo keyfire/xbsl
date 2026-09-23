@@ -16,6 +16,33 @@ export interface ProblemFamily {
 
 const none = (): ProblemCounts => ({ errors: 0, warnings: 0 });
 
+/** The glyphs of the row badge: a circled cross for errors, a triangle for warnings. A tree row
+ *  description is plain text, so codicons cannot stand there; these two read the same way. */
+const ERROR_GLYPH = "⊗";
+const WARNING_GLYPH = "⚠";
+
+/** The short badge of a tree row: an icon and a number per kind of problem, a kind with no
+ *  problems left out (`⊗ 2 ⚠ 1`). The words stay in the tooltip. */
+export function problemBadge(counts: ProblemCounts): string {
+  return [
+    counts.errors ? `${ERROR_GLYPH} ${counts.errors}` : "",
+    counts.warnings ? `${WARNING_GLYPH} ${counts.warnings}` : "",
+  ].filter(Boolean).join(" ");
+}
+
+/** The counts of several rows added up: a category of the tree by kinds has no folder of its
+ *  own, so it shows the sum of the objects listed under it. */
+export function sumCounts(rows: readonly (ProblemCounts | undefined)[]): ProblemCounts {
+  const total = none();
+  for (const row of rows) {
+    if (row) {
+      total.errors += row.errors;
+      total.warnings += row.warnings;
+    }
+  }
+  return total;
+}
+
 /** The element's own YAML and every paired code file in the same folder. */
 export function filesForElement(yamlPath: string, codePaths: readonly string[]): string[] {
   const normalized = pathKey(yamlPath);

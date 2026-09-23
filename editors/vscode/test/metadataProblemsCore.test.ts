@@ -1,6 +1,8 @@
 import * as assert from "node:assert/strict";
 
-import { filesForElement, MetadataProblemCounts } from "../src/metadataProblemsCore";
+import {
+  filesForElement, MetadataProblemCounts, problemBadge, sumCounts,
+} from "../src/metadataProblemsCore";
 
 type Test = { name: string; run: () => void };
 const tests: Test[] = [];
@@ -76,6 +78,21 @@ test("rebuilding ownership drops removed files and retains current diagnostics",
   assert.deepStrictEqual(counts.get(source), { errors: 1, warnings: 0 });
   counts.dispose();
   assert.deepStrictEqual(counts.get(root), { errors: 0, warnings: 0 });
+});
+
+test("the row badge shows an icon and a number per kind of problem", () => {
+  assert.strictEqual(problemBadge({ errors: 2, warnings: 1 }), "⊗ 2 ⚠ 1");
+  assert.strictEqual(problemBadge({ errors: 0, warnings: 3 }), "⚠ 3");
+  assert.strictEqual(problemBadge({ errors: 1, warnings: 0 }), "⊗ 1");
+  assert.strictEqual(problemBadge({ errors: 0, warnings: 0 }), "");
+});
+
+test("a category adds up the rows under it and skips rows with no counts", () => {
+  assert.deepStrictEqual(
+    sumCounts([{ errors: 2, warnings: 1 }, undefined, { errors: 0, warnings: 4 }]),
+    { errors: 2, warnings: 5 },
+  );
+  assert.deepStrictEqual(sumCounts([]), { errors: 0, warnings: 0 });
 });
 
 let failed = 0;

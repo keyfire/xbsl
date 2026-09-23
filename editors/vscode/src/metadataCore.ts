@@ -263,6 +263,9 @@ export interface MetaNodeDescription {
   // rows edit scalars only, but the schema section must not call a non-empty collection
   // "(not set)" just because it has no scalar row.
   collections?: Record<string, number>;
+  // Where each key of the node starts in the text, collections included: the "open in yaml"
+  // button of a row puts the cursor on its own key, not on the start of the object.
+  keyOffsets?: Record<string, number>;
 }
 
 function scalarStr(node: unknown): string | undefined {
@@ -335,10 +338,15 @@ export function describeMetaNode(text: string, offset: number): MetaNodeDescript
   const isStringField = fieldType === undefined || fieldType === "Строка" || fieldType === "Строка?";
   const rows: MetaPropRow[] = [];
   const collections: Record<string, number> = {};
+  const keyOffsets: Record<string, number> = {};
   for (const item of map.items) {
     const key = isScalar(item.key) ? String(item.key.value) : "";
     if (!key) {
       continue;
+    }
+    const keyRange = isScalar(item.key) ? item.key.range : undefined;
+    if (keyRange && !(key in keyOffsets)) {
+      keyOffsets[key] = keyRange[0];
     }
     if (STRING_ONLY_KEYS.has(key) && !isStringField) {
       continue; // e.g. Многострочная is not shown for a non-string type
@@ -376,6 +384,7 @@ export function describeMetaNode(text: string, offset: number): MetaNodeDescript
     offset: map.range ? map.range[0] : offset,
     rows,
     collections: Object.keys(collections).length > 0 ? collections : undefined,
+    keyOffsets: Object.keys(keyOffsets).length > 0 ? keyOffsets : undefined,
   };
 }
 

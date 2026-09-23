@@ -35,6 +35,12 @@ export function codePointToUtf16Offset(text: string, offset: number): number {
   return i;
 }
 
+/** Plain text for a Markdown document: every character Markdown could read as markup is
+ *  escaped, so a namespace like `Vendor::Project` or a kind name shows exactly as written. */
+export function escapeMarkdown(text: string): string {
+  return text.replace(/[\\`*_{}\[\]()#+\-.!|<>~]/g, (ch) => `\\${ch}`);
+}
+
 export function renderDocMarkdown(source: string): string {
   const escape = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");

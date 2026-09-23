@@ -399,12 +399,18 @@ export function buildMetaPanelModel(
   const name = nameRow && nameRow.value !== desc.title ? nameRow.value : "";
   const visible = synthetic && schema ? [] : desc.rows.filter((r) => !KIND_KEYS.has(r.key));
   const byKey = new Map(visible.map((r) => [r.key, r]));
+  // The key of a property in the yaml - the target of its "open in yaml" button.
+  const spanOf = (key: string): { start: number; end: number } | undefined => {
+    const start = synthetic ? undefined : desc.keyOffsets?.[key];
+    return start === undefined ? undefined : { start, end: start + key.length };
+  };
   const toRow = (r: MetaPropRow): PanelRow => {
     const prop = schema?.props[r.key];
     return {
       key: r.key,
       set: !synthetic,
       value: r.value,
+      propSpan: spanOf(r.key),
       // A known property is edited by its declared type (a dropdown for an enumeration, a
       // switch for a flag); an unknown one keeps the value-shaped editor.
       editor: prop && !r.readonly && SCALAR_PROP_KINDS.has(prop.kind ?? "")
@@ -447,6 +453,7 @@ export function buildMetaPanelModel(
           key,
           set: true,
           value: String(count),
+          propSpan: spanOf(key),
           editor: { control: "readonly" } as RowEditor,
           defaultValue: prop.default,
           since: prop.since,
@@ -455,6 +462,9 @@ export function buildMetaPanelModel(
         continue;
       }
       const row = schemaRow(key, prop, schema, set, typeCandidates, attrCandidates);
+      if (row.set) {
+        row.propSpan = spanOf(key);
+      }
       if ((row.editor as { control: string }).control === "readonly") {
         readonlyRows.push(row); // a tree-owned structure (block/list) - visible, not editable
         continue;

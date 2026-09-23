@@ -257,6 +257,23 @@ test("buildMetaPanelModel: the object select rows become enum editors", () => {
   assert.deepStrictEqual((scope.editor as { options: string[] }).options, ["ВПроекте", "ВПодсистеме"]);
 });
 
+test("buildMetaPanelModel: every set row opens the yaml on its own key", () => {
+  const internals = parseInternals(CATALOG)!;
+  const schema = {
+    props: { Имя: { kind: "string" }, Реквизиты: { kind: "list" } },
+    enums: {},
+  } as unknown as Parameters<typeof buildMetaPanelModel>[2];
+  const model = buildMetaPanelModel(
+    describeMetaSelection(CATALOG, { offset: internals.rootOffset })!, undefined, schema,
+  );
+  const byKey = Object.fromEntries(model.sections.flatMap((s) => s.rows).map((r) => [r.key, r]));
+  assert.strictEqual(byKey["ОбластьВидимости"].propSpan?.start, CATALOG.indexOf("ОбластьВидимости"));
+  assert.strictEqual(byKey["Имя"].propSpan?.start, CATALOG.indexOf("Имя: Товары"));
+  // A collection shows its size read-only, and its button goes to the collection itself.
+  assert.strictEqual(byKey["Реквизиты"].value, "2");
+  assert.strictEqual(byKey["Реквизиты"].propSpan?.start, CATALOG.indexOf("Реквизиты:"));
+});
+
 test("buildMetaPanelModel: a synthetic standard attribute renders every row as not set", () => {
   const model = buildMetaPanelModel(
     describeMetaSelection(CATALOG, { std: { kind: "Справочник", name: "Код" } })!
