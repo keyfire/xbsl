@@ -95,6 +95,16 @@ export function rootBase(projectRoot: string, folder?: string): string | undefin
   return path.isAbsolute(root) ? path.resolve(root) : undefined;
 }
 
+// The folder a narrowed root names when it is not on disk; undefined without a root or when the
+// folder exists. Without that folder the server checks no yaml of the project, and nothing says
+// so: a project renamed after the setting was written loses its yaml findings silently.
+export function missingRoot(
+  projectRoot: string, folder: string | undefined, exists: (dir: string) => boolean,
+): string | undefined {
+  const base = rootBase(projectRoot, folder);
+  return base !== undefined && !exists(base) ? base : undefined;
+}
+
 // `folder` is the first workspace folder, the one the server resolves a relative root against.
 export function lspDocumentSelector(projectRoot: string, folder?: string): DocumentFilterShape[] {
   // xbql is the standalone query of a virtual table: the server serves it for completion (the

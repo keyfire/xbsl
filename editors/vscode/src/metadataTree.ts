@@ -61,7 +61,9 @@ import {
 } from "./treeFilterCore";
 import { TreeFilterHost, TreeFilterPanel } from "./treeFilterPanel";
 import { MetadataProblems } from "./metadataProblems";
-import { filesForElement, ProblemCounts, ProblemFamily } from "./metadataProblemsCore";
+import {
+  filesForElement, problemBadge, ProblemCounts, ProblemFamily, sumCounts,
+} from "./metadataProblemsCore";
 import { METADATA_DRAG_MIME, MetadataDragTickets } from "./metadataDragCore";
 import { carriesWsdl, wsdlFiles } from "./wsdlCore";
 import { docsCommandUri } from "./hoverDocs";
@@ -91,6 +93,7 @@ import {
   resourcesDescriptors,
   ResourcesDescriptorRef,
 } from "./resourceFoldersCore";
+import { escapeMarkdown } from "./docCommentCore";
 import { updatePropsFromSelection } from "./formProps";
 import { revealContent } from "./reveal";
 
@@ -713,10 +716,17 @@ class XbslNode extends vscode.TreeItem {
   filterPlace?: FolderPlace; // subsystem or package: the place "Filter by" narrows the tree to
   wsdlPaths?: string[]; // SOAP service client and its WSDL node: the descriptions "Open WSDL" opens
   linkedForms?: string[]; // forms displayed under an object, counted on that object's row
+  problems?: ProblemCounts; // the problems shown on the row (see markProblemNodes)
+  // The plain tooltip of a row whose tooltip is built on hover (see deferTooltips): VS Code lets
+  // resolveTreeItem fill a tooltip only while the item leaves it undefined.
+  plainTip?: string;
 }
 
 function markProblemNodes(nodes: XbslNode[], problems: MetadataProblems): void {
-  const walk = (node: XbslNode): void => {
+  // Returns the counts the node shows, so a category of the tree by kinds can add up the
+  // objects under it: it has no folder of its own to ask. An object already counts its forms,
+  // so a category sums its direct children only.
+  const walk = (node: XbslNode): ProblemCounts | undefined => {
     let counts: ProblemCounts | undefined;
     if (node.projectDir) {
       counts = problems.get(node.projectDir);
@@ -730,13 +740,13 @@ function markProblemNodes(nodes: XbslNode[], problems: MetadataProblems): void {
         counts.warnings += own.warnings;
       }
     }
+    const children = (node.children ?? []).map(walk);
+    if (!counts && /\bxbslCategory\b/.test(node.contextValue ?? "")) {
+      counts = sumCounts(children);
+    }
     if (counts && (counts.errors || counts.warnings)) {
-      const label = [
-        counts.errors ? vscode.l10n.t("Errors: {0}", counts.errors) : "",
-        counts.warnings ? vscode.l10n.t("Warnings: {0}", counts.warnings) : "",
-      ].filter(Boolean).join(", ");
-      node.description = [node.description, label].filter(Boolean).join(" • ");
-      node.tooltip = typeof node.tooltip === "string" ? `${node.tooltip}\n${label}` : label;
+      node.problems = counts;
+      node.description = [node.description, problemBadge(counts)].filter(Boolean).join(" • ");
       if (node.iconPath instanceof vscode.ThemeIcon) {
         node.iconPath = new vscode.ThemeIcon(
           node.iconPath.id,
@@ -744,9 +754,54 @@ function markProblemNodes(nodes: XbslNode[], problems: MetadataProblems): void {
         );
       }
     }
-    for (const child of node.children ?? []) walk(child);
+    return counts;
   };
   for (const node of nodes) walk(node);
+}
+
+// An object or a form of the tree: its yaml carries a documentation comment of its own.
+function isDocumentable(node: XbslNode): boolean {
+  return !!node.yamlPath && !node.stdKind && /\b(?:element|form)\b/.test(node.contextValue ?? "");
+}
+
+// Rows whose tooltip is built on hover: an object or a form (its documentation comment is read
+// then), a row with problems (the icons are colored there) and a category (its docs page). The
+// plain text of the tooltip is kept aside, and the tooltip itself is left undefined - VS Code
+// asks resolveTreeItem only for a tooltip the item does not have.
+function deferTooltips(nodes: XbslNode[]): void {
+  for (const node of nodes) {
+    if ((node.problems || node.docsKind || isDocumentable(node))
+        && (node.tooltip === undefined || typeof node.tooltip === "string")) {
+      node.plainTip = node.tooltip;
+      node.tooltip = undefined;
+    }
+    deferTooltips(node.children ?? []);
+  }
+}
+
+// The documentation comment of an object or a form - the comment of the root of its yaml, as
+// the properties panel shows it. Undefined without the language server or without a comment.
+async function readDocComment(yamlPath: string): Promise<string | undefined> {
+  if (!lspActive()) {
+    return undefined;
+  }
+  const res = await lspRequest<{ supported?: boolean; text?: string }>("xbsl/docComment", {
+    uri: vscode.Uri.file(yamlPath).toString(), op: "get", offset: 0,
+    offsetEncoding: "unicode-codepoint",
+  });
+  const text = res?.supported ? (res.text ?? "").trim() : "";
+  return text || undefined;
+}
+
+// The problems of a row in its tooltip: the icon and the number of each kind, in the color the
+// theme gives errors and warnings. VS Code keeps a span style of exactly this form in a hover.
+function problemMarkdown(counts: ProblemCounts): string {
+  const part = (count: number, icon: string, color: string): string =>
+    `<span style="color:var(--vscode-${color});"><span class="codicon codicon-${icon}"></span> ${count}</span>`;
+  return [
+    counts.errors ? part(counts.errors, "error", "editorError-foreground") : "",
+    counts.warnings ? part(counts.warnings, "warning", "editorWarning-foreground") : "",
+  ].filter(Boolean).join("&nbsp;&nbsp;");
 }
 
 // Set parent links across the whole built tree (for reveal), and give every node a STABLE, unique
@@ -2108,17 +2163,39 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   // one xbsl/docsByName per category, cached for the session (null = no docs page for this kind).
   private readonly docsTipCache = new Map<string, vscode.MarkdownString | null>();
 
+  // The tooltip of a row deferred by deferTooltips, built on the first hover: the docs page of
+  // a category or the plain text of the row, then its problems as colored icons, then the
+  // documentation comment of an object or a form, read from its yaml by the language server.
   async resolveTreeItem(item: vscode.TreeItem, node: XbslNode): Promise<vscode.TreeItem> {
-    if (!node.docsKind) {
-      return item;
+    const md = new vscode.MarkdownString("", true);
+    md.supportHtml = true; // the colored spans of the problem icons
+    const blocks: string[] = [];
+    if (node.docsKind) {
+      const label = typeof node.label === "string" ? node.label : node.label?.label ?? node.docsKind;
+      let docs = this.docsTipCache.get(node.docsKind);
+      if (docs === undefined) {
+        docs = await this.buildCategoryTooltip(node.docsKind, label);
+        this.docsTipCache.set(node.docsKind, docs);
+      }
+      if (docs) {
+        blocks.push(docs.value);
+        md.isTrusted = docs.isTrusted; // the docs link of a category runs a command
+      }
     }
-    const label = typeof node.label === "string" ? node.label : node.label?.label ?? node.docsKind;
-    let md = this.docsTipCache.get(node.docsKind);
-    if (md === undefined) {
-      md = await this.buildCategoryTooltip(node.docsKind, label);
-      this.docsTipCache.set(node.docsKind, md);
+    if (node.plainTip) {
+      blocks.push(node.plainTip.split("\n").map(escapeMarkdown).join("  \n"));
     }
-    if (md) {
+    if (node.problems) {
+      blocks.push(problemMarkdown(node.problems));
+    }
+    if (isDocumentable(node)) {
+      const comment = await readDocComment(node.yamlPath!);
+      if (comment) {
+        blocks.push("---", comment);
+      }
+    }
+    if (blocks.length) {
+      md.appendMarkdown(blocks.join("\n\n"));
       item.tooltip = md;
     }
     return item;
@@ -2176,6 +2253,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       this.syncFilterContext();
       this.roots = buildRoots(this.model, this.selection, this.groupMode, this.hideEmpty, this.placement, filterTree);
       markProblemNodes(this.roots, this.problems);
+      deferTooltips(this.roots);
       setParents(this.roots, undefined);
     }
     return this.roots;
@@ -3125,9 +3203,9 @@ class MetadataDragAndDrop implements vscode.TreeDragAndDropController<XbslNode>,
     if (!moving.length) {
       return;
     }
-    const where = typeof destination.tooltip === "string" && destination.tooltip
-      ? destination.tooltip
-      : String(destination.label);
+    // A folder with problems keeps its namespace aside until hover (deferTooltips).
+    const tip = destination.plainTip ?? destination.tooltip;
+    const where = typeof tip === "string" && tip ? tip : String(destination.label);
     const move = vscode.l10n.t("Move");
     const pick = await vscode.window.showWarningMessage(
       vscode.l10n.t(

@@ -13,12 +13,35 @@
 
 ### Added
 
+- **The extension warns when the folder in `xbsl.projectRoot` does not exist.** Without that
+  folder, for example after the project was renamed, the language server checks none of the
+  project's yaml. It used to stay silent; now the extension warns at startup. ([#136](https://github.com/keyfire/xbsl/pull/136))
+- **Hovering an object in the metadata tree shows its documentation comment.** The tooltip of
+  an object or a form adds the comment from its yaml below the namespace, the kind and the
+  problems. ([#136](https://github.com/keyfire/xbsl/pull/136))
 - **The `code/deprecated-project` finding links to the documentation.** Its code in the
   Problems panel opens the page of the deprecation annotation.
   ([#132](https://github.com/keyfire/xbsl/pull/132))
 - **The `code/type-unavailable` finding links to the documentation.** Its code in the
   Problems panel opens the page about where modules run.
   ([#131](https://github.com/keyfire/xbsl/pull/131))
+
+### Changed
+
+- **Problems in the metadata tree show as icons.** A row says `⊗ 2 ⚠ 1` instead of words, and the
+  tooltip shows the same icons in the theme's error and warning colors. In the tree by kinds a
+  category now adds up the problems of its objects and is highlighted like a subsystem. ([#136](https://github.com/keyfire/xbsl/pull/136))
+- **The documentation comment editor is compact and saves on its own.** Its buttons are icons,
+  and a second press takes the markup off; the heading goes one level up per press, and after the
+  sixth the line is plain again. Edit and preview are toggles that show the current mode. The
+  comment is written when the field loses focus or on Ctrl+Enter, Esc undoes the edit, and the
+  Save button is gone. ([#136](https://github.com/keyfire/xbsl/pull/136))
+
+### Fixed
+
+- **"Open in yaml" next to an object property puts the cursor on that property.** The button went
+  to the start of the object; it now goes to the property's own key, collections included.
+  ([#136](https://github.com/keyfire/xbsl/pull/136))
 
 ## 0.76.0
 
