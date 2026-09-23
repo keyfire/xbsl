@@ -34,6 +34,14 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **Data extracted from a newer help keeps the Russian names of list row fields.** That help
+  spells the fields of the list row of an automatic list form in English (`Code`, `Parent`,
+  `SettingKey`), in the heading and in the signature alike. The extractor now takes the spelling
+  the runtime states for a field of the kind, the way every other member is stored. ([#141](https://github.com/keyfire/xbsl/pull/141))
+- **The template of a subordinate register and the floor of a component are no longer lost.** The
+  generated types of a register subordinate to a recorder join the register kind instead of being
+  dropped as a template of no kind. The compatibility mode a component is registered from comes
+  from its shipped description first: the help dropped it from a page. ([#141](https://github.com/keyfire/xbsl/pull/141))
 - **`xbsl extract` reads a minified documentation site.** On such a site a one-word attribute
   value goes without quotes (`class=hash-link`, `href=/docs/help/...`), the sidebar data writes
   some characters as JavaScript escapes that JSON rejects, and `@Deprecated` carries a message.

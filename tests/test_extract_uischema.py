@@ -477,6 +477,18 @@ def test_component_since_only_without_deleted_overloads():
     assert "since" not in comps["Картинка"]   # no marker at all
 
 
+def test_the_floor_of_the_shipped_description_goes_first():
+    """A newer help dropped the version line from the page of a component the runtime still
+    registers from that mode alone. The shipped description states the floor, so it wins over
+    the help, and a component the descriptions do not name keeps what the help says."""
+    comps = ux.build_schema(
+        _PAGES, "9.9.9+0", _GUIDE_PAGES, component_from={"Картинка": "9.4", "Виджет": "9.4"},
+    )["components"]
+    assert comps["Картинка"]["since"] == "9.4"
+    assert comps["Виджет"]["since"] == "9.4"
+    assert "since" not in comps["КарточкаАкме"]
+
+
 def test_namesake_components_winner_and_conflicts():
     widget = _schema()["components"]["Виджет"]
     assert widget["package"] == "Стд::Интерфейс::Виджеты"

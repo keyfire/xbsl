@@ -398,6 +398,107 @@ def test_template_kinds_exceptions_win_over_the_rule(tmp_path, monkeypatch):
     assert unmapped == []
 
 
+def test_a_subordinated_register_is_a_flavour_of_the_register_kind(tmp_path, monkeypatch):
+    """A newer help documents the register subordinate to a recorder under a template of its
+    own. It is a flavour of the kind, set by a property in yaml, so its generated types join the
+    kind's instead of being dropped as a template that names no kind."""
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: {"РегистрСведений": "InformationRegister"})
+    with _template_car(
+        tmp_path, "InformationRegisterName_ru", "SubordinatedInformationRegisterName.Data_ru",
+    ) as car:
+        kinds, unmapped = _MODULE._template_kinds(car)
+
+    assert kinds == {
+        "InformationRegisterName": "РегистрСведений",
+        "SubordinatedInformationRegisterName": "РегистрСведений",
+    }
+    assert unmapped == []
+
+
+def test_a_field_spelled_in_english_gets_its_russian_name():
+    known = {"Code": "Код", "Settings": "Настройки", "Address": "Адрес"}
+    unspelled: set[str] = set()
+
+    assert _MODULE.russian_field("Code", known, unspelled) == "Код"
+    assert _MODULE.russian_field("Код", known, unspelled) == "Код"
+    assert _MODULE.russian_field("Settings_Address", known, unspelled) == "Настройки_Адрес"
+    # a template placeholder and a composite with an unknown part stay as the page writes them
+    assert _MODULE.russian_field("ConstantName", known, unspelled) == "ConstantName"
+    assert _MODULE.russian_field("Settings_Port", known, unspelled) == "Settings_Port"
+    assert unspelled == {"ConstantName", "Settings_Port"}
+
+
+def _constants_car(tmp_path, classes: dict[str, bytes]):
+    """A car with one jar that carries the given classes (simple name -> body)."""
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as jar:
+        for simple, body in classes.items():
+            jar.writestr(f"com/example/{simple}.class", body)
+    car = tmp_path / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("lib/constants.jar", buffer.getvalue())
+    return car
+
+
+def test_the_constants_of_a_kind_have_the_last_word(tmp_path, monkeypatch):
+    """The project constants state the fields every kind shares; a kind's own constants may
+    spell a field of the same English name another way, and for that kind they win. A term
+    that names a parameter is not a field."""
+    import zipfile
+
+    terms = {
+        b"project": [("CODE_FIELD_TERM", "Code", "Код"), ("TYPE_FIELD_TERM", "Type", "Вид"),
+                     ("READ_PARAM_TERM", "Key", "Ключ")],
+        b"journal": [("DATA_JOURNAL_TYPE_ATTR_NAME", "Type", "Тип")],
+        b"other": [("TYPE_FIELD_TERM", "Type", "Разновидность")],
+    }
+    monkeypatch.setattr(_MODULE.classcode, "declared_terms", lambda blob: terms[blob])
+    car = _constants_car(tmp_path, {
+        "G5ProjectConstants": b"project", "DataJournalConstants": b"journal",
+        "UnrelatedConstants": b"other",
+    })
+    with zipfile.ZipFile(car) as z:
+        spellings = _MODULE.field_spellings(z, {"DataJournal", "Catalog"})
+
+    assert spellings == {"": {"Code": "Код", "Type": "Вид"}, "DataJournal": {"Type": "Тип"}}
+    known = {**spellings[""], **spellings["DataJournal"]}
+    assert known["Type"] == "Тип"
+
+
+def test_main_stores_a_list_row_field_by_its_russian_name(tmp_path, monkeypatch):
+    """The list row page of a newer help spells the fields in English, heading and signature
+    alike; the catalog keeps the Russian name, the way it keeps every other member."""
+    import json
+    import zipfile
+
+    page = (
+        "<html><head><title>{ИмяЖурналаДанных}.АвтоматическаяФормаСписка.ДанныеСтрокиСписка"
+        " | Product</title></head><body><article>"
+        "<h1>{ИмяЖурналаДанных}.АвтоматическаяФормаСписка.ДанныеСтрокиСписка</h1>"
+        "<h2>Свойства</h2><h3>Type</h3><p><code>Доступность: Клиент</code></p>"
+        "<pre><code>Type: Строка</code></pre></article></body></html>"
+    )
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: {"ЖурналДанных": "DataJournal"})
+    monkeypatch.setattr(
+        _MODULE.classcode, "declared_terms",
+        lambda blob: [("DATA_JOURNAL_TYPE_ATTR_NAME", "Type", "Тип")] if blob == b"journal" else [],
+    )
+    car = _constants_car(tmp_path, {"DataJournalConstants": b"journal"})
+    with zipfile.ZipFile(car, "a") as z:
+        z.writestr(
+            _MODULE.TEMPLATE_BASE + "DataJournalName.AutomaticListForm.ListRowData_ru/index.html", page,
+        )
+    output = tmp_path / "stdlib.json"
+
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    generated = json.loads(output.read_text(encoding="utf-8"))["generated_members"]
+
+    assert generated["ЖурналДанных.АвтоматическаяФормаСписка.ДанныеСтрокиСписка"]["properties"] == ["Тип"]
+
+
 def test_a_generic_base_is_read_by_its_head():
     """A base prints its argument in the link text (`Collection<ItemType>`), entity-escaped.
 

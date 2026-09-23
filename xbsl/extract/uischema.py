@@ -100,10 +100,13 @@ Conventions of the property records:
   enumeration member of a wider union.
 - "default" is a best-effort extraction of the documented auto-value ("При Авто
   выбирается X"); when the docs do not state one, the key is absent - never guessed.
-- "since" of a component: the page-level "Версия N и выше" marker when present;
-  otherwise the marker of its only-ever constructor (no deleted overloads - the
-  component appeared together with it). A deleted overload proves the component
-  predates the current constructor, so no since is emitted.
+- "since" of a component: the compatibility mode its shipped description registers it
+  from (`component_from` of stdlib.json - the runtime's own floor, which a newer help
+  dropped from a page while the component stayed registered from that mode alone); else
+  the page-level "Версия N и выше" marker when present; otherwise the marker of its
+  only-ever constructor (no deleted overloads - the component appeared together with it).
+  A deleted overload proves the component predates the current constructor, so no since
+  is emitted.
 
 Same-named components (or enumerations) in different packages, should a version bring
 them: the bare name stays the key; the winner is chosen by (an Стд::Интерфейс package
@@ -600,6 +603,7 @@ def _runtime_rows(record: dict, section: str) -> list[tuple[str, str | None]]:
 def build_schema(
     pages: list[dict], element_version: str, guides: list[dict] | None = None,
     retired_components: dict[str, dict] | None = None,
+    component_from: dict[str, str] | None = None,
 ) -> dict:
     """The full uischema dictionary from the type pages of the documentation dataset.
 
@@ -681,7 +685,7 @@ def build_schema(
         content = props.get("Содержимое")
         if content is not None and content.get("slot"):
             rec["container"] = True  # only the Содержимое slot counts (see the docstring)
-        since = page.since
+        since = (component_from or {}).get(name) or page.since
         if since is None and not abstract and not page.has_deleted_ctor:
             since = page.ctor_since
         if since:
@@ -803,6 +807,7 @@ def main(argv=None) -> int:
     schema = build_schema(
         docs.type_pages(version), version, docs.guide_pages(version),
         retired_components=stdlib.get("retired_components"),
+        component_from=stdlib.get("component_from"),
     )
     out = Path(args.out) if args.out else _distro.version_dir(version) / "uischema.json"
     out.parent.mkdir(parents=True, exist_ok=True)
