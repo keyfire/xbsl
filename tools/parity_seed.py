@@ -363,6 +363,10 @@ Attributes:
 #: An insert of a fixed height under the form's content.
 _INSET_RU = "    Содержимое:\n        Тип: КонтейнерHtml\n        Имя: Вставка\n        Высота: 480\n"
 _INSET_EN = "    Content:\n        Type: HtmlContainer\n        Name: Inset\n        Height: 480\n"
+#: The same insert with its height bound to a form attribute instead of a number.
+_INSET_BOUND_RU = _INSET_RU.replace("Высота: 480", "Высота: =ВысотаРамкиПикс")
+_INSET_BOUND_EN = _INSET_EN.replace("Height: 480", "Height: =FrameHeightPx")
+_INSET_BOUND_TOKENS = {**_FORM_TOKENS, "Вставка": "Inset", "ВысотаРамкиПикс": "FrameHeightPx"}
 #: A horizontal row holding an insert next to a label (a single child has nothing to slide
 #: against); `{align}` is the alignment line or nothing.
 _ROW_RU = ("    Содержимое:\n        Тип: Группа\n        Имя: Ряд\n        Компоновка: Горизонтальная\n"
@@ -3097,6 +3101,15 @@ SEEDS: list[Seed] = [
         files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_RU},
         english={"ApplicationForm.yaml": _FORM_EN + _INSET_EN},
         tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=FINDING,
+        note="a height bound to an attribute is a set size too – the stretch overrides the "
+             "number the binding yields",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_BOUND_RU},
+        english={"ApplicationForm.yaml": _FORM_EN + _INSET_BOUND_EN},
+        tokens=_INSET_BOUND_TOKENS,
     ),
     Seed(
         rule="yaml/col-width-needs-no-stretch",
