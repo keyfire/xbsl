@@ -80,6 +80,14 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`xbsl extract` reads a minified documentation site.** On such a site a one-word attribute
+  value goes without quotes (`class=hash-link`, `href=/docs/help/...`), the sidebar data writes
+  some characters as JavaScript escapes that JSON rejects, and `@Deprecated` carries a message.
+  The run finished without a warning and lost most of the data: 1406 of 2156 documentation pages
+  were left, 108 of about 21,600 tree nodes and 5 of 88 components of the interface schema, with
+  no member type or method signature at all. Attribute values are now quoted on reading, the
+  sidebar data is brought to the JSON spelling, and the message of the mark is skipped. Data from
+  earlier distributions comes out the same. ([#138](https://github.com/keyfire/xbsl/pull/138))
 - **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
   contract is covariant like a read-only one: the IDE warns about `Array<String>` in
   `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`
