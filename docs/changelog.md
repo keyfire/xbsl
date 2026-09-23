@@ -36,6 +36,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **The stdlib catalog no longer marks a type client-only because of a NUL on its page.** The docs
+  pages of one build carry NUL characters inside words, and the availability line of a type
+  available on both sides was read by its client prefix: `code/type-unavailable` then flagged the
+  type in server code. The extractor now cleans a page on reading, as the docs step does, and takes
+  the availability word only whole; a catalog extracted before needs extracting again. ([#137](https://github.com/keyfire/xbsl/pull/137))
 - **`form/handler-signature` reports a handler that narrows an event parameter.** `OnHover` is
   declared on the base `Component`, so a hover handler with `Source: Label` failed the build while
   the linter stayed silent. A parameter may take the type of the signature or its ancestor; a
