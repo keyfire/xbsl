@@ -2539,6 +2539,38 @@ SEEDS: list[Seed] = [
     ),
     Seed(
         rule="form/handler-signature",
+        expect=CLEAN,
+        note="an event hands its data out, so a wider type argument takes it",
+        files={
+            "ФормаЗаявки.yaml": _INPUT_RU,
+            "ФормаЗаявки.xbsl": "метод Изменение(Источник: ПолеВвода<Строка>, "
+                                "Событие: СобытиеПриИзменении<Объект?>)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _INPUT_EN,
+            "ApplicationForm.xbsl": "method Change(Source: Edit<String>, "
+                                    "Event: OnChangeEvent<Object?>)\n;\n",
+        },
+        tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=FINDING,
+        note="the source takes a value in as well, so its type argument must match exactly",
+        files={
+            "ФормаЗаявки.yaml": _INPUT_RU,
+            "ФормаЗаявки.xbsl": "метод Изменение(Источник: ПолеВвода<Строка?>, "
+                                "Событие: СобытиеПриИзменении<Строка>)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _INPUT_EN,
+            "ApplicationForm.xbsl": "method Change(Source: Edit<String?>, "
+                                    "Event: OnChangeEvent<String>)\n;\n",
+        },
+        tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
         expect=FINDING,
         note="a hover handler that narrows the source to the label is reported: the event is "
              "declared on the base component, and the ancestry is read in both spellings",
