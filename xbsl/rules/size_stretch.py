@@ -97,8 +97,9 @@ pixels: the reference case in a deployed project is a 40-pixel badge column whos
 far away from the adjacent name until an explicit `HorizontalStretch: False` pinned it, and
 the comment left next to the cure says exactly that.
 
-Judged is a column of one of the three kinds whose `Width` is a fixed positive number (not
-`Auto`, not a binding, not zero) with NO `HorizontalStretch` key in the same node. An
+Judged is a column of one of the three kinds whose `Width` sets a width - a positive number
+or a binding, which yields one at run time and turns into a share just the same (not `Auto`,
+not zero) - with NO `HorizontalStretch` key in the same node. An
 explicit value of ANY kind - `False`, `True`, `Auto`, a binding - is the author's
 deliberate choice and is never judged: the same project keeps `Width: 300` together with
 `HorizontalStretch: True` on purpose, the width working as the flex basis of a share.
@@ -198,7 +199,7 @@ MESSAGES = {
               "свободного места, а не пиксели: колонка выходит шире заданного, и содержимое "
               "уезжает от соседней. Пиксельной ширине – {stretch_key}: {n[Ложь]}, доле с "
               "гарантированным минимумом – {min_width_key}.",
-        "en": "The {type} column has a fixed {width_key}: {value} but no {stretch_key} – when "
+        "en": "The {type} column sets {width_key}: {value} but no {stretch_key} – when "
               "the column stretches (at '{n[Авто]}' the platform decides on its own) the "
               "number acts as a share of the free space rather than pixels: the column comes "
               "out wider than asked and the content drifts away from its neighbour. A pixel "
@@ -510,7 +511,7 @@ def col_width_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
         if uischema.canonical_component(written_type) not in _COLUMN_TYPES:
             continue
         entry = keys.get(_WIDTH_KEY)
-        if entry is None or _H_STRETCH_KEY in keys or not _fixed_size(entry[1]):
+        if entry is None or _H_STRETCH_KEY in keys or not _set_size(entry[1]):
             continue
         key_node = entry[0]
         # The advice names the keys the way the file spells them, like the sibling rule
