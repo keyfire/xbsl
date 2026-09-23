@@ -440,8 +440,12 @@ def _simple_payload(*names: str, yanked: tuple[str, ...] = ()) -> bytes:
     }).encode("utf-8")
 
 
-def _serve(monkeypatch, index: bytes | None, meta: dict | None = None) -> list[str]:
-    """Answer the index and the JSON metadata separately; returns the list of asked urls."""
+def _serve(monkeypatch, index: bytes | None, meta: dict | None = None,
+           missing: bool = False) -> list[str]:
+    """Answer the index and the JSON metadata separately; returns the list of asked urls.
+
+    `missing` makes the JSON metadata answer 404, as PyPI does for an unknown version.
+    """
     asked: list[str] = []
 
     def urlopen(target, timeout=0):
@@ -453,6 +457,8 @@ def _serve(monkeypatch, index: bytes | None, meta: dict | None = None) -> list[s
             if index is None:
                 raise OSError("index unreachable")
             return _FakeResp(index)
+        if missing:
+            raise selfupdate.urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         assert meta is not None, "the JSON metadata must not be asked at all"
         return _FakeResp(json.dumps(meta).encode("utf-8"))
 
@@ -518,11 +524,28 @@ def test_an_index_without_pep691_falls_back_to_the_json(monkeypatch):
     assert asked == [selfupdate.PYPI_SIMPLE, selfupdate.PYPI_LATEST]
 
 
-def test_a_version_the_index_does_not_carry_is_named_as_such(monkeypatch):
-    """A readable index is the answer: no second guess at the lagging JSON."""
-    _serve(monkeypatch, _simple_payload("xbsl-0.51.0-py3-none-any.whl"))
+def test_a_version_missing_from_a_lagging_index_comes_from_its_page(monkeypatch):
+    """The live failure of 23.09.2026: the index still served the previous release for half
+    an hour, while the version page already listed the new files."""
+    monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
+    page = {"info": {"version": "0.52.0"},
+            "urls": [{"filename": "xbsl-0.52.0-py3-none-any.whl", "url": "http://pypi/pure.whl"},
+                     {"filename": "xbsl-0.52.0-cp314-cp314-win_amd64.whl",
+                      "url": "http://pypi/native.whl"}]}
+    asked = _serve(monkeypatch, _simple_payload("xbsl-0.51.0-py3-none-any.whl"), meta=page)
+
+    url, version, kind = selfupdate._wheel_url("0.52.0")
+
+    assert (url, version, kind) == ("http://pypi/native.whl", "0.52.0", selfupdate.NATIVE)
+    assert asked == [selfupdate.PYPI_SIMPLE, selfupdate.PYPI_VERSION.format(version="0.52.0")]
+
+
+def test_a_version_missing_everywhere_is_named_as_such(monkeypatch):
+    """Only a 404 of the version page means the version does not exist."""
+    asked = _serve(monkeypatch, _simple_payload("xbsl-0.51.0-py3-none-any.whl"), missing=True)
     with pytest.raises(selfupdate.SelfUpdateError, match="версия не найдена"):
         selfupdate._wheel_url("9.9.9")
+    assert asked == [selfupdate.PYPI_SIMPLE, selfupdate.PYPI_VERSION.format(version="9.9.9")]
 
 
 def test_interpreter_tag_is_the_wheel_spelling():

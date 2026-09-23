@@ -237,6 +237,11 @@ def _wheel_url(version: str | None) -> tuple[str, str, str]:
     because the files were read from that same lagging document. A minute later the same
     command went through. The JSON stays as the fallback for an index that does not answer
     PEP 691 (and it is the one that reports an outage in words).
+
+    The index lags too. On 23.09.2026 it served the previous release for more than half an
+    hour after publishing, while the version page already listed every file. So a version
+    named explicitly and missing from the index is looked up on its own page; only a 404
+    there means the version does not exist.
     """
     files = _simple_files()
     if files:
@@ -248,8 +253,6 @@ def _wheel_url(version: str | None) -> tuple[str, str, str]:
         if target and entries:
             url, kind = _pick_wheel(entries)
             return url, target, kind
-        if version:  # the index is readable and simply does not carry this version
-            raise SelfUpdateError(i18n.t("selfupdate.no-version"))
     data = _fetch_json(PYPI_VERSION.format(version=version) if version else PYPI_LATEST)
     resolved = data["info"]["version"]
     url, kind = _pick_wheel(data["urls"])

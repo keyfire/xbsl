@@ -25,6 +25,24 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **The translator wraps a line of code that grew past the limit.** English names are longer than
+  Russian ones, and on a project of about four hundred modules 26 lines of code ran past 120
+  columns after translation. Such a line now breaks where the style guide breaks an expression:
+  after a comma or the opening bracket of a list, or before an operator.
+  ([#133](https://github.com/keyfire/xbsl/pull/133))
+
+### Fixed
+
+- **`self-update --version X` installs a release the simple index does not list yet.** After
+  0.116.0 came out, the index kept serving the previous release for more than half an hour, and
+  the command answered that the version did not exist, although its PyPI page already listed the
+  files. A version named explicitly and missing from the index is now looked up on its own page.
+  ([#133](https://github.com/keyfire/xbsl/pull/133))
+
 ## 2026-09-23 – 0.115.0, 0.116.0
 
 ### Added
