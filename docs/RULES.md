@@ -826,9 +826,11 @@ sees only the properties marked `Contextual`.
 `String|Undefined|?` and `Array<String>|ReadableArray<String>` look like that, a member under
 `Object` or under a base type of the catalog with the same arguments. The platform IDE warns about
 it, and a function type is not judged. The fix writes the union without those members.
-With freshly extracted generic metadata, a read-only base can cover wider arguments,
-and nested base formulas are substituted. Mutable parameters remain invariant; missing
-metadata keeps the previous exact-argument behavior.
+With freshly extracted generic metadata, a contract with a covariant parameter covers wider
+arguments, a read-only one and a mutable one alike (`MutableArray<Object>` covers
+`Array<String>`), and nested base formulas are substituted. The concrete `Array`, `Map`, `Set`
+and `Collection` keep their parameters invariant; missing metadata keeps the previous
+exact-argument behavior.
 
 <a id="d-code-unclosed-resource"></a>**`code/unclosed-resource`.** It looks like `val Selection =
 Query{...}.Execute()`. The platform closes a full pass by itself, and it logs an unclosed-resource

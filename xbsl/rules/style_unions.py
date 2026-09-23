@@ -14,8 +14,11 @@ and the rule repeats what the IDE judges, checked on probe projects variant by v
   the project too) and by a base type from the platform catalog - `Presentable` covers `String`,
   `Iterable<String>` and `ReadableArray<String>` cover `Array<String>`. The arguments of a
   generic type follow the variance and base-argument formulas extracted from the platform
-  descriptors: a read-only base may take a wider argument (`ReadableArray<Object>` covers
-  `Array<String>`), while a mutable `Array<Object>` does not cover `Array<String>`;
+  descriptors. A contract with a covariant parameter takes a wider argument, a read-only one
+  and a mutable one alike: `ReadableArray<Object>` and `MutableArray<Object>` both cover
+  `Array<String>`, as the IDE confirmed on a probe project. The concrete `Array`, `Map`, `Set`
+  and `Collection` keep their parameters invariant, so `Array<Object>` does not cover
+  `Array<String>`;
 - the parameters and the result of a function type (`(Строка|Строка)->Число`) and a type
   written in yaml are not judged.
 
