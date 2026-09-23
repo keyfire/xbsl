@@ -81,6 +81,13 @@ entry either - say what the behaviour was, not which class name was compared.
   no member type or method signature at all. Attribute values are now quoted on reading, the
   sidebar data is brought to the JSON spelling, and the message of the mark is skipped. Data from
   earlier distributions comes out the same. ([#138](https://github.com/keyfire/xbsl/pull/138))
+- **The type parameters of generic types and multi-line signatures are read from a minified
+  site too.** Such a page writes `>` in text unescaped (`Array&lt;ItemType>`), so every generic
+  type lost its parameter list and the variance of its parameters. A long signature printed over
+  several lines kept its indentation (`Load(  FileName: String?, ...)`), and the type of a
+  property was looked for after a colon that the message of `@Deprecated` may hold. The markup
+  normalization now escapes `>` in text, a signature comes out in one line, and the mark is taken
+  off before the type is read. ([#139](https://github.com/keyfire/xbsl/pull/139))
 - **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
   contract is covariant like a read-only one: the IDE warns about `Array<String>` in
   `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`
