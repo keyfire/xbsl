@@ -183,7 +183,7 @@ def _kind(text: str) -> str:
 def _record(entry: str, raw: str, origin: str) -> dict | None:
     """A structured page record, or None if there is no content block."""
     raw = _CTRL_RE.sub("", raw)  # control characters corrupt the text, the index and titles
-    raw = _distro.quote_attributes(raw)  # the parsers below match quoted attribute values
+    raw = _distro.normalize_markup(raw)  # the parsers below expect unminified markup
     html, text = _clean(raw)
     if not html:
         return None
