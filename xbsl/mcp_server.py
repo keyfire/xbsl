@@ -1779,7 +1779,9 @@ def meta_add_subsystem(
 # model (xbsl.formmodel / xbsl.formedits), apply them to the file and lint what they
 # wrote - the same contract as the writing meta_* tools. Node ids are positional paths
 # ("Наследует/Содержимое[0]") and stay valid only until the next edit: re-read the tree
-# after every change. meta_remove_components / meta_move_components are the batch
+# after every change. Every node argument also takes the `Name` of a component that is
+# unique in the form (formmodel.get_node), so a node known by its name needs no tree read
+# first. meta_remove_components / meta_move_components are the batch
 # spellings: one call, one edit pass over several nodes. The remaining designer
 # operations (wrap/unwrap/duplicate/rename) are exposed through the CLI
 # (`xbsl form-edit`) and the LSP for now.
@@ -1815,8 +1817,10 @@ def meta_component_tree(
     Шапка / Подвал; other nested values are properties. Use the node ids with
     meta_add_component / meta_move_component / meta_remove_component / the batch
     meta_move_components / meta_remove_components / meta_set_component_property;
-    ids are positional, so re-read the tree after any edit. `file` is the absolute path of
-    the file read; the base directory is not repeated, since `root` here is the tree.
+    ids are positional, so re-read the tree after any edit. Those tools also take the
+    `Name` of a component in place of its id when no other component in the form carries
+    it; a repeated name is refused with the paths to choose from. `file` is the absolute
+    path of the file read; the base directory is not repeated, since `root` here is the tree.
 
     componentProperties lists the records of the top-level Свойства section (the
     component's own properties: name, type and their spans) - they are not tree nodes.
@@ -1824,7 +1828,8 @@ def meta_component_tree(
     A big form does not fit one answer (a real one reached a quarter of a million
     characters), so the tree can be asked for in parts. All four narrowings compose:
 
-    * node_id - the subtree under that node instead of the whole form;
+    * node_id - the subtree under that node instead of the whole form (a path, or a
+      `Name` unique in the form);
     * name - the subtree of the component with this `Name` (what a person knows; the
       ids are positional). Several matches come back in "roots", not "root";
     * max_depth - how many levels below the root to unfold (0 - no limit, 1 - the
@@ -1906,12 +1911,13 @@ def meta_add_component(
 ) -> dict:
     """Insert a new component (Тип and/or Имя) into a slot of the parent node.
 
-    parent_id comes from meta_component_tree; slot is one of the child-bearing keys
+    parent_id is a path from meta_component_tree or the `Name` of a component unique in
+    the form; slot is one of the child-bearing keys
     (Содержимое, Страницы, Колонки, Команды, КомандыСтроки, Шапка, Подвал). By default
     the component lands at the end of the slot; before/after position it against a
-    sibling node id. A missing slot is created; a slot holding a single nested mapping
-    is converted to the "-" list form. The edit touches only the affected lines -
-    formatting and comments elsewhere survive.
+    sibling, named the same way. A missing slot is created; a slot holding a single
+    nested mapping is converted to the "-" list form. The edit touches only the affected
+    lines - formatting and comments elsewhere survive.
 
     See also: meta_set_component_property sets the properties of the new node,
     meta_add_handler binds its events, meta_insert_fragment pastes a ready subtree.
@@ -1940,7 +1946,8 @@ def meta_insert_fragment(
     checked against any catalog (project components are valid). A list, several
     components or a fragment without a top-level Тип are rejected with a clear error.
     The block is re-indented to the destination; slot rules match meta_add_component
-    (missing slot created, a single-mapping slot converts to the list form).
+    (missing slot created, a single-mapping slot converts to the list form), and so does
+    the way parent_id, before and after name nodes: a path or a unique `Name`.
     A `#` comment of the fragment goes where the development environment reads it, the way
     the yaml/plain-comment fix puts it: a comment above the component moves inside the node
     as `##`. A comment with no such place stays as pasted, and `notes` say why: the visual
@@ -1970,6 +1977,8 @@ def meta_move_component(
     emptied slot key is removed together with it; the destination follows the same slot
     rules as meta_add_component (missing slot created, singleton slot converted to a
     list). before/after position the node against a sibling in the destination slot.
+    node_id, new_parent_id, before and after each take a path from meta_component_tree
+    or the `Name` of a component unique in the form.
     """
     return _form_write(_base(root), yaml_path, "move", {
         "node": node_id, "new_parent": new_parent_id, "slot": slot,
@@ -1982,6 +1991,8 @@ def meta_move_component(
 def meta_remove_component(yaml_path: str, node_id: str, root: str | None = None) -> dict:
     """Remove a node (with its attached comments); the last child of a slot removes the
     slot key line as well. The root node (Наследует) cannot be removed.
+    node_id is a path from meta_component_tree or the `Name` of a component unique in
+    the form.
     """
     return _form_write(_base(root), yaml_path, "remove", {"node": node_id})
 
@@ -1996,6 +2007,7 @@ def meta_remove_components(yaml_path: str, node_ids: list[str],
     inside another removed node are skipped silently. A slot losing ALL its children is
     removed whole (the slot key line goes too). The root node (Наследует) cannot be
     removed. One call = one edit pass, instead of re-reading the tree between removals.
+    The name of a component unique in the form works in place of its path.
     """
     return _form_write(_base(root), yaml_path, "remove_nodes", {"nodes": node_ids})
 
@@ -2019,7 +2031,8 @@ def meta_move_components(
     all its children is removed whole; the destination follows the same slot rules as
     meta_add_component. before/after position the run against a sibling in the
     destination slot and must not name a moved node. The returned node is the FIRST of
-    the moved run.
+    the moved run. node_ids, new_parent_id, before and after take paths or component
+    names unique in the form.
     """
     return _form_write(_base(root), yaml_path, "move_nodes", {
         "nodes": node_ids, "new_parent": new_parent_id, "slot": slot,
@@ -2039,6 +2052,9 @@ def meta_set_component_property(
 ) -> dict:
     """Set, replace or remove a property of a component node.
 
+    node_id - a path from meta_component_tree or the `Name` of the component when no other
+    component in the form carries it; a repeated name is refused with the paths of its
+    carriers, and the answer's `node` reports the path of the node edited.
     value - a scalar or a binding ("=Объект.Поле", "$Строки.Ключ"): quoted automatically
     when yaml requires it. value_yaml - a composite value as a ready yaml fragment, e.g.
     "Тип: АбсолютныйЦвет\\nЗначение: RGB(F4F6F7)"; it becomes a nested block, a fragment of
@@ -2067,6 +2083,9 @@ def meta_add_handler(
     root: str | None = None,
 ) -> dict:
     """Bind an event property of a component node to a handler method of the paired module.
+
+    node_id is a path from meta_component_tree or the `Name` of a component unique in the
+    form.
 
     Writes BOTH files: the yaml gets `key: Метод` on the node, the module (same stem,
     .xbsl; created when absent) gets a method stub appended - parameters ("Источник",

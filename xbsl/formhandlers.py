@@ -366,7 +366,7 @@ def add_handler(
         yaml_edits: list[TextEdit] = []
         new_yaml_text = yaml_text
     else:
-        res = formedits.set_property(yaml_text, node_id, key, value=method)
+        res = formedits.set_property(yaml_text, node.id, key, value=method)
         yaml_edits, new_yaml_text = res.edits, res.new_text
 
     # --- the module half --------------------------------------------------------------------
@@ -546,7 +546,7 @@ def remove_handler(
         if candidate and _NAME_RE.fullmatch(candidate):
             method = candidate
 
-    res = formedits.reset_property(yaml_text, node_id, key)
+    res = formedits.reset_property(yaml_text, node.id, key)
     yaml_edits, new_yaml_text = res.edits, res.new_text
 
     if not drop_method or method is None or module_text is None:

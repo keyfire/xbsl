@@ -1479,8 +1479,10 @@ _CORE_MESSAGES = {
         "en": "instead of the tree, return the node at a file offset (cursor sync)",
     },
     "cli.help.scaf.form-tree-node": {
-        "ru": "поддерево этого узла вместо всей формы (идентификатор из дерева)",
-        "en": "the subtree of this node instead of the whole form (an id from the tree)",
+        "ru": "поддерево этого узла вместо всей формы (путь из дерева или Имя компонента, "
+              "единственное в форме)",
+        "en": "the subtree of this node instead of the whole form (a path from the tree or "
+              "a component Name unique in the form)",
     },
     "cli.help.scaf.form-tree-name": {
         "ru": "поддерево компонента с этим Имя; несколько совпадений приходят в \"roots\"",
@@ -1516,14 +1518,16 @@ _CORE_MESSAGES = {
         "en": "OFFSET",
     },
     "cli.help.scaf.form-edit": {
-        "ru": "операция конструктора форм: точечная правка yaml компонента интерфейса; см. также "
-              "form-tree – ид узлов, которыми адресуются правки",
-        "en": "form-designer operation: a pinpoint edit of an interface component's yaml; see "
-              "also form-tree for the node ids the edits address",
+        "ru": "операция конструктора форм: точечная правка yaml компонента интерфейса. Узел "
+              "задаётся путём из дерева или Имя компонента, если оно в форме одно; см. также "
+              "form-tree – пути узлов, которыми адресуются правки",
+        "en": "form-designer operation: a pinpoint edit of an interface component's yaml. A node "
+              "is given by its path from the tree or by a component Name unique in the form; "
+              "see also form-tree for the node paths the edits address",
     },
     "cli.help.scaf.fe-parent": {
-        "ru": "id узла-контейнера (insert/insert-fragment)",
-        "en": "container node id (insert/insert-fragment)",
+        "ru": "узел-контейнер: путь или Имя компонента (insert/insert-fragment)",
+        "en": "container node: a path or a component Name (insert/insert-fragment)",
     },
     "cli.help.scaf.fe-slot": {
         "ru": "слот детей: Содержимое, Страницы, Колонки, ... (insert/move)",
@@ -1538,18 +1542,20 @@ _CORE_MESSAGES = {
         "en": "Name of the new component (insert), the wrapper (wrap) or a Properties-section property (property-*)",
     },
     "cli.help.scaf.fe-node": {
-        "ru": "id узла операции (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property)",
-        "en": "operation node id (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property)",
+        "ru": "узел операции: путь или Имя компонента, единственное в форме "
+              "(move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property)",
+        "en": "operation node: a path or a component Name unique in the form "
+              "(move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property)",
     },
     "cli.help.scaf.fe-nodes": {
-        "ru": "id узлов пачковой операции (move-nodes/remove-nodes): через "
-              "запятую или повтором флага; порядок не важен",
-        "en": "node ids of a batch operation (move-nodes/remove-nodes): comma-separated "
-              "or by repeating the flag; order does not matter",
+        "ru": "узлы пачковой операции (move-nodes/remove-nodes): пути или имена компонентов "
+              "через запятую или повтором флага; порядок не важен",
+        "en": "nodes of a batch operation (move-nodes/remove-nodes): paths or component names, "
+              "comma-separated or by repeating the flag; order does not matter",
     },
     "cli.help.scaf.fe-new-parent": {
-        "ru": "id нового контейнера (move/move-nodes)",
-        "en": "new container id (move/move-nodes)",
+        "ru": "новый контейнер: путь или Имя компонента (move/move-nodes)",
+        "en": "new container: a path or a component Name (move/move-nodes)",
     },
     "cli.help.scaf.fe-container": {
         "ru": "Тип контейнера-обёртки (wrap)",
@@ -1562,12 +1568,12 @@ _CORE_MESSAGES = {
               "for rename without the flag, Name is removed",
     },
     "cli.help.scaf.fe-before": {
-        "ru": "id соседа: вставить/переместить ПЕРЕД ним",
-        "en": "sibling id: insert/move BEFORE it",
+        "ru": "сосед (путь или Имя): вставить/переместить ПЕРЕД ним",
+        "en": "sibling (a path or a Name): insert/move BEFORE it",
     },
     "cli.help.scaf.fe-after": {
-        "ru": "id соседа: вставить/переместить ПОСЛЕ него",
-        "en": "sibling id: insert/move AFTER it",
+        "ru": "сосед (путь или Имя): вставить/переместить ПОСЛЕ него",
+        "en": "sibling (a path or a Name): insert/move AFTER it",
     },
     "cli.help.scaf.fe-key": {
         "ru": "имя свойства узла (set-property/reset-property)",
@@ -1600,8 +1606,10 @@ _CORE_MESSAGES = {
               "also form-tree for the node ids and add-method for a method outside any event",
     },
     "cli.help.scaf.fh-node": {
-        "ru": "id узла (создание обработчика; без --node/--key – список методов модуля)",
-        "en": "node id (handler creation; without --node/--key – the module's method list)",
+        "ru": "узел: путь или Имя компонента (создание обработчика; без --node/--key – "
+              "список методов модуля)",
+        "en": "node: a path or a component Name (handler creation; without --node/--key – "
+              "the module's method list)",
     },
     "cli.help.scaf.fh-key": {
         "ru": "ключ события узла: ПриНажатии, ПослеСоздания, ...",
