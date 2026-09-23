@@ -194,6 +194,11 @@ _LABEL_HOVER_RU = _FORM_RU + "    Содержимое:\n        Тип: Над�
 _LABEL_HOVER_EN = _FORM_EN + "    Content:\n        Type: Label\n        Name: Mark\n        OnHover: Hover\n"
 _LABEL_HOVER_TOKENS = {**_FORM_TOKENS, "Отметка": "Mark", "Наведение": "Hover", "Источник": "Source",
                        "Событие": "Event"}
+#: A button whose drop event names a handler - the event lists only the root among its bases.
+_BUTTON_DROP_RU = _FORM_RU + "    Содержимое:\n        Тип: Кнопка\n        Имя: Приемник\n        ПриПеретаскивании: Перенос\n"
+_BUTTON_DROP_EN = _FORM_EN + "    Content:\n        Type: Button\n        Name: Receiver\n        OnDrop: Drop\n"
+_BUTTON_DROP_TOKENS = {**_FORM_TOKENS, "Приемник": "Receiver", "Перенос": "Drop", "Источник": "Source",
+                       "Событие": "Event"}
 #: A number attribute of the catalog - a regular attribute, judged by the keys of its own class.
 _NUMBER_ATTRIBUTE_RU = """\
 Реквизиты:
@@ -841,7 +846,7 @@ _ROW_FILL_EN = ("structure Summary\n    val Amount: Number = 0\n;\n"
                 "method Show(RowData: DynamicListRow<MarkPanel.ListRow>)\n"
                 "    val Line = RowData.Data\n"
                 "    val Result = new Summary(Amount = Line.{field})\n;\n")
-_ROW_TOKENS = {"ПанельОтметок": "MarkPanel", "Отметки": "Marks", "Список": "List",
+_LIST_ROW_TOKENS = {"ПанельОтметок": "MarkPanel", "Отметки": "Marks", "Список": "List",
                "Срок": "Deadline", "Сумма": "Amount", "СуммаРаздела": "SectionAmount",
                "ЗащищеннаяСумма": "GuardedAmount", "Строчка": "Line", "Сводка": "Summary",
                "Итог": "Result", "Показать": "Show"}
@@ -2539,6 +2544,53 @@ SEEDS: list[Seed] = [
     ),
     Seed(
         rule="form/handler-signature",
+        expect=CLEAN,
+        note="an event hands its data out, so a wider type argument takes it",
+        files={
+            "ФормаЗаявки.yaml": _INPUT_RU,
+            "ФормаЗаявки.xbsl": "метод Изменение(Источник: ПолеВвода<Строка>, "
+                                "Событие: СобытиеПриИзменении<Объект?>)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _INPUT_EN,
+            "ApplicationForm.xbsl": "method Change(Source: Edit<String>, "
+                                    "Event: OnChangeEvent<Object?>)\n;\n",
+        },
+        tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=FINDING,
+        note="the source takes a value in as well, so its type argument must match exactly",
+        files={
+            "ФормаЗаявки.yaml": _INPUT_RU,
+            "ФормаЗаявки.xbsl": "метод Изменение(Источник: ПолеВвода<Строка?>, "
+                                "Событие: СобытиеПриИзменении<Строка>)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _INPUT_EN,
+            "ApplicationForm.xbsl": "method Change(Source: Edit<String?>, "
+                                    "Event: OnChangeEvent<String>)\n;\n",
+        },
+        tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=FINDING,
+        note="an event type the catalog does not relate to the delegate's is refused",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_DROP_RU,
+            "ФормаЗаявки.xbsl": "метод Перенос(Источник: Компонент, "
+                                "Событие: СобытиеКомпонента)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_DROP_EN,
+            "ApplicationForm.xbsl": "method Drop(Source: Component, Event: ComponentEvent)\n;\n",
+        },
+        tokens=_BUTTON_DROP_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
         expect=FINDING,
         note="a hover handler that narrows the source to the label is reported: the event is "
              "declared on the base component, and the ancestry is read in both spellings",
@@ -4023,7 +4075,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="Deadline"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/unknown-row-field",
@@ -4038,7 +4090,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="Section"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/unknown-row-field",
@@ -4052,7 +4104,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="ToString()"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/unknown-row-field",
@@ -4066,7 +4118,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="Key"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/row-field-null",
@@ -4080,7 +4132,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_FILL_EN.format(field="GuardedAmount"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/row-field-null",
@@ -4095,7 +4147,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_FILL_EN.format(field="SectionAmount"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/row-field-null",

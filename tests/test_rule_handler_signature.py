@@ -50,7 +50,7 @@ _CHECKBOX = """            Тип: Флажок
 
 
 def _handler(params: str) -> str:
-    return f"@Обработчик\nметод ФлажокИзменён({params})\n;\n"
+    return f"метод ФлажокИзменён({params})\n;\n"
 
 
 def test_a_narrower_event_argument_is_reported(tmp_path):
@@ -114,7 +114,7 @@ def test_the_type_argument_of_the_component_is_substituted(tmp_path):
     """`ПолеВвода<Строка>` passes `СобытиеПриИзменении<Строка>`, not the raw type parameter."""
     diags = _lint(
         tmp_path, _INPUT_STRING,
-        "@Обработчик\nметод ПолеИзменено(Источник: ПолеВвода<Строка>, "
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка>, "
         "Событие: СобытиеПриИзменении<Строка>)\n;\n",
     )
 
@@ -124,11 +124,72 @@ def test_the_type_argument_of_the_component_is_substituted(tmp_path):
 def test_a_wrong_argument_after_substitution_is_reported(tmp_path):
     diags = _lint(
         tmp_path, _INPUT_STRING,
-        "@Обработчик\nметод ПолеИзменено(Источник: ПолеВвода<Строка>, "
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка>, "
         "Событие: СобытиеПриИзменении<Число>)\n;\n",
     )
 
     assert len(diags) == 1 and "СобытиеПриИзменении<Строка>" in diags[0].message
+
+
+def test_a_wider_event_argument_is_legal(tmp_path):
+    """An event hands its data out, so a handler may take it as a wider type.
+
+    The compiler accepts the same type made nullable, an ancestor and the root type.
+    """
+    for event in ("СобытиеПриИзменении<Строка?>", "СобытиеПриИзменении<Объект>",
+                  "СобытиеПриИзменении<Объект?>"):
+        diags = _lint(
+            tmp_path, _INPUT_STRING,
+            f"метод ПолеИзменено(Источник: ПолеВвода<Строка>, Событие: {event})\n;\n",
+        )
+
+        assert diags == [], event
+
+
+def test_the_nullable_event_argument_may_widen_to_the_nullable_root(tmp_path):
+    diags = _lint(
+        tmp_path, _CHECKBOX,
+        _handler("Источник: Флажок, Событие: СобытиеПриИзменении<Объект?>"),
+    )
+
+    assert diags == []
+
+
+def test_an_ancestor_that_drops_the_null_is_reported(tmp_path):
+    """The root takes every value but the absent one: `Object` for `Boolean?` narrows."""
+    diags = _lint(
+        tmp_path, _CHECKBOX,
+        _handler("Источник: Флажок, Событие: СобытиеПриИзменении<Объект>"),
+    )
+
+    assert len(diags) == 1
+    assert "СобытиеПриИзменении<Булево?>" in diags[0].message
+    assert "можно только расширить" in diags[0].message
+
+
+def test_the_data_event_widens_its_argument_too(tmp_path):
+    component = """            Тип: ПолеВвода<Строка>
+            Имя: Поле
+            ПриИзмененииТекстаРедактирования: ТекстИзменён"""
+    module = ("метод ТекстИзменён(Источник: ПолеВвода<Строка>, "
+              "Событие: СобытиеСДанными<{argument}>)\n;\n")
+
+    assert _lint(tmp_path, component, module.format(argument="Объект")) == []
+    diags = _lint(tmp_path, component, module.format(argument="Число"))
+    assert len(diags) == 1 and "СобытиеСДанными<Строка>" in diags[0].message
+
+
+def test_the_argument_of_the_source_must_match_exactly(tmp_path):
+    """A component also takes a value in: `Edit<String?>` is not a wider source."""
+    diags = _lint(
+        tmp_path, _INPUT_STRING,
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка?>, "
+        "Событие: СобытиеПриИзменении<Строка>)\n;\n",
+    )
+
+    assert len(diags) == 1
+    assert "Параметр 1" in diags[0].message
+    assert "точного совпадения" in diags[0].message
 
 
 def test_an_unsubstituted_type_parameter_is_not_judged(tmp_path):
@@ -138,7 +199,7 @@ def test_an_unsubstituted_type_parameter_is_not_judged(tmp_path):
             ПриИзменении: ПолеИзменено"""
     diags = _lint(
         tmp_path, component,
-        "@Обработчик\nметод ПолеИзменено(Источник: ПолеВвода<Строка>, "
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка>, "
         "Событие: СобытиеПриИзменении<Число>)\n;\n",
     )
 
@@ -159,7 +220,7 @@ _LABEL = """            Тип: Надпись
 def _label(tmp_path, event: str, params: str):
     return _lint(
         tmp_path, _LABEL.format(event=event),
-        f"@Обработчик\nметод Отметить({params})\n;\n",
+        f"метод Отметить({params})\n;\n",
     )
 
 
@@ -196,6 +257,34 @@ def test_a_narrowed_event_parameter_is_reported(tmp_path):
     assert "'СобытиеПриНажатии' – наследник 'СобытиеКомпонента'" in diags[0].message
 
 
+_BUTTON_DROP = """            Тип: Кнопка
+            Имя: Кнопка
+            ПриПеретаскивании: Перенос"""
+
+
+def _drop(tmp_path, params: str):
+    return _lint(tmp_path, _BUTTON_DROP, f"метод Перенос({params})\n;\n")
+
+
+def test_an_unrelated_event_type_is_reported(tmp_path):
+    """The drop event lists only the root among its bases, and the compiler agrees with the
+    catalog: a handler that takes the base component event for it does not compile."""
+    diags = _drop(tmp_path, "Источник: Компонент, Событие: СобытиеКомпонента")
+
+    assert len(diags) == 1
+    assert "Параметр 2" in diags[0].message
+    assert "'СобытиеКомпонента' не связан с 'СобытиеПриПеретаскивании'" in diags[0].message
+
+
+def test_the_root_takes_any_event(tmp_path):
+    assert _drop(tmp_path, "Источник: Компонент, Событие: Объект") == []
+
+
+def test_a_type_the_catalog_does_not_describe_is_not_judged(tmp_path):
+    """A project type has an ancestry the catalog cannot see: it is neither related nor not."""
+    assert _drop(tmp_path, "Источник: МояПанель, Событие: СобытиеПриПеретаскивании") == []
+
+
 def test_a_nullable_narrowed_source_is_reported_by_its_head(tmp_path):
     """The mark of nullability does not widen the label into a component."""
     diags = _label(tmp_path, "ПриНаведении", "Источник: Надпись?, Событие: СобытиеКомпонента")
@@ -213,10 +302,17 @@ Content:
     Type: Group
     Content:
         -
-            Type: Group
-            Name: Panel
-            OnHover: Highlight
+{component}
 """
+
+
+def _lint_en(tmp_path, component: str, module: str):
+    (tmp_path / "Form.yaml").write_text(_FORM_EN.format(component=component), encoding="utf-8")
+    (tmp_path / "Form.xbsl").write_text(module, encoding="utf-8")
+    i18n.set_lang("en")
+    return [
+        d for d in engine.run(discover([str(tmp_path)]), select={RULE}) if d.rule_id == RULE
+    ]
 
 
 def test_an_english_narrowed_source_is_reported_in_the_english_spelling(tmp_path):
@@ -224,16 +320,27 @@ def test_an_english_narrowed_source_is_reported_in_the_english_spelling(tmp_path
 
     The message spells the signature the way an English project writes it.
     """
-    (tmp_path / "Form.yaml").write_text(_FORM_EN, encoding="utf-8")
-    (tmp_path / "Form.xbsl").write_text(
-        "method Highlight(Source: Group, Event: ComponentEvent)\n;\n", encoding="utf-8",
+    diags = _lint_en(
+        tmp_path,
+        "            Type: Group\n            Name: Panel\n            OnHover: Highlight",
+        "method Highlight(Source: Group, Event: ComponentEvent)\n;\n",
     )
-    i18n.set_lang("en")
-
-    diags = [
-        d for d in engine.run(discover([str(tmp_path)]), select={RULE}) if d.rule_id == RULE
-    ]
 
     assert len(diags) == 1
     assert "OnHover(Source: Component, Event: ComponentEvent)" in diags[0].message
     assert "'Group' is a descendant of 'Component'" in diags[0].message
+
+
+def test_an_english_mismatch_names_the_event_the_component_and_the_type_in_english(tmp_path):
+    """The schema keeps the event, the component and the delegate in Russian, and an English
+    message printed them as they were: the reader of an English project met words their own
+    sources do not use."""
+    diags = _lint_en(
+        tmp_path,
+        "            Type: Checkbox\n            Name: Flag\n            OnChange: FlagChanged",
+        "method FlagChanged(Source: Checkbox, Event: OnChangeEvent<Boolean>)\n;\n",
+    )
+
+    assert len(diags) == 1
+    assert ("the 'OnChange' event of 'Checkbox' passes 'OnChangeEvent<Boolean?>'"
+            in diags[0].message)

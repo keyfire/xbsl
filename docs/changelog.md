@@ -41,6 +41,28 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`form/handler-signature` reports an event type unrelated to the signature.** The rule used
+  to skip such types: the drop and autocomplete events seemed to miss the base `ComponentEvent` in
+  the catalog. The compiler confirmed the catalog and refused such handlers. Project types the
+  catalog does not know are still not judged. ([#142](https://github.com/keyfire/xbsl/pull/142))
+- **`form/handler-signature` accepts a wider data type of the event.** A handler may take the
+  event data as the same type with `?`, as its ancestor or as `Object`, and the compiler accepts
+  that. The rule reported any difference in the argument and fired falsely on two third-party
+  libraries. The type of the source must still match exactly. ([#142](https://github.com/keyfire/xbsl/pull/142))
+- **`xbsl data-diff` names the generated types and the kinds with a manager that came or
+  went.** Member lists were compared only for the names both versions have, so a new generated
+  type never made it into the report. Such types and kinds are now listed apart, the way facets
+  are. ([#142](https://github.com/keyfire/xbsl/pull/142))
+- **The English message of `form/handler-signature` no longer prints Russian names.** When a
+  parameter type differed from the event signature, the message named the event, the component
+  and the expected type the way the interface schema stores them, in Russian. All three now come
+  in their English spelling, as in the message about a narrowed parameter. ([#142](https://github.com/keyfire/xbsl/pull/142))
+- **`yaml/col-width-needs-no-stretch` counts a width given by a binding.** The rule skipped
+  `Width: =...` on a table column, yet the stretch turns the number a binding yields into a share
+  just like a literal one. ([#142](https://github.com/keyfire/xbsl/pull/142))
+- **`xbsl extract` pairs a template title that has a NUL inside a word.** The `terms` step read
+  the help pages without the cleaning the `stdlib` step does, and such a title was left without a
+  pair. The data of the last two distributions comes out the same. ([#142](https://github.com/keyfire/xbsl/pull/142))
 - **Data extracted from a newer help keeps the Russian names of list row fields.** That help
   spells the fields of the list row of an automatic list form in English (`Code`, `Parent`,
   `SettingKey`), in the heading and in the signature alike. The extractor now takes the spelling

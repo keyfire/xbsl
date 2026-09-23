@@ -96,9 +96,11 @@ MESSAGES = {
     "datadiff.group.member-types": {"ru": "типы членов", "en": "member result types"},
     "datadiff.group.globals": {"ru": "глобальные имена", "en": "global names"},
     "datadiff.group.object-members": {"ru": "порождаемые члены объектов", "en": "generated object members"},
+    "datadiff.group.managers": {"ru": "виды с членами менеджера", "en": "kinds with manager members"},
     "datadiff.group.manager-members": {"ru": "члены менеджеров", "en": "manager members"},
     "datadiff.group.facets": {"ru": "фасеты", "en": "facets"},
     "datadiff.group.facet-members": {"ru": "члены фасетов", "en": "facet members"},
+    "datadiff.group.generated-types": {"ru": "порождаемые типы", "en": "generated types"},
     "datadiff.group.generated-members": {"ru": "члены порождаемых типов",
                                         "en": "members of generated types"},
     "datadiff.group.classes": {"ru": "классы", "en": "classes"},
@@ -372,12 +374,16 @@ def diff_stdlib(old: dict, new: dict) -> dict:
         "globals": _added_removed(old.get("globals"), new.get("globals")),
         "object_members": _diff_name_sets(
             old.get("object_members") or {}, new.get("object_members") or {}),
+        # A member list is compared for the names both versions have; a kind or a generated
+        # type that came or went is named apart, the way facets are.
+        "managers": _added_removed(old.get("manager_members"), new.get("manager_members")),
         "manager_members": _diff_member_lists(
             _as_member_lists(old.get("manager_members")),
             _as_member_lists(new.get("manager_members")),
         ),
         "facets": _added_removed(old_fm, new_fm),
         "facet_members": _diff_member_lists(old_fm, new_fm),
+        "generated_types": _added_removed(old.get("generated_members"), new.get("generated_members")),
         "generated_members": _diff_member_lists(
             old.get("generated_members") or {}, new.get("generated_members") or {}),
     })

@@ -514,3 +514,20 @@ def test_an_outright_majority_owner_still_wins_over_the_alphabet():
     assert _template_markdown_members(text, "AcmeRightName") == {
         "MethodTwo", "MethodThree", "MethodFour",
     }
+
+
+def test_a_title_with_a_control_character_inside_a_word_still_pairs(tmp_path):
+    """Pages of one build carry NUL characters inside words, the title among them: the pair is
+    read from the title without them, the way the stdlib step reads a page."""
+    import zipfile
+
+    from xbsl.extract import stdlib, terms
+
+    car = tmp_path / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    page = "<html><head><title>Пере\x00чень | Product</title></head><body></body></html>"
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr(stdlib.STD_BASE + "Tools/Listing_ru/index.html", page)
+
+    sections, _conflicts = terms.extract(tmp_path)
+
+    assert sections["types"].get("Перечень") == "Listing"

@@ -202,3 +202,22 @@ def test_a_member_that_really_went_away_is_still_a_removal():
     report = datadiff.diff_stdlib(old, new)
 
     assert report["members"]["Кнопка"] == {"properties": {"removed": ["Устаревшее"]}}
+
+
+def test_a_generated_type_or_a_manager_kind_that_came_or_went_is_named():
+    """A member list is compared for the names both versions have, so a generated type that
+    appeared (a new template page) or a kind that lost its manager page went unmentioned.
+    They are named apart, the way facets are."""
+    old = {
+        "generated_members": {"Вид.Объект": {"methods": ["Записать"]}},
+        "manager_members": {"Вид": {"methods": ["Найти"]}, "Старый": {"methods": ["Найти"]}},
+    }
+    new = {
+        "generated_members": {"Вид.Объект": {"methods": ["Записать", "Удалить"]},
+                              "Вид.Блокировки.Регистратор": {"properties": ["Регистратор"]}},
+        "manager_members": {"Вид": {"methods": ["Найти"]}},
+    }
+    diff = datadiff.diff_stdlib(old, new)
+    assert diff["generated_types"] == {"added": ["Вид.Блокировки.Регистратор"]}
+    assert diff["generated_members"] == {"Вид.Объект": {"methods": {"added": ["Удалить"]}}}
+    assert diff["managers"] == {"removed": ["Старый"]}

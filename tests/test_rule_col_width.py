@@ -70,19 +70,33 @@ def test_col_all_three_column_kinds_checked():
     assert sorted(x.line for x in d) == [12, 15, 18]
 
 
-def test_col_auto_binding_and_zero_widths_skipped():
+def test_col_auto_and_zero_widths_skipped():
     content = _form(
         "                -\n"
         "                    Тип: СтандартнаяКолонкаТаблицы\n"
         "                    Ширина: Авто\n"
         "                -\n"
         "                    Тип: СтандартнаяКолонкаТаблицы\n"
-        "                    Ширина: =Общее.ШиринаКолонки()\n"
-        "                -\n"
-        "                    Тип: СтандартнаяКолонкаТаблицы\n"
         "                    Ширина: 0\n"
     )
     assert _lint("Ф.yaml", content, select={RULE}) == []
+
+
+def test_col_binding_width_is_a_set_width():
+    # A binding yields a number at run time, and a stretching column turns it into a share
+    # just like a literal one; a block scalar is text, not a binding
+    content = _form(
+        "                -\n"
+        "                    Тип: СтандартнаяКолонкаТаблицы\n"
+        "                    Ширина: =Общее.ШиринаКолонки()\n"
+        "                -\n"
+        "                    Тип: СтандартнаяКолонкаТаблицы\n"
+        "                    Ширина: |\n"
+        "                        =Общее.ШиринаКолонки()\n"
+    )
+    d = _lint("Ф.yaml", content, select={RULE})
+    assert [x.line for x in d] == [12]
+    assert "=Общее.ШиринаКолонки()" in d[0].message
 
 
 def test_col_parameterized_type_head_is_stripped():

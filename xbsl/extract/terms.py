@@ -414,8 +414,8 @@ def manager_owners(
         page = f"{stdlib.TEMPLATE_BASE}{template}_ru/index.html"
         if page not in entries or template not in markdown:
             continue
-        props, methods, events = stdlib.page_members(
-            _distro.normalize_markup(car.read(page).decode("utf-8", "replace")), inherited=False)
+        # The reader of the stdlib step: control characters out, the markup brought to form.
+        props, methods, events = stdlib.page_members(stdlib._page(car, page), inherited=False)
         russian = props | methods | events
         english = _template_markdown_members(markdown[template], template)
         if not russian or not english:
@@ -633,6 +633,8 @@ def _query_scan(names: list[str]) -> tuple[dict[str, str], set[str]]:
 
 
 def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
+    from xbsl.extract import stdlib  # the page reader: stdlib imports this module in turn
+
     car = _distro.find_car(dist)
     types: dict[str, str] = {}
     facets: dict[str, str] = {}
@@ -655,7 +657,10 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
                 english = _path_name(entry)
                 if not english:
                     continue
-                title_match = _TITLE_RE.search(z.read(entry).decode("utf-8", "replace"))
+                # Control characters inside a word are cut out, as the stdlib step does; the
+                # markup is left as it is, the title pattern reads it that way.
+                title_match = _TITLE_RE.search(
+                    stdlib._RAW_JUNK_RE.sub("", z.read(entry).decode("utf-8", "replace")))
                 if not title_match:
                     continue
                 russian = title_match.group(1).split("|")[0].strip()
