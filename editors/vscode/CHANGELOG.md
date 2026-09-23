@@ -15,6 +15,7 @@
 
 - **The `code/type-unavailable` finding links to the documentation.** Its code in the
   Problems panel opens the page about where modules run.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
 
 ## 0.76.0
 
