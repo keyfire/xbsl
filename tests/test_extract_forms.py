@@ -119,6 +119,26 @@ def test_a_method_kept_only_for_compatibility_has_its_signatures_without_the_mar
     assert extractor.page_member_types(page) == {"ЗагрузитьПартию": "ДвоичныйОбъект"}
 
 
+def test_a_deprecation_mark_with_a_message_keeps_the_form():
+    """A newer mark carries a message quoting the signature to use, quotes unescaped, and the
+    form itself stands on the next line. Taking only the bare mark off left the message in front
+    of the name, and the form was dropped - with the member's signatures and type."""
+    mark = ('@<a href="/Std/Annotations/Deprecated_ru/">Устарело</a>(Сообщение = "Используйте '
+            '"Загрузить(ИмяФайла: Строка?, Байты: Байты): ДвоичныйОбъект"")\n')
+    page = _page(("Методы", (
+        _heading("ЗагрузитьИзБайт")
+        + '<div class="highlight"><pre class="highlight"><code>' + mark
+        + "ЗагрузитьИзБайт(Байты: Байты): ДвоичныйОбъект</code></pre></div>"
+    )))
+
+    assert extractor.page_member_signatures(page) == {
+        "ЗагрузитьИзБайт": ["ЗагрузитьИзБайт(Байты: Байты): ДвоичныйОбъект"]
+    }
+    assert extractor.page_member_forms(page) == {
+        "ЗагрузитьИзБайт": [{"signature": "ЗагрузитьИзБайт(Байты: Байты): ДвоичныйОбъект", "deprecated": True}]
+    }
+
+
 def test_type_parameters_of_a_method_come_from_the_forms_that_count():
     page = _page(("Методы", (
         _heading("Прочитать") + _signature("Прочитать<ТипОбъекта>(Источник: Строка, Тип: Тип<ТипОбъекта>): ТипОбъекта")

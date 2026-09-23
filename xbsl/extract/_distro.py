@@ -25,6 +25,27 @@ _VER_RE = re.compile(r"-(\d+\.\d+\.\d+(?:\+\d+)?)-")
 #: data is filed under does not carry it - see record_build.
 _BUILD_RE = re.compile(r"\+(\d+)")
 _root_override: Path | None = None
+#: An opening tag with its attributes; a quoted value may hold `>` and `=`.
+_TAG_OPEN_RE = re.compile(r"""<[A-Za-z][\w:-]*(?:"[^"]*"|'[^']*'|[^'">])*>""")
+#: One attribute value: a quoted value is taken whole, so an `=` inside it is never read
+#: as the start of another attribute.
+_ATTR_VALUE_RE = re.compile(r"""=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+)""")
+
+
+def _quote_tag(m: re.Match) -> str:
+    return _ATTR_VALUE_RE.sub(
+        lambda a: a.group(0) if a.group(1)[0] in "\"'" else f'="{a.group(1)}"', m.group(0))
+
+
+def quote_attributes(page: str) -> str:
+    """The page with every attribute value in double quotes.
+
+    A minified docs site leaves a value without spaces unquoted (`class=hash-link`,
+    `href=/docs/help/...`, `id=examples`), while the page parsers of the extractors match the
+    quoted form. A page is brought to that form once, on reading, and the parsers stay as they
+    are. A page that already quotes everything comes back unchanged.
+    """
+    return _TAG_OPEN_RE.sub(_quote_tag, page)
 
 
 def find_car(dist: Path) -> Path:

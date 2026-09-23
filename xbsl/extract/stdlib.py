@@ -349,8 +349,32 @@ def _form_rank(struck: bool, signature: str) -> int:
 CHECK_VALUE_USAGE_MARK = "@ПроверятьИспользованиеЗначения"
 
 
+def _after_arguments(text: str) -> str:
+    """The text after the argument list an annotation carries (`(Сообщение = "...")`), if any.
+
+    The message quotes the signature to use instead, with its parentheses and with the inner
+    quotes left unescaped, so the list ends at the parenthesis that balances the first one, and
+    quotes are not counted.
+    """
+    if not text.startswith("("):
+        return text
+    depth = 0
+    for i, c in enumerate(text):
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return text[i + 1:]
+    return text
+
+
 def _signature_marks(signature: str) -> tuple[set[str], str]:
-    """Leading documentation annotations and the bare signature they describe."""
+    """Leading documentation annotations and the bare signature they describe.
+
+    A mark may carry arguments (`@Устарело(Сообщение = "...")`), and the signature then starts
+    on the next line.
+    """
     marks: set[str] = set()
     text = signature.strip()
     while True:
@@ -359,7 +383,7 @@ def _signature_marks(signature: str) -> tuple[set[str], str]:
         if mark is None:
             return marks, text
         marks.add(mark)
-        text = text[len(mark):].strip()
+        text = _after_arguments(text[len(mark):]).strip()
 
 
 def _without_mark(signature: str) -> str:
@@ -1039,6 +1063,11 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
         slot.extend(sig for sig in sigs if sig not in slot)
 
 
+def _page(z: zipfile.ZipFile, entry: str) -> str:
+    """A docs page as text, attribute values quoted (see _distro.quote_attributes)."""
+    return _distro.quote_attributes(z.read(entry).decode("utf-8", "replace"))
+
+
 def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
     the global context with per-name availability, managers, facets, the members of the types a
@@ -1073,7 +1102,7 @@ def extract(dist: Path) -> tuple:
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
-            raw = z.read(n).decode("utf-8", "replace")
+            raw = _page(z, n)
             title = ""
             mt = _TITLE_RE.search(raw)
             if mt:
@@ -1184,7 +1213,7 @@ def extract(dist: Path) -> tuple:
                 # The template's own page (<Kind>Name_ru) is the kind's MANAGER: its methods
                 # (Записать, Заблокировать, НайтиПоКоду...) are available by bare name in
                 # the object's manager module.
-                raw = z.read(n).decode("utf-8", "replace")
+                raw = _page(z, n)
                 props, methods, events = page_members(raw)
                 if props or methods:
                     # A manager has no events; nothing is dropped silently - the pages of the
@@ -1198,7 +1227,7 @@ def extract(dist: Path) -> tuple:
                     manager_returns.setdefault(kind, {}).update(rets)
                 folds.extend((kind, member, spellings) for member, spellings in folded)
                 continue
-            raw = z.read(n).decode("utf-8", "replace")
+            raw = _page(z, n)
             mt = _TITLE_RE.search(raw)
             if not mt:
                 continue
