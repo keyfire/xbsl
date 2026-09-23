@@ -63,7 +63,8 @@ import { lspActive, lspRequest, lspRequestDetailed, lspServerGeneration } from "
 import { neighborColumnFor, revealContent } from "./reveal";
 import { cspMeta, inlineJson, makeNonce } from "./webviewShared";
 import {
-  codePointToUtf16Offset, renderDocMarkdown, utf16ToCodePointOffset,
+  codePointToUtf16Offset, cycleHeading, renderDocMarkdown, toggleInline, toggleLink,
+  toggleListItem, utf16ToCodePointOffset,
 } from "./docCommentCore";
 
 const VIEW_TYPE = "xbslProperties";
@@ -298,6 +299,10 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
     border-radius: 3px; cursor: pointer; opacity: .8; }
   .doc-tools button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
   .doc-tools button:disabled { opacity: .4; cursor: default; background: transparent; }
+  .doc-tools button.on { opacity: 1; background: var(--vscode-inputOption-activeBackground, rgba(128,128,128,.28));
+    border-color: var(--vscode-inputOption-activeBorder, transparent); color: var(--vscode-inputOption-activeForeground, inherit); }
+  .doc-modes { display: inline-flex; gap: 2px; margin-left: auto; }
+  .doc-hint { margin-left: 6px; opacity: .6; font-size: 13px; vertical-align: -2px; cursor: help; }
   .doc textarea { min-height: 100px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace); }
   .doc-preview { padding: 5px 7px; border: 1px solid var(--vscode-panel-border); border-radius: 3px;
     overflow-wrap: anywhere; }
@@ -324,6 +329,10 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
   const vsapi = acquireVsCodeApi();
   const L = ${L};
   const renderDocMarkdown = ${renderDocMarkdown.toString()};
+  const toggleInline = ${toggleInline.toString()};
+  const cycleHeading = ${cycleHeading.toString()};
+  const toggleListItem = ${toggleListItem.toString()};
+  const toggleLink = ${toggleLink.toString()};
   const state = Object.assign({ search: "", open: { set: true, events: true, all: false } }, vsapi.getState() || {});
   if (!state.open) { state.open = { set: true, events: true, all: false }; }
   let model = null;
@@ -368,12 +377,17 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
       docDraft = info.text; docOriginal = info.text;
     }
     const box = el("section", "doc");
-    box.appendChild(el("div", "doc-title", L.docComment));
+    // How the comment is written is told by an info icon next to the title: a tooltip on the
+    // field itself would cover the text being typed.
+    const title = el("div", "doc-title", L.docComment);
+    const hint = el("i", "codicon codicon-info doc-hint");
+    hint.title = L.docHint;
+    title.appendChild(hint);
+    box.appendChild(title);
     const tools = el("div", "doc-tools");
     const input = document.createElement("textarea");
     input.value = docDraft;
     input.placeholder = L.docPlaceholder;
-    input.title = L.docHint;
     input.disabled = !!model.readonly;
     const preview = el("div", "doc-preview");
     // The comment is written like any other field of the panel: when the field loses focus or
@@ -405,41 +419,52 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
       button.addEventListener("mousedown", (e) => e.preventDefault());
       return button;
     };
-    const previewButton = iconButton("open-preview", L.docPreview);
+    // Edit and Preview are a pair of toggles at the end of the toolbar; the current mode is
+    // the pressed one.
     const editButton = iconButton("edit", L.docEdit);
+    const previewButton = iconButton("open-preview", L.docPreview);
+    const markMode = (previewing) => {
+      previewButton.classList.toggle("on", previewing);
+      editButton.classList.toggle("on", !previewing);
+      previewButton.setAttribute("aria-pressed", String(previewing));
+      editButton.setAttribute("aria-pressed", String(!previewing));
+    };
     const showPreview = () => {
       commit();
       preview.innerHTML = renderDocMarkdown(input.value);
       preview.hidden = false; input.hidden = true;
-      previewButton.hidden = true; editButton.hidden = false;
+      markMode(true);
     };
     const showEdit = () => {
       preview.hidden = true; input.hidden = false;
-      editButton.hidden = true; previewButton.hidden = false;
+      markMode(false);
       input.focus();
     };
-    const action = (icon, label, before, after, sample, linePrefix) => {
+    // A second press of a button takes its markup off; the heading goes one level up per
+    // press and loses the heading after the last level (see docCommentCore.ts).
+    const action = (icon, label, change) => {
       const button = iconButton(icon, label);
       button.disabled = !!model.readonly;
       button.addEventListener("click", () => {
-        const start = input.selectionStart, end = input.selectionEnd;
-        const selected = input.value.slice(start, end) || sample;
-        const insert = linePrefix ? before + selected : before + selected + after;
-        input.setRangeText(insert, start, end, "select");
+        const edit = change(input.value, input.selectionStart, input.selectionEnd);
+        input.value = edit.text;
         docDraft = input.value; showEdit();
+        input.setSelectionRange(edit.start, edit.end);
       });
       tools.appendChild(button);
     };
-    action("bold", L.docBold, "**", "**", "text", false);
-    action("italic", L.docItalic, "*", "*", "text", false);
-    action("code", L.docCode, String.fromCharCode(96), String.fromCharCode(96), "code", false);
-    action("text-size", L.docHeading, "# ", "", "Heading", true);
-    action("list-unordered", L.docList, "- ", "", "Item", true);
-    action("link", L.docLink, "[", "](https://example.com)", "link", false);
+    action("bold", L.docBold, (t, s, e) => toggleInline(t, s, e, "**", "text"));
+    action("italic", L.docItalic, (t, s, e) => toggleInline(t, s, e, "*", "text"));
+    action("code", L.docCode, (t, s, e) => toggleInline(t, s, e, String.fromCharCode(96), "code"));
+    action("text-size", L.docHeading, (t, s, e) => cycleHeading(t, s, e, "Heading"));
+    action("list-unordered", L.docList, (t, s, e) => toggleListItem(t, s, e, "Item"));
+    action("link", L.docLink, (t, s, e) => toggleLink(t, s, e, "link"));
     previewButton.addEventListener("click", showPreview);
     editButton.addEventListener("click", showEdit);
-    tools.appendChild(previewButton); tools.appendChild(editButton);
-    editButton.hidden = true;
+    const modes = el("span", "doc-modes");
+    modes.appendChild(editButton); modes.appendChild(previewButton);
+    tools.appendChild(modes);
+    markMode(false);
     box.appendChild(tools);
     box.appendChild(input); box.appendChild(preview);
     preview.hidden = true;

@@ -28,10 +28,11 @@
 - **Problems in the metadata tree show as icons.** A row says `⊗ 2 ⚠ 1` instead of words, and the
   tooltip shows the same icons in the theme's error and warning colors. In the tree by kinds a
   category now adds up the problems of its objects and is highlighted like a subsystem. ([#136](https://github.com/keyfire/xbsl/pull/136))
-- **The documentation comment editor is compact and saves on its own.** The toolbar shows icons
-  with their names in tooltips. The comment is written to the yaml when the field loses focus or
-  on Ctrl+Enter, like the other fields of the inspector, and Esc undoes the edit. The Save button
-  is gone. ([#136](https://github.com/keyfire/xbsl/pull/136))
+- **The documentation comment editor is compact and saves on its own.** Its buttons are icons,
+  and a second press takes the markup off; the heading goes one level up per press, and after the
+  sixth the line is plain again. Edit and preview are toggles that show the current mode. The
+  comment is written when the field loses focus or on Ctrl+Enter, Esc undoes the edit, and the
+  Save button is gone. ([#136](https://github.com/keyfire/xbsl/pull/136))
 
 ### Fixed
 
