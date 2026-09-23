@@ -7,6 +7,12 @@ probe projects - the positions it judges (a function type is not one of them), h
 compare, the place it reports (a repeat at the EARLIER member, a covered member where it stands)
 and that the unions the fix writes pass without a warning.
 
+The variance of the generic contracts was checked against the same language server on 23.09.2026:
+a mutable contract is covariant like a read-only one, and the IDE warns about `Массив<Строка>`
+in `ИзменяемыйМассив<Объект>|Массив<Строка>`. The unions left alone below are the ones the IDE
+does not warn about with any catalog, and the covered ones are judged against a catalog of their
+own, so the tests do not depend on whether the installed data carries the variance.
+
 The rule parses the module and reads the platform catalog, so the tests need the Element data.
 """
 
@@ -145,7 +151,9 @@ def test_the_english_module_names_the_empty_value_in_english():
     "Массив<Строка>|Массив<Число>",
     "Массив<Строка?>|ЧитаемыйМассив<Строка>",
     "Массив<Строка>|Массив<Объект>",
-    "ИзменяемыйМассив<Объект>|Массив<Строка>",
+    "ИзменяемыйМассив<Строка>|Массив<Объект>",
+    "Массив<Объект>|ИзменяемыйМассив<Строка>",
+    "Коллекция<Объект>|Массив<Строка>",
     "(Строка|Строка)->Число",
     "()->Строка|Строка",
     "()->Массив<Строка|Строка>",
@@ -157,7 +165,7 @@ def test_unions_that_add_something_with_each_member_are_not_reported(written):
 def _variance_catalog():
     return (
         {
-            "Массив": frozenset({"ЧитаемыйМассив", "Обходимое", "Объект"}),
+            "Массив": frozenset({"ИзменяемыйМассив", "ЧитаемыйМассив", "Обходимое", "Объект"}),
             "ЧитаемыйМассив": frozenset({"Обходимое", "Объект"}),
             "Соответствие": frozenset({"ЧитаемоеСоответствие", "Обходимое", "Объект"}),
             "ЧитаемоеСоответствие": frozenset({"Обходимое", "Объект"}),
@@ -165,6 +173,7 @@ def _variance_catalog():
         },
         {
             "Массив": ("ТипЭлемента",),
+            "ИзменяемыйМассив": ("ТипЭлемента",),
             "ЧитаемыйМассив": ("ТипЭлемента",),
             "Обходимое": ("ТипЭлемента",),
             "Соответствие": ("ТипКлюча", "ТипЗначения"),
@@ -172,6 +181,7 @@ def _variance_catalog():
             "КлючИЗначение": ("ТипКлюча", "ТипЗначения"),
         },
         {
+            "ИзменяемыйМассив": ("out",),
             "ЧитаемыйМассив": ("out",),
             "Обходимое": ("out",),
             "ЧитаемоеСоответствие": ("out", "out"),
@@ -179,6 +189,7 @@ def _variance_catalog():
         },
         {
             "Массив": {
+                "ИзменяемыйМассив": ("ТипЭлемента",),
                 "ЧитаемыйМассив": ("ТипЭлемента",),
             },
             "ЧитаемыйМассив": {
@@ -197,6 +208,8 @@ def _variance_catalog():
 @pytest.mark.parametrize(("written", "rewritten"), [
     ("Массив<Строка>|ЧитаемыйМассив<Объект>", "ЧитаемыйМассив<Объект>"),
     ("Обходимое<Объект>|Массив<Строка>", "Обходимое<Объект>"),
+    ("ИзменяемыйМассив<Объект>|Массив<Строка>", "ИзменяемыйМассив<Объект>"),
+    ("Массив<Строка>|ИзменяемыйМассив<Объект>", "ИзменяемыйМассив<Объект>"),
     ("Соответствие<Строка, Число>|ЧитаемоеСоответствие<Объект, Объект>",
      "ЧитаемоеСоответствие<Объект, Объект>"),
     ("Соответствие<Строка, Число>|Обходимое<КлючИЗначение<Объект, Объект>>",

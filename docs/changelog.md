@@ -37,6 +37,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
+  contract is covariant like a read-only one: the IDE warns about `Array<String>` in
+  `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`
+  keep their parameters invariant. The rule description and one test said otherwise, and both now
+  follow the IDE. ([#134](https://github.com/keyfire/xbsl/pull/134))
 - **`self-update --version X` installs a release the simple index does not list yet.** After
   0.116.0 came out, the index kept serving the previous release for more than half an hour, and
   the command answered that the version did not exist, although its PyPI page already listed the
