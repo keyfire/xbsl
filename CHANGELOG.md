@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-23 – 0.115.0, 0.116.0, 0.117.0
 
 ### Added
 
@@ -33,24 +33,6 @@ entry either - say what the behaviour was, not which class name was compared.
   columns after translation. Such a line now breaks where the style guide breaks an expression:
   after a comma or the opening bracket of a list, or before an operator.
   ([#133](https://github.com/keyfire/xbsl/pull/133))
-
-### Fixed
-
-- **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
-  contract is covariant like a read-only one: the IDE warns about `Array<String>` in
-  `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`
-  keep their parameters invariant. The rule description and one test said otherwise, and both now
-  follow the IDE. ([#134](https://github.com/keyfire/xbsl/pull/134))
-- **`self-update --version X` installs a release the simple index does not list yet.** After
-  0.116.0 came out, the index kept serving the previous release for more than half an hour, and
-  the command answered that the version did not exist, although its PyPI page already listed the
-  files. A version named explicitly and missing from the index is now looked up on its own page.
-  ([#133](https://github.com/keyfire/xbsl/pull/133))
-
-## 2026-09-23 – 0.115.0, 0.116.0
-
-### Added
-
 - **`code/deprecated-project` finds uses of project declarations marked deprecated.** A method,
   property, constructor, parameter or enumeration value with `@Deprecated` is reported where it
   is used and the target is certain, as the platform IDE warns. The parser now keeps the
@@ -91,6 +73,16 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
+  contract is covariant like a read-only one: the IDE warns about `Array<String>` in
+  `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`
+  keep their parameters invariant. The rule description and one test said otherwise, and both now
+  follow the IDE. ([#134](https://github.com/keyfire/xbsl/pull/134))
+- **`self-update --version X` installs a release the simple index does not list yet.** After
+  0.116.0 came out, the index kept serving the previous release for more than half an hour, and
+  the command answered that the version did not exist, although its PyPI page already listed the
+  files. A version named explicitly and missing from the index is now looked up on its own page.
+  ([#133](https://github.com/keyfire/xbsl/pull/133))
 - **`form-edit wrap` keeps a list where the slot is declared as an array.** Wrapping a single
   `Picture` in a `Group` wrote the content as one mapping, and the server rejected the form. The
   slot type from the UI schema now decides how the content is written.
