@@ -194,6 +194,11 @@ _LABEL_HOVER_RU = _FORM_RU + "    Содержимое:\n        Тип: Над�
 _LABEL_HOVER_EN = _FORM_EN + "    Content:\n        Type: Label\n        Name: Mark\n        OnHover: Hover\n"
 _LABEL_HOVER_TOKENS = {**_FORM_TOKENS, "Отметка": "Mark", "Наведение": "Hover", "Источник": "Source",
                        "Событие": "Event"}
+#: A button whose drop event names a handler - the event lists only the root among its bases.
+_BUTTON_DROP_RU = _FORM_RU + "    Содержимое:\n        Тип: Кнопка\n        Имя: Приемник\n        ПриПеретаскивании: Перенос\n"
+_BUTTON_DROP_EN = _FORM_EN + "    Content:\n        Type: Button\n        Name: Receiver\n        OnDrop: Drop\n"
+_BUTTON_DROP_TOKENS = {**_FORM_TOKENS, "Приемник": "Receiver", "Перенос": "Drop", "Источник": "Source",
+                       "Событие": "Event"}
 #: A number attribute of the catalog - a regular attribute, judged by the keys of its own class.
 _NUMBER_ATTRIBUTE_RU = """\
 Реквизиты:
@@ -2568,6 +2573,21 @@ SEEDS: list[Seed] = [
                                     "Event: OnChangeEvent<String>)\n;\n",
         },
         tokens=_INPUT_TOKENS,
+    ),
+    Seed(
+        rule="form/handler-signature",
+        expect=FINDING,
+        note="an event type the catalog does not relate to the delegate's is refused",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_DROP_RU,
+            "ФормаЗаявки.xbsl": "метод Перенос(Источник: Компонент, "
+                                "Событие: СобытиеКомпонента)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_DROP_EN,
+            "ApplicationForm.xbsl": "method Drop(Source: Component, Event: ComponentEvent)\n;\n",
+        },
+        tokens=_BUTTON_DROP_TOKENS,
     ),
     Seed(
         rule="form/handler-signature",
