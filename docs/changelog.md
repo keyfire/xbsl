@@ -29,6 +29,12 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`code/resource-replace-absent` and `code/resource-label-unfilled` check the labels of resource
+  templates.** A module that reads a css, html or svg file and fills its labels with `Replace` is
+  followed to the file itself: a replacement of a string the file lacks and a label no replacement
+  fills are reported. On a live project three stylesheets lost their styles this way when their
+  labels were renamed in the files and not in the code. Both rules are off by default.
+  ([#135](https://github.com/keyfire/xbsl/pull/135))
 - **The translator wraps a line of code that grew past the limit.** English names are longer than
   Russian ones, and on a project of about four hundred modules 26 lines of code ran past 120
   columns after translation. Such a line now breaks where the style guide breaks an expression:

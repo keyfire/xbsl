@@ -45,6 +45,7 @@ from . import (  # noqa: F401
     readonly_targets,
     ref_fields,
     repetitions,
+    resource_labels,
     resources,
     return_mismatch,
     statement_no_effect,

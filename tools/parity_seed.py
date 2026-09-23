@@ -1993,6 +1993,23 @@ _DEPRECATED_TOKENS = {"Задачи": "Tasks", "Старое": "Old", "Проб�
                       "Предел": "Limit", "Шаги": "Steps", "Черновик": "Draft", "Готово": "Done",
                       "Шаг": "Step"}
 
+_LABELS_CSS = ".card { color: {{COLOR}}; width: {{SIZE}}; }\n"
+_LABELS_XBSL_RU = (
+    "метод Карточка(): Строка\n"
+    "    возврат Ресурс{card.css}.ОткрытьПотокЧтения().ПрочитатьКакСтроку()"
+    ".Заменить(\"{{COLOR}}\", \"red\")%s\n"
+    ";\n"
+)
+_LABELS_TOKENS = {"Проба": "Probe", "Основное": "Main", "Оформление": "Appearance",
+                  "Карточка": "Card"}
+
+
+def _labels_files(more: str) -> dict[str, str]:
+    """A project with one stylesheet and one module that fills its labels by Replace."""
+    return {"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/card.css": _LABELS_CSS,
+            "Основное/Оформление.xbsl": _LABELS_XBSL_RU % more}
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -6715,6 +6732,35 @@ SEEDS: list[Seed] = [
         files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Задачи.yaml": _TASKS_YAML_RU,
                "Основное/Задачи.xbsl": "@Устарело\nконст Предел = 10\n\nметод Проба(Предел: Число): Число\n    возврат Предел\n;\n"},
         tokens=_DEPRECATED_TOKENS,
+    ),
+    # --- labels of a resource template against the Replace chains that fill them ---------
+    Seed(
+        rule="code/resource-replace-absent",
+        expect=FINDING,
+        note="a Replace of a label the stylesheet does not have",
+        files=_labels_files('.Заменить("{{WIDTH}}", "1px")'),
+        tokens=_LABELS_TOKENS,
+    ),
+    Seed(
+        rule="code/resource-replace-absent",
+        expect=CLEAN,
+        note="every Replace finds its label in the stylesheet",
+        files=_labels_files('.Заменить("{{SIZE}}", "1px")'),
+        tokens=_LABELS_TOKENS,
+    ),
+    Seed(
+        rule="code/resource-label-unfilled",
+        expect=FINDING,
+        note="a complete chain leaves a label of the stylesheet in place",
+        files=_labels_files(""),
+        tokens=_LABELS_TOKENS,
+    ),
+    Seed(
+        rule="code/resource-label-unfilled",
+        expect=CLEAN,
+        note="the chain fills every label of the stylesheet",
+        files=_labels_files('.Заменить("{{SIZE}}", "1px")'),
+        tokens=_LABELS_TOKENS,
     ),
 ]
 

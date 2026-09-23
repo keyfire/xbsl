@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 248.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 250.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -429,6 +429,8 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Квалифицированное имя своего проекта в значении yaml ведёт в пространство имён, где элемента с таким именем нет: компилятор отвечает "Неизвестный тип" [подробнее](#d-yaml-wrong-namespace) [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `code/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | То же в модуле и запросе: имя своего проекта ведёт в пространство имён, где его элемента нет, и компилятор отвечает "Неизвестный тип" [подробнее](#d-code-wrong-namespace) [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `code/package-resources-missing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | `ПакетРесурсов.Текущий()` в модуле пакета или корня подсистемы, у которых нет своего каталога `Ресурсы`: ни один файл не находится, и ломается это только при выполнении [подробнее](#d-code-package-resources-missing) [доки](https://1cmycloud.com/docs/help/topics/resource-in-project/) |
+| `code/resource-replace-absent` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Замена строки, которой нет в тексте файла ресурса вне комментариев: замена ничего не меняет, метку переименовали в файле или в коде [подробнее](#d-code-resource-replace-absent) |
+| `code/resource-label-unfilled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Метка файла ресурса, которую полная цепочка замен оставляет на месте: вместо значения на страницу попадает сама метка [подробнее](#d-code-resource-label-unfilled) |
 | `yaml/missing-subsystem-usage` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Элементы и модули подсистемы импортируют другую подсистему, а в описании своей её нет в блоке `Использование`: применение проекта падает [подробнее](#d-yaml-missing-subsystem-usage) [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/computed-binding-assigned` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Каждый экземпляр компонента связывает свойство вычисляемым выражением, а компонент присваивает это свойство в своём модуле: на присваивании платформа падает [подробнее](#d-yaml-computed-binding-assigned) |
 | `yaml/localization-missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Неквалифицированная ссылка `$Словарь.Ключ`, чей словарь лежит в пространстве имён, которого нет в секции `Импорт` этого yaml: применение отвергает узел [подробнее](#d-yaml-localization-missing-import) [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
@@ -667,6 +669,24 @@ yaml, строк и комментариев, а словарь перевода
 стоять оно может в позиции типа, в вызове или таблицей запроса. О таблице компилятор отвечает, что
 она не найдена. Строка импорта и ключ литерала `Ресурс{...}` не читаются. Автоисправление заменяет
 пространство имён, если элемент лежит в одном месте.
+
+<a id="d-code-resource-replace-absent"></a>**`code/resource-replace-absent`.** Выглядит
+это как `Ресурс{card.css}.ОткрытьПотокЧтения().ПрочитатьКакСтроку().Заменить("{{SIZE}}", Размер)`,
+когда в файле нет `{{SIZE}}`. Правило ведёт текст одного файла ресурса по цепочке вызовов
+`Заменить`: через локальные значения, обёртки над чтением (по пути, по пути внутри папки или по
+параметру типа `Ресурс`), текстовые помощники и соответствия, которые заполняются по литеральному
+списку путей, в том числе через параметры работы клиента. Каждый шаг применяется к файлу, у
+которого стёрты комментарии. Сообщение говорит, если строка есть только в комментарии файла или её
+уже заменил предыдущий шаг цепочки. Помощник, который служит нескольким файлам, за один из них не
+отвечает. Вычисляемый путь, вычисляемая искомая строка и выбор между двумя файлами не судятся.
+
+<a id="d-code-resource-label-unfilled"></a>**`code/resource-label-unfilled`.** Метка – это слово
+между разделителями, которые цепочка использует в своих строках: `{{A}}` и `{{B}}` дают `{{ИМЯ}}`.
+Метка судится, когда цепочка полная, то есть дальше ничего не заменяет ни вызывающий метод, ни
+вызываемый, ни переменная. Часть файла (`Подстрока`, обёртка, которая оставляет внутреннюю часть) и
+значение, которое другая ветвь берёт из другого источника, не судятся. Находка стоит там, где текст
+выходит из цепочки. Если та же цепочка заменяет строку, которой в файле нет, об этом говорят оба
+сообщения: так выглядит переименованная метка.
 
 <a id="d-code-package-resources-missing"></a>**`code/package-resources-missing`.** Метод отдаёт
 ресурсы только своего пространства имён, поэтому у пакета не находятся даже файлы его подсистемы,
