@@ -183,6 +183,7 @@ def _kind(text: str) -> str:
 def _record(entry: str, raw: str, origin: str) -> dict | None:
     """A structured page record, or None if there is no content block."""
     raw = _CTRL_RE.sub("", raw)  # control characters corrupt the text, the index and titles
+    raw = _distro.normalize_markup(raw)  # the parsers below expect unminified markup
     html, text = _clean(raw)
     if not html:
         return None
@@ -253,18 +254,33 @@ def _balanced_array(raw: str, start: int) -> str:
     return raw[start:]
 
 
+#: A JavaScript `\xHH` escape that is not itself the tail of an escaped backslash.
+_JS_HEX_ESCAPE_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\x([0-9A-Fa-f]{2})")
+#: `\'` - a quote escaped for a JavaScript string in single quotes.
+_JS_QUOTE_ESCAPE_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\'")
+
+
+def _json_escapes(text: str) -> str:
+    """JavaScript escapes JSON does not accept, in its spelling: `\\xab` -> `\\u00ab`, `\\'` -> `'`."""
+    text = _JS_HEX_ESCAPE_RE.sub(lambda m: m.group(1) + "\\u00" + m.group(2), text)
+    return _JS_QUOTE_ESCAPE_RE.sub(lambda m: m.group(1) + "'", text)
+
+
 def _sidebar_items(js: str, key: str) -> list | None:
     """The parsed sidebar items array by its key, or None.
 
     The bundle sometimes over-escapes quotes in a label (`\\"` instead of `\"`, e.g. in
     'Ключевое слово "ничто"') - valid JSON breaks on that, so on error a repair is attempted.
+    A newer bundle also writes some characters as JavaScript escapes JSON does not know
+    (`\xab` for a guillemet, `\'`), and the last repair turns them into the JSON spelling.
     """
     anchor = f'"{key}":['
     i = js.find(anchor)
     if i < 0:
         return None
     arr = _balanced_array(js, i + len(anchor) - 1)  # from the '[' position
-    for candidate in (arr, arr.replace('\\\\"', '\\"')):
+    repaired = arr.replace('\\\\"', '\\"')
+    for candidate in (arr, repaired, _json_escapes(repaired)):
         try:
             return json.loads(candidate)
         except json.JSONDecodeError:

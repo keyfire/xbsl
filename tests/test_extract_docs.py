@@ -1,5 +1,6 @@
 """Page and sidebar parsing in xbsl/extract/docs.py - on mini fixtures (no distribution)."""
 
+from xbsl.extract import _distro
 from xbsl.extract import docs as ex
 
 ORIGIN = "https://1cmycloud.com"
@@ -95,6 +96,50 @@ def test_no_content_block_returns_none():
     assert ex._record("x/index.html", "<html><body>нет разметки</body></html>", ORIGIN) is None
 
 
+# The same page as a minified docs site writes it: a value without spaces goes unquoted
+# (`class=hash-link`, `href=/docs/help/...`, `id=r`).
+PAGE_MINIFIED = (
+    "<html><body><article>"
+    "<nav class=theme-doc-breadcrumbs><span itemprop=name>Мас\x00сив</span></nav>"
+    '<div class="theme-doc-markdown markdown"><div class=row><div class="col col--12 markdown">'
+    "<header><h1>Мас\x00сив</h1></header>"
+    "<p><code>Стд::Коллекции::Массив</code>  <code>Доступность: КлиентИСервер</code></p>"
+    "<p>См. <a href=/docs/help/stdlib/element/xbsl/Std/Object_ru/>Объект</a> и "
+    "<a href=https://example.org/x>внешнее</a>.</p>"
+    '<h2 class="anchor anchorTargetStickyNavbar" id=r>Раздел'
+    "<a href=#r class=hash-link title=ссылка translate=no>​</a></h2>"
+    '<div class="language-xbsl codeBlockContainer"><div class=codeBlockContent>'
+    "<pre class=prism-code><code class=codeBlockLines>"
+    '<span class=token-line><span class="token xbsl-keyword">знч</span>'
+    '<span class="token plain"> Х = 1</span><br></span>'
+    '<span class=token-line><span class="token plain">  Х = 2</span><br></span></code></pre></div></div>'
+    "<p><img decoding=async alt=s src=/docs/help/assets/images/a.png width=10 class=img_x></p>"
+    "</div></div></div>"
+    "<footer class=theme-doc-footer>низ страницы</footer>"
+    "</article></body></html>"
+)
+
+
+def test_minified_page_reads_as_the_quoted_one():
+    assert ex._record(ENTRY, PAGE_MINIFIED, ORIGIN) == _rec()
+
+
+def test_normalize_markup_keeps_quoted_values_whole():
+    # `url=` inside a quoted value is not an attribute; `>` inside quotes does not end the tag
+    assert (_distro.normalize_markup('<meta http-equiv=refresh content="0; url=/docs/help/x/">')
+            == '<meta http-equiv="refresh" content="0; url=/docs/help/x/">')
+    assert _distro.normalize_markup("<div data-x='a>b' id=y>т=1</div>") == "<div data-x='a>b' id=\"y\">т=1</div>"
+    assert _distro.normalize_markup(PAGE) == PAGE
+
+
+def test_normalize_markup_escapes_a_bare_angle_bracket_in_text():
+    # a minified page writes `>` in text as it is; a script keeps its own
+    assert (_distro.normalize_markup("<p><code>Стд::Коллекции::Массив&lt;ТипЭлемента></code></p>")
+            == "<p><code>Стд::Коллекции::Массив&lt;ТипЭлемента&gt;</code></p>")
+    script = "<script>if(a>b){x='<a href=y>'}</script><!-- a>b -->"
+    assert _distro.normalize_markup(script) == script
+
+
 # --- sidebar parsing ------------------------------------------------------------------
 
 # A mini bundle: two sidebars; the second has a label with extra quote escaping (as in the real
@@ -118,6 +163,14 @@ def test_sidebar_double_escaped_quote_repaired():
     std = ex._sidebar_items(JS, "xbslStdlib")   # contains the label with \\"ничто\\"
     assert std is not None and len(std) == 1
     assert "ничто" in std[0]["label"]
+
+
+def test_sidebar_javascript_escapes_repaired():
+    # a newer bundle writes a guillemet as `\xab` and a quote as `\'` - not JSON escapes
+    js = ('x={"developer":[{"type":"link","href":"/docs/help/topics/overview",'
+          '"label":"\\xab1\\u0421:\\u042d\\u043b\\u0435\\u043c\\u0435\\u043d\\u0442\\xbb, \\\\x \\\'ok\\\'"}]}')
+    dev = ex._sidebar_items(js, "developer")
+    assert dev is not None and dev[0]["label"] == "\u00ab1С:Элемент\u00bb, \\x 'ok'"
 
 
 def test_collect_hrefs_skips_template_ns():

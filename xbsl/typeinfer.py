@@ -934,7 +934,8 @@ def _has_default(param: str) -> bool:
 #: treat them as never empty. Every property and argument-less method the catalog calls plain was
 #: put through the editor behind `??` (about 8,700 members), and with the struck forms of older
 #: versions no longer read as current this one is the only disagreement left: no reading of the data
-#: explains it. Pairs are (the declaring type, the member) in the catalog's spelling.
+#: explains it. A newer distribution prints the property nullable, and an entry acts only where the
+#: data calls the property plain. Pairs are (the declaring type, the member) in the catalog's spelling.
 _DISPUTED_PROPERTIES = frozenset({("ОбсуждениеВзаимодействия", "ИдВнешнегоОбсуждения")})
 
 

@@ -4,6 +4,7 @@ No network or distribution needed - the pages are synthetic, modeled on the real
 Docusaurus markup.
 """
 
+from xbsl.extract import _distro
 from xbsl.extract import stdlib as _MODULE
 
 _COMPONENT_PAGE = (
@@ -610,6 +611,14 @@ def test_the_type_parameters_are_read_from_the_page_header():
     page = "<article><h1>Соответствие</h1>Стд::Коллекции::Соответствие&lt;ТипКлюча, ТипЗначения&gt;</article>"
 
     assert _MODULE.page_type_params(page) == ["ТипКлюча", "ТипЗначения"]
+
+
+def test_the_type_parameters_of_a_minified_header_are_read_as_well():
+    """A minified page leaves the closing bracket of the list unescaped; the extractor reads a
+    page through the markup normalization, and the list comes out the same."""
+    page = "<article><h1>Массив</h1><p><code>Стд::Коллекции::Массив&lt;ТипЭлемента></code></p></article>"
+
+    assert _MODULE.page_type_params(_distro.normalize_markup(page)) == ["ТипЭлемента"]
 
 
 def test_a_plain_type_declares_no_parameters():

@@ -193,11 +193,6 @@ def _template_kinds(car: zipfile.ZipFile) -> tuple[dict[str, str], list[str]]:
     return kinds, unmapped
 
 
-def _read_page(archive: zipfile.ZipFile, name: str) -> str:
-    """A documentation page of the archive without control characters inside its words."""
-    return _RAW_JUNK_RE.sub("", archive.read(name).decode("utf-8", "replace"))
-
-
 def _plain_text(html: str) -> str:
     """Text without tags, Docusaurus anchor characters and control characters.
 
@@ -206,6 +201,20 @@ def _plain_text(html: str) -> str:
     goes unrecognized, the member name fails validation, and such types' members are lost silently.
     """
     return _JUNK_RE.sub("", _TAG_RE.sub("", html)).strip()
+
+
+#: What is left of the layout of a signature a page prints over several lines (the name and
+#: `(`, a parameter per indented line, `): Тип`) once _plain_text has taken the line breaks.
+_SIG_INDENT_RE = re.compile(r"\s{2,}")
+_SIG_AFTER_OPEN_RE = re.compile(r"([(\[]) ")
+_SIG_BEFORE_CLOSE_RE = re.compile(r" ([)\]])")
+
+
+def _one_line(signature: str) -> str:
+    """A signature printed over several lines, in the one-line form the other pages use."""
+    text = _SIG_INDENT_RE.sub(" ", signature)
+    text = _SIG_AFTER_OPEN_RE.sub(r"\1", text)
+    return _SIG_BEFORE_CLOSE_RE.sub(r"\1", text)
 
 
 def component_props(entry: str, raw: str) -> tuple[str, set[str]] | None:
@@ -359,8 +368,32 @@ def _form_rank(struck: bool, signature: str) -> int:
 CHECK_VALUE_USAGE_MARK = "@ПроверятьИспользованиеЗначения"
 
 
+def _after_arguments(text: str) -> str:
+    """The text after the argument list an annotation carries (`(Сообщение = "...")`), if any.
+
+    The message quotes the signature to use instead, with its parentheses and with the inner
+    quotes left unescaped, so the list ends at the parenthesis that balances the first one, and
+    quotes are not counted.
+    """
+    if not text.startswith("("):
+        return text
+    depth = 0
+    for i, c in enumerate(text):
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return text[i + 1:]
+    return text
+
+
 def _signature_marks(signature: str) -> tuple[set[str], str]:
-    """Leading documentation annotations and the bare signature they describe."""
+    """Leading documentation annotations and the bare signature they describe.
+
+    A mark may carry arguments (`@Устарело(Сообщение = "...")`), and the signature then starts
+    on the next line.
+    """
     marks: set[str] = set()
     text = signature.strip()
     while True:
@@ -369,7 +402,7 @@ def _signature_marks(signature: str) -> tuple[set[str], str]:
         if mark is None:
             return marks, text
         marks.add(mark)
-        text = text[len(mark):].strip()
+        text = _after_arguments(text[len(mark):]).strip()
 
 
 def _without_mark(signature: str) -> str:
@@ -614,7 +647,7 @@ def page_constructors(raw: str, title: str) -> str:
             m = _SIG_CODE_RE.search(parts[k + 1])
             if m is None:
                 continue
-            sig = html.unescape(_plain_text(m.group(1)))
+            sig = _one_line(html.unescape(_plain_text(m.group(1))))
             open_paren, close_paren = sig.find("("), sig.rfind(")")
             if open_paren < 0 or close_paren < open_paren:
                 continue
@@ -666,16 +699,18 @@ def page_member_types(raw: str, folded: list[tuple[str, list[str]]] | None = Non
         for name, struck, body in _member_chunks(section):
             if not is_method:
                 properties.add(name)
-            for sig in [_plain_text(m.group(1)) for m in _SIG_CODE_RE.finditer(body)]:
+            for sig in [_one_line(_plain_text(m.group(1))) for m in _SIG_CODE_RE.finditer(body)]:
+                # the mark goes first: its message may hold a colon and a parenthesis of its own
+                bare = _without_mark(sig)
                 if is_method:
-                    paren = sig.rfind("):")
-                    tail = sig[paren + 2:] if paren >= 0 else ""
+                    paren = bare.rfind("):")
+                    tail = bare[paren + 2:] if paren >= 0 else ""
                 else:
-                    colon = sig.find(":")
+                    colon = bare.find(":")
                     # a property signature is `Имя: Тип` with the member's own name
-                    if colon < 0 or _without_mark(sig[:colon]) != name:
+                    if colon < 0 or bare[:colon].strip() != name:
                         continue
-                    tail = sig[colon + 1:]
+                    tail = bare[colon + 1:]
                 # The signature encodes the generic brackets as entities (&lt;/&gt;), with
                 # every type name wrapped in a link the tag-stripping already removed -
                 # unescape, or the full spelling silently degrades to the head.
@@ -767,7 +802,7 @@ def _ranked_signatures(raw: str) -> dict[str, list[tuple[int, str]]]:
             continue
         for name, struck, body in _member_chunks(section):
             for m in _SIG_CODE_RE.finditer(body):
-                printed = html.unescape(_plain_text(m.group(1))).strip()
+                printed = _one_line(html.unescape(_plain_text(m.group(1)))).strip()
                 text = _TIGHT_COMMA_RE.sub(", ", _without_mark(printed))
                 # A generic method prints its parameters between the name and the parenthesis
                 # (`ПрочитатьОбъект<ТипОбъекта>(...)`), and demanding `name(` dropped the whole
@@ -846,7 +881,7 @@ def page_checked_return_methods(raw: str) -> dict[str, bool]:
             continue
         for name, struck, body in _member_chunks(section):
             for match in _SIG_CODE_RE.finditer(body):
-                printed = html.unescape(_plain_text(match.group(1))).strip()
+                printed = _one_line(html.unescape(_plain_text(match.group(1)))).strip()
                 marks, signature = _signature_marks(printed)
                 if method_type_params(signature)[0] != name:
                     continue
@@ -917,7 +952,7 @@ def page_member_forms(raw: str) -> dict[str, list[dict[str, str | bool]]]:
             continue
         for name, struck, body in _member_chunks(section):
             for m in _SIG_CODE_RE.finditer(body):
-                printed = html.unescape(_plain_text(m.group(1))).strip()
+                printed = _one_line(html.unescape(_plain_text(m.group(1)))).strip()
                 text = _TIGHT_COMMA_RE.sub(", ", _without_mark(printed))
                 if is_method:
                     if method_type_params(text)[0] != name:
@@ -1051,6 +1086,12 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
         slot.extend(sig for sig in sigs if sig not in slot)
 
 
+def _page(z: zipfile.ZipFile, entry: str) -> str:
+    """A docs page as text, in the markup the parsers expect (see _distro.normalize_markup),
+    with the control characters inside its words cut out first (_RAW_JUNK_RE)."""
+    return _distro.normalize_markup(_RAW_JUNK_RE.sub("", z.read(entry).decode("utf-8", "replace")))
+
+
 def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
     the global context with per-name availability, managers, facets, the members of the types a
@@ -1085,7 +1126,7 @@ def extract(dist: Path) -> tuple:
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
-            raw = _read_page(z, n)
+            raw = _page(z, n)
             title = ""
             mt = _TITLE_RE.search(raw)
             if mt:
@@ -1196,7 +1237,7 @@ def extract(dist: Path) -> tuple:
                 # The template's own page (<Kind>Name_ru) is the kind's MANAGER: its methods
                 # (Записать, Заблокировать, НайтиПоКоду...) are available by bare name in
                 # the object's manager module.
-                raw = _read_page(z, n)
+                raw = _page(z, n)
                 props, methods, events = page_members(raw)
                 if props or methods:
                     # A manager has no events; nothing is dropped silently - the pages of the
@@ -1210,7 +1251,7 @@ def extract(dist: Path) -> tuple:
                     manager_returns.setdefault(kind, {}).update(rets)
                 folds.extend((kind, member, spellings) for member, spellings in folded)
                 continue
-            raw = _read_page(z, n)
+            raw = _page(z, n)
             mt = _TITLE_RE.search(raw)
             if not mt:
                 continue

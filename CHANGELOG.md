@@ -103,6 +103,21 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`xbsl extract` reads a minified documentation site.** On such a site a one-word attribute
+  value goes without quotes (`class=hash-link`, `href=/docs/help/...`), the sidebar data writes
+  some characters as JavaScript escapes that JSON rejects, and `@Deprecated` carries a message.
+  The run finished without a warning and lost most of the data: 1406 of 2156 documentation pages
+  were left, 108 of about 21,600 tree nodes and 5 of 88 components of the interface schema, with
+  no member type or method signature at all. Attribute values are now quoted on reading, the
+  sidebar data is brought to the JSON spelling, and the message of the mark is skipped. Data from
+  earlier distributions comes out the same. ([#138](https://github.com/keyfire/xbsl/pull/138))
+- **The type parameters of generic types and multi-line signatures are read from a minified
+  site too.** Such a page writes `>` in text unescaped (`Array&lt;ItemType>`), so every generic
+  type lost its parameter list and the variance of its parameters. A long signature printed over
+  several lines kept its indentation (`Load(  FileName: String?, ...)`), and the type of a
+  property was looked for after a colon that the message of `@Deprecated` may hold. The markup
+  normalization now escapes `>` in text, a signature comes out in one line, and the mark is taken
+  off before the type is read. ([#139](https://github.com/keyfire/xbsl/pull/139))
 - **`style/redundant-union-member` is described the way the IDE judges variance.** A mutable
   contract is covariant like a read-only one: the IDE warns about `Array<String>` in
   `MutableArray<Object>|Array<String>`. Only the concrete `Array`, `Map`, `Set` and `Collection`

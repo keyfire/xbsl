@@ -415,7 +415,7 @@ def manager_owners(
         if page not in entries or template not in markdown:
             continue
         props, methods, events = stdlib.page_members(
-            car.read(page).decode("utf-8", "replace"), inherited=False)
+            _distro.normalize_markup(car.read(page).decode("utf-8", "replace")), inherited=False)
         russian = props | methods | events
         english = _template_markdown_members(markdown[template], template)
         if not russian or not english:

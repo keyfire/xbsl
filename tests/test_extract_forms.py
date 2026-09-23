@@ -119,6 +119,51 @@ def test_a_method_kept_only_for_compatibility_has_its_signatures_without_the_mar
     assert extractor.page_member_types(page) == {"ЗагрузитьПартию": "ДвоичныйОбъект"}
 
 
+def test_a_deprecation_mark_with_a_message_keeps_the_form():
+    """A newer mark carries a message quoting the signature to use, quotes unescaped, and the
+    form itself stands on the next line. Taking only the bare mark off left the message in front
+    of the name, and the form was dropped - with the member's signatures and type."""
+    mark = ('@<a href="/Std/Annotations/Deprecated_ru/">Устарело</a>(Сообщение = "Используйте '
+            '"Загрузить(ИмяФайла: Строка?, Байты: Байты): ДвоичныйОбъект"")\n')
+    page = _page(("Методы", (
+        _heading("ЗагрузитьИзБайт")
+        + '<div class="highlight"><pre class="highlight"><code>' + mark
+        + "ЗагрузитьИзБайт(Байты: Байты): ДвоичныйОбъект</code></pre></div>"
+    )))
+
+    assert extractor.page_member_signatures(page) == {
+        "ЗагрузитьИзБайт": ["ЗагрузитьИзБайт(Байты: Байты): ДвоичныйОбъект"]
+    }
+    assert extractor.page_member_forms(page) == {
+        "ЗагрузитьИзБайт": [{"signature": "ЗагрузитьИзБайт(Байты: Байты): ДвоичныйОбъект", "deprecated": True}]
+    }
+
+
+def test_a_signature_printed_over_several_lines_comes_out_in_one_line():
+    """A newer page breaks a long signature: the name and `(`, a parameter per indented line,
+    then `): Тип`."""
+    page = _page(("Методы", (
+        _heading("Загрузить")
+        + _signature("Загрузить(\n  Байты: Байты,\n  Свойства: ДвоичныйОбъект.Свойства? = Неопределено\n)"
+                     ": ДвоичныйОбъект")
+    )))
+
+    assert extractor.page_member_signatures(page) == {
+        "Загрузить": ["Загрузить(Байты: Байты, Свойства: ДвоичныйОбъект.Свойства? = Неопределено): ДвоичныйОбъект"]
+    }
+    assert extractor.page_member_types(page) == {"Загрузить": "ДвоичныйОбъект"}
+
+
+def test_a_property_keeps_its_type_when_the_message_of_its_mark_holds_a_colon():
+    mark = '@<a href="/Std/Annotations/Deprecated_ru/">Устарело</a>(Сообщение = "Используйте Остаток: Число")\n'
+    page = _page(("Свойства", (
+        _heading("Количество")
+        + '<div class="highlight"><pre class="highlight"><code>' + mark + "Количество: Число</code></pre></div>"
+    )))
+
+    assert extractor.page_member_types(page) == {"Количество": "Число"}
+
+
 def test_type_parameters_of_a_method_come_from_the_forms_that_count():
     page = _page(("Методы", (
         _heading("Прочитать") + _signature("Прочитать<ТипОбъекта>(Источник: Строка, Тип: Тип<ТипОбъекта>): ТипОбъекта")
