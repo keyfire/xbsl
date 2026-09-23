@@ -25,27 +25,42 @@ _VER_RE = re.compile(r"-(\d+\.\d+\.\d+(?:\+\d+)?)-")
 #: data is filed under does not carry it - see record_build.
 _BUILD_RE = re.compile(r"\+(\d+)")
 _root_override: Path | None = None
-#: An opening tag with its attributes; a quoted value may hold `>` and `=`.
-_TAG_OPEN_RE = re.compile(r"""<[A-Za-z][\w:-]*(?:"[^"]*"|'[^']*'|[^'">])*>""")
+#: A piece of markup between two runs of text: a comment, a script or style block with its
+#: content, an opening or closing tag, a declaration. A quoted attribute value may hold `>`.
+_MARKUP_RE = re.compile(
+    r"""<!--.*?-->|<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>.*?</\1\s*>"""
+    r"""|</?[A-Za-z][\w:-]*(?:"[^"]*"|'[^']*'|[^'">])*>|<![^>]*>""",
+    re.S | re.I)
 #: One attribute value: a quoted value is taken whole, so an `=` inside it is never read
 #: as the start of another attribute.
 _ATTR_VALUE_RE = re.compile(r"""=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+)""")
 
 
-def _quote_tag(m: re.Match) -> str:
+def _quote_values(tag: str) -> str:
     return _ATTR_VALUE_RE.sub(
-        lambda a: a.group(0) if a.group(1)[0] in "\"'" else f'="{a.group(1)}"', m.group(0))
+        lambda a: a.group(0) if a.group(1)[0] in "\"'" else f'="{a.group(1)}"', tag)
 
 
-def quote_attributes(page: str) -> str:
-    """The page with every attribute value in double quotes.
+def normalize_markup(page: str) -> str:
+    """The page in the markup the page parsers of the extractors expect.
 
     A minified docs site leaves a value without spaces unquoted (`class=hash-link`,
-    `href=/docs/help/...`, `id=examples`), while the page parsers of the extractors match the
-    quoted form. A page is brought to that form once, on reading, and the parsers stay as they
-    are. A page that already quotes everything comes back unchanged.
+    `href=/docs/help/...`, `id=examples`) and writes `>` in text as it is (`Array&lt;ItemType>`),
+    while the parsers match quoted values and `&gt;`. A page is brought to that form once, on
+    reading, and the parsers stay as they are. A script or style block passes unchanged, and a
+    page already in that form comes back as it was.
     """
-    return _TAG_OPEN_RE.sub(_quote_tag, page)
+    out: list[str] = []
+    pos = 0
+    for m in _MARKUP_RE.finditer(page):
+        out.append(page[pos:m.start()].replace(">", "&gt;"))
+        token = m.group(0)
+        if m.group(1) is None and token[1] not in "/!":
+            token = _quote_values(token)
+        out.append(token)
+        pos = m.end()
+    out.append(page[pos:].replace(">", "&gt;"))
+    return "".join(out)
 
 
 def find_car(dist: Path) -> Path:

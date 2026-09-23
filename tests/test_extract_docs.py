@@ -124,12 +124,20 @@ def test_minified_page_reads_as_the_quoted_one():
     assert ex._record(ENTRY, PAGE_MINIFIED, ORIGIN) == _rec()
 
 
-def test_quote_attributes_keeps_quoted_values_whole():
+def test_normalize_markup_keeps_quoted_values_whole():
     # `url=` inside a quoted value is not an attribute; `>` inside quotes does not end the tag
-    assert (_distro.quote_attributes('<meta http-equiv=refresh content="0; url=/docs/help/x/">')
+    assert (_distro.normalize_markup('<meta http-equiv=refresh content="0; url=/docs/help/x/">')
             == '<meta http-equiv="refresh" content="0; url=/docs/help/x/">')
-    assert _distro.quote_attributes("<div data-x='a>b' id=y>т=1</div>") == "<div data-x='a>b' id=\"y\">т=1</div>"
-    assert _distro.quote_attributes(PAGE) == PAGE
+    assert _distro.normalize_markup("<div data-x='a>b' id=y>т=1</div>") == "<div data-x='a>b' id=\"y\">т=1</div>"
+    assert _distro.normalize_markup(PAGE) == PAGE
+
+
+def test_normalize_markup_escapes_a_bare_angle_bracket_in_text():
+    # a minified page writes `>` in text as it is; a script keeps its own
+    assert (_distro.normalize_markup("<p><code>Стд::Коллекции::Массив&lt;ТипЭлемента></code></p>")
+            == "<p><code>Стд::Коллекции::Массив&lt;ТипЭлемента&gt;</code></p>")
+    script = "<script>if(a>b){x='<a href=y>'}</script><!-- a>b -->"
+    assert _distro.normalize_markup(script) == script
 
 
 # --- sidebar parsing ------------------------------------------------------------------

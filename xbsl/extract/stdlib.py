@@ -198,6 +198,20 @@ def _plain_text(html: str) -> str:
     return _JUNK_RE.sub("", _TAG_RE.sub("", html)).strip()
 
 
+#: What is left of the layout of a signature a page prints over several lines (the name and
+#: `(`, a parameter per indented line, `): Тип`) once _plain_text has taken the line breaks.
+_SIG_INDENT_RE = re.compile(r"\s{2,}")
+_SIG_AFTER_OPEN_RE = re.compile(r"([(\[]) ")
+_SIG_BEFORE_CLOSE_RE = re.compile(r" ([)\]])")
+
+
+def _one_line(signature: str) -> str:
+    """A signature printed over several lines, in the one-line form the other pages use."""
+    text = _SIG_INDENT_RE.sub(" ", signature)
+    text = _SIG_AFTER_OPEN_RE.sub(r"\1", text)
+    return _SIG_BEFORE_CLOSE_RE.sub(r"\1", text)
+
+
 def component_props(entry: str, raw: str) -> tuple[str, set[str]] | None:
     """(Russian component type name, its built-in properties), or None - not a component.
 
@@ -628,7 +642,7 @@ def page_constructors(raw: str, title: str) -> str:
             m = _SIG_CODE_RE.search(parts[k + 1])
             if m is None:
                 continue
-            sig = html.unescape(_plain_text(m.group(1)))
+            sig = _one_line(html.unescape(_plain_text(m.group(1))))
             open_paren, close_paren = sig.find("("), sig.rfind(")")
             if open_paren < 0 or close_paren < open_paren:
                 continue
@@ -680,16 +694,18 @@ def page_member_types(raw: str, folded: list[tuple[str, list[str]]] | None = Non
         for name, struck, body in _member_chunks(section):
             if not is_method:
                 properties.add(name)
-            for sig in [_plain_text(m.group(1)) for m in _SIG_CODE_RE.finditer(body)]:
+            for sig in [_one_line(_plain_text(m.group(1))) for m in _SIG_CODE_RE.finditer(body)]:
+                # the mark goes first: its message may hold a colon and a parenthesis of its own
+                bare = _without_mark(sig)
                 if is_method:
-                    paren = sig.rfind("):")
-                    tail = sig[paren + 2:] if paren >= 0 else ""
+                    paren = bare.rfind("):")
+                    tail = bare[paren + 2:] if paren >= 0 else ""
                 else:
-                    colon = sig.find(":")
+                    colon = bare.find(":")
                     # a property signature is `Имя: Тип` with the member's own name
-                    if colon < 0 or _without_mark(sig[:colon]) != name:
+                    if colon < 0 or bare[:colon].strip() != name:
                         continue
-                    tail = sig[colon + 1:]
+                    tail = bare[colon + 1:]
                 # The signature encodes the generic brackets as entities (&lt;/&gt;), with
                 # every type name wrapped in a link the tag-stripping already removed -
                 # unescape, or the full spelling silently degrades to the head.
@@ -781,7 +797,7 @@ def _ranked_signatures(raw: str) -> dict[str, list[tuple[int, str]]]:
             continue
         for name, struck, body in _member_chunks(section):
             for m in _SIG_CODE_RE.finditer(body):
-                printed = html.unescape(_plain_text(m.group(1))).strip()
+                printed = _one_line(html.unescape(_plain_text(m.group(1)))).strip()
                 text = _TIGHT_COMMA_RE.sub(", ", _without_mark(printed))
                 # A generic method prints its parameters between the name and the parenthesis
                 # (`ПрочитатьОбъект<ТипОбъекта>(...)`), and demanding `name(` dropped the whole
@@ -860,7 +876,7 @@ def page_checked_return_methods(raw: str) -> dict[str, bool]:
             continue
         for name, struck, body in _member_chunks(section):
             for match in _SIG_CODE_RE.finditer(body):
-                printed = html.unescape(_plain_text(match.group(1))).strip()
+                printed = _one_line(html.unescape(_plain_text(match.group(1)))).strip()
                 marks, signature = _signature_marks(printed)
                 if method_type_params(signature)[0] != name:
                     continue
@@ -931,7 +947,7 @@ def page_member_forms(raw: str) -> dict[str, list[dict[str, str | bool]]]:
             continue
         for name, struck, body in _member_chunks(section):
             for m in _SIG_CODE_RE.finditer(body):
-                printed = html.unescape(_plain_text(m.group(1))).strip()
+                printed = _one_line(html.unescape(_plain_text(m.group(1)))).strip()
                 text = _TIGHT_COMMA_RE.sub(", ", _without_mark(printed))
                 if is_method:
                     if method_type_params(text)[0] != name:
@@ -1064,8 +1080,8 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
 
 
 def _page(z: zipfile.ZipFile, entry: str) -> str:
-    """A docs page as text, attribute values quoted (see _distro.quote_attributes)."""
-    return _distro.quote_attributes(z.read(entry).decode("utf-8", "replace"))
+    """A docs page as text, in the markup the parsers expect (see _distro.normalize_markup)."""
+    return _distro.normalize_markup(z.read(entry).decode("utf-8", "replace"))
 
 
 def extract(dist: Path) -> tuple:
