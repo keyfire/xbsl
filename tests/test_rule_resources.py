@@ -204,6 +204,203 @@ def test_without_a_project_file_silent(tmp_path, library):
     assert not engine.run(discover([str(tmp_path)]), select={_UNKNOWN})
 
 
+def _scoped_project(tmp_path, module_text, folders, compatibility="9.0"):
+    """A neutral project with resources owned by subsystem/package namespace keys."""
+    root = tmp_path / "acme" / "Demo"
+    (root / "Project.yaml").parent.mkdir(parents=True, exist_ok=True)
+    project = "Vendor: acme\nName: Demo\nVersion: 1.0.0\n"
+    if compatibility is not None:
+        project += f"CompatibilityMode: {compatibility}\n"
+    (root / "Project.yaml").write_text(project, encoding="utf-8")
+    subsystems = {namespace.split("::", 1)[0] for namespace in folders} | {"Main"}
+    for subsystem in subsystems:
+        descriptor = root / subsystem / "Subsystem.yaml"
+        descriptor.parent.mkdir(parents=True, exist_ok=True)
+        descriptor.write_text(f"Name: {subsystem}\n", encoding="utf-8")
+    for namespace, (keys, public) in folders.items():
+        resources_dir = root.joinpath(*namespace.split("::"), "Resources")
+        resources_dir.mkdir(parents=True, exist_ok=True)
+        if public:
+            (resources_dir / "Resources.yaml").write_text(
+                "VisibilityScope: InProject\n", encoding="utf-8",
+            )
+        for key in keys:
+            resource = resources_dir / key
+            resource.parent.mkdir(parents=True, exist_ok=True)
+            resource.write_text("<svg/>\n", encoding="utf-8")
+    module = root / "Main" / "Probe.xbsl"
+    module.write_text(module_text, encoding="utf-8")
+    return tmp_path
+
+
+def _resource_module(key, *imports):
+    prefix = "".join(f"import {name}\n" for name in imports)
+    return prefix + _english_method(f"Resource{{{key}}}.Link")
+
+
+def _run_scoped(tmp_path, module_text, folders, library):
+    return engine.run(discover([str(_scoped_project(tmp_path, module_text, folders))]),
+                      select={_UNKNOWN})
+
+
+def test_a_local_resource_has_priority_over_an_imported_namesake(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::Pack"),
+        {"Main": (("Shared.svg",), False), "Foreign::Pack": (("Shared.svg",), True)},
+        library,
+    )
+
+    assert found == []
+
+
+def test_two_local_namespaces_make_a_bare_resource_ambiguous(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Shared.svg"),
+        {"Main::One": (("Shared.svg",), False), "Main::Two": (("Shared.svg",), False)},
+        library,
+    )
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "ambiguous"
+
+
+def test_an_imported_private_resource_is_reported_as_hidden(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::Pack"),
+        {"Foreign::Pack": (("Shared.svg",), False)},
+        library,
+    )
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "hidden"
+
+
+def test_an_imported_public_resource_is_visible(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::Pack"),
+        {"Foreign::Pack": (("Shared.svg",), True)},
+        library,
+    )
+
+    assert found == []
+
+
+def test_a_foreign_unimported_resource_does_not_make_the_bare_key_known(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Shared.svg"),
+        {"Foreign::Pack": (("Shared.svg",), True)},
+        library,
+    )
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "unknown"
+
+
+def test_a_qualified_private_resource_is_reported_as_hidden(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Foreign::Pack::Shared.svg", "Foreign::Pack"),
+        {"Foreign::Pack": (("Shared.svg",), False)},
+        library,
+    )
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "hidden"
+
+
+def test_two_imported_public_namespaces_make_a_bare_resource_ambiguous(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::One", "Foreign::Two"),
+        {
+            "Foreign::One": (("Shared.svg",), True),
+            "Foreign::Two": (("Shared.svg",), True),
+        },
+        library,
+    )
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "ambiguous"
+
+
+def test_a_descriptorless_resource_is_public_before_compatibility_8(tmp_path, library):
+    project = _scoped_project(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::Pack"),
+        {"Foreign::Pack": (("Shared.svg",), False)},
+        compatibility="7.0",
+    )
+
+    assert engine.run(discover([str(project)]), select={_UNKNOWN}) == []
+
+
+def test_descriptorless_visibility_is_left_unproven_without_a_compatibility_mode(
+        tmp_path, library):
+    project = _scoped_project(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::Pack"),
+        {"Foreign::Pack": (("Shared.svg",), False)},
+        compatibility=None,
+    )
+
+    assert engine.run(discover([str(project)]), select={_UNKNOWN}) == []
+
+
+def test_the_platform_library_is_only_a_fallback_after_local_ambiguity(tmp_path, library):
+    found = _run_scoped(
+        tmp_path,
+        _resource_module("Настройки.svg"),
+        {
+            "Main::One": (("Настройки.svg",), False),
+            "Main::Two": (("Настройки.svg",), False),
+        },
+        library,
+    )
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "ambiguous"
+
+
+def test_malformed_resources_descriptor_does_not_prove_private_visibility(tmp_path, library):
+    project = _scoped_project(
+        tmp_path,
+        _resource_module("Shared.svg", "Foreign::Pack"),
+        {"Foreign::Pack": (("Shared.svg",), True)},
+    )
+    descriptor = (tmp_path / "acme" / "Demo" / "Foreign" / "Pack"
+                  / "Resources" / "Resources.yaml")
+    descriptor.write_text("VisibilityScope: [broken\n", encoding="utf-8")
+
+    assert engine.run(discover([str(project)]), select={_UNKNOWN}) == []
+
+
+def test_a_fully_qualified_resource_in_another_loaded_project_is_not_false_unknown(
+        tmp_path, library):
+    project = _scoped_project(
+        tmp_path,
+        _resource_module("Other::App::Assets::Shared.svg"),
+        {},
+    )
+    external = tmp_path / "Other" / "App"
+    files = {
+        "Project.yaml": "Vendor: Other\nName: App\nVersion: 1.0.0\nCompatibilityMode: 9.0\n",
+        "Assets/Subsystem.yaml": "Name: Assets\n",
+        "Assets/Resources/Resources.yaml": "VisibilityScope: InProject\n",
+        "Assets/Resources/Shared.svg": "<svg/>\n",
+    }
+    for rel, text in files.items():
+        path = external / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    assert engine.run(discover([str(project)]), select={_UNKNOWN}) == []
+
+
 @pytest.mark.needs_data
 def test_real_image_library_is_read():
     resources._platform_images.cache_clear()

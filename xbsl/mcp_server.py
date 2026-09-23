@@ -1415,7 +1415,7 @@ def meta_rename_object(
     next to absolute paths.
     Renames the object's files (yaml, modules, its forms `<Имя>Форма*`, the card-list row
     component `СтрокаСписка<Имя>`, the WSDL descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP
-    service client with their numbers) and rewrites references: yaml type/table/form keys,
+    service client with their numbers, and its imported `.xsd` schemas) and rewrites references: yaml type/table/form keys,
     `=` bindings, .xbsl code (string literals are left intact) and composite form names.
     Comments of modules and yaml get the new name whole. A translation dictionary is not
     rewritten as a source: the translation of each comment line the rename changed is carried
@@ -1472,7 +1472,7 @@ def meta_delete_object(
 ) -> dict:
     """Delete a configuration object whole: the yaml/module pair, its forms `<Имя>Форма*`
     and the card-list row component `СтрокаСписка<Имя>`, with their pairs, and the WSDL
-    descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP service client. A subsystem in
+    descriptions `<Имя>.Wsdl.<N>.wsdl` and imported `.xsd` schemas of a SOAP service client. A subsystem in
     1C:Element is the folder the files live in, so the membership goes away with the files.
     Every REMAINING mention of the name across the project is listed by file and line
     (string literals and comments included - a router string, seeding, dictionary keys)
@@ -1514,7 +1514,7 @@ def meta_move_object(
     new package), another package, the subsystem root or a folder of another subsystem. The
     object moves with its forms `<Имя>Форма*`, modules, list row and list table (and the
     translations of a localized-strings element, the WSDL descriptions of a SOAP service
-    client).
+    client, including its imported `.xsd` schemas).
     An element of a package lives in the package's own namespace: another subsystem reaches it
     only through `импорт Subsystem::Package`, while the root and the packages of one subsystem
     see each other. So the move adds that import where a reference now needs it - modules and

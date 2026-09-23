@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 242.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 245.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -383,7 +383,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/enum-default-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | `ЗначениеПоУмолчанию` поля-перечисления пишется голым именем объявленного значения: запись с именем типа (`ВидимостьМетки.Невидимая`) или несуществующее имя сборка отвергает [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | `yaml/unknown-enum-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Значение свойства компонента вне списка перечисления ui-схемы (`ВыравниваниеСодержимогоПоВертикали: Конец` – по вертикали значения `Конец` нет) |
 | `yaml/bare-object-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Голое слово в свойстве, принимающем `Объект` (`Значение: Титул`) – платформа ждёт литерал в кавычках, выражение с `=` либо `$`-ссылку локализованной строки [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
-| `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Имени из `Ресурс{...}` нет ни в каталогах `Ресурсы` проекта, ни в библиотеке картинок платформы [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
+| `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Ссылка `Ресурс{...}` неизвестна, недоступна по видимости или неоднозначна на выбранном приоритете пространства имен [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик формы не найден в модуле [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Сигнатура обработчика не совпадает с событием [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Обращение к компоненту, которого нет в разметке формы [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
@@ -478,6 +478,9 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Видимый текст остался кириллическим литералом там, где то же свойство проект уже вынес ссылкой на словарь локализации [подробнее](#d-conventions-untranslated-visible-literal) |
 | `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Видимый текст остался кириллическим литералом в модуле: судится по стоку, куда он попадает [подробнее](#d-conventions-untranslated-code-literal) |
 | `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | проект | Токен проекта или кириллическая строка комментария, которых ещё нет в словаре перевода проекта [подробнее](#d-conventions-missing-translation) |
+| `code/procedure-as-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Результат доказанно разрешенной процедуры используется как значение [подробнее](#d-code-procedure-as-value) |
+| `code/contract-parameter-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Имя параметра реализации отличается от имени в контракте проекта [подробнее](#d-code-contract-parameter-name) |
+| `conventions/platform-translation-shadow` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Объявление проекта блокирует платформенный перевод без явной пары в словаре [подробнее](#d-conventions-platform-translation-shadow) |
 | `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к полю структуры, объявленной в проекте, сверяется с её объявлением: переименованное поле краснеет у потребителя, а не на серверной компиляции [подробнее](#d-code-unknown-structure-field) |
 | `code/redundant-skip-undefined` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Исключение `Неопределено` из коллекции, у которой тип элемента его и так не допускает [подробнее](#d-code-redundant-skip-undefined) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Iterable_ru/) |
 | `code/redundant-cast` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Приведение к типу, который у операнда уже есть: IDE платформы о таком приведении предупреждает [подробнее](#d-code-redundant-cast) [доки](https://1cmycloud.com/docs/help/topics/as/) |
@@ -1025,3 +1028,15 @@ xbsl путь/к/исходникам --ignore style     # всё, кроме н
 или букву тира `A`/`B`/`C`/`D`. Плагин может переопределить severity правила (группа
 entry-points `xbsl.severity`); `XBSL_NO_PLUGINS=1` отключает плагины и возвращает встроенные
 значения из этой таблицы.
+
+<a id="d-code-procedure-as-value"></a>**`code/procedure-as-value`.**
+
+Проверяет вызовы методов проекта в выражениях, в том числе из другого модуля. Неизвестные цели, неоднозначные перегрузки и самостоятельные вызовы процедур пропускает. Автоматического исправления нет.
+
+<a id="d-code-contract-parameter-name"></a>**`code/contract-parameter-name`.**
+
+Сравнивает имена только для однозначного контракта сервиса проекта и согласованных сигнатур. В режиме совместимости от 8.0 сообщает об ошибке, в более раннем режиме предупреждает; неизвестный режим пропускает. Автоматического исправления нет.
+
+<a id="d-conventions-platform-translation-shadow"></a>**`conventions/platform-translation-shadow`.**
+
+Работает только в проектах со словарем перевода. Называет кириллическое объявление, которое переводчик считает проектным именем, если оно подавляет известный перевод платформы и не имеет подходящей явной пары tokens. Локальные переменные и параметры пропускает. Добавьте пару в словарь; переименование необязательно и автоматически не выполняется. Объявления ASCII не входят в этот набор переводчика, поэтому в полностью переведенном английском дереве находок этого правила нет.

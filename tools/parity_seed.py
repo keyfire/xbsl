@@ -6538,6 +6538,158 @@ SEEDS: list[Seed] = [
         },
         tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
     ),
+    Seed(
+        rule="code/procedure-as-value",
+        expect=FINDING,
+        note="a resolved cross-module procedure cannot initialize a value",
+        files={
+            "Проект.yaml": _PROJECT_RU.format(mode="8.0"),
+            "Процедуры.yaml": _COMMON_MODULE_RU.replace("Вычисления", "Процедуры"),
+            "Процедуры.xbsl": "метод Сообщить()\n;\n",
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": (
+                "метод Проверить()\n    знч Результат = Процедуры.Сообщить()\n;\n"
+            ),
+        },
+        tokens={
+            "Проба": "Probe", "Процедуры": "Procedures", "Сообщить": "Notify",
+            "Вычисления": "Calculations", "Проверить": "Check", "Результат": "Result",
+        },
+        english={
+            "Project.yaml": _PROJECT_EN.format(mode="8.0"),
+            "Procedures.yaml": _COMMON_MODULE_EN.replace("Calculations", "Procedures"),
+            "Procedures.xbsl": "method Notify()\n;\n",
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": (
+                "method Check()\n    val Result = Procedures.Notify()\n;\n"
+            ),
+        },
+    ),
+    Seed(
+        rule="code/procedure-as-value",
+        expect=CLEAN,
+        note="a resolved cross-module procedure is legal as a direct use statement",
+        files={
+            "Проект.yaml": _PROJECT_RU.format(mode="8.0"),
+            "Процедуры.yaml": _COMMON_MODULE_RU.replace("Вычисления", "Процедуры"),
+            "Процедуры.xbsl": "метод Сообщить()\n;\n",
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "метод Проверить()\n    исп Процедуры.Сообщить()\n;\n",
+        },
+        tokens={
+            "Проба": "Probe", "Процедуры": "Procedures", "Сообщить": "Notify",
+            "Вычисления": "Calculations", "Проверить": "Check",
+        },
+        english={
+            "Project.yaml": _PROJECT_EN.format(mode="8.0"),
+            "Procedures.yaml": _COMMON_MODULE_EN.replace("Calculations", "Procedures"),
+            "Procedures.xbsl": "method Notify()\n;\n",
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "method Check()\n    use Procedures.Notify()\n;\n",
+        },
+    ),
+    Seed(
+        rule="code/contract-parameter-name",
+        expect=FINDING,
+        note="an implementation parameter differs from its service contract at compatibility 8",
+        files={
+            "Проект.yaml": _PROJECT_RU.format(mode="8.0"),
+            "Договор.yaml": (
+                "ВидЭлемента: КонтрактСервиса\n"
+                "Ид: 1d1f5c60-0000-4000-8000-000000000f60\n"
+                "Имя: Договор\nОбластьВидимости: ВПроекте\nОкружение: Сервер\n"
+            ),
+            "Договор.xbsl": (
+                "абстрактный метод Выполнить(Значение: Строка): Строка\n"
+            ),
+            "Сервис.yaml": (
+                "ВидЭлемента: ОбщийМодуль\n"
+                "Ид: 1d1f5c60-0000-4000-8000-000000000f61\n"
+                "Имя: Сервис\nОбластьВидимости: ВПроекте\nОкружение: Сервер\n"
+                "НастройкиТипа:\n    Контракты:\n        - Договор\n"
+            ),
+            "Сервис.xbsl": (
+                "@Реализация\nметод Выполнить(Переименовано: Строка): Строка\n"
+                "    возврат Переименовано\n;\n"
+            ),
+        },
+        tokens={
+            "Проба": "Probe", "Договор": "ProbeContract", "Выполнить": "Execute",
+            "Значение": "Value", "Сервис": "Service", "Переименовано": "Renamed",
+        },
+        english={
+            "Project.yaml": _PROJECT_EN.format(mode="8.0"),
+            "ProbeContract.yaml": (
+                "ElementKind: ServiceContract\n"
+                "Id: 1d1f5c60-0000-4000-8000-000000000f60\n"
+                "Name: ProbeContract\nVisibilityScope: InProject\nEnvironment: Server\n"
+            ),
+            "ProbeContract.xbsl": (
+                "abstract method Execute(Value: String): String\n"
+            ),
+            "Service.yaml": (
+                "ElementKind: CommonModule\n"
+                "Id: 1d1f5c60-0000-4000-8000-000000000f61\n"
+                "Name: Service\nVisibilityScope: InProject\nEnvironment: Server\n"
+                "TypeOptions:\n    Contracts:\n        - ProbeContract\n"
+            ),
+            "Service.xbsl": (
+                "@Implementation\nmethod Execute(Renamed: String): String\n"
+                "    return Renamed\n;\n"
+            ),
+        },
+    ),
+    Seed(
+        rule="code/contract-parameter-name",
+        expect=CLEAN,
+        note="an implementation parameter matches its service contract",
+        files={
+            "Проект.yaml": _PROJECT_RU.format(mode="8.0"),
+            "Договор.yaml": (
+                "ВидЭлемента: КонтрактСервиса\n"
+                "Ид: 1d1f5c60-0000-4000-8000-000000000f60\n"
+                "Имя: Договор\nОбластьВидимости: ВПроекте\nОкружение: Сервер\n"
+            ),
+            "Договор.xbsl": (
+                "абстрактный метод Выполнить(Значение: Строка): Строка\n"
+            ),
+            "Сервис.yaml": (
+                "ВидЭлемента: ОбщийМодуль\n"
+                "Ид: 1d1f5c60-0000-4000-8000-000000000f61\n"
+                "Имя: Сервис\nОбластьВидимости: ВПроекте\nОкружение: Сервер\n"
+                "НастройкиТипа:\n    Контракты:\n        - Договор\n"
+            ),
+            "Сервис.xbsl": (
+                "@Реализация\nметод Выполнить(Значение: Строка): Строка\n"
+                "    возврат Значение\n;\n"
+            ),
+        },
+        tokens={
+            "Проба": "Probe", "Договор": "ProbeContract", "Выполнить": "Execute",
+            "Значение": "Value", "Сервис": "Service",
+        },
+        english={
+            "Project.yaml": _PROJECT_EN.format(mode="8.0"),
+            "ProbeContract.yaml": (
+                "ElementKind: ServiceContract\n"
+                "Id: 1d1f5c60-0000-4000-8000-000000000f60\n"
+                "Name: ProbeContract\nVisibilityScope: InProject\nEnvironment: Server\n"
+            ),
+            "ProbeContract.xbsl": (
+                "abstract method Execute(Value: String): String\n"
+            ),
+            "Service.yaml": (
+                "ElementKind: CommonModule\n"
+                "Id: 1d1f5c60-0000-4000-8000-000000000f61\n"
+                "Name: Service\nVisibilityScope: InProject\nEnvironment: Server\n"
+                "TypeOptions:\n    Contracts:\n        - ProbeContract\n"
+            ),
+            "Service.xbsl": (
+                "@Implementation\nmethod Execute(Value: String): String\n"
+                "    return Value\n;\n"
+            ),
+        },
+    ),
 ]
 
 

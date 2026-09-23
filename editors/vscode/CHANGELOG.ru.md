@@ -2,6 +2,14 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Исправлено
+
+- **Дерево SOAP-клиента показывает импортированные схемы XSD.** Они стоят рядом с WSDL
+  и открываются как XML. Создание или удаление схемы обновляет дерево.
+  ([#129](https://github.com/keyfire/xbsl/pull/129))
+
 ## 0.75.1
 
 ### Исправлено
