@@ -20,13 +20,15 @@ import argparse
 import difflib
 import inspect
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, i18n, metamodel, report, resource_usage, rundiff, scaffold, uischema,
+    cijob, formmodel, i18n, mcpjournal, metamodel, report, resource_usage, rundiff, scaffold,
+    uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import (
@@ -2578,7 +2580,18 @@ def main() -> None:
         epilog=i18n.t("cli.help.mcp.epilog"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     ).parse_args()
-    mcp.run()
+    # The journal answers what "Transport closed" on the client side cannot: whether the
+    # server failed, the client closed its end, or a self-update stopped the process.
+    mcpjournal.record("start", version=__version__, parent=os.getppid(), executable=sys.executable)
+    try:
+        mcp.run()
+    except KeyboardInterrupt:
+        mcpjournal.record("exit", reason="interrupted")
+        raise
+    except BaseException as exc:
+        mcpjournal.record("exit", reason="failed", error=f"{type(exc).__name__}: {exc}"[:500])
+        raise
+    mcpjournal.record("exit", reason="input-closed")
 
 
 if __name__ == "__main__":

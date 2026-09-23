@@ -75,6 +75,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `data-diff` | compare two data versions: what changed in the platform |
 | `translate` | translate the project sources into English spellings |
 | `self-update` | update xbsl by unpacking the wheel from PyPI |
+| `mcp-log` | the MCP server journal: when servers started, how they ended and who stopped them |
 
 Command options: xbsl &lt;command&gt; `--help`. The options above apply to the check mode.
 
@@ -284,6 +285,22 @@ usage: xbsl self-update [-h] [--version VERSION] [--stop-holders]
 | `-h, --help` | show this help message and exit |
 | `--version VERSION` | target version (default: the latest from PyPI) |
 | `--stop-holders` | stop the processes holding the installation (the editor's LSP server, MCP sessions) and update; without the flag the command only names them |
+
+## `xbsl mcp-log`
+
+the MCP server journal: when servers started, how they ended and who stopped them
+
+```bash
+usage: xbsl mcp-log [-h] [--last LAST] [--json]
+```
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--last LAST` | how many newest events to show (default 20; 0 - all) |
+| `--json` | the events as JSON, an object per journal line |
 
 ## Metadata scaffolding
 

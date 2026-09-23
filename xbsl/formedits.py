@@ -273,6 +273,38 @@ def _encode_scalar(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _encode_property_scalar(node: Node, key: str, value: str) -> str:
+    """Avoid double quotes only when schema proves the binding is not string-valued."""
+    if not value.startswith("=") or not node.type:
+        return _encode_scalar(value)
+    try:
+        record = uischema.component_property(
+            uischema.canonical_component(node.type), uischema.canonical_property(key),
+        )
+    except Exception:  # noqa: BLE001 - without type data, retain the existing spelling
+        return _encode_scalar(value)
+    prop = record.get("property") or {}
+    types = prop.get("types") or []
+    if not types or any(
+        str(type_).strip().rstrip("?") in {"Строка", "Объект", "String", "Object"}
+        for type_ in types
+    ):
+        return _encode_scalar(value)
+    if "\n" in value or "\r" in value:
+        raise FormModelError("Привязка свойства должна быть однострочной")
+    try:
+        parsed = yaml.compose("value: " + value + "\n", Loader=yaml.SafeLoader)
+    except yaml.YAMLError:
+        parsed = None
+    if isinstance(parsed, yaml.MappingNode) and parsed.value:
+        scalar = parsed.value[0][1]
+        if isinstance(scalar, yaml.ScalarNode) and scalar.style is None and scalar.value == value:
+            return value
+    # The platform accepts a single-quoted binding of a typed property. YAML needs that
+    # spelling when the expression contains a colon followed by whitespace.
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _not_root(node: Node, действие: str) -> Node:
     if node.id == ROOT_KEY:
         raise FormModelError(f"Корневой узел формы нельзя {действие}")
@@ -298,24 +330,29 @@ class _Plan:
     consumed: list[Span] = field(default_factory=list)  # removals folded into the edits
 
 
-def _slot_takes_a_list(parent: Node, slot_name: str) -> bool:
-    """Is the parent's slot declared `Массив<...>` - i.e. must a first child be a list item?
+def _type_slot_takes_a_list(owner: str | None, slot_name: str) -> bool:
+    """Is this component slot declared as only array alternatives?
 
     Proof required: the owner's component type is known, the ui schema knows the property,
     and EVERY alternative of its type union is an array (a union that also allows a single
     Компонент is written as a mapping). Anything unproven answers False and
     keeps the historical single-mapping spelling.
     """
-    owner = parent.type
     if not owner:
         return False  # a page item has no Тип - nothing to look the slot up by
     try:
-        record = uischema.component_property(owner, slot_name)
+        record = uischema.component_property(
+            uischema.canonical_component(owner), uischema.canonical_property(slot_name),
+        )
     except Exception:  # noqa: BLE001 - no data, no cardinality
         return False
     prop = record.get("property") or {}
     types = prop.get("types") or []
     return bool(types) and all(t.startswith("Массив<") for t in types)
+
+
+def _slot_takes_a_list(parent: Node, slot_name: str) -> bool:
+    return _type_slot_takes_a_list(parent.type, slot_name)
 
 
 def _plan_insert(form, parent, slot_name, item_fn, map_fn, before, after,
@@ -966,6 +1003,7 @@ def wrap_node(text: str, node_id: str, container_type: str,
     if name:
         _check_name(name)
     nl, step = form.nl, form.step
+    list_content = _type_slot_takes_a_list(container_type, "Содержимое")
     region = node.content_span
     _, content = _split_payload(form, node)
     if node.dash_col is not None:
@@ -974,14 +1012,20 @@ def wrap_node(text: str, node_id: str, container_type: str,
         if name:
             head += " " * body + f"Имя: {name}" + nl
         head += " " * body + "Содержимое:" + nl
-        replacement = head + _item_content_to_mapping(form, node, content, body + step)
+        replacement = (
+            head + _reindent(content, body + step - dash) if list_content
+            else head + _item_content_to_mapping(form, node, content, body + step)
+        )
     else:
         body = node.body_col
         head = " " * body + f"Тип: {container_type}" + nl
         if name:
             head += " " * body + f"Имя: {name}" + nl
         head += " " * body + "Содержимое:" + nl
-        replacement = head + _reindent(content, step)
+        replacement = (
+            head + " " * (body + step) + "-" + nl + _reindent(content, 2 * step)
+            if list_content else head + _reindent(content, step)
+        )
     return _finish(text, [TextEdit(region.start, region.end, replacement)], region.start)
 
 
@@ -1156,10 +1200,11 @@ def set_property(text: str, node_id: str, key: str, value: str | None = None,
     nl, step = form.nl, form.step
     pair = node.pairs.get(key)
     if value is not None:
+        encoded = _encode_property_scalar(node, key, value)
         if pair is not None and pair.scalar_span is not None:
-            edits = [TextEdit(pair.scalar_span.start, pair.scalar_span.end, _encode_scalar(value))]
+            edits = [TextEdit(pair.scalar_span.start, pair.scalar_span.end, encoded)]
         else:
-            lines0 = [f"{key}: {_encode_scalar(value)}"]
+            lines0 = [f"{key}: {encoded}"]
             if pair is not None:
                 line = " " * pair.key_col + lines0[0] + nl
                 edits = [TextEdit(pair.span.start, pair.span.end, line)]

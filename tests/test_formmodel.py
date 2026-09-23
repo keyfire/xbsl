@@ -591,6 +591,44 @@ def test_move_guards():
 # --- wrap / unwrap ------------------------------------------------------------------------
 
 
+@pytest.mark.needs_data
+def test_wrap_single_image_keeps_group_content_as_array():
+    source = """ВидЭлемента: КомпонентИнтерфейса
+Наследует:
+    Тип: Группа
+    Содержимое:
+        -
+            Тип: Картинка
+            Имя: Иллюстрация
+            Изображение: icon.svg
+"""
+    result = formedits.wrap_node(source, "Наследует/Содержимое[0]", "Группа")
+    assert unchanged_outside(source, result)
+    content = pyyaml.safe_load(result.new_text)["Наследует"]["Содержимое"]
+    assert isinstance(content, list)
+    assert isinstance(content[0]["Содержимое"], list)
+    assert content[0]["Содержимое"][0]["Тип"] == "Картинка"
+    assert formedits.unwrap_node(result.new_text, result.node_id).new_text == source
+
+
+@pytest.mark.needs_data
+def test_wrap_english_image_keeps_group_content_as_array():
+    source = """ElementKind: InterfaceComponent
+Inherits:
+    Type: Group
+    Content:
+        -
+            Type: Image
+            Name: Illustration
+"""
+    result = formedits.wrap_node(source, "Наследует/Content[0]", "Group")
+    wrapper = parse_form(result.new_text).nodes[result.node_id]
+    slot = next(child for child in wrapper.children if child.kind == "slot")
+    assert slot.list_style is True
+    assert slot.children[0].type == "Image"
+    assert formedits.unwrap_node(result.new_text, result.node_id).new_text == source
+
+
 def test_wrap_list_item_and_unwrap_roundtrip():
     res = formedits.wrap_node(FORM, FIELD, "Группа", name="Обертка")
     assert unchanged_outside(FORM, res)
@@ -696,6 +734,86 @@ def test_rename_guards():
 
 
 # --- set_property / reset_property --------------------------------------------------------
+
+
+@pytest.mark.needs_data
+def test_numeric_binding_is_bare_for_new_and_previously_quoted_values():
+    source = """ВидЭлемента: КомпонентИнтерфейса
+Наследует:
+    Тип: Группа
+    Ширина: "=Условие()?Авто:320"
+    Заголовок: Пример
+"""
+    value = "=Условие()?Авто:360"
+    replaced = formedits.set_property(source, "Наследует", "Ширина", value=value)
+    assert unchanged_outside(source, replaced)
+    assert "Ширина: =Условие()?Авто:360\n" in replaced.new_text
+    assert pyyaml.safe_load(replaced.new_text)["Наследует"]["Ширина"] == value
+    new = formedits.set_property(
+        source.replace('    Ширина: "=Условие()?Авто:320"\n', ""),
+        "Наследует", "Ширина", value=value,
+    )
+    assert "Ширина: =Условие()?Авто:360\n" in new.new_text
+
+
+@pytest.mark.needs_data
+def test_english_numeric_binding_uses_schema_alias_and_stays_bare():
+    source = """ElementKind: InterfaceComponent
+Inherits:
+    Type: Group
+    Width: "=Mobile()?Auto:320"
+"""
+    value = "=Mobile()?Auto:360"
+    result = formedits.set_property(source, "Наследует", "Width", value=value)
+    assert unchanged_outside(source, result)
+    assert "Width: =Mobile()?Auto:360\n" in result.new_text
+    assert pyyaml.safe_load(result.new_text)["Inherits"]["Width"] == value
+
+
+@pytest.mark.needs_data
+def test_typed_binding_with_yaml_indicator_uses_single_quotes_without_changing_expression():
+    source = """ВидЭлемента: КомпонентИнтерфейса
+Наследует:
+    Тип: Группа
+    Ширина: 320
+"""
+    value = "=Условие() ? Авто : 360"
+    result = formedits.set_property(source, "Наследует", "Ширина", value=value)
+    assert unchanged_outside(source, result)
+    assert "Ширина: '=Условие() ? Авто : 360'\n" in result.new_text
+    assert pyyaml.safe_load(result.new_text)["Наследует"]["Ширина"] == value
+
+
+@pytest.mark.needs_data
+def test_typed_binding_single_quote_round_trips_an_inner_apostrophe():
+    source = """ВидЭлемента: КомпонентИнтерфейса
+Наследует:
+    Тип: Группа
+    Ширина: 320
+"""
+    value = '=Имя == "It\'s" ? 200 : 240'
+    result = formedits.set_property(source, "Наследует", "Ширина", value=value)
+    assert "Ширина: '=Имя == \"It''s\" ? 200 : 240'\n" in result.new_text
+    assert pyyaml.safe_load(result.new_text)["Наследует"]["Ширина"] == value
+
+
+@pytest.mark.needs_data
+def test_typed_binding_multiline_refuses_without_a_partial_edit():
+    source = """ВидЭлемента: КомпонентИнтерфейса
+Наследует:
+    Тип: Группа
+    Ширина: 320
+"""
+    with pytest.raises(FormModelError, match="однострочной"):
+        formedits.set_property(source, "Наследует", "Ширина", value="=200\n+ 1")
+    assert "Ширина: 320" in source
+
+
+@pytest.mark.needs_data
+def test_open_text_binding_may_keep_quotes():
+    value = '=Режим ? "Да" : "Нет"'
+    result = formedits.set_property(FORM, LABEL, "Значение", value=value)
+    assert 'Значение: "=Режим ? \\"Да\\" : \\"Нет\\""' in result.new_text
 
 
 def test_set_property_new_scalar_lands_after_type():

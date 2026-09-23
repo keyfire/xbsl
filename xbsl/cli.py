@@ -356,6 +356,53 @@ def _selfupdate_main(argv: list[str]) -> int:
     return 0
 
 
+def _mcplog_parser() -> argparse.ArgumentParser:
+    parser = i18n.ArgumentParser(prog="xbsl mcp-log",
+                                 description=i18n.t("cli.help.commands.mcp-log"))
+    parser.add_argument("--last", type=int, default=20, help=i18n.t("cli.help.mcplog-last"))
+    parser.add_argument("--json", action="store_true", help=i18n.t("cli.help.mcplog-json"))
+    return parser
+
+
+def _mcplog_line(event: dict) -> str:
+    """One journal event in words: the time, the writing process and what happened."""
+    kind = event.get("event")
+    if kind == "start":
+        text = i18n.t("mcplog.start", version=event.get("version", "?"),
+                      parent=event.get("parent", "?"))
+    elif kind == "exit":
+        reason = event.get("reason", "")
+        if reason == "failed":
+            text = i18n.t("mcplog.exit.failed", error=event.get("error", ""))
+        elif reason in ("input-closed", "interrupted"):
+            text = i18n.t(f"mcplog.exit.{reason}")
+        else:
+            text = i18n.t("mcplog.unknown", event=f"exit {reason}")
+    elif kind == "stopped":
+        text = i18n.t("mcplog.stopped", target=event.get("target", "?"),
+                      name=event.get("name", ""), reason=event.get("reason", ""))
+    else:
+        text = i18n.t("mcplog.unknown", event=kind)
+    return f"{event.get('time', '?')}  pid {event.get('pid', '?')}  {text}"
+
+
+def _mcplog_main(argv: list[str]) -> int:
+    from xbsl import mcpjournal
+
+    args = _mcplog_parser().parse_args(argv)
+    events = mcpjournal.read(max(args.last, 0))
+    if args.json:
+        for event in events:
+            print(json.dumps(event, ensure_ascii=False))
+        return 0
+    print(i18n.t("mcplog.path", path=mcpjournal.journal_path()))
+    if not events:
+        print(i18n.t("mcplog.empty"))
+    for event in events:
+        print(_mcplog_line(event))
+    return 0
+
+
 def _baseline_parser() -> argparse.ArgumentParser:
     parser = i18n.ArgumentParser(
         prog="xbsl baseline",
@@ -1819,6 +1866,7 @@ COMMANDS: tuple[Command, ...] = (
     Command("translate", "cli.help.commands.translate", _translate_main, reference=False),
     Command("self-update", "cli.help.commands.self-update", _selfupdate_main,
             parser=_selfupdate_parser),
+    Command("mcp-log", "cli.help.commands.mcp-log", _mcplog_main, parser=_mcplog_parser),
     *(Command(name, f"cli.help.scaf.{name}", partial(_scaffold_run, name),
               parser=_scaffold_parser, scaffold=True) for name in _META_COMMANDS),
 )

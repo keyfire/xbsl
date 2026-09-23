@@ -968,6 +968,16 @@ _AVAILABILITY_RE = re.compile(r"Доступность:\s*(КлиентИСер�
 _H23_SPLIT_RE = re.compile(r"<h[23][^>]*>(.*?)</h[23]>", re.S)
 
 
+def page_type_availability(raw: str) -> str | None:
+    """Read a type's own environment from its header, never from a member section."""
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return None
+    header = _H2_OPEN_RE.split(ma.group(1), 1)[0]
+    m = _AVAILABILITY_RE.search(header)
+    return m.group(1) if m else None
+
+
 def package_member_availability(raw: str) -> dict[str, str]:
     """Member of a package page -> its availability (Клиент / Сервер / КлиентИСервер).
 
@@ -1043,6 +1053,8 @@ def extract(dist: Path) -> tuple:
     types: dict[str, dict[str, set[str]]] = {}
     globals_: set[str] = set()
     global_env: dict[str, str] = {}
+    type_env: dict[str, str] = {}
+    conflicted_type_env: set[str] = set()
     conflicted_env: set[str] = set()
     managers: dict[str, dict[str, set[str]]] = {}
     manager_returns: dict[str, dict[str, str]] = {}
@@ -1078,6 +1090,11 @@ def extract(dist: Path) -> tuple:
             # Russian name). The English spelling is not stored: the loader adds it by terms.json,
             # which pairs the two forms. So members, bases and facets are kept once, not twice.
             key = (title if _TYPE_NAME_RE.match(title) else "") or eng or ""
+            if key:
+                availability = page_type_availability(raw)
+                if availability:
+                    if type_env.setdefault(key, availability) != availability:
+                        conflicted_type_env.add(key)
             if key:
                 flags = checked_methods.setdefault(key, {})
                 for method, marked in page_checked_return_methods(raw).items():
@@ -1254,7 +1271,10 @@ def extract(dist: Path) -> tuple:
                   + ", ".join(filled))
     for member in conflicted_env:
         global_env.pop(member, None)
-    return (names, members, components, types, globals_, global_env, managers, manager_returns,
+    for name in conflicted_type_env:
+        type_env.pop(name, None)
+    return (names, members, components, types, globals_, global_env, type_env,
+            managers, manager_returns,
             facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
             type_variance, method_params,
             deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired)
@@ -1744,7 +1764,8 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    (names, members, components, types, globals_, global_env, managers, manager_returns,
+    (names, members, components, types, globals_, global_env, type_env,
+     managers, manager_returns,
      facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
      type_variance, method_params,
      deprecated, folds, checked_methods, retired) = extract(dist)
@@ -1794,6 +1815,9 @@ def main(argv=None) -> int:
         # its package page): Клиент / Сервер / КлиентИСервер. A name whose availability the
         # docs do not print, or print differently in two packages, is absent here.
         "global_availability": dict(sorted(global_env.items())),
+        # The type page's own header states where the type exists. Missing and conflicting
+        # declarations stay absent, so older or incomplete catalogs produce no verdict.
+        "type_availability": dict(sorted(type_env.items())),
         # Members of the kind's singleton type (the <Kind>Name_ru template page): bare names in
         # the manager module, and what may follow the dot after a project object of that kind.
         # Properties and methods apart, like type_members - a completion list inserts the

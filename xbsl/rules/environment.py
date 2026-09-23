@@ -81,6 +81,12 @@ whole project back, and a warning would let the pass through.
   own element declares is not read as a component: in an object module the bare name is
   the attribute or the tabular section written in the yaml beside it.
 
+- code/type-unavailable: a value access or constructor of a standard type whose type-page
+  header says it exists on one side only, from a method compiled for the other side.
+  Return and parameter type annotations are excluded: they do not access the value.
+  The paired yaml supplies the module's environment; local, module, and project names
+  that could shadow a standard type leave the use undecided and silent.
+
 The call detection of the first check is exercised by its own tests: a client handler calling
 a @НаСервере @ДоступноСКлиента method is found by the same matching and correctly not flagged.
 """
@@ -102,6 +108,7 @@ from xbsl.rules.enum_values import _shadowed_names
 from xbsl.rules.handlers import _handler_re, _IDENT_RE
 from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, element_own_names, object_kind,
                                     unreadable_object, unreadable_object_kind, value_of)
+from xbsl.typeinfer import _method_names, walk_nodes
 
 MESSAGES = {
     "code/client-available-unused.title": {
@@ -1126,6 +1133,172 @@ def global_unavailable(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "code/global-unavailable", Severity.ERROR, message,
             )
+
+
+# --- A standard type outside its environment -------------------------------------------
+
+MESSAGES_TYPES = {
+    "code/type-unavailable.title": {
+        "ru": "Стандартный тип вне своего окружения",
+        "en": "A standard type outside its environment",
+    },
+    "code/type-unavailable.on-client": {
+        "ru": "Тип '{name}' доступен только на сервере, а метод '{method}' исполняется на клиенте "
+              "– применение отвечает \"Тип недоступен в текущем окружении\". "
+              "Перенесите обращение в метод @НаСервере.",
+        "en": "Type '{name}' exists on the server only, while method '{method}' runs on the "
+              "client - the apply reports that the type is unavailable in this environment. "
+              "Move the access into an @{n[НаСервере]} method.",
+    },
+    "code/type-unavailable.on-server": {
+        "ru": "Тип '{name}' доступен только на клиенте, а метод '{method}' исполняется на сервере "
+              "– перенесите обращение в клиентский код.",
+        "en": "Type '{name}' exists on the client only, while method '{method}' runs on the "
+              "server - move the access into client code.",
+    },
+}
+i18n.register(MESSAGES_TYPES)
+
+
+_types_env_cache: dict[str, str] | None = None
+
+
+def _type_availability() -> dict[str, str]:
+    """Type-page environments; an old catalog without this section gives no verdict."""
+    global _types_env_cache
+    if _types_env_cache is None:
+        try:
+            data = dataset.load_json("stdlib.json")
+        except Exception:  # noqa: BLE001 - no data, no rule
+            data = {}
+        _types_env_cache = data.get("type_availability") or {}
+    return _types_env_cache
+
+
+def _reset_types_env() -> None:
+    global _types_env_cache
+    _types_env_cache = None
+
+
+dataset.register_reset(_reset_types_env)
+
+
+def _type_env_mapper(source: SourceFile) -> dict | None:
+    """Collect YAML execution roles and unshadowed type value uses from method bodies."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None:
+            return None
+        kind = object_kind(data)
+        name = value_of(data, "Имя", kind)
+        role = None
+        if kind in ("ОбщийМодуль", "Структура"):
+            value = value_of(data, "Окружение", kind)
+            if value in _environment_forms()[0]:
+                role = "server"
+            elif value in _environment_forms()[1]:
+                role = "client"
+            elif value in _both_env_forms():
+                role = "both"
+        elif kind in _SERVER_ENV_KINDS:
+            role = "server"
+        elif kind in _CLIENT_ENV_KINDS:
+            role = "client"
+        elif kind == "Перечисление":
+            role = "both"
+        return {"k": "y", "stem": _pair_stem(source.rel), "role": role,
+                "name": name if isinstance(name, str) else None,
+                "own": sorted(element_own_names(data))}
+    if source.kind != "xbsl" or not _type_availability():
+        return None
+    module, errors = parse(source)
+    if errors:
+        return None  # a recovered AST cannot prove which identifiers are value accesses
+    nodes = walk_nodes(module)
+    declared = {node.name for node in nodes
+                if isinstance(node, (P.Method, P.ObjectField, P.Structure))}
+    available = _type_availability()
+    lm = linemap(source)
+    accesses: list[list] = []
+    for member in nodes:
+        if not isinstance(member, P.Method):
+            continue
+        annotations = {a.name for a in member.annotations}
+        on_server = bool(annotations & _on_server_forms())
+        on_client = bool(annotations & _on_client_forms())
+        if on_server and on_client:
+            continue  # the method runs where called from
+        side = "server" if on_server else "client" if on_client else "module"
+        body_nodes = walk_nodes(member.body)
+        shadowed = set(_method_names(member, body_nodes))
+        shadowed.update(
+            node.target.name for node in body_nodes
+            if isinstance(node, P.Assign) and isinstance(node.target, P.Name)
+        )
+        for node in body_nodes:
+            if isinstance(node, P.Name):
+                name = node.name
+                if name in shadowed or name in declared:
+                    continue
+                offset = node.start
+            elif isinstance(node, P.New) and node.type.names:
+                name = node.type.names[0]
+                if name in declared:
+                    continue
+                offset = node.type.start
+            else:
+                continue
+            russian = terms.russian(name, "types") or name
+            type_env = available.get(russian)
+            if type_env not in ("Клиент", "Сервер"):
+                continue
+            line, col = lm.linecol(offset)
+            accesses.append([name, type_env, member.name, side, line, col])
+    if not accesses:
+        return None
+    return {"k": "x", "stem": _pair_stem(source.rel), "accesses": accesses}
+
+
+@rule(
+    "code/type-unavailable", "code/type-unavailable.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_type_env_mapper,
+)
+def type_unavailable(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A value access to a documented one-environment type on the other side."""
+    roles: dict[str, str] = {}
+    names: set[str] = set()
+    own_names: dict[str, set[str]] = {}
+    for fact in facts.values():
+        if fact["k"] != "y":
+            continue
+        if fact["role"]:
+            roles[fact["stem"]] = fact["role"]
+        if fact["name"]:
+            names.add(fact["name"])
+        own_names[fact["stem"]] = set(fact["own"])
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        stem = fact["stem"]
+        role = roles.get(stem) or roles.get(stem.rsplit(".", 1)[0])
+        if role is None:
+            continue
+        own = own_names.get(stem) or own_names.get(stem.rsplit(".", 1)[0]) or set()
+        for name, type_env, method, side, line, col in fact["accesses"]:
+            if name in names or name in own:
+                continue
+            runs_on = role if side == "module" else side
+            if runs_on is None:
+                continue
+            if type_env == "Сервер" and runs_on in ("client", "both"):
+                message = i18n.t("code/type-unavailable.on-client", name=name, method=method)
+            elif type_env == "Клиент" and runs_on in ("server", "both"):
+                message = i18n.t("code/type-unavailable.on-server", name=name, method=method)
+            else:
+                continue
+            yield Diagnostic(rel, line, col, "code/type-unavailable", Severity.ERROR, message)
 
 
 # --- An interface component referenced from server-compiled code ------------------------
