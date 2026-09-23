@@ -253,6 +253,14 @@ keystroke. What the inference cannot name is not judged: a lambda parameter with
 with an unknown part, a method whose overloads for the given arguments disagree, a column of a query
 the compiler would refuse. The rules therefore miss some of the IDE's warnings and add none of their own.
 
+`code/row-field-null` reads the same inference for the row of a query. A column that reads a field
+through a reference or from the joined side of an outer join may hold `Null`, and the rule reports
+where such a column goes to a structure field, a parameter of a project method, a variable or a
+method result whose declared type has no `Null`; a `?` type refuses it too. A lambda of `Transform`,
+`Filter` or `ForEach` gets its parameter type from the signature of the platform method, a reading
+only this rule uses so far. A computed column is not judged: the compiler narrows
+`CASE WHEN X IS NULL THEN ... ELSE X END` itself.
+
 `code/deprecated-api` checks calls of deprecated platform methods. It selects overloads using the
 project compatibility mode and the number, names and inferred types of arguments, and reports only
 when every matching form is deprecated. Unknown types keep ambiguous calls silent. This requires a

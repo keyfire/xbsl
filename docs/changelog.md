@@ -29,6 +29,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Changed
 
+- **`code/row-field-null` also follows the rows of `Query{...}`.** A column read through a reference
+  or from the joined side of an outer join may be `Null`, and passing it to a structure field, a
+  parameter of a project method, a variable or a method result declared without `Null` fails the
+  build; a `?` type refuses it as well. The rule only looked at dynamic list rows, so a query without
+  `ReplaceNull` failed only when the build was applied. ([#137](https://github.com/keyfire/xbsl/pull/137))
 - **Form tools take a component's `Name` where they took only a node path.** An agent that knew the
   component by name got "node not found" from `meta_set_component_property` and had to read the
   tree for the path first. The name now works in every tool and `form-*` command that takes a node;
