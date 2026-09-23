@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine, fixer, metamodel, restext, terms, uischema
+from xbsl import dataset, engine, fixer, metamodel, resources as resource_model, restext, terms, uischema
 from xbsl.layout import Layout, Place, service_dirs
 from xbsl.lexer import _skip_interpolation
 
@@ -6066,7 +6066,8 @@ _LIST_TABLE = "(?:СписокТаблица|ListTable)"
 #: documentation spells the file `<Имя>.Wsdl.1`, but a build carrying a file under that name
 #: fails to apply with "WSDL not found": the platform reads the name with the extension. The
 #: element has no property pointing at the file, so the name is the only link between them.
-_WSDL_DESCRIPTION = re.compile(r"Wsdl\.[1-9]\d*\.wsdl")
+#: Imported XML schemas share the same stem and number series: `<Name>.Wsdl.2.xsd`.
+_WSDL_DESCRIPTION = re.compile(r"Wsdl\.[1-9]\d*\.(?:wsdl|xsd)")
 
 
 def _file_owner(path: Path) -> str | None:
@@ -6074,8 +6075,9 @@ def _file_owner(path: Path) -> str | None:
 
     An element's own files are its description and modules (`<Имя>.yaml`, `<Имя>.xbsl`,
     `<Имя>.<Часть>.xbsl`), the `.xbql` query of a virtual table and the WSDL descriptions of a
-    SOAP service client. Every walk over an object's files - the family that deleting or moving
-    it takes along, the files a rename renames - reads them through this one test. None for any
+    SOAP service client, including its imported XSD schemas. Every walk over an object's files -
+    the family that deleting or moving it takes along, the files a rename renames - reads them
+    through this one test. None for any
     other file of the folder.
     """
     owner, _dot, rest = path.name.partition(".")
@@ -6534,7 +6536,8 @@ def op_rename_object(
     # description changes (`<Имя>.Wsdl.2`, with the extension or without), never an address or
     # a longer name that starts the same way.
     description_name = re.compile(
-        rf"(?<![{_WORD}.]){re.escape(old_name)}(?=\.Wsdl\.[1-9]\d*(?![{_WORD}]))"
+        rf"(?P<prefix>\b(?:location|schemaLocation)\s*=\s*)(?P<quote>[\"'])"
+        rf"{re.escape(old_name)}(?P<tail>\.Wsdl\.[1-9]\d*(?:\.(?:wsdl|xsd))?)(?P=quote)"
     )
     for rename in result.renames:
         if not _WSDL_DESCRIPTION.fullmatch(rename.old_path.name.partition(".")[2]):
@@ -6551,7 +6554,10 @@ def op_rename_object(
             text = loaded.text
         else:
             text = reader(rename.old_path)
-        new_text, count = description_name.subn(new_name, text)
+        new_text, count = description_name.subn(
+            lambda match: (match["prefix"] + match["quote"] + new_name
+                           + match["tail"] + match["quote"]), text
+        )
         if count:
             result.changes.append(FileChange(rename.new_path, new_text, created=False))
             result.details.append(f"{rel(rename.old_path)}: замен – {count}")
@@ -7749,27 +7755,10 @@ def _resources_of(path: Path) -> tuple[_ResourceFolder, tuple[str, ...]]:
 
 def _resource_folder_index(root: Path, layout: Layout) -> dict[str, tuple[_ResourceFolder, frozenset[str]]]:
     """Every resources folder under the root with the keys of its files, by the folder's path key."""
-    found: dict[str, tuple[_ResourceFolder, frozenset[str]]] = {}
-    for name in restext.RESOURCE_DIRS:
-        for directory in engine.find_sources(root, name):
-            if not directory.is_dir():
-                continue
-            place = layout.place(directory / "_")
-            if place is None:
-                continue
-            try:
-                parts = directory.relative_to(place.subsystem_dir).parts
-            except ValueError:
-                continue
-            first = next((i for i, part in enumerate(parts) if part in service_dirs()), None)
-            if first != len(parts) - 1:
-                continue  # a namesake inside a resources folder, or one under localization
-            keys = frozenset(
-                path.relative_to(directory).as_posix()
-                for path in engine.find_sources(directory, "*") if path.is_file()
-            )
-            found[_path_key(directory)] = (_ResourceFolder(directory, place), keys)
-    return found
+    return {
+        _path_key(scope.directory): (_ResourceFolder(scope.directory, scope.place), scope.keys)
+        for scope in resource_model.resource_scopes(root, layout)
+    }
 
 
 def _check_resource_folder_name(name: str, top_level: bool) -> str:
@@ -7878,13 +7867,13 @@ class _ResourceScan:
 
     - a key with a namespace (`Warehouse::Pictures/Flag.svg`, the vendor and project prefix in front
       allowed) names the resources folder of that namespace;
-    - a bare key is looked for in the folders the file sees: every resources folder of its own
-      subsystem - the root and the packages of a subsystem see each other, and a literal in a
-      module of a package finds a file of its subsystem (xbsl.rules.resources) - and the folders
-      of the namespaces the file imports (the documentation page on resources: a resource of
-      another subsystem is reached by the full namespace or through an import). One folder
-      holding the key is the folder named; two make the reference ambiguous, and it is named in
-      the notes rather than rewritten.
+    - a bare key first considers every resources namespace of its own subsystem. A local match
+      suppresses imported namesakes. Only when there is no local match do imported namespaces
+      participate. Two namespaces at that winning priority make the reference ambiguous, and it
+      is named in the notes rather than rewritten;
+    - visibility is checked after a single namespace wins. A hidden or unproven foreign link is
+      not treated as a reference to the file. A fully qualified namespace may name another
+      project loaded under the root.
 
     A reference to a touched file of the operation's folder is rewritten to the new key (listed,
     for a deletion). A STRING literal that spells the path - `ResourcesPackage.Current().Get()`
@@ -7909,6 +7898,12 @@ class _ResourceScan:
         self.read = reader or _read
         self.layout = _root_layout(root)
         self.folders = _resource_folder_index(root, self.layout)
+        self.scope_public = {
+            key: resource_model.resource_folder_visibility(
+                folder.directory, resource_model.project_compatibility(folder.place.project_dir),
+            )
+            for key, (folder, _keys) in self.folders.items()
+        }
         self.own = _path_key(folder.directory)
         self.edits: dict[Path, list[tuple[int, int, str]]] = {}
         self.texts: dict[Path, str] = {}
@@ -7920,7 +7915,6 @@ class _ResourceScan:
         self.stems: list[tuple[Path, int, str]] = []
         # (file, start, end, kind) of every place above - the offsets of the text it spells.
         self.mentions: list[tuple[Path, int, int, str]] = []
-        self._visible: dict[Path, list[str]] = {}
         self._run()
 
     def _run(self) -> None:
@@ -8005,42 +7999,54 @@ class _ResourceScan:
                     self._stem(path, text, offset + bare.start("value"))
             offset += len(line) + 1
 
-    def _visible_from(self, path: Path, text: str) -> list[str]:
-        """The resources folders a bare key of this file is looked for in (see the class)."""
-        if path in self._visible:
-            return self._visible[path]
+    def _resolution(self, path: Path, text: str, qualifier: str | None,
+                    key: str, projected_own: bool = False) -> resource_model.ResourceResolution:
+        """Resolve a static key by the same namespace priority as the platform resolver."""
         place = self.layout.place(path)
         project = self.layout.project_dir_of(path)
         written = _yaml_import_names(text) if path.suffix == ".yaml" else _module_import_names(text)
         imported = {self.layout.local_name(namespace, project) for namespace in written}
-        visible = [
-            key for key, (folder, _keys) in self.folders.items()
-            if folder.place.project_dir == project and (
-                (place is not None and folder.place.subsystem == place.subsystem)
-                or folder.place.key in imported)
+        def namespace(folder: _ResourceFolder) -> str:
+            if folder.place.project_dir == project:
+                return folder.place.key
+            identity = self.layout.identity(folder.place.project_dir)
+            return _full_namespace(
+                f"{identity[0]}::{identity[1]}" if identity else None, folder.place.key,
+            )
+
+        current_namespaces = {
+            folder.place.key for folder, _keys in self.folders.values()
+            if folder.place.project_dir == project
+        }
+        target = None
+        if qualifier is not None:
+            target = self.layout.resolve(qualifier.split("::"), project, current_namespaces)
+            if target is None:
+                full_names = {namespace(folder) for folder, _keys in self.folders.values()}
+                target = qualifier if qualifier in full_names else None
+            if target is None:
+                return resource_model.ResourceResolution("unknown")
+        candidates = [
+            resource_model.ResourceCandidate(
+                namespace(folder),
+                (folder.place.project_dir == project and place is not None
+                 and folder.place.subsystem == place.subsystem),
+                self.scope_public[token], token,
+            )
+            for token, (folder, keys) in self.folders.items()
+            if (key in keys or (projected_own and token == self.own))
+            and (target is not None or folder.place.project_dir == project)
+            and (target is None or namespace(folder) == target)
         ]
-        self._visible[path] = visible
-        return visible
+        return resource_model.resolve_resource(
+            candidates, imported, target,
+        )
 
     def _holders(self, path: Path, text: str, qualifier: str | None, key: str) -> list[str]:
         """The resources folders holding the key that a reference of this file reaches."""
-        if qualifier is None:
-            return [other for other in self._visible_from(path, text) if key in self.folders[other][1]]
-        project = self.layout.project_dir_of(path)
-        local = self.layout.local_name(qualifier, project)
-        holders = []
-        for other, (folder, keys) in self.folders.items():
-            if key not in keys:
-                continue
-            identity = self.layout.identity(folder.place.project_dir)
-            if identity is not None:
-                named = (folder.place.project_dir == project and local == folder.place.key) or (
-                    qualifier == f"{identity[0]}::{identity[1]}::{folder.place.key}")
-            else:
-                named = qualifier == folder.place.key or qualifier.endswith("::" + folder.place.key)
-            if named:
-                holders.append(other)
-        return holders
+        return [candidate.token for candidate in self._resolution(
+            path, text, qualifier, key,
+        ).candidates]
 
     def _reference(self, path: Path, text: str, body_start: int, body: str,
                    bare: bool = False) -> bool:
@@ -8051,15 +8057,18 @@ class _ResourceScan:
             return False
         if bare and "." not in key.rpartition("/")[2]:
             return False  # an image property names a file, and a file name carries its type
-        holders = self._holders(path, text, qualifier.strip() if separator else None, key)
+        resolution = self._resolution(path, text, qualifier.strip() if separator else None, key)
+        if resolution.kind not in {"resolved", "ambiguous"}:
+            return False
+        holders = [candidate.token for candidate in resolution.candidates]
         if self.own not in holders:
             return False
         line = _line_of(text, body_start)
         written = body.strip()
         written_start = body_start + len(body) - len(body.lstrip())
         self._mention(path, text, written_start, written_start + len(written),
-                      "ambiguous" if len(holders) > 1 else "reference")
-        if len(holders) > 1:
+                      "ambiguous" if resolution.kind == "ambiguous" else "reference")
+        if resolution.kind == "ambiguous":
             self.ambiguous.append((path, line, written))
             return True
         new_key = self.moves[key]
@@ -8069,9 +8078,9 @@ class _ResourceScan:
         key_start = body_start + len(body) - len(tail) + (len(tail) - len(tail.lstrip()))
         self.texts.setdefault(path, text)
         self.edits.setdefault(path, []).append((key_start, key_start + len(key), new_key))
-        if not separator and any(
-                new_key in self.folders[other][1]
-                for other in self._visible_from(path, text) if other != self.own):
+        after = self._resolution(path, text, None, new_key, projected_own=True)
+        if not separator and after.kind == "ambiguous" and any(
+                candidate.token == self.own for candidate in after.candidates):
             self.collisions.append((path, line, written))
         return True
 
@@ -8416,8 +8425,8 @@ def resource_references(root: Path, resource_path: Path, *, reader=None) -> dict
 
     - `reference` - a static reference that resolves to the file: a `Resource{...}` literal of
       a module (a comment included) or of a yaml binding, the bare value of an image property;
-    - `ambiguous` - a static reference whose key two resources folders visible from the file
-      hold, this one among them;
+    - `ambiguous` - a static reference whose key two namespaces at the winning priority hold,
+      this one among them; local namespaces suppress imported namesakes;
     - `string` - a string literal that spells the path, read at run time by
       `ResourcesPackage.Current().Get()` or a wrapper of the project;
     - `computed` - a string with the folder of the file and a computed name, which may name it;

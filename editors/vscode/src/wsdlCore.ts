@@ -7,6 +7,7 @@
 // The documentation spells the file `<Name>.Wsdl.1`, without the extension, but a build that
 // carries such a file fails to apply with "WSDL not found", so the tree lists the names the
 // platform reads.
+// Imported XML schemas use the same stem and number series: `<Name>.Wsdl.2.xsd`.
 //
 // A SOAP service (the server side) has no such file: the platform builds its WSDL from the
 // element and serves it at `?wsdl`.
@@ -16,7 +17,7 @@ import { SERIALIZER_KIND_SPELLINGS } from "./metadataCore";
 const SOAP_CLIENT_KIND = "КлиентSoapСервиса";
 
 // `Wsdl.<number>.wsdl` after the element name and a dot; the platform numbers from one.
-const WSDL_TAIL = /^Wsdl\.([1-9]\d*)\.wsdl$/;
+const WSDL_TAIL = /^Wsdl\.([1-9]\d*)\.(?:wsdl|xsd)$/;
 
 /** Does an element of this kind keep WSDL descriptions beside it?
  *

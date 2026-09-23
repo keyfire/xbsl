@@ -45,11 +45,17 @@ library, and such a check would call every one of them
 errors. The probe settled it: `Ресурс{Настройки.svg}` compiles in a project with no such
 file, while `Ресурс{Настройки3.svg}` right next to it fails.
 
-So the known set is the union of two sources: the RELATIVE POSIX PATH of every file under
-the project's `Ресурсы` folders (the project root is the folder holding `Проект.yaml`;
-a top-level file's path is its bare name) and the names of the platform's image library.
-The documentation page `topics/image-library` lists the library in Russian - the first
-source of truth, not a hand-written list. The same pictures also have English names: the
+Project resources keep their namespace instead of collapsing into one known set. For a bare
+key the runtime gives every namespace of the current subsystem priority 0 (the root and all
+packages), another namespace of the project priority 5, another project priority 10 and `Std`
+priority 20. Only namespaces at the best available priority participate: a local resource wins
+over an imported namesake, while two local packages holding the key make it ambiguous. Imported
+resources then obey the visibility of their resources descriptor. Without a descriptor the
+runtime default is global before compatibility mode 8.0 and subsystem-only from 8.0 onward.
+
+The platform image library is the last fallback. The documentation page
+`topics/image-library` lists it in Russian - the first source of truth, not a hand-written list.
+The same pictures also have English names: the
 platform's own sources write `Resource{Std::...}` and bare English names, and the translator
 writes them too. Those names come from the pairs the extractor matched by their bytes
 (`uiterms.resource_paths`). With the Russian names alone the rule reported such references
@@ -61,14 +67,11 @@ what produces false positives.
 A Ресурсы-prefixed key is left to code/resource-bare-name, so one mistake is not reported
 twice; a backslash spelling is unproven and skipped rather than judged.
 
-The union spans the projects of the run - a resource of a foreign subsystem is never
-reported. That is narrower than the compiler: the IDE server resolves a bare key across the
-resources folders of the module's own subsystem (its root and its packages, a file in two
-packages being an ambiguous resource) and answered a file of another subsystem with an unknown
-resource, or, once the module imported the package holding it, with a resource not visible
-outside its subsystem. How a resource is published was not probed, so the rule keeps the union:
-a wider set can only silence it, never make it fire. Keys are matched exactly: the platform's
-lookup is case-sensitive while a Windows checkout is not.
+The rule reports the three failure results the shipped resolver distinguishes: unknown,
+ambiguous at the winning priority and hidden by visibility. A fully qualified resource in
+another loaded project is left alone because subsystem usage across projects is not part of the
+facts this rule collects. Keys are matched exactly: the platform's lookup is case-sensitive
+while a Windows checkout is not.
 """
 
 from __future__ import annotations
@@ -78,14 +81,14 @@ from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, docs, i18n, terms
+from xbsl import dataset, docs, i18n, resources as resource_model, terms
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token
 from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules._syntax import code_tokens
-from xbsl.rules.yaml_imports import _layout_fact, _layout_from
+from xbsl.rules.yaml_imports import _layout_fact, _layout_from, _module_imports
 from xbsl.rules.yaml_schema import _HAVE_YAML
 
 MESSAGES = {
@@ -103,6 +106,17 @@ MESSAGES = {
         "en": "Unknown resource '{name}' – neither in the project's '{n[Ресурсы]}' folders nor in "
               "the platform's image library; applying the build will fail with 'Неизвестный "
               "ресурс'.",
+    },
+    "code/unknown-resource.ambiguous": {
+        "ru": "Неоднозначный ресурс '{name}' – его одновременно дают пространства имен: {owners}.",
+        "en": "Ambiguous resource '{name}' – it is provided by these namespaces at the same "
+              "priority: {owners}.",
+    },
+    "code/unknown-resource.hidden": {
+        "ru": "Ресурс '{name}' принадлежит пространству имен '{owner}' и не виден из-за "
+              "области видимости каталога ресурсов.",
+        "en": "Resource '{name}' belongs to namespace '{owner}' and is hidden by the resources "
+              "folder's visibility scope.",
     },
     "code/resource-bare-name.path": {
         "ru": "Ключ ресурса задаётся ОТНОСИТЕЛЬНО каталога {n[Ресурсы]}: '{name}' начинается с "
@@ -260,32 +274,21 @@ def _english_library_keys() -> frozenset[str]:
 
 
 def _unknown_resource_mapper(source: SourceFile) -> dict | None:
-    """The map phase: a Проект.yaml contributes its folder, a module its resource refs."""
+    """The map phase: descriptors contribute layout, modules their refs and imports."""
     if source.kind == "yaml":
-        if source.path.name in ("Проект.yaml", "Project.yaml"):
-            return {"root": str(source.path.parent)}
-        return None
+        return _layout_fact(source)
     if source.kind != "xbsl" or not any(w + "{" in source.text for w in _resource_words()):
         return None
-    refs = list(_resource_refs(code_tokens(source), source.text))
-    return {"refs": refs} if refs else None
-
-
-def _project_resources(roots: Iterable[str]) -> set[str]:
-    """Relative POSIX keys of every file under a resources folder of the given roots.
-
-    The key of a resource is its path relative to the subsystem's Ресурсы folder
-    (subfolders included); a top-level file's key is its bare name.
-    """
-    keys: set[str] = set()
-    for root in roots:
-        for res_dir in [d for name in _RESOURCE_DIRS for d in Path(root).rglob(name)]:
-            if not res_dir.is_dir():
-                continue
-            for path in res_dir.rglob("*"):
-                if path.is_file():
-                    keys.add(path.relative_to(res_dir).as_posix())
-    return keys
+    toks = code_tokens(source)
+    refs = list(_resource_refs(toks, source.text))
+    if not refs:
+        return None
+    return {
+        "k": "refs",
+        "path": str(source.path),
+        "refs": refs,
+        "imports": [name for name, _line, _col in _module_imports(toks)],
+    }
 
 
 @rule(
@@ -296,24 +299,79 @@ def unknown_resource(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     library = _platform_images()
     if not library:
         return  # no documentation data - the library is unknown, guessing would be wrong
-    roots = {fact["root"] for fact in facts.values() if "root" in fact}
-    if not roots:
+    layout = _layout_from(facts)
+    if not layout.projects:
         return  # no Проект.yaml in the run - nothing to compare against
-    known = _project_resources(roots) | library
+    scopes = tuple(
+        scope for root in layout.projects
+        for scope in resource_model.resource_scopes(root, layout)
+    )
     for rel, fact in facts.items():
+        if fact.get("k") != "refs":
+            continue
+        path = Path(fact["path"])
+        place = layout.place(path)
+        project = layout.project_dir_of(path)
+        imports = {layout.local_name(name, project) for name in fact.get("imports", ())}
+        project_scopes = tuple(scope for scope in scopes if scope.place.project_dir == project)
+        namespaces = {scope.place.key for scope in project_scopes}
         for name, line, col in fact.get("refs", ()):
             if name.startswith(_UPLOADED_PREFIX):
                 continue  # uploaded into the base - existence is a base fact
             if "\\" in name:
                 continue  # a backslash spelling is unproven - skipped, not judged
-            key = name.rsplit("::", 1)[-1].strip()  # Стд::Грузовик.svg -> Грузовик.svg
+            qualifier, separator, tail = name.rpartition("::")
+            key = tail.strip()
             if key.partition("/")[0] in _RESOURCE_DIRS:
                 continue  # the Ресурсы-prefixed spelling - resource-bare-name reports it
-            if key in known:
+            if key in library and separator and qualifier in {"Стд", "Std"}:
                 continue
+            target = None
+            if separator:
+                target = layout.resolve(qualifier.strip().split("::"), project, namespaces)
+                if target is None:
+                    external = [
+                        scope for scope in scopes if key in scope.keys
+                        and (identity := layout.identity(scope.place.project_dir)) is not None
+                        and qualifier == f"{identity[0]}::{identity[1]}::{scope.place.key}"
+                    ]
+                    if external:
+                        continue  # cross-project namespace usage is not part of these facts
+                    resolution = resource_model.ResourceResolution("unknown")
+                elif (place is not None and target.split("::", 1)[0] != place.subsystem
+                      and target not in imports):
+                    continue  # subsystem usage is not part of this rule's facts
+            candidates = [
+                resource_model.ResourceCandidate(
+                    scope.place.key,
+                    place is not None and scope.place.subsystem == place.subsystem,
+                    scope.public,
+                    str(scope.directory),
+                )
+                for scope in project_scopes if key in scope.keys
+                and (target is None or scope.place.key == target)
+            ]
+            if not separator or target is not None:
+                resolution = resource_model.resolve_resource(
+                    candidates, imports, target,
+                )
+            if resolution.kind == "resolved":
+                continue
+            if resolution.kind == "unproven":
+                continue
+            if resolution.kind == "unknown" and not separator and key in library:
+                continue
+            owners = sorted({candidate.namespace for candidate in resolution.candidates})
+            message_key = resolution.kind if resolution.kind in {"ambiguous", "hidden"} else "unknown"
+            message_args = {"name": name}
+            if message_key == "ambiguous":
+                message_args["owners"] = ", ".join(owners)
+            elif message_key == "hidden":
+                message_args["owner"] = owners[0]
             yield Diagnostic(
                 rel, line, col, "code/unknown-resource", Severity.ERROR,
-                i18n.t("code/unknown-resource.unknown", name=name),
+                i18n.t(f"code/unknown-resource.{message_key}", **message_args),
+                data={"resolution": message_key, "namespaces": owners},
             )
 
 

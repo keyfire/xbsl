@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+
+- **The SOAP client tree includes imported XSD schemas.** They appear beside WSDL files
+  and open as XML. Creating or deleting a schema refreshes the tree.
+
 ## 0.75.1
 
 ### Fixed

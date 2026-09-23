@@ -3303,7 +3303,7 @@ export function registerMetadataTree(
   resourceWatcher.onDidDelete(() => bump(true));
   // A WSDL description that appears or goes away changes the WSDL node of its SOAP service client
   // and moves no object, so the placement is kept.
-  const wsdlWatcher = vscode.workspace.createFileSystemWatcher("**/*.wsdl", false, true, false);
+  const wsdlWatcher = vscode.workspace.createFileSystemWatcher("**/*.{wsdl,xsd}", false, true, false);
   wsdlWatcher.onDidCreate(() => bump(false));
   wsdlWatcher.onDidDelete(() => bump(false));
   context.subscriptions.push(wsdlWatcher);

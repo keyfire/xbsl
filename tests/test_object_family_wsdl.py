@@ -103,6 +103,62 @@ def test_the_family_of_a_soap_client_holds_its_wsdl_descriptions(tmp_path):
     assert sorted(path.name for path in family) == sorted([*FAMILY, f"{CLIENT}.Wsdl.10.wsdl"])
 
 
+SCHEMA = (
+    '<schema xmlns="http://www.w3.org/2001/XMLSchema">\r\n'
+    f'  <include schemaLocation="{CLIENT}.Wsdl.3.xsd"/>\r\n'
+    f"  <include schemaLocation='{CLIENT}.Wsdl.4.xsd'/>\r\n"
+    f'  <import schemaLocation="https://example.com/{CLIENT}.Wsdl.3.xsd"/>\r\n'
+    f'  <annotation><documentation>{CLIENT}.Wsdl.3.xsd</documentation></annotation>\r\n'
+    '</schema>\r\n'
+)
+
+
+def _project_with_schemas(tmp_path):
+    return _project(tmp_path, {
+        f"Склад/{CLIENT}.Wsdl.2.xsd": BOM + SCHEMA.encode(),
+        f"Склад/{CLIENT}.Wsdl.3.xsd": b'<schema/>',
+        f"Склад/{CLIENT}.Wsdl.4.xsd": b'<schema/>',
+        f"Склад/{CLIENT}.Xsd.2.xsd": b'<unrelated/>',
+        f"Склад/{CLIENT}Архив.Wsdl.2.xsd": b'<unrelated/>',
+    })
+
+
+def test_a_soap_client_family_contains_schemas_but_not_guessed_xsd_names(tmp_path):
+    stock = _project_with_schemas(tmp_path)
+    names = {p.name for p in scaffold.object_family(stock / f"{CLIENT}.yaml", CLIENT)}
+    assert names == set(FAMILY) | {f"{CLIENT}.Wsdl.{n}.xsd" for n in (2, 3, 4)}
+
+
+def test_a_moved_soap_client_keeps_schema_bytes(tmp_path):
+    stock = _project_with_schemas(tmp_path)
+    result = scaffold.op_move_object(tmp_path, stock / f"{CLIENT}.yaml", stock / "Партии")
+    apply_result(result)
+    assert (stock / "Партии" / f"{CLIENT}.Wsdl.2.xsd").read_bytes() == BOM + SCHEMA.encode()
+    assert (stock / f"{CLIENT}.Xsd.2.xsd").is_file()
+    assert not (stock / f"{CLIENT}.Wsdl.2.xsd").exists()
+
+
+def test_a_renamed_soap_client_updates_only_local_schema_links(tmp_path):
+    stock = _project_with_schemas(tmp_path)
+    new = "КлиентКотировок"
+    result = scaffold.op_rename_object(tmp_path, CLIENT, new)
+    apply_result(result)
+    expected = SCHEMA.replace(f'"{CLIENT}.Wsdl.3.xsd"', f'"{new}.Wsdl.3.xsd"')
+    expected = expected.replace(f"'{CLIENT}.Wsdl.4.xsd'", f"'{new}.Wsdl.4.xsd'")
+    assert (stock / f"{new}.Wsdl.2.xsd").read_bytes() == BOM + expected.encode()
+    assert (stock / f"{CLIENT}.Xsd.2.xsd").is_file()
+    assert (stock / f"{CLIENT}Архив.Wsdl.2.xsd").is_file()
+
+
+def test_a_deleted_soap_client_removes_schemas_but_not_unrelated_files(tmp_path):
+    stock = _project_with_schemas(tmp_path)
+    result = scaffold.op_delete_object(tmp_path, CLIENT)
+    assert {p.name for p in result.deletes} == set(FAMILY) | {f"{CLIENT}.Wsdl.{n}.xsd" for n in (2, 3, 4)}
+    apply_result(result)
+    assert (stock / f"{CLIENT}.Xsd.2.xsd").is_file()
+    assert (stock / f"{CLIENT}Архив.Wsdl.2.xsd").is_file()
+
+
 # --- the operations --------------------------------------------------------------------------
 
 
@@ -217,6 +273,11 @@ ENGLISH_FILES: dict[str, bytes] = {
         '    <import location="CurrencyRatesClient.Wsdl.2.wsdl"/>\n</definitions>\n'
     ).encode(),
     "Main/CurrencyRatesClient.Wsdl.2.wsdl": SECOND.encode(),
+    "Main/CurrencyRatesClient.Wsdl.3.xsd": (
+        '<schema xmlns="http://www.w3.org/2001/XMLSchema">\n'
+        '    <import schemaLocation="CurrencyRatesClient.Wsdl.4.xsd"/>\n</schema>\n'
+    ).encode(),
+    "Main/CurrencyRatesClient.Wsdl.4.xsd": b'<schema/>',
     "Main/Batches/GoodsBatches.yaml": (
         "ElementKind: Catalog\nId: 6f0b6a44-0000-4000-8000-000000000412\nName: GoodsBatches\n"
     ).encode(),
@@ -232,7 +293,8 @@ def test_an_english_soap_client_takes_its_descriptions_along(tmp_path):
         path.write_bytes(data)
     client = main / "CurrencyRatesClient.yaml"
     family = ["CurrencyRatesClient.yaml", "CurrencyRatesClient.Wsdl.1.wsdl",
-              "CurrencyRatesClient.Wsdl.2.wsdl"]
+              "CurrencyRatesClient.Wsdl.2.wsdl", "CurrencyRatesClient.Wsdl.3.xsd",
+              "CurrencyRatesClient.Wsdl.4.xsd"]
     assert scaffold.element_kind(client.read_text(encoding="utf-8")) == "КлиентSoapСервиса"
 
     moved = scaffold.op_move_object(tmp_path, client, main / "Batches")
@@ -245,6 +307,8 @@ def test_an_english_soap_client_takes_its_descriptions_along(tmp_path):
     }
     first = next(c.content for c in renamed.changes if c.path.name == "RatesClient.Wsdl.1.wsdl")
     assert 'location="RatesClient.Wsdl.2.wsdl"' in first
+    schema = next(c.content for c in renamed.changes if c.path.name == "RatesClient.Wsdl.3.xsd")
+    assert 'schemaLocation="RatesClient.Wsdl.4.xsd"' in schema
 
     deleted = scaffold.op_delete_object(tmp_path, "CurrencyRatesClient")
     assert sorted(path.name for path in deleted.deletes) == sorted(family)

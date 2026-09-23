@@ -72,6 +72,22 @@ test("wsdlFiles: either path separator, names compared as written", () => {
   assert.deepStrictEqual(wsdlFiles("КлиентСклада", ["/repo/КлиентСклада.wsdl.1.WSDL"]), []);
 });
 
+test("wsdlFiles: imported XSD schemas use the Wsdl stem and share its number order", () => {
+  const files = [
+    at("КлиентСклада.Wsdl.10.xsd"),
+    at("КлиентСклада.Wsdl.2.xsd"),
+    at("КлиентСклада.Wsdl.1.wsdl"),
+    at("КлиентСклада.Xsd.3.xsd"),
+    at("КлиентСклада.Wsdl.0.xsd"),
+    at("КлиентСкладаАрхив.Wsdl.3.xsd"),
+  ];
+  assert.deepStrictEqual(wsdlFiles("КлиентСклада", files), [
+    at("КлиентСклада.Wsdl.1.wsdl"),
+    at("КлиентСклада.Wsdl.2.xsd"),
+    at("КлиентСклада.Wsdl.10.xsd"),
+  ]);
+});
+
 console.log(`\ntotal: ${passed} ok, ${failed} fail`);
 if (failed > 0) {
   process.exit(1);

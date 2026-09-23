@@ -156,12 +156,12 @@ def test_after_a_rename_only_the_key_that_never_reached_the_folder_is_unknown(tm
         return {(Path(d.path).name, d.line) for d in found}
 
     before = findings()
+    assert ("Отчеты.xbsl", 2) in before
     apply_result(scaffold.op_rename_resource_folder(
         tmp_path, project / "Склад" / "Ресурсы" / "Стили", "Оформление"))
-    # The bare key of another subsystem with neither an import nor a namespace was not a
-    # reference to the folder, so the rename leaves it; the rule matches a key against the
-    # files of every folder at once, which is why it said nothing about that key before.
-    assert findings() - before == {("Отчеты.xbsl", 2)}
+    # The bare key of another subsystem with neither an import nor a namespace was never a
+    # reference to the folder. The resolver reports it before the rename and keeps reporting it.
+    assert findings() == before
 
 
 # --- moving a resource ----------------------------------------------------------------------------
@@ -374,6 +374,79 @@ def test_a_resource_reference_whose_key_two_folders_hold_is_marked_ambiguous(tmp
     assert ("Склад/Остатки.xbsl", 3, "ambiguous", "Стили/a.css") in places
     # A namespace settles it.
     assert ("Продажи/Заказы.xbsl", 5, "reference", "Демо::Учет::Склад::Стили/a.css") in places
+
+
+def test_a_local_resource_keeps_an_imported_namesake_out_of_reference_results(tmp_path):
+    project = _project(tmp_path, {
+        "Продажи/Ресурсы/Стили/a.css": "local {}\n",
+        "Продажи/Локальный.xbsl": (
+            "импорт Склад\n\nметод Стиль(): Ресурс\n"
+            "    возврат Ресурс{Стили/a.css}\n;\n"
+        ),
+    })
+    target = project / "Склад" / "Ресурсы" / "Стили" / "a.css"
+
+    places = _places(scaffold.resource_references(tmp_path, target), project)
+
+    assert not any(path == "Продажи/Локальный.xbsl" for path, _line, _kind, _text in places)
+    assert ("Продажи/Заказы.xbsl", 5, "reference",
+            "Демо::Учет::Склад::Стили/a.css") in places
+
+
+def test_a_projected_key_collision_in_another_local_package_is_reported(tmp_path):
+    project = _project(tmp_path, {
+        "Склад/Партии/Ресурсы/Иконки/logo.svg": "other\n",
+    })
+    resources = project / "Склад" / "Ресурсы"
+
+    result = scaffold.op_move_resource(tmp_path, resources / "logo.svg", resources / "Иконки")
+
+    collision = next(note for note in result.notes if note.startswith("После переноса"))
+    assert "Склад/Остатки.xbsl:7 logo.svg" in collision
+
+
+def test_a_fully_qualified_reference_to_another_project_is_preserved(tmp_path):
+    project = _project(tmp_path, {
+        "Продажи/Внешний.xbsl": (
+            "метод Логотип(): Ресурс\n"
+            "    возврат Ресурс{Other::App::Assets::logo.svg}\n;\n"
+        ),
+    })
+    external = tmp_path / "Other" / "App"
+    files = {
+        "Project.yaml": "Vendor: Other\nName: App\nVersion: 1.0.0\nCompatibilityMode: 9.0\n",
+        "Assets/Subsystem.yaml": "Name: Assets\n",
+        "Assets/Resources/Resources.yaml": "ОбластьВидимости: ВПроекте\n",
+        "Assets/Resources/logo.svg": "<svg/>\n",
+    }
+    for rel, text in files.items():
+        path = external / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    places = _places(
+        scaffold.resource_references(tmp_path, external / "Assets" / "Resources" / "logo.svg"),
+        project,
+    )
+
+    assert ("Продажи/Внешний.xbsl", 2, "reference",
+            "Other::App::Assets::logo.svg") in places
+
+
+def test_a_hidden_foreign_resource_is_not_a_scaffold_reference(tmp_path):
+    project = _project(tmp_path, {
+        "Склад/Партии/Ресурсы/Ресурсы.yaml": "ОбластьВидимости: ВПодсистеме\n",
+        "Склад/Партии/Ресурсы/private.svg": "<svg/>\n",
+        "Продажи/Скрытый.xbsl": (
+            "импорт Склад::Партии\n\nметод Значок(): Ресурс\n"
+            "    возврат Ресурс{private.svg}\n;\n"
+        ),
+    })
+    target = project / "Склад" / "Партии" / "Ресурсы" / "private.svg"
+
+    places = _places(scaffold.resource_references(tmp_path, target), project)
+
+    assert not any(path == "Продажи/Скрытый.xbsl" for path, _line, _kind, _text in places)
 
 
 def test_a_resource_reference_range_counts_characters_the_way_an_editor_does(tmp_path):

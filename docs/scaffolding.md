@@ -162,7 +162,9 @@ of every object. No section there means the platform falls back to `PermitAdmins
 
 `rename-object` renames the object's files, including its forms, the generated `ListRow<Name>`
 component of a card list and the WSDL descriptions of a SOAP service client. A description keeps its
-number, and a reference from one description to another by file name gets the new name. The command
+number, and a reference from one description to another by file name gets the new name.
+Imported XML schemas (`<Name>.Wsdl.<N>.xsd`) move, rename and delete with the client too;
+local `location` and `schemaLocation` links follow a rename, while external URLs stay unchanged. The command
 rewrites references across the whole project and with an eye on the context: the reference-bearing
 yaml keys `Type`, `Table`, `DataSource`, `Form` and `FormType`, the `=` bindings and the .xbsl code.
 Attributes, components or dynamic-list fields that merely share the old name are left alone, and so
@@ -233,12 +235,13 @@ by a string at the old place has nothing to rewrite.
 
 `resource-references` (MCP `meta_resource_references`) finds the places that name a resource file or
 a folder and changes nothing. It reads the sources the way a move does, and every place comes with its
-file, range, line and kind: `reference` for a static reference, `ambiguous` for a key two visible
-folders hold, `string` for a string with the path, `computed` for a string with the folder and a
+file, range, line and kind: `reference` for a static reference, `ambiguous` for a key held by
+several namespaces at the winning priority, `string` for a string with the path, `computed` for a string with the folder and a
 computed file name, `stem` for a whole string that spells the key of a file without its
 extension. Seed data names a picture by its code this way, and the code adds the extension at run
 time; the JSON files of the project's resources are read for it too. The metadata tree of the VS Code extension shows the answer in the References
-view.
+view. Resources of the current subsystem take priority over imported namesakes. The root and
+packages of that subsystem have equal priority; two matching local namespaces remain ambiguous.
 
 ## Code templates
 

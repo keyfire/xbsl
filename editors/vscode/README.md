@@ -569,6 +569,7 @@ translated text. A SOAP service client gets a **WSDL** node for the description 
 generated from (`<Name>.Wsdl.1.wsdl` beside the element): a click opens it as XML, several
 descriptions get a node each, and **Open WSDL** in the client's context menu does the same. A SOAP
 service has no such node - the platform builds its WSDL from the element.
+Imported XML schemas (`<Name>.Wsdl.<N>.xsd`) appear under the same node and open as XML.
 
 **Clicks.** An object or a field opens the **properties panel** on the right. A field's `Type`
 there is a combo of primitives, reference types (`<Object>.Reference?`) and the project

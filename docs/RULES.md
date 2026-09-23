@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 242 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 245 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -388,7 +388,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/enum-default-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `DefaultValue` of an enumeration-typed field must be the bare name of a declared value: the type-prefixed spelling (`LabelVisibility.Invisible`) or an unknown name is rejected by the build [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | `yaml/unknown-enum-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A component property value outside the enumeration of the ui schema (`ContentVerticalAlign: End` - the vertical axis has `Top`, `Center`, `Bottom`, `Baseline` and no `End`) |
 | `yaml/bare-object-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal, an `=` binding or a `$` localized-string reference [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
-| `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
+| `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `Resource{...}` reference is unknown, hidden or ambiguous at the winning namespace priority [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Form handler not found in the module [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Handler signature does not match the event [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Access to a component the form markup does not declare [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
@@ -483,6 +483,9 @@ the execution model (client/server), form handlers, properties and queries.
 | `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Visible text left as a Cyrillic literal where the project already references the same property into a localization dictionary [details](#d-conventions-untranslated-visible-literal) |
 | `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Visible text left as a Cyrillic literal in a module: judged by the sink it reaches [details](#d-conventions-untranslated-code-literal) |
 | `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | A project token or a Cyrillic comment line the project's translation dictionary does not cover yet [details](#d-conventions-missing-translation) |
+| `code/procedure-as-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A resolved procedure call is used as a value [details](#d-code-procedure-as-value) |
+| `code/contract-parameter-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An implementation parameter name differs from its project contract [details](#d-code-contract-parameter-name) |
+| `conventions/platform-translation-shadow` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A project declaration blocks a platform translation without an explicit dictionary pair [details](#d-conventions-platform-translation-shadow) |
 | `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A field access on a structure declared in the project is checked against its declaration: a renamed field turns red at its reader rather than on the server apply [details](#d-code-unknown-structure-field) |
 | `code/redundant-skip-undefined` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | `SkipUndefined()` on a collection whose known element type is not nullable [details](#d-code-redundant-skip-undefined) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Iterable_ru/) |
 | `code/redundant-cast` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A cast to a type the operand already has: the platform IDE warns about such a cast [details](#d-code-redundant-cast) [docs](https://1cmycloud.com/docs/help/topics/as/) |
@@ -1051,3 +1054,15 @@ decides their severity and defaults for that project; see
 or a tier letter `A`/`B`/`C`/`D`. A plugin may override a rule's severity (the `xbsl.severity`
 entry-points group); `XBSL_NO_PLUGINS=1` disables plugins and restores the built-in values from
 this table.
+
+<a id="d-code-procedure-as-value"></a>**`code/procedure-as-value`.**
+
+Checks local and cross-module project calls in value expressions. Unknown targets, ambiguous overloads and standalone procedure calls are left alone. No automatic fix is offered.
+
+<a id="d-code-contract-parameter-name"></a>**`code/contract-parameter-name`.**
+
+Compares parameter names only for an unambiguous project service contract and matching signatures. Reports an error in compatibility mode 8.0 or later, a warning in earlier modes, and skips an unknown compatibility mode. No automatic fix is offered.
+
+<a id="d-conventions-platform-translation-shadow"></a>**`conventions/platform-translation-shadow`.**
+
+Runs only in projects with a translation dictionary. Reports a Cyrillic declaration collected by the translator when it suppresses a known platform mapping and has no applicable explicit token pair. Local variables and parameters are excluded. Add a dictionary pair; renaming is optional and is never applied automatically. ASCII declarations are excluded by the translator's contract, so a fully translated English tree has no findings from this rule.
