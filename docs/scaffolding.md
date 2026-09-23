@@ -243,6 +243,14 @@ time; the JSON files of the project's resources are read for it too. The metadat
 view. Resources of the current subsystem take priority over imported namesakes. The root and
 packages of that subsystem have equal priority; two matching local namespaces remain ambiguous.
 
+`xbsl unused-resources <root>` and MCP `meta_unused_resources` list candidates with no
+known uses. They scan resource literals, image properties, resource-loading wrappers,
+JSON keys and links from reached CSS/HTML/SVG/JS files. Unreached resource files do not
+make their own links reachable. Computed paths and uncertain uses stay separate.
+`--include-protected` includes those separate lists; `--limit` caps each returned list,
+while summary totals remain complete. Every unused entry is labelled `confidence: candidate`:
+external data and arbitrary generated names still need review. The command never deletes files.
+
 ## Code templates
 
 A template is a short trigger plus a construct. Type the first letters of `if`, press

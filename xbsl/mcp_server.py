@@ -26,7 +26,7 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, i18n, metamodel, report, rundiff, scaffold, uischema,
+    cijob, formmodel, i18n, metamodel, report, resource_usage, rundiff, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import (
@@ -1683,6 +1683,33 @@ def meta_resource_references(root: str, resource_path: str, limit: int = 100) ->
         return _failed(exc, base)
     answer["references"] = answer["references"][:max(0, limit)]
     return {"root": str(base), **answer}
+
+
+@mcp.tool()
+def meta_unused_resources(
+    root: str,
+    include_protected: bool = False,
+    limit: int = 100,
+) -> dict:
+    """Find unreachable-resource candidates without changing or deleting any file.
+
+    The analysis follows static Resource literals, YAML image values, bounded computed resource
+    paths, JSON stems and relative links from reached CSS/HTML/SVG/JS resources. `unused` means
+    only that none of those known paths reaches the file; external data, reflection and arbitrary
+    generated names remain outside proof, so every result is labelled `confidence: candidate`.
+    include_protected - also return `dynamic` and `uncertain` files, kept separate from candidates.
+    limit - maximum items returned in each list; summary totals always cover the full analysis and
+    `hasMore` says whether any requested list was truncated. The tool is read only.
+    root - the project or repository root, absolute; relative paths resolve against it.
+
+    See also: meta_resource_references explains every known place naming one resource.
+    """
+    base = _base(root)
+    return resource_usage.compact(
+        resource_usage.analyze(base),
+        include_protected=include_protected,
+        limit=limit,
+    )
 
 
 @mcp.tool()

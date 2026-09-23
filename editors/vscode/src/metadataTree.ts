@@ -60,6 +60,9 @@ import {
   writeSelection,
 } from "./treeFilterCore";
 import { TreeFilterHost, TreeFilterPanel } from "./treeFilterPanel";
+import { MetadataProblems } from "./metadataProblems";
+import { filesForElement, ProblemCounts, ProblemFamily } from "./metadataProblemsCore";
+import { METADATA_DRAG_MIME, MetadataDragTickets } from "./metadataDragCore";
 import { carriesWsdl, wsdlFiles } from "./wsdlCore";
 import { docsCommandUri } from "./hoverDocs";
 import {
@@ -487,6 +490,8 @@ interface Model {
   projects: Project[];
   subsystems: Subsystem[];
   resources: string[]; // resource FILE paths - grouped into the Resources section lazily
+  codePaths: string[]; // all XBSL modules and XBQL queries, paired by exact stem below
+  roots: string[]; // workspace roots bound diagnostic aggregation
 }
 
 // Resource files: anything under a Resources folder (either spelling). They are not yaml
@@ -507,8 +512,10 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
   // open it the same way.
   const xbqlPaths: string[] = [];
   const resourcePaths: string[] = [];
+  const roots: string[] = [];
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const root = projectRootFor(folder);
+    roots.push(root);
     const [y, x, q, r] = await Promise.all([
       collectFiles(root, "yaml"), collectFiles(root, "xbsl"), collectFiles(root, "xbql"),
       collectResourceFiles(root),
@@ -616,7 +623,65 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
     }
     owner.translations = [...(owner.translations ?? []), { lang, yamlPath }];
   }
-  return { elements, projects, subsystems, resources: resourcePaths };
+  return { elements, projects, subsystems, resources: resourcePaths,
+    codePaths: [...xbslPaths, ...xbqlPaths], roots };
+}
+
+function metadataProblemFamilies(model: Model): ProblemFamily[] {
+  const codeByDir = new Map<string, string[]>();
+  for (const code of model.codePaths) {
+    const directory = pathKey(path.dirname(code));
+    const files = codeByDir.get(directory) ?? [];
+    files.push(code);
+    codeByDir.set(directory, files);
+  }
+  const boundaries = [...model.projects.map((project) => project.dir), ...model.roots];
+  const under = (file: string, directory: string): boolean => {
+    const target = pathKey(file);
+    const base = pathKey(directory);
+    return target === base || target.startsWith(base + "/");
+  };
+  const parentsOf = (file: string): string[] => {
+    const boundary = boundaries.filter((candidate) => under(file, candidate))
+      .sort((a, b) => b.length - a.length)[0];
+    if (!boundary) return [];
+    const parents: string[] = [];
+    let directory = path.dirname(file);
+    while (under(directory, boundary)) {
+      parents.push(directory);
+      if (pathKey(directory) === pathKey(boundary)) break;
+      const above = path.dirname(directory);
+      if (above === directory) break;
+      directory = above;
+    }
+    return parents;
+  };
+  const families: ProblemFamily[] = model.elements.map((element) => ({
+    id: element.yamlPath,
+    files: [
+      ...filesForElement(element.yamlPath, codeByDir.get(pathKey(path.dirname(element.yamlPath))) ?? []),
+      ...(element.translations ?? []).map((translation) => translation.yamlPath),
+      ...(element.wsdlPaths ?? []),
+    ],
+    ancestors: parentsOf(element.yamlPath),
+  }));
+  for (const project of model.projects) {
+    families.push({
+      id: project.dir,
+      files: [project.yamlPath, ...(project.appModulePath ? [project.appModulePath] : [])],
+      ancestors: [],
+    });
+  }
+  for (const subsystem of model.subsystems) {
+    if (subsystem.yamlPath) {
+      families.push({
+        id: subsystem.dir,
+        files: [subsystem.yamlPath],
+        ancestors: parentsOf(subsystem.yamlPath),
+      });
+    }
+  }
+  return families;
 }
 
 // --- tree node --------------------------------------------------------------------------
@@ -647,6 +712,41 @@ class XbslNode extends vscode.TreeItem {
   movable?: boolean; // an object "move to a package" and drag and drop can carry
   filterPlace?: FolderPlace; // subsystem or package: the place "Filter by" narrows the tree to
   wsdlPaths?: string[]; // SOAP service client and its WSDL node: the descriptions "Open WSDL" opens
+  linkedForms?: string[]; // forms displayed under an object, counted on that object's row
+}
+
+function markProblemNodes(nodes: XbslNode[], problems: MetadataProblems): void {
+  const walk = (node: XbslNode): void => {
+    let counts: ProblemCounts | undefined;
+    if (node.projectDir) {
+      counts = problems.get(node.projectDir);
+    } else if (node.folderDir) {
+      counts = problems.get(node.folderDir);
+    } else if (node.yamlPath && /\b(?:element|form)\b/.test(node.contextValue ?? "")) {
+      counts = { ...problems.get(node.yamlPath) };
+      for (const form of node.linkedForms ?? []) {
+        const own = problems.get(form);
+        counts.errors += own.errors;
+        counts.warnings += own.warnings;
+      }
+    }
+    if (counts && (counts.errors || counts.warnings)) {
+      const label = [
+        counts.errors ? vscode.l10n.t("Errors: {0}", counts.errors) : "",
+        counts.warnings ? vscode.l10n.t("Warnings: {0}", counts.warnings) : "",
+      ].filter(Boolean).join(", ");
+      node.description = [node.description, label].filter(Boolean).join(" • ");
+      node.tooltip = typeof node.tooltip === "string" ? `${node.tooltip}\n${label}` : label;
+      if (node.iconPath instanceof vscode.ThemeIcon) {
+        node.iconPath = new vscode.ThemeIcon(
+          node.iconPath.id,
+          new vscode.ThemeColor(counts.errors ? "editorError.foreground" : "editorWarning.foreground"),
+        );
+      }
+    }
+    for (const child of node.children ?? []) walk(child);
+  };
+  for (const node of nodes) walk(node);
 }
 
 // Set parent links across the whole built tree (for reveal), and give every node a STABLE, unique
@@ -1382,6 +1482,7 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
   node.objectModulePath = el.objectModulePath;
   node.queryPath = el.queryPath;
   node.wsdlPaths = el.wsdlPaths;
+  node.linkedForms = boundForms.map((form) => form.yamlPath);
   node.offset = internals?.rootOffset; // the object root - for the properties panel
   node.children = children;
   node.addKind = lone?.addKind;
@@ -1740,6 +1841,8 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   readonly onDidChangeTreeData = this.emitter.event;
   private roots?: XbslNode[];
   private model?: Model;
+  private problemModel?: Model;
+  private readonly problems: MetadataProblems;
   // The filter by subsystems and packages: the chosen placement keys per project
   // (treeFilterCore), kept in the workspace state so a reload of the window keeps it.
   private selection: Selection;
@@ -1774,6 +1877,13 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     private readonly memento?: vscode.Memento
   ) {
     this.selection = readSelection(memento?.get(FILTER_STATE_KEY));
+    this.problems = new MetadataProblems(() => this.redraw());
+  }
+
+  dispose(): void {
+    this.problems.dispose();
+    this.emitter.dispose();
+    this.formEmitter.dispose();
   }
 
   // The root the engine walks for an operation on this path - the project root the lint uses.
@@ -2043,11 +2153,21 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     return node.parent;
   }
 
+  async dragNodes(ids: readonly string[]): Promise<XbslNode[]> {
+    const roots = await this.buildRootsIfNeeded();
+    const found = ids.map((id) => findNode(roots, (node) => node.id === id));
+    return found.every((node): node is XbslNode => !!node) ? found : [];
+  }
+
   private async buildRootsIfNeeded(): Promise<XbslNode[]> {
     if (!this.roots) {
       if (!this.model || this.modelStale) {
         this.modelStale = false;
         this.model = await parseModel(this.projectRootFor);
+      }
+      if (this.problemModel !== this.model) {
+        this.problems.setFamilies(metadataProblemFamilies(this.model));
+        this.problemModel = this.model;
       }
       void this.askPlacement();
       const filterTree = filterTreeOf(this.model, this.placement);
@@ -2055,6 +2175,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       this.dropStaleKeys(filterTree);
       this.syncFilterContext();
       this.roots = buildRoots(this.model, this.selection, this.groupMode, this.hideEmpty, this.placement, filterTree);
+      markProblemNodes(this.roots, this.problems);
       setParents(this.roots, undefined);
     }
     return this.roots;
@@ -2945,7 +3066,7 @@ async function renamePackage(provider: XbslMetadataProvider, node?: XbslNode): P
   }
 }
 
-const TREE_MIME = "application/vnd.code.tree.xbslmetadata";
+const TREE_MIME = METADATA_DRAG_MIME;
 
 // What the commands of the Resources section need from the tree (resourceFolders.ts).
 function resourceTreeAccess(provider: XbslMetadataProvider): ResourceTreeAccess {
@@ -2960,22 +3081,33 @@ function resourceTreeAccess(provider: XbslMetadataProvider): ResourceTreeAccess 
 // Drag an object onto a subsystem or a package (or anything under one) - the same move as the
 // "Move to package" command, confirmed first: a drop is easy to make by accident, and a move
 // edits files across the project.
-class MetadataDragAndDrop implements vscode.TreeDragAndDropController<XbslNode> {
+class MetadataDragAndDrop implements vscode.TreeDragAndDropController<XbslNode>, vscode.Disposable {
   readonly dragMimeTypes = [TREE_MIME];
   readonly dropMimeTypes = [TREE_MIME];
+  private readonly tickets = new MetadataDragTickets();
 
   constructor(private readonly provider: XbslMetadataProvider) {}
+
+  dispose(): void {
+    this.tickets.clear();
+  }
 
   handleDrag(source: readonly XbslNode[], data: vscode.DataTransfer): void {
     // A resource file or folder travels too: dropped on a folder of its section, it moves there.
     const movable = source.filter((n) => (n.movable && n.yamlPath) || isMovableResource(n.resource));
-    if (movable.length) {
-      data.set(TREE_MIME, new vscode.DataTransferItem(movable));
+    const payload = this.tickets.issue(movable.map((node) => node.id).filter((id): id is string => !!id));
+    if (payload) {
+      data.set(TREE_MIME, new vscode.DataTransferItem(payload));
     }
   }
 
   async handleDrop(target: XbslNode | undefined, data: vscode.DataTransfer): Promise<void> {
-    const dragged = data.get(TREE_MIME)?.value as XbslNode[] | undefined;
+    const item = data.get(TREE_MIME);
+    const ids = item ? this.tickets.consume(await item.asString()) : undefined;
+    const dragged = ids ? await this.provider.dragNodes(ids) : [];
+    if (!dragged.length || dragged.some((node) => !node.movable && !isMovableResource(node.resource))) {
+      return;
+    }
     if (dragged?.length && (await dropResources(resourceTreeAccess(this.provider), dragged, target))) {
       return;
     }
@@ -3232,6 +3364,7 @@ export function registerMetadataTree(
   projectEnums: () => Promise<Record<string, string[]>>;
 } {
   const provider = new XbslMetadataProvider(projectRootFor, context.workspaceState);
+  context.subscriptions.push(provider);
   provider.syncFilterContext();
   // Resource files draw their type from the file icon theme, or from a codicon without one.
   context.subscriptions.push(
@@ -3243,13 +3376,15 @@ export function registerMetadataTree(
   );
   sessionProvider = provider; // the panels ask the project language through it
   panelColumnFn = panelColumnFor; // where a form's own designer panel sits, when one is open
+  const dragController = new MetadataDragAndDrop(provider);
+  context.subscriptions.push(dragController);
   const view = vscode.window.createTreeView("xbslMetadata", {
     treeDataProvider: provider,
     // A button of our own instead of the built-in one: that collapses the project root too,
     // leaving a single line in the tree and two clicks back to the metadata kinds.
     showCollapseAll: false,
     // An object dragged onto a subsystem or a package moves there (the engine's move).
-    dragAndDropController: new MetadataDragAndDrop(provider),
+    dragAndDropController: dragController,
   });
   provider.attachView(view); // reveal requires access to the tree view
   const filterHost: TreeFilterHost = {
@@ -3274,7 +3409,7 @@ export function registerMetadataTree(
   provider.setHideEmpty(savedHide);
   void vscode.commands.executeCommand("setContext", HIDE_EMPTY_CONTEXT, savedHide);
 
-  const watcher = vscode.workspace.createFileSystemWatcher("**/*.{yaml,xbsl}");
+  const watcher = vscode.workspace.createFileSystemWatcher("**/*.{yaml,xbsl,xbql}");
   // Resource files carry arbitrary extensions - watched by their folder, not by type.
   const resourceWatcher = vscode.workspace.createFileSystemWatcher("**/{Ресурсы,Resources}/**");
   let timer: NodeJS.Timeout | undefined;
@@ -3297,7 +3432,10 @@ export function registerMetadataTree(
   const DESCRIPTORS = new Set(["Проект.yaml", "Project.yaml", "Подсистема.yaml", "Subsystem.yaml"]);
   watcher.onDidCreate(() => bump(true));
   watcher.onDidDelete(() => bump(true));
-  watcher.onDidChange((uri) => bump(DESCRIPTORS.has(path.basename(uri.fsPath))));
+  watcher.onDidChange((uri) => {
+    if (uri.fsPath.endsWith(".xbql")) return; // its contents do not change the metadata model
+    bump(DESCRIPTORS.has(path.basename(uri.fsPath)));
+  });
   // A changed file keeps its node; only appearing and disappearing files reshape the tree.
   resourceWatcher.onDidCreate(() => bump(true));
   resourceWatcher.onDidDelete(() => bump(true));
@@ -3307,6 +3445,7 @@ export function registerMetadataTree(
   wsdlWatcher.onDidCreate(() => bump(false));
   wsdlWatcher.onDidDelete(() => bump(false));
   context.subscriptions.push(wsdlWatcher);
+  context.subscriptions.push({ dispose: () => { if (timer) clearTimeout(timer); } });
 
   context.subscriptions.push(
     view,

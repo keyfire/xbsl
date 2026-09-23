@@ -857,6 +857,28 @@ usage: xbsl resource-references [-h] root resource_path
 |---|---|
 | `-h, --help` | show this help message and exit |
 
+### `xbsl unused-resources`
+
+find files under Resources folders not reached by static references, bounded computed paths, or links from reached JSON/CSS/HTML/SVG/JS files; results are review candidates and the command deletes nothing
+
+```bash
+usage: xbsl unused-resources [-h] [--include-protected] [--limit LIMIT] root
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--include-protected` | also return files protected by bounded dynamic or uncertain paths |
+| `--limit LIMIT` | return at most N items in each list; totals stay complete (default: 100) |
+
 ### `xbsl localization-info`
 
 the languages and translations of a LocalizedStrings element (candidates for add-localization; the texts are written by set-localization)

@@ -578,6 +578,15 @@ descriptions get a node each, and **Open WSDL** in the client's context menu doe
 service has no such node - the platform builds its WSDL from the element.
 Imported XML schemas (`<Name>.Wsdl.<N>.xsd`) appear under the same node and open as XML.
 
+The tree shows its own error and warning counts for all files of an object, including
+modules and queries, and totals for packages, subsystems and projects. These counts work
+even when the standard `problems.decorations.enabled` badges are off; Git decorations remain.
+
+The properties panel starts with a **documentation comment** section for nodes that can
+carry one. Edit Markdown, use the formatting buttons and preview the result, then save it
+into the current YAML buffer. Ordinary editor undo remains available. Raw HTML stays text
+and unsafe links are not active. A changed source comment refuses a stale save and keeps the draft.
+
 **Clicks.** An object or a field opens the **properties panel** on the right. A field's `Type`
 there is a combo of primitives, reference types (`<Object>.Reference?`) and the project
 enumerations, and it still accepts a typed-in value. A common module opens its `.xbsl`, a form

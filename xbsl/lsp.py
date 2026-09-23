@@ -43,7 +43,7 @@ except ImportError:  # pragma: no cover - the extra is not installed
     LanguageServer = None
 
 from xbsl import (
-    __version__, baseline, bindingcomplete, cijob, dataset, docs, engine, environment,
+    __version__, baseline, bindingcomplete, cijob, dataset, doccomments, docs, engine, environment,
     formedits, formhandlers, formmodel, formsearch, i18n, indexer, metamodel, scaffold,
     templates, terms, uischema,
 )
@@ -1816,6 +1816,26 @@ def _make_server() -> "LanguageServer":
                 _meta_root(params), Path(str(_param(params, "path"))), reader=_sources_reader,
             )
         except (scaffold.ScaffoldError, OSError) as exc:
+            return {"error": str(exc)}
+
+    @server.feature("xbsl/docComment")
+    def _doc_comment(params: object) -> dict:
+        """Read or plan a documentation comment edit against the current editor buffer."""
+        try:
+            if _param(params, "offsetEncoding") != "unicode-codepoint":
+                return {"error": "documentation comment offsets must be Unicode code points"}
+            path = _form_path(params)
+            text = _form_reader(path)
+            offset = int(_param(params, "offset", 0) or 0)
+            if str(_param(params, "op", "get") or "get") == "get":
+                return doccomments.inspect(text, offset).as_dict()
+            if str(_param(params, "op", "")) == "set":
+                return doccomments.plan(
+                    text, offset, str(_param(params, "text", "") or ""),
+                    str(_param(params, "expected")) if _param(params, "expected") is not None else None,
+                )
+            return {"error": "unknown documentation comment operation"}
+        except (OSError, ValueError, scaffold.ScaffoldError) as exc:
             return {"error": str(exc)}
 
     # --- form designer (the structure view is a thin client of these methods) ------------

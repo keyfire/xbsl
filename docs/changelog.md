@@ -29,6 +29,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`unused-resources` finds resource candidates with no known uses.** The CLI and
+  `meta_unused_resources` keep computed and uncertain uses separate and never delete files.
+- **The language server supports precise documentation-comment edits.** The properties
+  inspector can edit supported YAML node comments while retaining the surrounding source.
+
 - **New checks catch project procedures used as values and mismatched contract parameter names.**
   They report only resolved project methods; uncertain targets stay unjudged.
   ([#129](https://github.com/keyfire/xbsl/pull/129))
