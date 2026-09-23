@@ -25,6 +25,26 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Changed
+
+- **Form tools take a component's `Name` where they took only a node path.** An agent that knew the
+  component by name got "node not found" from `meta_set_component_property` and had to read the
+  tree for the path first. The name now works in every tool and `form-*` command that takes a node;
+  a repeated name is refused with its paths, an unknown one with the close names. ([#137](https://github.com/keyfire/xbsl/pull/137))
+
+### Fixed
+
+- **`form/handler-signature` reports a handler that narrows an event parameter.** `OnHover` is
+  declared on the base `Component`, so a hover handler with `Source: Label` failed the build while
+  the linter stayed silent. A parameter may take the type of the signature or its ancestor; a
+  descendant is now reported with the signature the compiler prints. ([#137](https://github.com/keyfire/xbsl/pull/137))
+- **`yaml/size-needs-no-stretch` counts a size given by a binding.** The rule skipped
+  `Height: =...`, yet the stretch overrides the number a binding yields just like a literal one. On
+  a live project an `HtmlContainer` with a bound height took the whole free height of a phone window
+  and hid the button below it. ([#137](https://github.com/keyfire/xbsl/pull/137))
+
 ## 2026-09-23 – 0.115.0, 0.116.0, 0.117.0
 
 ### Added
