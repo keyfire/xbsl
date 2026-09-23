@@ -34,6 +34,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`form/handler-signature` reports an event type unrelated to the signature.** The rule used
+  to skip such types: the drop and autocomplete events seemed to miss the base `ComponentEvent` in
+  the catalog. The compiler confirmed the catalog and refused such handlers. Project types the
+  catalog does not know are still not judged. ([#142](https://github.com/keyfire/xbsl/pull/142))
 - **`form/handler-signature` accepts a wider data type of the event.** A handler may take the
   event data as the same type with `?`, as its ancestor or as `Object`, and the compiler accepts
   that. The rule reported any difference in the argument and fired falsely on two third-party
