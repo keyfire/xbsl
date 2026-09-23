@@ -135,6 +135,8 @@ _FACET_TITLE_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*\.[А-ЯЁ
 # (ElementKind: AccessKey, the flavour is a property), so their generated types are its own;
 # NonPeriodicConstantsSet - likewise a flavour of ConstantsSet (the periodicity property),
 # documented apart in an older build and merged into the constants set page in a newer one;
+# SubordinatedInformationRegister - a flavour of InformationRegister (a register subordinate to
+# a recorder is set by a property of the same kind), documented apart in a newer build;
 # Form/ObjectForm/PopupComponent - bases of an interface component (`Inherits: Type: Form`),
 # not kinds: an element of such a page is an InterfaceComponent, and the members of the base
 # are component properties, extracted from the component pages instead.
@@ -143,6 +145,7 @@ _TEMPLATE_KIND_EXCEPTIONS = {
     "ComputableAccessKeyName": "КлючДоступа",
     "GrantableAccessKeyName": "КлючДоступа",
     "NonPeriodicConstantsSetName": "НаборКонстант",
+    "SubordinatedInformationRegisterName": "РегистрСведений",
     "FormName": None,
     "ObjectFormName": None,
     "PopupComponentName": None,
@@ -191,6 +194,68 @@ def _template_kinds(car: zipfile.ZipFile) -> tuple[dict[str, str], list[str]]:
         else:
             unmapped.append(name)
     return kinds, unmapped
+
+
+#: The class that states the standard fields every element kind shares, and the suffixes of the
+#: static fields a constants class stores a field term into (`CODE_FIELD_TERM`,
+#: `DATA_JOURNAL_TYPE_ATTR_NAME`).
+_PROJECT_FIELDS_CLASS = "G5ProjectConstants"
+_FIELD_TERM_SUFFIXES = ("_FIELD_TERM", "_FIELD_NAME", "_ATTR_NAME")
+
+
+def field_spellings(car: zipfile.ZipFile, kinds: set[str]) -> dict[str, dict[str, str]]:
+    """{English kind: {English field: Russian spelling}}; the fields every kind shares go under "".
+
+    A newer build of the help spells some fields of the generated types in English
+    (`Code`, `Parent`, `SettingKey` on the list row of an automatic list form, in the heading and
+    in the signature alike), while every other member keeps its Russian name and the loader adds
+    the English one from the terms. The spelling comes from the runtime, not from a guess: the
+    project constants state the shared fields, and the constants of a kind (`<Kind>Constants`)
+    its own ones. The kind has the last word: the V8 constants spell a field called `Type` in
+    English differently from the data journal, so a dictionary over every class would pick a
+    wrong one.
+    """
+    wanted = {_PROJECT_FIELDS_CLASS: ""} | {f"{kind}Constants": kind for kind in kinds}
+    found: dict[str, dict[str, str]] = {}
+    for entry in car.namelist():
+        if not entry.endswith(".jar"):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            if not inner.endswith(".class"):
+                continue
+            kind = wanted.get(inner.rsplit("/", 1)[-1][:-len(".class")])
+            if kind is None:
+                continue
+            try:
+                blob = jar.read(inner)
+            except (zipfile.BadZipFile, KeyError):
+                continue
+            slot = found.setdefault(kind, {})
+            for field, english, russian in classcode.declared_terms(blob):
+                if field.endswith(_FIELD_TERM_SUFFIXES) and not russian.isascii():
+                    slot.setdefault(english, russian)
+    return found
+
+
+def russian_field(name: str, spellings: dict[str, str], unspelled: set[str]) -> str:
+    """The Russian spelling of a member a template page spells in English, else the name as is.
+
+    A composite name (`Settings_Address`, a component of a nested field) is spelled only when
+    every part is known; a name left in English is added to `unspelled`, to be printed.
+    """
+    if not name.isascii():
+        return name
+    if name in spellings:
+        return spellings[name]
+    parts = name.split("_")
+    if len(parts) > 1 and all(part in spellings for part in parts):
+        return "_".join(spellings[part] for part in parts)
+    unspelled.add(name)
+    return name
 
 
 def _plain_text(html: str) -> str:
@@ -1228,6 +1293,8 @@ def extract(dist: Path) -> tuple:
             # either a new kind of the build or a page that describes no kind at all, and both
             # are decided by a human reading this line - the way the metamodel step does it.
             print(f"  шаблон без вида: {name} - члены этого вида в данные не попадут")
+        spellings = field_spellings(z, {name.removesuffix("Name") for name in template_kinds})
+        unspelled: set[str] = set()
         for n in (e for e in entries if e.startswith(TEMPLATE_BASE) and e.endswith("/index.html")):
             dirname = n[len(TEMPLATE_BASE):].split("/")[0]
             kind = template_kinds.get(dirname.split(".")[0].removesuffix("_ru"))
@@ -1272,6 +1339,13 @@ def extract(dist: Path) -> tuple:
                 continue
             props, methods, events = page_members(raw)
             if props or methods or events:
+                # A field the page spells in English is stored by its Russian name, as every
+                # other member is (see field_spellings): the kind's own constants first.
+                english_kind = dirname.split(".")[0].removesuffix("_ru").removesuffix("Name")
+                known = {**spellings.get("", {}), **spellings.get(english_kind, {})}
+                props = {russian_field(member, known, unspelled) for member in props}
+                methods = {russian_field(member, known, unspelled) for member in methods}
+                events = {russian_field(member, known, unspelled) for member in events}
                 # A kind with several flavours has a template per flavour (`AccessKey`:
                 # `Recompute` on the computable one, `Grant` on the grantable one) and the yaml
                 # spells the flavour as a property, so a consumer given the kind alone cannot tell
@@ -1281,6 +1355,10 @@ def extract(dist: Path) -> tuple:
                 slot["properties"] |= props
                 slot["methods"] |= methods
                 slot["events"] |= events
+        if unspelled:
+            # A placeholder of a template (`ConstantName`) stays as the page writes it; a field
+            # the runtime states no spelling for is named here instead of being guessed.
+            print("  члены порождаемых типов без русского написания: " + ", ".join(sorted(unspelled)))
     names |= TOPIC_ONLY_TYPES
     with zipfile.ZipFile(car) as z:
         type_variance = runtime_type_variance(z, english_keys, type_params)
@@ -1306,7 +1384,8 @@ def extract(dist: Path) -> tuple:
                     slot[kind] |= member_names
     with zipfile.ZipFile(car) as z:
         filled = []
-        retired = retired_components(z, names, set(types))
+        descriptions = component_descriptions(z)
+        retired = retired_components(z, names, set(types), descriptions)
         for russian, record in retired.items():
             own = record["members"]
             base = record["base"]
@@ -1330,7 +1409,8 @@ def extract(dist: Path) -> tuple:
             managers, manager_returns,
             facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
             type_variance, method_params,
-            deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired)
+            deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired,
+            component_floors(descriptions))
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1447,6 +1527,7 @@ def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
                 "term": term,
                 "namespace": _description_term(data.get("namespace")),
                 "baseType": base_type,
+                "from": data.get("from"),
                 "to": data.get("to"),
                 "properties": _description_rows(data, "properties", typed=True),
                 "events": _description_rows(data, "events", typed=False),
@@ -1454,14 +1535,34 @@ def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
     return found
 
 
-def retired_components(car: zipfile.ZipFile, named: set[str], described: set[str]) -> dict[str, dict]:
+def component_floors(descriptions: dict[str, dict]) -> dict[str, str]:
+    """{Russian component name: the compatibility mode it is registered from}.
+
+    The shipped description states the floor the runtime keeps (its `from` key). The help marks
+    the same thing by a "version N and above" line, and a newer build dropped that line from a
+    page while the component was still registered from that mode alone - so the schema step
+    takes the floor from here first and from the help only when the description states none.
+    """
+    return {
+        russian: str(record["from"])
+        for russian, record in sorted(descriptions.items())
+        if record.get("from")
+    }
+
+
+def retired_components(
+    car: zipfile.ZipFile, named: set[str], described: set[str],
+    descriptions: dict[str, dict] | None = None,
+) -> dict[str, dict]:
     """{Russian name: runtime descriptor} for components the help names but does not describe.
 
     Only the components the help NAMES and does not DESCRIBE, and only those the shipped
     description says something about - see the comment above for both narrowings.
     """
     found: dict[str, dict] = {}
-    for russian, record in sorted(component_descriptions(car).items()):
+    if descriptions is None:
+        descriptions = component_descriptions(car)
+    for russian, record in sorted(descriptions.items()):
         if russian not in named or russian in described:
             continue
         if not any(record["members"].values()):
@@ -1821,7 +1922,7 @@ def main(argv=None) -> int:
      managers, manager_returns,
      facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
      type_variance, method_params,
-     deprecated, folds, checked_methods, retired) = extract(dist)
+     deprecated, folds, checked_methods, retired, component_from) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1861,6 +1962,9 @@ def main(argv=None) -> int:
         # descriptor for compatibility projects, so retain only its UI-schema facts here; the
         # schema step has no distribution of its own.  Older datasets simply omit this section.
         **({"retired_components": retired_component_payloads(retired)} if retired else {}),
+        # The compatibility mode a component is registered from, as its shipped description
+        # states it (see component_floors); the schema step reads it. Older datasets omit it.
+        **({"component_from": component_from} if component_from else {}),
         "type_members": {k: _members_json(v) for k, v in sorted(own_types.items())},
         # Global context: members of Стд and its first-level packages, available by bare name.
         "globals": sorted(globals_),
