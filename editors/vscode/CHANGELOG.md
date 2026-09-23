@@ -15,13 +15,16 @@
 
 - **The metadata tree counts errors and warnings across an object's files.** Modules and
   queries contribute to the object, package, subsystem and project counts; clearing a diagnostic updates the tree.
+  ([#130](https://github.com/keyfire/xbsl/pull/130))
 - **The properties inspector edits documentation comments.** Supported element, component
   and declaration nodes get a Markdown editor with formatting buttons and a safe preview.
+  ([#130](https://github.com/keyfire/xbsl/pull/130))
 
 ### Fixed
 
 - **Dragging objects and resources in the metadata tree reaches the move confirmation.**
   The selected nodes can now be transferred between packages without a serialization error.
+  ([#130](https://github.com/keyfire/xbsl/pull/130))
 
 - **The SOAP client tree includes imported XSD schemas.** They appear beside WSDL files
   and open as XML. Creating or deleting a schema refreshes the tree.
