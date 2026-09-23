@@ -96,6 +96,14 @@ _CORE_MESSAGES = {
         "ru": "клиентский вызов бывает не виден статически: метод зовут строкой из HTML-вставки или обработчиком, который дописывает разметку. Проверка нарочно считает употреблением любое упоминание в клиентском окружении, в yaml и в строке, но остаток ложных возможен – включайте, когда ревизуете поверхность, открытую клиенту",
         "en": "a client call is not always visible statically: a method may be called by name from a string of an HTML insert, or by a handler that writes markup. The check deliberately counts any mention in a client environment, in a yaml or in a string as a use, yet false positives remain - enable it when auditing the surface open to the client",
     },
+    "code/resource-replace-absent.off": {
+        "ru": "проверка читает все модули проекта и его файлы ресурсов, а заполнять разметку ресурсов заменами – решение самого проекта. Включайте, если проект подставляет значения в метки своих css, html или svg",
+        "en": "the check reads every module of the project and its resource files, and filling resource markup by replacements is the project's own choice. Enable it when the project puts values into labels of its css, html or svg files",
+    },
+    "code/resource-label-unfilled.off": {
+        "ru": "проверка читает все модули проекта и его файлы ресурсов, и полноту цепочки замен она выводит из мест вызова. Включайте, если проект подставляет значения в метки своих css, html или svg",
+        "en": "the check reads every module of the project and its resource files, and it infers that a chain of replacements is complete from the places it is called. Enable it when the project puts values into labels of its css, html or svg files",
+    },
     "code/duplicate-method-body.off": {
         "ru": "две одинаковых обвязки не всегда обязаны стать одним методом: общий код формы объекта иногда дешевле повторить, чем связать модули зависимостью. Включайте, когда собираетесь выносить общее",
         "en": "two identical wrappers do not always have to become one method: shared object-form code is sometimes cheaper repeated than tied into a dependency. Enable it when you are about to extract the shared part",

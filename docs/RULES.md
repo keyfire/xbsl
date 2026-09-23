@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 248 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 250 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -434,6 +434,8 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A qualified name of this project in a yaml value leads to a namespace where no element of that name lies: the compiler answers "Unknown type" [details](#d-yaml-wrong-namespace) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `code/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The same in a module or a query: a name of this project leads to a namespace where its element does not lie, and the compiler answers "Unknown type" [details](#d-code-wrong-namespace) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `code/package-resources-missing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | `ResourcesPackage.Current()` in a module of a package or at the root of a subsystem that has no `Resources` folder of its own: no file is found, and that breaks only at run time [details](#d-code-package-resources-missing) [docs](https://1cmycloud.com/docs/help/topics/resource-in-project/) |
+| `code/resource-replace-absent` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A replacement of a string that the text of its resource file does not have outside comments: the replacement changes nothing, the label was renamed in the file or the code [details](#d-code-resource-replace-absent) |
+| `code/resource-label-unfilled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A label of a resource file that the complete chain of replacements leaves in place: the page gets the label instead of a value [details](#d-code-resource-label-unfilled) |
 | `yaml/missing-subsystem-usage` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Elements and modules of a subsystem import another subsystem while the description of their own does not list it under `Using`: the project fails to apply [details](#d-yaml-missing-subsystem-usage) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/computed-binding-assigned` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Every instance of a component binds a property with a computed expression while the component assigns that property in its own module: the platform crashes on the assignment [details](#d-yaml-computed-binding-assigned) |
 | `yaml/localization-missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An unqualified `$Dictionary.Key` whose dictionary lies in a namespace this yaml does not import: the apply refuses the node [details](#d-yaml-localization-missing-import) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
@@ -674,6 +676,24 @@ of the element. An element in several places is reported with its places and no 
 it may stand in a type position, in a call or as a table of a query. For a table the compiler
 answers that the table is not found. The import line and the key of a `Resource{...}` literal are
 not read. The fix replaces the namespace when the element lies in one place.
+
+<a id="d-code-resource-replace-absent"></a>**`code/resource-replace-absent`.** It looks
+like `Resource{card.css}.OpenReadableStream().ReadAsString().Replace("{{SIZE}}", Size)` when the
+file has no `{{SIZE}}`. The rule follows the text of one resource file through the chain of
+`Replace` calls: across locals, wrappers over the read (by a path, a path inside a folder or a
+parameter of type `Resource`), text helpers, and maps filled from a literal list of paths, client
+parameters included. Each step is applied to the file with its comments blanked. The message says
+when the string is only in a comment of the file, or when an earlier step of the chain has
+already replaced it. A helper that serves several files is not blamed for one of them. A computed
+path or search string and a choice between two files are not judged.
+
+<a id="d-code-resource-label-unfilled"></a>**`code/resource-label-unfilled`.** A label is a word
+between the delimiters the chain uses for its own strings: `{{A}}` and `{{B}}` give `{{NAME}}`. The
+label is judged when the chain is complete, that is when nothing replaces further in a caller, in
+a callee or through a variable. A part of the file (`Substring`, a wrapper that keeps the inner
+part) and a value that another branch fills from elsewhere are not judged. The finding sits where
+the text leaves the chain. When the same chain also replaces a string the file lacks, both
+messages say it: that is what a renamed label looks like.
 
 <a id="d-code-package-resources-missing"></a>**`code/package-resources-missing`.** The method
 returns the resources of its own namespace alone, so for a package not even the files of its
