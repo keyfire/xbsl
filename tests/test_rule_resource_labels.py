@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from xbsl import engine, i18n
+from xbsl import engine, i18n, plugins
 
 pytestmark = pytest.mark.needs_data
 
@@ -296,10 +296,16 @@ def test_a_project_without_replacements_costs_nothing(tmp_path):
 
 
 def test_the_rules_are_project_wide_and_off_by_default():
+    """The engine ships both rules off, with the reason. A project profile may turn a rule on
+    through a plugin, and then the registry says enabled: that state is the plugin's, not the
+    engine's default, so it is checked only for a rule no installed plugin overrides."""
     rules = {info.id: info for info in engine.RULES}
+    overridden = plugins.severity_overrides()
     for rule_id in (ABSENT, UNFILLED):
         assert rules[rule_id].scope == "project"
-        assert rules[rule_id].enabled_by_default is False
+        assert rules[rule_id].off_reason
+        if rule_id not in overridden:
+            assert rules[rule_id].enabled_by_default is False
 
 
 def test_the_messages_read_in_english(tmp_path):
