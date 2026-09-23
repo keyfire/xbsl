@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-23 – 0.115.0, 0.116.0
 
 ### Added
 
@@ -38,21 +38,6 @@ entry either - say what the behaviour was, not which class name was compared.
   end to a journal, and `self-update --stop-holders` writes which servers it stopped. The journal
   shows whether the server failed, the client closed it or an update stopped it.
   ([#131](https://github.com/keyfire/xbsl/pull/131))
-
-### Fixed
-
-- **`form-edit wrap` keeps a list where the slot is declared as an array.** Wrapping a single
-  `Picture` in a `Group` wrote the content as one mapping, and the server rejected the form. The
-  slot type from the UI schema now decides how the content is written.
-  ([#131](https://github.com/keyfire/xbsl/pull/131))
-- **`form-edit set-property` writes a typed binding without double quotes.** A width binding kept
-  its quotes, and the server rejected it. A value that YAML accepts without quotes is written
-  without them, otherwise in single quotes. ([#131](https://github.com/keyfire/xbsl/pull/131))
-
-## 2026-09-23 – 0.115.0
-
-### Added
-
 - **`unused-resources` finds resource candidates with no known uses.** The CLI and
   `meta_unused_resources` keep computed and uncertain uses separate and never delete files.
   ([#130](https://github.com/keyfire/xbsl/pull/130))
@@ -67,8 +52,23 @@ entry either - say what the behaviour was, not which class name was compared.
   The warning runs only in projects with a translation dictionary and excludes local names.
   ([#129](https://github.com/keyfire/xbsl/pull/129))
 
+### Changed
+
+- Library tests can use a local `.xlib` corpus to check exported and internal types
+  through both YAML and XBSL. Proprietary archives remain outside the repository.
+  ([#127](https://github.com/keyfire/xbsl/pull/127))
+- Python comments and docstrings consistently use hyphens. Ordinary string literals remain unchanged.
+  ([#127](https://github.com/keyfire/xbsl/pull/127))
+
 ### Fixed
 
+- **`form-edit wrap` keeps a list where the slot is declared as an array.** Wrapping a single
+  `Picture` in a `Group` wrote the content as one mapping, and the server rejected the form. The
+  slot type from the UI schema now decides how the content is written.
+  ([#131](https://github.com/keyfire/xbsl/pull/131))
+- **`form-edit set-property` writes a typed binding without double quotes.** A width binding kept
+  its quotes, and the server rejected it. A value that YAML accepts without quotes is written
+  without them, otherwise in single quotes. ([#131](https://github.com/keyfire/xbsl/pull/131))
 - **Resource checks follow namespace priority and visibility.** A resource in the current
   subsystem wins over an imported namesake. The linter reports hidden and ambiguous resources,
   and resource moves use the same resolution order.
@@ -96,14 +96,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`code/client-available-unused` keeps malformed client descriptions without a readable
   object name unjudged.** The readable element kind still identifies the client module
   in either language, so the YAML error does not cause an unrelated unused-method warning.
-  ([#127](https://github.com/keyfire/xbsl/pull/127))
-
-### Changed
-
-- Library tests can use a local `.xlib` corpus to check exported and internal types
-  through both YAML and XBSL. Proprietary archives remain outside the repository.
-  ([#127](https://github.com/keyfire/xbsl/pull/127))
-- Python comments and docstrings consistently use hyphens. Ordinary string literals remain unchanged.
   ([#127](https://github.com/keyfire/xbsl/pull/127))
 
 ## 2026-09-22 – 0.114.0
