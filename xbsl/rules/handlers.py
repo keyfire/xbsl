@@ -48,6 +48,18 @@ MESSAGES = {
               "exact match: applying the build answers that the method does not satisfy the "
               "signature, and the project rolls back to the previous build.",
     },
+    "form/handler-signature.event-argument": {
+        "ru": "Параметр {position} обработчика '{handler}' объявлен как '{actual}', а событие "
+              "'{event}' компонента '{component}' передаёт '{expected}'. Тип данных события "
+              "можно только расширить: взять тот же тип с '?' или его предка. При применении "
+              "сборки компиляция ответит \"Метод не удовлетворяет сигнатуре\", и проект "
+              "откатится на прежнюю сборку.",
+        "en": "Parameter {position} of the handler '{handler}' is declared as '{actual}', while "
+              "the '{event}' event of '{component}' passes '{expected}'. The data type of an "
+              "event can only be widened: take the same type with '?' or its ancestor. Applying "
+              "the build answers that the method does not satisfy the signature, and the "
+              "project rolls back to the previous build.",
+    },
     "form/handler-signature.narrower": {
         "ru": "Параметр {position} обработчика '{handler}' объявлен как '{actual}', а сигнатура "
               "события у компонента '{component}' – {signature}. Тип '{narrowed}' – наследник "
@@ -297,10 +309,19 @@ def close_in_before_close(source: SourceFile) -> Iterable[Diagnostic]:
 # - a head that is neither is not judged. The catalog misses some links (a drag event does
 #   not list `ComponentEvent` among its bases), so "unrelated" may be a gap in the data;
 # - a type parameter left unsubstituted (a list whose row type resolves through the source
-#   type) is not judged: what the compiler sees there is not visible in the file.
+#   type) is not judged: what the compiler sees there is not visible in the file;
+# - the type ARGUMENT of the event may be wider than the one the event passes, the argument
+#   of the source may not. Compiled on a local server in both compatibility modes, a handler
+#   of an `Edit<String>` took `OnChangeEvent<String?>`, `OnChangeEvent<Object>` and
+#   `OnChangeEvent<Object?>`, and `EventWithData` behaved the same. The compiler refused
+#   `OnChangeEvent<Boolean>` and `OnChangeEvent<Object>` where `OnChangeEvent<Boolean?>` is
+#   passed, `OnChangeEvent<Number>` for a string, and `Edit<String?>` or `Edit<Object?>` as
+#   the source of an `Edit<String>`. An event only hands its data out, while a component
+#   also takes a value in.
 #
-# What is left is the narrowed head and the case the defect was first met in: the SAME type,
-# spelled with a different argument or nullability.
+# What is left is the narrowed head and the case the defect was first met in: the SAME type
+# with a different argument. For the source any difference is a finding, for the event the
+# argument that drops the nullability or names an unrelated type.
 
 #: Type expressions are compared by text, so both spellings are folded into the Russian one.
 _TYPE_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
@@ -353,6 +374,45 @@ def _narrower(written: str, expected: str) -> bool:
     return written != expected and expected in _ancestors().get(written, frozenset())
 
 
+#: The root every type descends from: an event argument of this type takes any data.
+_ROOT_TYPE = "Объект"
+
+
+def _widens(written: str, expected: str) -> bool:
+    """Whether a type argument written by the handler takes every value of the expected one.
+
+    Both are folded. The same type, the same type made nullable, the root and an ancestor the
+    catalog states all do. A type that drops the nullability or is not related does not, and
+    neither does a generic type that differs: only the argument of the event itself was
+    proven to widen.
+    """
+    if written == expected:
+        return True
+    if expected.endswith("?") and not written.endswith("?"):
+        return False
+    written, expected = written.rstrip("?"), expected.rstrip("?")
+    if written in (expected, _ROOT_TYPE):
+        return True
+    if "<" in written or "<" in expected:
+        return False
+    return written in _ancestors().get(expected, frozenset())
+
+
+def _event_widens(written: str, expected: str) -> bool:
+    """Whether the written event type takes what the delegate passes (both folded, one head).
+
+    `СобытиеПриИзменении<Объект?>` takes a `СобытиеПриИзменении<Строка>`: every type argument
+    may widen, and the event type itself may become nullable but not lose its `?`.
+    """
+    if expected.endswith("?") and not written.endswith("?"):
+        return False
+    written_args = dataset.generic_args(written.rstrip("?"))
+    expected_args = dataset.generic_args(expected.rstrip("?"))
+    if len(written_args) != len(expected_args):
+        return False
+    return all(_widens(got, want) for got, want in zip(written_args, expected_args))
+
+
 #: A type name inside an expression, an entity facet included (`BinaryObject.Reference`).
 _SHOWN_NAME_RE = re.compile(r"[^\W\d_]\w*(?:\.[^\W\d_]\w*)?", re.UNICODE)
 
@@ -377,6 +437,8 @@ def _shown(type_text: str) -> str:
 #: keeps the delegate without names; the documentation names the two parameters of every event
 #: handler the same way.
 _DELEGATE_PARAMS = ("Источник", "Событие")
+#: The position of the event parameter, counted from one as the messages count it.
+_EVENT_POSITION = _DELEGATE_PARAMS.index("Событие") + 1
 
 
 def _event_signature(event: str, params: list[str]) -> str:
@@ -595,10 +657,15 @@ def handler_signature(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                         ),
                     )
                     continue
+                key = "form/handler-signature.mismatch"
+                if position == _EVENT_POSITION:
+                    if _event_widens(got_folded, want_folded):
+                        continue  # an event hands its data out: a wider type takes it
+                    key = "form/handler-signature.event-argument"
                 yield Diagnostic(
                     rel, ref["line"], ref["col"], "form/handler-signature", Severity.WARNING,
                     i18n.t(
-                        "form/handler-signature.mismatch",
+                        key,
                         handler=ref["handler"], event=i18n.name(ref["event"]),
                         component=i18n.name(ref["component"]),
                         position=position, expected=_shown(want), actual=got,

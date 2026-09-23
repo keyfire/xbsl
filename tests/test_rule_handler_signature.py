@@ -50,7 +50,7 @@ _CHECKBOX = """            Тип: Флажок
 
 
 def _handler(params: str) -> str:
-    return f"@Обработчик\nметод ФлажокИзменён({params})\n;\n"
+    return f"метод ФлажокИзменён({params})\n;\n"
 
 
 def test_a_narrower_event_argument_is_reported(tmp_path):
@@ -114,7 +114,7 @@ def test_the_type_argument_of_the_component_is_substituted(tmp_path):
     """`ПолеВвода<Строка>` passes `СобытиеПриИзменении<Строка>`, not the raw type parameter."""
     diags = _lint(
         tmp_path, _INPUT_STRING,
-        "@Обработчик\nметод ПолеИзменено(Источник: ПолеВвода<Строка>, "
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка>, "
         "Событие: СобытиеПриИзменении<Строка>)\n;\n",
     )
 
@@ -124,11 +124,72 @@ def test_the_type_argument_of_the_component_is_substituted(tmp_path):
 def test_a_wrong_argument_after_substitution_is_reported(tmp_path):
     diags = _lint(
         tmp_path, _INPUT_STRING,
-        "@Обработчик\nметод ПолеИзменено(Источник: ПолеВвода<Строка>, "
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка>, "
         "Событие: СобытиеПриИзменении<Число>)\n;\n",
     )
 
     assert len(diags) == 1 and "СобытиеПриИзменении<Строка>" in diags[0].message
+
+
+def test_a_wider_event_argument_is_legal(tmp_path):
+    """An event hands its data out, so a handler may take it as a wider type.
+
+    The compiler accepts the same type made nullable, an ancestor and the root type.
+    """
+    for event in ("СобытиеПриИзменении<Строка?>", "СобытиеПриИзменении<Объект>",
+                  "СобытиеПриИзменении<Объект?>"):
+        diags = _lint(
+            tmp_path, _INPUT_STRING,
+            f"метод ПолеИзменено(Источник: ПолеВвода<Строка>, Событие: {event})\n;\n",
+        )
+
+        assert diags == [], event
+
+
+def test_the_nullable_event_argument_may_widen_to_the_nullable_root(tmp_path):
+    diags = _lint(
+        tmp_path, _CHECKBOX,
+        _handler("Источник: Флажок, Событие: СобытиеПриИзменении<Объект?>"),
+    )
+
+    assert diags == []
+
+
+def test_an_ancestor_that_drops_the_null_is_reported(tmp_path):
+    """The root takes every value but the absent one: `Объект` for `Булево?` narrows."""
+    diags = _lint(
+        tmp_path, _CHECKBOX,
+        _handler("Источник: Флажок, Событие: СобытиеПриИзменении<Объект>"),
+    )
+
+    assert len(diags) == 1
+    assert "СобытиеПриИзменении<Булево?>" in diags[0].message
+    assert "можно только расширить" in diags[0].message
+
+
+def test_the_data_event_widens_its_argument_too(tmp_path):
+    component = """            Тип: ПолеВвода<Строка>
+            Имя: Поле
+            ПриИзмененииТекстаРедактирования: ТекстИзменён"""
+    module = ("метод ТекстИзменён(Источник: ПолеВвода<Строка>, "
+              "Событие: СобытиеСДанными<{argument}>)\n;\n")
+
+    assert _lint(tmp_path, component, module.format(argument="Объект")) == []
+    diags = _lint(tmp_path, component, module.format(argument="Число"))
+    assert len(diags) == 1 and "СобытиеСДанными<Строка>" in diags[0].message
+
+
+def test_the_argument_of_the_source_must_match_exactly(tmp_path):
+    """A component also takes a value in: `ПолеВвода<Строка?>` is not a wider source."""
+    diags = _lint(
+        tmp_path, _INPUT_STRING,
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка?>, "
+        "Событие: СобытиеПриИзменении<Строка>)\n;\n",
+    )
+
+    assert len(diags) == 1
+    assert "Параметр 1" in diags[0].message
+    assert "точного совпадения" in diags[0].message
 
 
 def test_an_unsubstituted_type_parameter_is_not_judged(tmp_path):
@@ -138,7 +199,7 @@ def test_an_unsubstituted_type_parameter_is_not_judged(tmp_path):
             ПриИзменении: ПолеИзменено"""
     diags = _lint(
         tmp_path, component,
-        "@Обработчик\nметод ПолеИзменено(Источник: ПолеВвода<Строка>, "
+        "метод ПолеИзменено(Источник: ПолеВвода<Строка>, "
         "Событие: СобытиеПриИзменении<Число>)\n;\n",
     )
 
@@ -159,7 +220,7 @@ _LABEL = """            Тип: Надпись
 def _label(tmp_path, event: str, params: str):
     return _lint(
         tmp_path, _LABEL.format(event=event),
-        f"@Обработчик\nметод Отметить({params})\n;\n",
+        f"метод Отметить({params})\n;\n",
     )
 
 
