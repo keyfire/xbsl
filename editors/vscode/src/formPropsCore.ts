@@ -243,6 +243,9 @@ export interface PanelModel {
   // true - the form is read-only (a library .xlib form, a git/diff view, a read-only file). The
   // webview disables its editors and shows a banner; writes are refused (hook 11).
   readonly?: boolean;
+  // The engine exposes this only for YAML mappings whose class keeps a documentation
+  // comment. It is separate from the ordinary property rows.
+  docComment?: { text: string; offset: number; id: string };
 }
 
 // Whether a document uri names a read-only form source: anything other than a real on-disk file

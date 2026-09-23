@@ -53,14 +53,18 @@ import {
   metaSchemaPathAt,
   metaKindOf,
   metaPropertyEdits,
+  metaNodeOffsetAt,
   pairedYamlPath,
 } from "./propsModes";
 import { metaSchema } from "./metaSchemaClient";
 import { findAttrOffset, stringAttributeNames } from "./metadataCore";
 import { ObjectInfoResponse } from "./formDataCore";
-import { lspActive, lspRequest } from "./lspClient";
+import { lspActive, lspRequest, lspRequestDetailed, lspServerGeneration } from "./lspClient";
 import { neighborColumnFor, revealContent } from "./reveal";
 import { cspMeta, inlineJson, makeNonce } from "./webviewShared";
+import {
+  codePointToUtf16Offset, renderDocMarkdown, utf16ToCodePointOffset,
+} from "./docCommentCore";
 
 const VIEW_TYPE = "xbslProperties";
 const SELECTION_DEBOUNCE_MS = 150;
@@ -71,7 +75,8 @@ const IDENTIFIER = /^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$/;
 // attribute identity when the panel shows one (possibly synthetic - see metaPropertyEdits).
 type Target =
   | { kind: "component"; uri: vscode.Uri; nodeId: string; nodeSpanStart: number; type: string }
-  | { kind: "metadata"; uri: vscode.Uri; offset: number; std?: { kind: string; name: string } };
+  | { kind: "metadata"; uri: vscode.Uri; offset: number; std?: { kind: string; name: string } }
+  | { kind: "documentation"; uri: vscode.Uri; offset: number };
 
 let view: vscode.WebviewView | undefined;
 let target: Target | undefined;
@@ -107,6 +112,8 @@ let recentColors: string[] = [];
 // Component schemas are static for the engine session; negative answers are cached too.
 const schemaCache = new Map<string, UiComponentDto | null>();
 let schemaUnavailable = false;
+let docCommentUnavailable = false;
+let docCommentGeneration = -1;
 let seq = 0;
 let debounceTimer: NodeJS.Timeout | undefined;
 
@@ -169,6 +176,17 @@ function labels(): Record<string, string> {
     toBinding: vscode.l10n.t("Bind to data ({0})", bindingSample()),
     toLiteral: vscode.l10n.t("Set a literal value"),
     bindingSample: bindingSample(),
+    docComment: vscode.l10n.t("Documentation comment"),
+    docPreview: vscode.l10n.t("Preview"),
+    docEdit: vscode.l10n.t("Edit"),
+    docSave: vscode.l10n.t("Save"),
+    docBold: vscode.l10n.t("Bold"),
+    docItalic: vscode.l10n.t("Italic"),
+    docCode: vscode.l10n.t("Code"),
+    docHeading: vscode.l10n.t("Heading"),
+    docList: vscode.l10n.t("List"),
+    docLink: vscode.l10n.t("Link"),
+    docPlaceholder: vscode.l10n.t("Write Markdown documentation for this element."),
   };
 }
 
@@ -269,6 +287,19 @@ ${cspMeta(nonce)}
   .withreset { display: flex; gap: 5px; align-items: flex-start; }
   .withreset > :first-child { flex: 1; min-width: 0; }
   .withreset > .rbtn { flex: none; margin-top: 2px; }
+  .doc { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+  .doc-title { font-weight: 600; margin: 3px 0 6px; }
+  .doc-tools { display: flex; flex-wrap: wrap; gap: 3px; margin: 5px 0; }
+  .doc-tools button, .doc-save { background: var(--vscode-button-secondaryBackground, var(--vscode-input-background));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); border: 1px solid var(--vscode-panel-border);
+    border-radius: 3px; cursor: pointer; padding: 2px 6px; }
+  .doc textarea { min-height: 100px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family, monospace); }
+  .doc-preview { padding: 5px 7px; border: 1px solid var(--vscode-panel-border); border-radius: 3px;
+    overflow-wrap: anywhere; }
+  .doc-preview p { margin: 4px 0; } .doc-preview h1, .doc-preview h2, .doc-preview h3 { margin: 7px 0 4px; }
+  .doc-preview ul, .doc-preview ol { padding-left: 20px; margin: 4px 0; }
+  .doc-preview pre { overflow-x: auto; } .doc-preview code { font-family: var(--vscode-editor-font-family, monospace); }
+  .doc-error { color: var(--vscode-errorForeground); min-height: 1em; }
   .combo { position: relative; }
   .combo-list { position: absolute; left: 0; right: 0; top: 100%; margin-top: 2px; z-index: 20;
     max-height: 220px; overflow-y: auto; background: var(--vscode-dropdown-background, var(--vscode-input-background));
@@ -287,11 +318,16 @@ ${cspMeta(nonce)}
 <script nonce="${nonce}">
   const vsapi = acquireVsCodeApi();
   const L = ${L};
+  const renderDocMarkdown = ${renderDocMarkdown.toString()};
   const state = Object.assign({ search: "", open: { set: true, events: true, all: false } }, vsapi.getState() || {});
   if (!state.open) { state.open = { set: true, events: true, all: false }; }
   let model = null;
   let sticky = null;
   let recentColors = [];
+  let docDraft = null;
+  let docOriginal = null;
+  let docId = null;
+  let docError = "";
   // While a row is focused it must not jump between the "set" and "all" sections (setting Авто /
   // resetting a value changes its section, and reflowing a focused field mid-edit is jarring). We
   // pin the focused row to the section AND position it is in; the move is deferred until focus
@@ -314,6 +350,76 @@ ${cspMeta(nonce)}
     if (cls) { node.className = cls; }
     if (text !== undefined) { node.textContent = text; }
     return node;
+  }
+
+  function docEditor() {
+    if (!model.docComment) { return null; }
+    const info = model.docComment;
+    if (docId !== info.id) {
+      docId = info.id; docDraft = info.text; docOriginal = info.text; docError = "";
+    } else if (info.text === docDraft) {
+      docOriginal = info.text; docError = "";
+    } else if (docDraft === docOriginal) {
+      docDraft = info.text; docOriginal = info.text;
+    }
+    const box = el("section", "doc");
+    box.appendChild(el("div", "doc-title", L.docComment));
+    const tools = el("div", "doc-tools");
+    const input = document.createElement("textarea");
+    input.value = docDraft;
+    input.placeholder = L.docPlaceholder;
+    input.disabled = !!model.readonly;
+    const preview = el("div", "doc-preview");
+    const previewButton = el("button", null, L.docPreview);
+    const editButton = el("button", null, L.docEdit);
+    const showPreview = () => {
+      preview.innerHTML = renderDocMarkdown(input.value);
+      preview.hidden = false; input.hidden = true;
+      previewButton.hidden = true; editButton.hidden = false;
+    };
+    const showEdit = () => {
+      preview.hidden = true; input.hidden = false;
+      editButton.hidden = true; previewButton.hidden = false;
+      input.focus();
+    };
+    const action = (label, before, after, sample, linePrefix) => {
+      const button = el("button", null, label);
+      button.type = "button";
+      button.disabled = !!model.readonly;
+      button.addEventListener("click", () => {
+        const start = input.selectionStart, end = input.selectionEnd;
+        const selected = input.value.slice(start, end) || sample;
+        const insert = linePrefix ? before + selected : before + selected + after;
+        input.setRangeText(insert, start, end, "select");
+        docDraft = input.value; showEdit();
+      });
+      tools.appendChild(button);
+    };
+    action(L.docBold, "**", "**", "text", false);
+    action(L.docItalic, "*", "*", "text", false);
+    action(L.docCode, String.fromCharCode(96), String.fromCharCode(96), "code", false);
+    action(L.docHeading, "# ", "", "Heading", true);
+    action(L.docList, "- ", "", "Item", true);
+    action(L.docLink, "[", "](https://example.com)", "link", false);
+    previewButton.addEventListener("click", showPreview);
+    editButton.addEventListener("click", showEdit);
+    tools.appendChild(previewButton); tools.appendChild(editButton);
+    editButton.hidden = true;
+    box.appendChild(tools);
+    input.addEventListener("input", () => { docDraft = input.value; });
+    box.appendChild(input); box.appendChild(preview);
+    preview.hidden = true;
+    const save = el("button", "doc-save", L.docSave);
+    save.disabled = !!model.readonly;
+    save.addEventListener("click", () => {
+      docDraft = input.value;
+      if (docDraft !== docOriginal) {
+        post({ type: "docSave", text: docDraft, expected: docOriginal, id: docId });
+      }
+    });
+    box.appendChild(save);
+    box.appendChild(el("div", "doc-error", docError));
+    return box;
   }
 
   // Esc restores the pre-edit value; Enter (or blur with a change) commits.
@@ -943,6 +1049,8 @@ ${cspMeta(nonce)}
     toYaml.addEventListener("click", () => post({ type: "reveal" }));
     titleBox.appendChild(head);
     titleBox.appendChild(toYaml);
+    const doc = docEditor();
+    if (doc) { pane.appendChild(doc); }
     if (model.meta && !model.schemaAvailable) {
       // A metadata node without a schema of its own (a field, an unknown kind, no generated
       // data): one flat row list, the way this mode always looked. With a schema the model
@@ -991,7 +1099,9 @@ ${cspMeta(nonce)}
       pane.appendChild(details);
     }
     // Footer: the indicator legend next to the empty-value hint.
-    pane.appendChild(el("div", "legend", L.legend + " " + L.emptyNote));
+    if (model.sections.length) {
+      pane.appendChild(el("div", "legend", L.legend + " " + L.emptyNote));
+    }
     if (sticky) {
       markSticky(sticky);
       // A pin-release render (focus already left the panel) must not yank focus back onto the row.
@@ -1049,6 +1159,10 @@ ${cspMeta(nonce)}
           if (err) { err.textContent = m.message; }
         }
       }
+    } else if (m.type === "docError") {
+      docError = m.message || "";
+      const error = pane.querySelector(".doc-error");
+      if (error) { error.textContent = docError; }
     }
   });
   render();
@@ -1113,6 +1227,46 @@ async function getSchema(type: string): Promise<UiComponentDto | null> {
   const schema = res.component ? { ...res.component, enums: res.enums } : null;
   schemaCache.set(type, schema);
   return schema;
+}
+
+interface DocCommentResponse {
+  supported?: boolean;
+  text?: string;
+  anchor?: number;
+  offsetEncoding?: string;
+  error?: string;
+}
+
+async function readDocComment(uri: vscode.Uri, codePointOffset: number): Promise<DocCommentResponse | undefined> {
+  const generation = lspServerGeneration();
+  if (generation !== docCommentGeneration) {
+    docCommentGeneration = generation;
+    docCommentUnavailable = false;
+  }
+  if (docCommentUnavailable || !lspActive()) {
+    return undefined;
+  }
+  const result = await lspRequestDetailed<DocCommentResponse>("xbsl/docComment", {
+    uri: uri.toString(), op: "get", offset: codePointOffset,
+    offsetEncoding: "unicode-codepoint",
+  });
+  if (result.kind === "methodNotFound" && result.generation === lspServerGeneration()) {
+    // Only a confirmed missing method is a capability result. A timeout or restarted
+    // server can answer the next selection successfully.
+    docCommentUnavailable = true;
+  }
+  if (result.kind !== "ok") {
+    return undefined;
+  }
+  const res = result.value;
+  if (res?.error) {
+    void view?.webview.postMessage({ type: "docError", message: vscode.l10n.t("XBSL: {0}", res.error) });
+    return;
+  }
+  if (!res || res.offsetEncoding !== "unicode-codepoint") {
+    return undefined;
+  }
+  return res.supported ? res : undefined;
 }
 
 // hook 6: the bindings a developer is most likely to type - =Объект.<attribute> for every
@@ -1213,11 +1367,7 @@ async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> 
     return;
   }
   if (!res.node) {
-    showHint(
-      vscode.l10n.t(
-        "Place the cursor on a form component in the yaml editor – its properties will show here."
-      )
-    );
+    await refreshDocOnly(uri, offset, my);
     return;
   }
   // A slot hit shows its owner component (the engine sends the parent along); the slot
@@ -1263,6 +1413,17 @@ async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> 
   }
   lastModel.projectEnums = projEnums;
   lastModel.readonly = readonly;
+  const comment = await readDocComment(uri, node.contentSpan?.start ?? node.span.start);
+  if (seq !== my || !view) {
+    return;
+  }
+  if (comment) {
+    lastModel.docComment = {
+      text: comment.text ?? "",
+      offset: node.contentSpan?.start ?? node.span.start,
+      id: uri.toString() + "#" + node.id,
+    };
+  }
   lastHint = null;
   target = { kind: "component", uri, nodeId: node.id, nodeSpanStart: node.span.start, type };
   const titleParts = [type, node.name ?? ""].filter(Boolean);
@@ -1270,6 +1431,44 @@ async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> 
     titleParts.push(vscode.l10n.t("Slot {0}", shown.viaSlot));
   }
   view.description = titleParts.join(" · ") || undefined;
+  postModel();
+}
+
+async function refreshDocOnly(uri: vscode.Uri, offset: number, my: number): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(uri);
+  const mapOffset = metaNodeOffsetAt(doc.getText(), offset);
+  const comment = mapOffset === undefined ? undefined
+    : await readDocComment(uri, utf16ToCodePointOffset(doc.getText(), mapOffset));
+  if (seq !== my || !view) {
+    return;
+  }
+  if (!comment || mapOffset === undefined) {
+    showHint(vscode.l10n.t(
+      "Place the cursor on a form component or documentable declaration in the yaml editor."
+    ));
+    return;
+  }
+  const readonly = await isReadonlyDoc(uri);
+  if (seq !== my || !view) {
+    return;
+  }
+  lastModel = {
+    nodeId: "documentation:" + mapOffset,
+    type: vscode.l10n.t("Documentation"),
+    name: "",
+    nodeSpanStart: mapOffset,
+    schemaAvailable: true,
+    sections: [],
+    readonly,
+    docComment: {
+      text: comment.text ?? "",
+      offset: utf16ToCodePointOffset(doc.getText(), mapOffset),
+      id: uri.toString() + "#documentation:" + mapOffset,
+    },
+  };
+  lastHint = null;
+  target = { kind: "documentation", uri, offset: mapOffset };
+  view.description = vscode.l10n.t("Documentation");
   postModel();
 }
 
@@ -1347,8 +1546,17 @@ async function refreshMetadata(uri: vscode.Uri, sel: MetaSelector): Promise<void
     desc, candidates, schema, attrCandidates, handlers && !handlers.error ? handlers : undefined
   );
   lastModel.readonly = await isReadonlyDoc(uri); // hook 11
+  const comment = sel.std ? undefined
+    : await readDocComment(uri, utf16ToCodePointOffset(doc.getText(), desc.offset));
   if (seq !== my || !view) {
     return;
+  }
+  if (comment) {
+    lastModel.docComment = {
+      text: comment.text ?? "",
+      offset: utf16ToCodePointOffset(doc.getText(), desc.offset),
+      id: uri.toString() + "#" + JSON.stringify(path ?? { offset: desc.offset }),
+    };
   }
   lastHint = null;
   target = { kind: "metadata", uri, offset: desc.offset, std: sel.std };
@@ -1510,6 +1718,81 @@ async function doApplyMetaProp(key: string, value: string | null): Promise<void>
   await refreshMetadata(tgt.uri, tgt.std ? { std: tgt.std } : { offset: tgt.offset });
 }
 
+function saveDocComment(value: string, expected: string, id: string): Promise<void> {
+  return enqueueWrite(() => doSaveDocComment(value, expected, id));
+}
+
+async function doSaveDocComment(value: string, expected: string, id: string): Promise<void> {
+  const tgt = target;
+  const comment = lastModel?.docComment;
+  const serial = seq;
+  if (!tgt || !comment || comment.id !== id || await isReadonlyDoc(tgt.uri) || seq !== serial) {
+    return;
+  }
+  const doc = await vscode.workspace.openTextDocument(tgt.uri);
+  const version = doc.version;
+  const result = await lspRequestDetailed<{
+    edits?: { start: number; end: number; newText: string }[];
+    nextOffset?: number;
+    offsetEncoding?: string;
+    error?: string;
+  }>("xbsl/docComment", {
+    uri: tgt.uri.toString(), op: "set", offset: comment.offset, text: value, expected,
+    offsetEncoding: "unicode-codepoint",
+  });
+  if (result.kind !== "ok") {
+    if (result.kind === "methodNotFound" && result.generation === lspServerGeneration()) {
+      docCommentUnavailable = true;
+    }
+    void view?.webview.postMessage({
+      type: "docError", message: vscode.l10n.t("The documentation service is unavailable. Try again."),
+    });
+    return;
+  }
+  const res = result.value;
+  if (res?.error) {
+    void view?.webview.postMessage({ type: "docError", message: vscode.l10n.t("XBSL: {0}", res.error) });
+    return;
+  }
+  if (!res || res.offsetEncoding !== "unicode-codepoint") {
+    void view?.webview.postMessage({
+      type: "docError", message: vscode.l10n.t("The documentation service returned an unsupported edit."),
+    });
+    return;
+  }
+  const fresh = await vscode.workspace.openTextDocument(tgt.uri);
+  if (seq !== serial || fresh.version !== version) {
+    void view?.webview.postMessage({
+      type: "docError", message: vscode.l10n.t("The YAML changed while the comment was being saved. Review it and try again."),
+    });
+    return;
+  }
+  const edit = new vscode.WorkspaceEdit();
+  const source = fresh.getText();
+  for (const item of res.edits ?? []) {
+    const start = codePointToUtf16Offset(source, item.start);
+    const end = codePointToUtf16Offset(source, item.end);
+    edit.replace(tgt.uri, new vscode.Range(fresh.positionAt(start), fresh.positionAt(end)), item.newText);
+  }
+  if (!await vscode.workspace.applyEdit(edit)) {
+    void view?.webview.postMessage({
+      type: "docError", message: vscode.l10n.t("The documentation comment could not be saved."),
+    });
+    return;
+  }
+  const next = res.nextOffset ?? comment.offset;
+  if (tgt.kind === "component") {
+    await refreshForOffset(tgt.uri, next);
+  } else if (tgt.kind === "documentation") {
+    const updated = await vscode.workspace.openTextDocument(tgt.uri);
+    await refreshDocOnly(tgt.uri, codePointToUtf16Offset(updated.getText(), next), ++seq);
+  } else {
+    const updated = await vscode.workspace.openTextDocument(tgt.uri);
+    const utf16Next = codePointToUtf16Offset(updated.getText(), next);
+    await refreshMetadata(tgt.uri, tgt.std ? { std: tgt.std } : { offset: utf16Next });
+  }
+}
+
 // hook 7: record a color the developer just applied, most-recent first, distinct, capped.
 // A non-color value normalizes to undefined and is ignored, so a bad hex is never stored.
 function rememberColor(hex: string): void {
@@ -1591,7 +1874,7 @@ async function reveal(offset: number | undefined): Promise<void> {
   const fallback =
     target.kind === "component"
       ? target.nodeSpanStart
-      : target.std
+      : target.kind === "metadata" && target.std
         ? findAttrOffset(doc.getText(), target.std.name) ?? 0
         : Math.max(target.offset, 0);
   const pos = doc.positionAt(Math.min(offset ?? fallback, doc.getText().length));
@@ -1986,7 +2269,8 @@ class FormPropsViewProvider implements vscode.WebviewViewProvider {
           m.type === "reset" ||
           m.type === "createHandler" ||
           m.type === "removeHandler";
-        if (isWrite && lastModel?.readonly) {
+        const docWrite = m.type === "docSave";
+        if ((isWrite || docWrite) && lastModel?.readonly) {
           void vscode.window.showInformationMessage(
             vscode.l10n.t("This form is read-only – editing is disabled.")
           );
@@ -1996,6 +2280,9 @@ class FormPropsViewProvider implements vscode.WebviewViewProvider {
           postModel();
         } else if (m.type === "commit" && typeof m.key === "string") {
           handleCommit(m.key, m.value, m.member);
+        } else if (m.type === "docSave" && typeof m.text === "string" &&
+                   typeof m.expected === "string" && typeof m.id === "string") {
+          void saveDocComment(m.text, m.expected, m.id);
         } else if (m.type === "commitComposite" && typeof m.key === "string") {
           handleCommitComposite(m.key, m.fields);
         } else if (m.type === "reset" && typeof m.key === "string") {

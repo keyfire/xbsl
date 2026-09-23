@@ -1,4 +1,6 @@
 {
+  "Errors: {0}": "Ошибок: {0}",
+  "Warnings: {0}": "Предупреждений: {0}",
   "XBSL: xbsl.projectRoot \"{0}\" not found – using the workspace folder.": "XBSL: xbsl.projectRoot \"{0}\" не найден – используется рабочая папка.",
   "Show log": "Показать журнал",
   "XBSL: the workspace run \"{0}\" was canceled – the files changed.": "XBSL: проверка всего проекта \"{0}\" отменена – файлы изменились.",
@@ -635,5 +637,20 @@
   "{0} – places: {1}, files: {2}": "{0} – мест: {1}, файлов: {2}",
   "Resource references": "Ссылки на ресурс",
   "Places that name {0}": "Места, которые ссылаются на {0}",
-  "XBSL: nothing in the sources names {0}.": "XBSL: в исходниках нет ссылок на {0}."
+  "XBSL: nothing in the sources names {0}.": "XBSL: в исходниках нет ссылок на {0}.",
+  "Documentation comment": "Документирующий комментарий",
+  "Place the cursor on a form component or documentable declaration in the yaml editor.": "Установите курсор на компонент формы или объявление с документирующим комментарием в YAML.",
+  "Preview": "Предпросмотр",
+  "Save": "Сохранить",
+  "Bold": "Полужирный",
+  "Italic": "Курсив",
+  "Code": "Код",
+  "Heading": "Заголовок",
+  "List": "Список",
+  "Link": "Ссылка",
+  "Write Markdown documentation for this element.": "Напишите описание элемента на Markdown.",
+  "The YAML changed while the comment was being saved. Review it and try again.": "YAML изменился во время сохранения комментария. Проверьте его и повторите попытку.",
+  "The documentation comment could not be saved.": "Не удалось сохранить документирующий комментарий.",
+  "The documentation service is unavailable. Try again.": "Сервис документации недоступен. Повторите попытку.",
+  "The documentation service returned an unsupported edit.": "Сервис документации вернул неподдерживаемую правку."
 }

@@ -57,16 +57,37 @@ export function setAfterServerStart(fn: () => void): void {
 // instead of crashing. The failure itself is logged to the XBSL output channel: the callers'
 // generic messages ("the engine does not answer") are undiagnosable without the real error.
 export async function lspRequest<T>(method: string, params: unknown): Promise<T | undefined> {
-  if (!client) {
-    return undefined;
+  const result = await lspRequestDetailed<T>(method, params);
+  return result.kind === "ok" ? result.value : undefined;
+}
+
+export type LspRequestResult<T> =
+  | { kind: "ok"; value: T; generation: number }
+  | { kind: "unavailable" | "methodNotFound" | "error"; generation: number };
+
+// Consumers that offer optional newer features need to distinguish an old server from a
+// temporary failure. A generation belongs to the client that actually sent the request.
+export async function lspRequestDetailed<T>(method: string, params: unknown): Promise<LspRequestResult<T>> {
+  const activeClient = client;
+  const generation = serverGeneration;
+  if (!activeClient) {
+    return { kind: "unavailable", generation };
   }
   try {
-    return await client.sendRequest<T>(method, params);
+    return { kind: "ok", value: await activeClient.sendRequest<T>(method, params), generation };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     outputChannel?.appendLine(vscode.l10n.t("XBSL LSP: the request {0} failed: {1}", method, msg));
-    return undefined;
+    const code = typeof e === "object" && e !== null && "code" in e
+      ? (e as { code: unknown }).code : undefined;
+    return { kind: code === -32601 ? "methodNotFound" : "error", generation };
   }
+}
+
+let serverGeneration = 0;
+
+export function lspServerGeneration(): number {
+  return serverGeneration;
 }
 
 interface SpawnPlan {
@@ -196,6 +217,7 @@ export async function activateLsp(
   client = built.client;
   try {
     await client.start();
+    serverGeneration++;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     output.appendLine(vscode.l10n.t('XBSL LSP: the server failed to start ({0}): {1}', built.plan.command, msg));
@@ -234,6 +256,7 @@ export async function activateLsp(
       try {
         await fresh.client.start();
         client = fresh.client;
+        serverGeneration++;
         afterStart?.();
         void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL LSP: server restarted"), 3000);
       } catch (e) {
