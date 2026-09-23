@@ -257,6 +257,34 @@ def test_a_narrowed_event_parameter_is_reported(tmp_path):
     assert "'СобытиеПриНажатии' – наследник 'СобытиеКомпонента'" in diags[0].message
 
 
+_BUTTON_DROP = """            Тип: Кнопка
+            Имя: Кнопка
+            ПриПеретаскивании: Перенос"""
+
+
+def _drop(tmp_path, params: str):
+    return _lint(tmp_path, _BUTTON_DROP, f"метод Перенос({params})\n;\n")
+
+
+def test_an_unrelated_event_type_is_reported(tmp_path):
+    """The drop event lists only the root among its bases, and the compiler agrees with the
+    catalog: a handler that takes the base component event for it does not compile."""
+    diags = _drop(tmp_path, "Источник: Компонент, Событие: СобытиеКомпонента")
+
+    assert len(diags) == 1
+    assert "Параметр 2" in diags[0].message
+    assert "'СобытиеКомпонента' не связан с 'СобытиеПриПеретаскивании'" in diags[0].message
+
+
+def test_the_root_takes_any_event(tmp_path):
+    assert _drop(tmp_path, "Источник: Компонент, Событие: Объект") == []
+
+
+def test_a_type_the_catalog_does_not_describe_is_not_judged(tmp_path):
+    """A project type has an ancestry the catalog cannot see: it is neither related nor not."""
+    assert _drop(tmp_path, "Источник: МояПанель, Событие: СобытиеПриПеретаскивании") == []
+
+
 def test_a_nullable_narrowed_source_is_reported_by_its_head(tmp_path):
     """The mark of nullability does not widen the label into a component."""
     diags = _label(tmp_path, "ПриНаведении", "Источник: Надпись?, Событие: СобытиеКомпонента")

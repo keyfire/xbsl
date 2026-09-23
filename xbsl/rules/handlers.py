@@ -60,6 +60,18 @@ MESSAGES = {
               "the build answers that the method does not satisfy the signature, and the "
               "project rolls back to the previous build.",
     },
+    "form/handler-signature.unrelated": {
+        "ru": "Параметр {position} обработчика '{handler}' объявлен как '{actual}', а сигнатура "
+              "события у компонента '{component}' – {signature}. Тип '{written}' не связан с "
+              "'{base}' наследованием: подойдёт тип из сигнатуры или его предок. При применении "
+              "сборки компиляция ответит \"Метод не удовлетворяет сигнатуре\", и проект "
+              "откатится на прежнюю сборку.",
+        "en": "Parameter {position} of the handler '{handler}' is declared as '{actual}', while "
+              "the event signature of '{component}' is {signature}. '{written}' is not related "
+              "to '{base}' by inheritance: the type of the signature or its ancestor will do. "
+              "Applying the build answers that the method does not satisfy the signature, and "
+              "the project rolls back to the previous build.",
+    },
     "form/handler-signature.narrower": {
         "ru": "Параметр {position} обработчика '{handler}' объявлен как '{actual}', а сигнатура "
               "события у компонента '{component}' – {signature}. Тип '{narrowed}' – наследник "
@@ -306,8 +318,10 @@ def close_in_before_close(source: SourceFile) -> Iterable[Diagnostic]:
 #   and the compiler refuses it: a hover handler that takes `Label` where the delegate says
 #   `Component`. The click handler of the same label takes `Label` legally - its delegate
 #   names the label. The ancestry comes from the type catalog (`bases`, closed transitively);
-# - a head that is neither is not judged. The catalog misses some links (a drag event does
-#   not list `ComponentEvent` among its bases), so "unrelated" may be a gap in the data;
+# - a head that is neither is refused too. The drop and the autocomplete events list only
+#   `Object` among their bases, which looked like a gap in the data, but the compiler refused
+#   `ComponentEvent` for both. A head the catalog does not describe (a project type, a word
+#   left unfolded) is not judged: its ancestry is not known here;
 # - a type parameter left unsubstituted (a list whose row type resolves through the source
 #   type) is not judged: what the compiler sees there is not visible in the file;
 # - the type ARGUMENT of the event may be wider than the one the event passes, the argument
@@ -319,8 +333,8 @@ def close_in_before_close(source: SourceFile) -> Iterable[Diagnostic]:
 #   the source of an `Edit<String>`. An event only hands its data out, while a component
 #   also takes a value in.
 #
-# What is left is the narrowed head and the case the defect was first met in: the SAME type
-# with a different argument. For the source any difference is a finding, for the event the
+# What is left is a narrowed or unrelated head and the case the defect was first met in: the
+# SAME type with a different argument. For the source any difference is a finding, for the event the
 # argument that drops the nullability or names an unrelated type.
 
 #: Type expressions are compared by text, so both spellings are folded into the Russian one.
@@ -372,6 +386,18 @@ def _narrower(written: str, expected: str) -> bool:
     in the data can hide a finding but never invent one.
     """
     return written != expected and expected in _ancestors().get(written, frozenset())
+
+
+def _unrelated(written: str, expected: str) -> bool:
+    """Whether two heads the catalog describes share no line of descent (both folded).
+
+    A head the catalog does not describe is never unrelated: a project type or a word left
+    unfolded has an ancestry this check cannot see, and guessing would invent a finding.
+    """
+    ancestors = _ancestors()
+    if written not in ancestors or expected not in ancestors:
+        return False
+    return written not in ancestors[expected] and expected not in ancestors[written]
 
 
 #: The root every type descends from: an event argument of this type takes any data.
@@ -644,15 +670,20 @@ def handler_signature(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     continue
                 want_head, got_head = _type_head(want_folded), _type_head(got_folded)
                 if want_head != got_head:
-                    if not _narrower(got_head, want_head):
-                        continue  # an ancestor is legal, an unrelated head is not judged
+                    if _narrower(got_head, want_head):
+                        message = "form/handler-signature.narrower"
+                    elif _unrelated(got_head, want_head):
+                        message = "form/handler-signature.unrelated"
+                    else:
+                        continue  # an ancestor is legal, an unknown head is not judged
+                    written = _type_head(got.replace(" ", ""))
                     yield Diagnostic(
                         rel, ref["line"], ref["col"], "form/handler-signature", Severity.WARNING,
                         i18n.t(
-                            "form/handler-signature.narrower",
+                            message,
                             handler=ref["handler"], component=i18n.name(ref["component"]),
-                            position=position, actual=got,
-                            narrowed=_type_head(got.replace(" ", "")), base=_shown(want_head),
+                            position=position, actual=got, narrowed=written, written=written,
+                            base=_shown(want_head),
                             signature=_event_signature(ref["event"], ref["expected"]),
                         ),
                     )
