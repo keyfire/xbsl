@@ -841,7 +841,7 @@ _ROW_FILL_EN = ("structure Summary\n    val Amount: Number = 0\n;\n"
                 "method Show(RowData: DynamicListRow<MarkPanel.ListRow>)\n"
                 "    val Line = RowData.Data\n"
                 "    val Result = new Summary(Amount = Line.{field})\n;\n")
-_ROW_TOKENS = {"ПанельОтметок": "MarkPanel", "Отметки": "Marks", "Список": "List",
+_LIST_ROW_TOKENS = {"ПанельОтметок": "MarkPanel", "Отметки": "Marks", "Список": "List",
                "Срок": "Deadline", "Сумма": "Amount", "СуммаРаздела": "SectionAmount",
                "ЗащищеннаяСумма": "GuardedAmount", "Строчка": "Line", "Сводка": "Summary",
                "Итог": "Result", "Показать": "Show"}
@@ -4023,7 +4023,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="Deadline"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/unknown-row-field",
@@ -4038,7 +4038,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="Section"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/unknown-row-field",
@@ -4052,7 +4052,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="ToString()"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/unknown-row-field",
@@ -4066,7 +4066,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_READ_EN.format(field="Key"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/row-field-null",
@@ -4080,7 +4080,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_FILL_EN.format(field="GuardedAmount"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/row-field-null",
@@ -4095,7 +4095,7 @@ SEEDS: list[Seed] = [
             "MarkPanel.yaml": _ROW_FORM_EN,
             "MarkPanel.xbsl": _ROW_FILL_EN.format(field="SectionAmount"),
         },
-        tokens=_ROW_TOKENS,
+        tokens=_LIST_ROW_TOKENS,
     ),
     Seed(
         rule="code/row-field-null",
