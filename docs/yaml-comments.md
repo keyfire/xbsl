@@ -19,10 +19,11 @@ plain `#` and `##` lines in the wrong place are lost on the first such edit.
   nodes are described.
 - **The first line of a list item after the `-`**, when the model describes such records: the
   properties of a component in `Properties:`, the URL templates of an HTTP service in
-  `UrlTemplates:` and the tabular parts of a catalog in `TabularParts:`.
+  `UrlTemplates:`, the attributes and the tabular parts of a catalog in `Attributes:` and
+  `TabularParts:`.
 
-There is no place on the items of `Attributes:` of a catalog, on the items of `Methods:` of a URL
-template, and on a single property of a node. On an instance of a project or a library component
+There is no place on the standard attributes of a catalog, the ones picked by their name (`Code`,
+`Name`), on the items of `Methods:` of a URL template, and on a single property of a node. On an instance of a project or a library component
 in a list a comment does harm: with it the server does not apply the project, because producing
 the metadata of the instance fails. A note about such a node goes into the comment of the group
 it stands in.
