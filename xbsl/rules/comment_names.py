@@ -41,12 +41,19 @@ What is NOT judged, each narrowing measured on real projects:
   by a member that neither the code of the project nor the platform has, is an object of
   another configuration or service, and the rule leaves its every mention alone. A member is
   judged only after a root the project or the platform knows, and never after a library type,
-  whose members the archive does not list.
+  whose members the archive does not list;
+- a name standing next to another system of the ecosystem: within two words of `Менеджер
+  сервиса`, `МС`, `1С:Предприятие`, `БСП`, `БТС` or their English names the name belongs to
+  that system - "документ НедоступностиРесурсов Менеджера сервиса", "как в БТС РезервныеКопии".
+  Only that mention is let go. On the history of a project the window removed seven of the
+  seventeen names of other systems and none of the thirty-three stale ones; a wider window, or
+  one decision for the whole project, lost more of the project's own names than it saved.
 
-What stays is a name of another product written without a chain - "документ ОстаткиДругойСистемы"
-reads exactly like a renamed object, and the rule reports it. In a project written in English
-the same holds for a product name of the prose: `PaaS`, `OpenAPI` and `YouTube` have the shape
-of a name and the script of the project. That is the reason the rule is off by default.
+What stays is a name of another product written with no system beside it -
+"документ ОстаткиДругойСистемы" reads exactly like a renamed object, and the rule reports it,
+saying how to name the system. In a project written in English the same holds for a product
+name of the prose: `PaaS`, `OpenAPI` and `YouTube` have the shape of a name and the script of
+the project. That is the reason the rule is off by default.
 
 One finding per name per file. A project without the platform catalog is not judged: there every
 platform name would read as unknown.
@@ -54,6 +61,7 @@ platform name would read as unknown.
 
 from __future__ import annotations
 
+import bisect
 import re
 from collections.abc import Iterable
 from functools import lru_cache
@@ -78,9 +86,12 @@ MESSAGES = {
     },
     "comment/unknown-name.found": {
         "ru": "Имени \"{name}\" нет ни в проекте, ни у платформы: его переименовали или удалили, "
-              "либо в имени опечатка.",
+              "либо в имени опечатка. Если это имя другой системы, назовите её рядом "
+              "(\"... Менеджера сервиса\") или запишите цепочкой \"Система.Имя\".",
         "en": "Name \"{name}\" exists neither in the project nor on the platform: it was renamed "
-              "or removed, or it is misspelled.",
+              "or removed, or it is misspelled. If it is a name of another system, name that "
+              "system next to it (\"... of the Service Manager\") or write it as a chain "
+              "\"System.Name\".",
     },
     "comment/unknown-name.off": {
         "ru": "имя судится по форме слова: имя другого продукта в прозе комментария неотличимо "
@@ -123,8 +134,19 @@ _CODE_LINE = re.compile(
     r"|(?:для|for)\s+\w+\s+(?:из|in)\s+[\w.]+"
     # a string literal
     r"|\""
+    # an argument line of a call spread over several lines
+    r"|\w+(?:\.\w+)+\s*,\s*$"
     r")"
 )
+#: Other systems of the ecosystem a comment names. A name within `_FOREIGN_REACH` words of one
+#: belongs to that system.
+_FOREIGN_SYSTEM = re.compile(
+    r"Менеджер\w*\s+сервис\w*|\bМС\b|1[СC]\s*:\s*Предприяти\w*|\bБСП\b|\bБТС\b"
+    r"|Service\s+Manager|1[СC]\s*:\s*Enterprise|\bSSL\b|\bBTS\b"
+)
+#: The words the distance to a system name is counted in; `1С:Предприятие` is one word.
+_MARKER_WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9_:]+")
+_FOREIGN_REACH = 2
 #: An operator of comparison or of logic anywhere on the line.
 _CODE_OPERATOR = re.compile(r"==|!=|>=|<=|&&|\|\||\?\?")
 #: A name hyphenated across a line break: the line ends with a letter and a hyphen.
@@ -198,9 +220,24 @@ def _is_code(prose: str) -> bool:
     return _CODE_LINE.match(core) is not None or _CODE_OPERATOR.search(core) is not None
 
 
+def _next_to_other_system(prose: str, start: int, systems: list[re.Match]) -> bool:
+    """Whether one of the `systems` found on the line starts within `_FOREIGN_REACH` words of
+    the word at `start`."""
+    words = [m.start() for m in _MARKER_WORD.finditer(prose)]
+
+    def index(position: int) -> int:
+        return bisect.bisect_right(words, position) - 1
+
+    at = index(start)
+    return any(
+        abs(index(system.start()) - at) <= _FOREIGN_REACH
+        for system in systems if not system.start() <= start < system.end()
+    )
+
+
 def _candidates(source: SourceFile) -> list[tuple]:
-    """(name, line, col, verbatim, chain root before it, member after it) for every
-    identifier-like word of the comments."""
+    """(name, line, col, verbatim, chain root before it, member after it, next to another
+    system) for every identifier-like word of the comments."""
     out: list[tuple] = []
     previous_line = -1
     hyphenated = False
@@ -212,6 +249,7 @@ def _candidates(source: SourceFile) -> list[tuple]:
         previous_line = cl.line
         if not prose.strip() or _is_code(prose):
             continue
+        systems = list(_FOREIGN_SYSTEM.finditer(prose))
         first = True
         for m in _WORD.finditer(prose):
             word = m.group(0)
@@ -230,6 +268,7 @@ def _candidates(source: SourceFile) -> list[tuple]:
                 word, cl.line, cl.column + start + m.start(), verbatim,
                 root.group(1) if root else None,
                 member.group(1) if member else None,
+                bool(systems) and _next_to_other_system(prose, m.start(), systems),
             ))
     return out
 
@@ -366,8 +405,8 @@ def unknown_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     index: dict | None = None
     for rel, fact in judged:
         reported: set[str] = set()
-        for name, line, col, verbatim, root, _member in fact["cands"]:
-            if name in known or name in reported or name in outside:
+        for name, line, col, verbatim, root, _member, foreign in fact["cands"]:
+            if name in known or name in reported or name in outside or foreign:
                 continue
             if root is not None and (root not in known or root in library or root in outside):
                 continue

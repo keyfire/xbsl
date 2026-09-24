@@ -116,6 +116,7 @@ def test_unknown_name_candidate_shape(word, expected):
     "//пер ОстатокСклада = 0",
     "var total = new Totals.Object()",
     '"ПересчитатьОстатки"',
+    "ПараметрыЗапроса.Склад,",
 ))
 def test_unknown_name_commented_out_code_is_recognized(line):
     assert comment_names._is_code(line)
@@ -128,6 +129,7 @@ def test_unknown_name_commented_out_code_is_recognized(line):
     "Все данные приходят одним вызовом (Партии.ДанныеСклада);",
     "если склад не задан, берется основной",
     "Возврат значения из ЗаписатьОстаток()",
+    "Остатки пересчитывает ПересчитатьОстатки,",
 ))
 def test_unknown_name_prose_is_not_code(line):
     assert not comment_names._is_code(line)
@@ -229,6 +231,58 @@ def test_unknown_name_of_another_product_without_a_chain_is_reported():
     names = _names(_module("// Поля повторяют документ ОстаткиДругойСистемы.\n"))
 
     assert names == ["ОстаткиДругойСистемы"]
+
+
+@pytest.mark.needs_data
+def test_unknown_name_next_to_another_system_is_left_alone():
+    """A system named beside the name owns it, whichever side it stands on."""
+    assert _module("// Поля повторяют документ ОстаткиДругойСистемы Менеджера сервиса.\n") == []
+    assert _module("// Резервирование устроено как в БТС РезервныеКопииДанных.\n") == []
+    assert _module("// Аналога ПроверкаЗаполненияДанных из 1С:Предприятия здесь нет.\n") == []
+
+
+@pytest.mark.needs_data
+def test_unknown_name_farther_from_the_system_is_reported():
+    """Four words away the system names another thing of the sentence."""
+    names = _names(_module(
+        "// Поля повторяют документ ОстаткиДругойСистемы, а не справочник Менеджера сервиса.\n"
+    ))
+
+    assert names == ["ОстаткиДругойСистемы"]
+
+
+@pytest.mark.needs_data
+def test_unknown_name_next_to_a_system_is_let_go_only_there():
+    """The mark belongs to one mention: the same name elsewhere in the file is still judged."""
+    names = _names(_module(
+        "// ОстаткиДругойСистемы Менеджера сервиса повторяет этот справочник.\n"
+        "// Порядок полей взят из ОстаткиДругойСистемы.\n"
+    ))
+
+    assert names == ["ОстаткиДругойСистемы"]
+
+
+@pytest.mark.needs_data
+def test_unknown_name_of_the_project_beside_a_system_is_the_known_cost():
+    """A stale name of the project right next to a system name goes unreported.
+
+    The window cannot tell "МС - ЗагрузитьДетали" from a name of that system. The price was
+    measured on a model of renames: three own names of 1275 mentions.
+    """
+    assert _module("// При недоступности МС - ПересчитатьСтарыеПартии.\n") == []
+
+
+@pytest.mark.needs_data
+def test_unknown_name_next_to_an_english_system_name_is_left_alone():
+    stores = "ElementKind: Catalog\nName: Stores\n"
+    module = "method Recalculate()\n;\n"
+
+    def run(comment: str):
+        return _project(**{"Stores.yaml": stores, "Stores.xbsl": comment + module})
+
+    assert run("// Mirrors the Service Manager ServiceOutages document.\n") == []
+    assert run("// There is no FillCheckProcessing of 1C:Enterprise here.\n") == []
+    assert _names(run("// Mirrors the ServiceOutages document.\n")) == ["ServiceOutages"]
 
 
 @pytest.mark.needs_data
