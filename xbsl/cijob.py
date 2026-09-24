@@ -153,6 +153,8 @@ class CiLint:
     select: tuple[str, ...] = ()
     ignore: tuple[str, ...] = ()
     enable: tuple[str, ...] = ()
+    #: The other systems the project names in its comments (`--other-system`).
+    other_systems: tuple[str, ...] = ()
     baseline: str | None = None
     no_baseline: bool = False
     #: The paths the job checks - reported, never imposed: a local run lints what it is asked to.
@@ -190,7 +192,8 @@ class CiLint:
         """The line a run prints about itself: what was adopted and where from."""
         flags = []
         for name, values in (("--select", self.select), ("--ignore", self.ignore),
-                             ("--enable", self.enable)):
+                             ("--enable", self.enable),
+                             ("--other-system", self.other_systems)):
             flags += [f"{name} {value}" for value in values]
         if self.baseline:
             flags.append(f"--baseline {self.baseline}")
@@ -240,6 +243,7 @@ class CiLint:
             "select": list(self.select),
             "ignore": list(self.ignore),
             "enable": list(self.enable),
+            "other_systems": list(self.other_systems),
             "baseline": self.baseline_file(),
             "no_baseline": self.no_baseline,
             "flags": self.describe(),
@@ -267,12 +271,13 @@ def brief(record: dict) -> str:
     if record.get("source"):
         where = i18n.t("ci.brief-include", path=where, source=_relative(record["source"], root))
     flags: list[str] = []
-    for name in ("select", "ignore", "enable"):
+    for name, flag in (("select", "--select"), ("ignore", "--ignore"), ("enable", "--enable"),
+                       ("other_systems", "--other-system")):
         values = record.get(name) or []
         if len(values) > _BRIEF_LISTED:
-            flags.append(f"--{name} ×{len(values)}")
+            flags.append(f"{flag} ×{len(values)}")
         else:
-            flags += [f"--{name} {value}" for value in values]
+            flags += [f"{flag} {value}" for value in values]
     if record.get("baseline"):
         flags.append(f"--baseline {_relative(record['baseline'], root)}")
     if record.get("no_baseline"):
@@ -628,7 +633,9 @@ def _flags(path: Path, job: str, argv: list[str], root: Path,
            source: Path | None = None,
            unread: tuple[str, ...] = ()) -> CiLint:
     """The verdict-shaping flags of one command line; everything else is the caller's."""
-    lists: dict[str, list[str]] = {"--select": [], "--ignore": [], "--enable": []}
+    lists: dict[str, list[str]] = {
+        "--select": [], "--ignore": [], "--enable": [], "--other-system": [],
+    }
     baseline: str | None = None
     no_baseline = False
     paths: list[str] = []
@@ -654,7 +661,8 @@ def _flags(path: Path, job: str, argv: list[str], root: Path,
     return CiLint(
         path=path, job=job, argv=tuple(argv), root=root,
         select=tuple(lists["--select"]), ignore=tuple(lists["--ignore"]),
-        enable=tuple(lists["--enable"]), baseline=baseline or None,
+        enable=tuple(lists["--enable"]), other_systems=tuple(lists["--other-system"]),
+        baseline=baseline or None,
         no_baseline=no_baseline, paths=tuple(paths), alternatives=alternatives,
         source=source, unread=unread,
     )

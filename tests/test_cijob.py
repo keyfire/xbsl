@@ -94,6 +94,20 @@ def test_both_spellings_of_a_flag_and_a_comma_list_are_read(tmp_path: Path):
     assert ci.no_baseline is True and ci.baseline is None
 
 
+def test_the_other_systems_of_the_job_are_read_and_are_not_paths(tmp_path: Path):
+    """A system named in several words stays one value; neither is taken for a checked path."""
+    text = (
+        "lint:\n"
+        "  script:\n"
+        "    - xbsl e1c --other-system \"Учетная система\" --other-system=УС,ДругаяСистема\n"
+    )
+    ci = cijob.read(_write(tmp_path / ".gitlab-ci.yml", text))
+    assert ci.other_systems == ("Учетная система", "УС", "ДругаяСистема")
+    assert ci.paths == ("e1c",)
+    assert "--other-system Учетная система" in ci.describe()
+    assert ci.as_dict()["other_systems"] == ["Учетная система", "УС", "ДругаяСистема"]
+
+
 def test_a_subcommand_is_not_the_check_run(tmp_path: Path):
     """`xbsl translate` runs no rules - taking its flags would describe another job entirely."""
     text = (

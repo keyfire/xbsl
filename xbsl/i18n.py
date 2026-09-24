@@ -332,6 +332,12 @@ _CORE_MESSAGES = {
         "en": "add rules disabled by default ON TOP of the standard set "
               "(--select replaces the set); the value forms are the same",
     },
+    "cli.help.other-system": {
+        "ru": "другая система, которую проект называет в комментариях: имя рядом с ней "
+              "comment/unknown-name не судит. Повторяемый; несколько имен через запятую",
+        "en": "another system the project names in its comments: comment/unknown-name does not "
+              "judge a name next to it. Repeatable; several names comma-separated",
+    },
     "cli.help.as-ci": {
         "ru": "проверять тем же набором правил, что и задача CI проекта: ключи --select/"
               "--ignore/--enable и список принятых замечаний берутся из .gitlab-ci.yml (или "
@@ -489,6 +495,10 @@ _CORE_MESSAGES = {
     "cli.help.meta.job": {
         "ru": "ЗАДАЧА",
         "en": "JOB",
+    },
+    "cli.help.meta.system": {
+        "ru": "СИСТЕМА",
+        "en": "SYSTEM",
     },
     "cli.help.meta.version": {
         "ru": "ВЕРСИЯ",
@@ -690,6 +700,12 @@ _CORE_MESSAGES = {
     "cli.help.lsp.enable": {
         "ru": "включить правила поверх набора по умолчанию",
         "en": "enable rules on top of the default set",
+    },
+    "cli.help.lsp.other-system": {
+        "ru": "другие системы, которые проект называет в комментариях, через запятую "
+              "(для comment/unknown-name)",
+        "en": "other systems the project names in its comments, comma-separated "
+              "(for comment/unknown-name)",
     },
     "cli.help.lsp.as-ci": {
         "ru": "судить тем же набором правил, что и задача CI проекта: ключи --select/--ignore/"
