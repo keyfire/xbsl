@@ -61,6 +61,7 @@ from xbsl.lsp_nav import (
     stdlib_global_hover,
     stdlib_member_hover,
 )
+from xbsl.rules import comment_names
 from xbsl.rules._syntax import (
     chain_type_at,
     enclosing_constructor,
@@ -240,6 +241,8 @@ class _State:
         self.select: Optional[set[str]] = None
         self.ignore: Optional[set[str]] = None
         self.enable: Optional[set[str]] = None
+        # The other systems the project names in its comments, for comment/unknown-name.
+        self.other_systems: list[str] = []
         self.lookup: Optional[IndexLookup] = None
         # The builtin templates plus the user's file, merged once at startup. The file is
         # re-read on the xbsl/templatesReload request, so the panel's edits show up without
@@ -2196,6 +2199,7 @@ def _adopt_ci(args: argparse.Namespace) -> None:
     STATE.select = (STATE.select or set()) | set(job.select) or None
     STATE.ignore = (STATE.ignore or set()) | set(job.ignore) or None
     STATE.enable = (STATE.enable or set()) | set(job.enable) or None
+    STATE.other_systems = STATE.other_systems + list(job.other_systems)
     if not args.baseline:
         # `--no-baseline` in the job means the job trusts nothing frozen - the editor must
         # not mute findings the pipeline will report.
@@ -2224,6 +2228,7 @@ def main() -> None:
     parser.add_argument("--select", help=i18n.t("cli.help.lsp.select"))
     parser.add_argument("--ignore", help=i18n.t("cli.help.lsp.ignore"))
     parser.add_argument("--enable", help=i18n.t("cli.help.lsp.enable"))
+    parser.add_argument("--other-system", help=i18n.t("cli.help.lsp.other-system"))
     parser.add_argument("--as-ci", nargs="?", const="", help=i18n.t("cli.help.lsp.as-ci"))
     parser.add_argument("--as-ci-job", help=i18n.t("cli.help.lsp.as-ci-job"))
     parser.add_argument("--baseline", help=i18n.t("cli.help.lsp.baseline"))
@@ -2240,8 +2245,12 @@ def main() -> None:
     STATE.select = _rule_set(args.select)
     STATE.ignore = _rule_set(args.ignore)
     STATE.enable = _rule_set(args.enable)
+    STATE.other_systems = [
+        name.strip() for name in (args.other_system or "").split(",") if name.strip()
+    ]
     if args.as_ci is not None or args.as_ci_job:
         _adopt_ci(args)
+    comment_names.set_other_systems(STATE.other_systems)
     _make_server().start_io()
 
 

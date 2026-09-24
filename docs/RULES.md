@@ -908,7 +908,10 @@ through a reference or of a left-joined table may be `Null`, and `.ReplaceNull(.
 `Null` out.
 
 <a id="d-comment-unknown-name"></a>**`comment/unknown-name`.** A case form of a known name,
-commented-out code and a chain naming another system are left alone.
+commented-out code and a chain naming another system are left alone. So is a name with another
+system named within two words of it: `1C:Enterprise`, `SSL`, `BTS` or their Russian names, or a
+system the project declares with `--other-system`. The message says how to name the system
+when it is not there.
 
 <a id="d-code-deprecated-api"></a>**`code/deprecated-api`.** `ObjectStorage.UploadFromBytes(...)`
 and `ObjectStorage.Upload(Stream, Size)` next to the current `Upload("file", Bytes)` look like

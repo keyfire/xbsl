@@ -41,12 +41,23 @@ What is NOT judged, each narrowing measured on real projects:
   by a member that neither the code of the project nor the platform has, is an object of
   another configuration or service, and the rule leaves its every mention alone. A member is
   judged only after a root the project or the platform knows, and never after a library type,
-  whose members the archive does not list.
+  whose members the archive does not list;
+- a name standing next to another system: within two words of a public system of the
+  ecosystem (`1С:Предприятие`, `БСП`, `БТС` and their English names) or of a system the project
+  declares with `--other-system`, the name belongs to that system -
+  "аналог ОбработкаПроверки из 1С:Предприятия", "как в БТС РезервныеКопии". A declared
+  system matches in its case forms, an abbreviation of up to three letters only as written, and
+  a one-word system is never reported itself. Only that mention is let go. On the history of a
+  project the window removed seven of the seventeen names of other systems and none of the
+  thirty-three stale ones; a wider window, or one decision for the whole project, lost more of
+  the project's own names than it saved. English prose spends two words on "of the", so there
+  the window lets fewer names go.
 
-What stays is a name of another product written without a chain - "документ ОстаткиДругойСистемы"
-reads exactly like a renamed object, and the rule reports it. In a project written in English
-the same holds for a product name of the prose: `PaaS`, `OpenAPI` and `YouTube` have the shape
-of a name and the script of the project. That is the reason the rule is off by default.
+What stays is a name of another product written with no system beside it -
+"документ ОстаткиДругойСистемы" reads exactly like a renamed object, and the rule reports it,
+saying how to name the system. In a project written in English the same holds for a product
+name of the prose: `PaaS`, `OpenAPI` and `YouTube` have the shape of a name and the script of
+the project. That is the reason the rule is off by default.
 
 One finding per name per file. A project without the platform catalog is not judged: there every
 platform name would read as unknown.
@@ -54,8 +65,10 @@ platform name would read as unknown.
 
 from __future__ import annotations
 
+import bisect
 import re
 from collections.abc import Iterable
+from contextlib import contextmanager
 from functools import lru_cache
 
 from xbsl import dataset, i18n, libs
@@ -78,9 +91,13 @@ MESSAGES = {
     },
     "comment/unknown-name.found": {
         "ru": "Имени \"{name}\" нет ни в проекте, ни у платформы: его переименовали или удалили, "
-              "либо в имени опечатка.",
+              "либо в имени опечатка. Если это имя другой системы, назовите её рядом "
+              "(\"... из 1С:Предприятия\"), запишите цепочкой \"Система.Имя\" или объявите "
+              "систему проекта ключом --other-system.",
         "en": "Name \"{name}\" exists neither in the project nor on the platform: it was renamed "
-              "or removed, or it is misspelled.",
+              "or removed, or it is misspelled. If it is a name of another system, name that "
+              "system right beside it (\"... from 1C:Enterprise\"), write it as a chain "
+              "\"System.Name\" or declare the system of the project with --other-system.",
     },
     "comment/unknown-name.off": {
         "ru": "имя судится по форме слова: имя другого продукта в прозе комментария неотличимо "
@@ -123,8 +140,18 @@ _CODE_LINE = re.compile(
     r"|(?:для|for)\s+\w+\s+(?:из|in)\s+[\w.]+"
     # a string literal
     r"|\""
+    # an argument line of a call spread over several lines
+    r"|\w+(?:\.\w+)+\s*,\s*$"
     r")"
 )
+#: The public systems of the ecosystem any project may name. A name within `_SYSTEM_REACH` words
+#: of one belongs to that system; a project adds its own systems with `--other-system`.
+_PUBLIC_SYSTEMS = re.compile(
+    r"1[СC]\s*:\s*Предприяти\w*|\bБСП\b|\bБТС\b|1[СC]\s*:\s*Enterprise|\bSSL\b|\bBTS\b"
+)
+#: The words the distance to a system name is counted in; `1С:Предприятие` is one word.
+_SYSTEM_WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9_:]+")
+_SYSTEM_REACH = 2
 #: An operator of comparison or of logic anywhere on the line.
 _CODE_OPERATOR = re.compile(r"==|!=|>=|<=|&&|\|\||\?\?")
 #: A name hyphenated across a line break: the line ends with a letter and a hyphen.
@@ -198,9 +225,84 @@ def _is_code(prose: str) -> bool:
     return _CODE_LINE.match(core) is not None or _CODE_OPERATOR.search(core) is not None
 
 
+#: The systems the project itself names besides the public ones, each as its words.
+_project_systems: tuple[tuple[str, ...], ...] = ()
+
+
+def set_other_systems(names: Iterable[str]) -> None:
+    """The other systems a project names in its comments (`--other-system`), for this process.
+
+    A name may take several words; it is matched in its case forms, and an abbreviation of up
+    to three letters only as it is written.
+    """
+    global _project_systems
+    _project_systems = tuple(dict.fromkeys(
+        tuple(name.split()) for name in names if name and name.split()
+    ))
+
+
+@contextmanager
+def other_systems(names: Iterable[str]):
+    """`set_other_systems` for the time of a block: one run of a server that lints many projects."""
+    previous = [" ".join(system) for system in _project_systems]
+    set_other_systems(names)
+    try:
+        yield
+    finally:
+        set_other_systems(previous)
+
+
+def _same_word(word: str, system_word: str) -> bool:
+    """Whether a word of the prose is a word of a declared system, possibly in another case.
+
+    A joined name declines part by part (`ДругойСистемы` of `ДругаяСистема`).
+    """
+    if word == system_word:
+        return True
+    if len(system_word) <= 3:
+        return False
+    ours, theirs = _parts(word), _parts(system_word)
+    if len(ours) > 1 and len(ours) == len(theirs):
+        return all(_same_stem(a.lower(), b.lower()) for a, b in zip(ours, theirs))
+    return _same_stem(word.lower(), system_word.lower())
+
+
+def _is_other_system(name: str) -> bool:
+    """Whether the name itself is a system the project declared."""
+    return any(len(system) == 1 and _same_word(name, system[0]) for system in _project_systems)
+
+
+def _next_to_other_system(prose: str, start: int) -> bool:
+    """Whether another system is named within `_SYSTEM_REACH` words of the word at `start`."""
+    words = list(_SYSTEM_WORD.finditer(prose))
+    starts = [word.start() for word in words]
+
+    def index(position: int) -> int:
+        return bisect.bisect_right(starts, position) - 1
+
+    at = index(start)
+    systems = [
+        index(found.start()) for found in _PUBLIC_SYSTEMS.finditer(prose)
+        if not found.start() <= start < found.end()
+    ]
+    # A colon belongs to a word only inside `1С:Предприятие`; at the edge it is punctuation.
+    texts = [word.group(0).strip(":") for word in words]
+    for system in _project_systems:
+        for first in range(len(texts) - len(system) + 1):
+            if first != at and all(
+                _same_word(texts[first + k], part) for k, part in enumerate(system)
+            ):
+                systems.append(first)
+    return any(abs(system - at) <= _SYSTEM_REACH for system in systems)
+
+
 def _candidates(source: SourceFile) -> list[tuple]:
-    """(name, line, col, verbatim, chain root before it, member after it) for every
-    identifier-like word of the comments."""
+    """(name, line, col, verbatim, chain root before it, member after it, the prose of the line,
+    the offset of the name in it) for every identifier-like word of the comments.
+
+    The prose travels with the candidate because the systems a project names are known only to
+    the process that runs the reduce, and a mapper may run in a worker of its own.
+    """
     out: list[tuple] = []
     previous_line = -1
     hyphenated = False
@@ -230,6 +332,7 @@ def _candidates(source: SourceFile) -> list[tuple]:
                 word, cl.line, cl.column + start + m.start(), verbatim,
                 root.group(1) if root else None,
                 member.group(1) if member else None,
+                prose, m.start(),
             ))
     return out
 
@@ -366,7 +469,7 @@ def unknown_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     index: dict | None = None
     for rel, fact in judged:
         reported: set[str] = set()
-        for name, line, col, verbatim, root, _member in fact["cands"]:
+        for name, line, col, verbatim, root, _member, prose, start in fact["cands"]:
             if name in known or name in reported or name in outside:
                 continue
             if root is not None and (root not in known or root in library or root in outside):
@@ -379,6 +482,8 @@ def unknown_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     index = _inflection_index(known)
                 if _inflected(name, index):
                     continue
+            if _is_other_system(name) or _next_to_other_system(prose, start):
+                continue  # a name of another system, not a stale one of the project
             reported.add(name)
             yield Diagnostic(
                 rel, line, col, "comment/unknown-name", Severity.WARNING,

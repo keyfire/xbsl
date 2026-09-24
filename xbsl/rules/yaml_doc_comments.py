@@ -328,6 +328,26 @@ def _enclosing_slot(slots: dict[int, _Slot], line: int) -> _Slot:
     return best
 
 
+def _slot_before(slots: dict[int, _Slot], line: int, column: int) -> _Slot:
+    """The innermost slot whose node holds the key at the 0-based position; the root when none.
+
+    A comment block belongs to the key after it, and the end of a span does not count. PyYAML
+    ends a block mapping at the first token after it, so the comment lines above a key of the
+    outer mapping fall inside the span of the inner node, while that key itself stands at its
+    end: judged by the lines, the comment went to the node that ends there.
+    """
+    best = next((slot for slot in slots.values() if slot.is_root), None)
+    best_start = None
+    for slot in slots.values():
+        if slot.is_root:
+            continue
+        start = (slot.node.start_mark.line, slot.node.start_mark.column)
+        end = (slot.node.end_mark.line, slot.node.end_mark.column)
+        if start <= (line, column) < end and (best_start is None or start >= best_start):
+            best, best_start = slot, start
+    return best
+
+
 def _where(slot: _Slot) -> str:
     if slot.is_root:
         return i18n.t("yaml/doc-comment.where-file")
@@ -455,7 +475,11 @@ def _judge(source: SourceFile, want_doc: bool) -> Iterable[Diagnostic]:
                 if isinstance(value, yaml.MappingNode) and id(value) in slots:
                     key, fix = "inside", _moved(source, block, anchor_line, slots[id(value)])
         if key in ("nearest", "declared-item"):
-            where_slot = _enclosing_slot(slots, head.line)
+            if own_line and index < len(text_lines):
+                indent = len(text_lines[index]) - len(text_lines[index].lstrip())
+                where_slot = _slot_before(slots, index, indent)
+            else:
+                where_slot = _enclosing_slot(slots, head.line)
         message_key = f"{rule_id}.{key}"
         if want_doc and key == "here":  # pragma: no cover - filtered above
             continue

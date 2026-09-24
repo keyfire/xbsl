@@ -170,9 +170,11 @@ The comments are read too. The `comment/` group judges their wording, and one of
 across files: `comment/unknown-name` collects the identifiers of every module, the names of every
 element description and the platform catalog, and reports a word of a comment that looks like an
 identifier and that none of them knows - a method that was renamed while its mention stayed. A case
-form of a known name and a line of commented-out code are not reported. The name of another product
-mentioned in prose has the same shape, which is why the rule is off by default and a project turns
-it on with `--enable comment/unknown-name`.
+form of a known name, a line of commented-out code and a name with another system named beside it
+are not reported. A system only this project knows is declared with `--other-system` in the same
+CI line. The name of another product mentioned in prose with no system beside it has the same
+shape, which is why the rule is off by default and a project turns it on with
+`--enable comment/unknown-name`.
 
 Several rules repeat warnings of the platform IDE, so those places show up before anyone opens the
 code there, and each rule follows the condition the compiler applies. `code/unused-local` and

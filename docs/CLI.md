@@ -37,6 +37,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--select ID/GROUP/TIER` | check only these rules (comma-separated or by repeating the flag: id, group – the part of the id before '/' (e.g. style) – or a tier letter A/B/C/D) |
 | `--ignore ID/GROUP/TIER` | exclude these rules (comma-separated or by repeating the flag: id, group or tier letter) |
 | `--enable ID/GROUP/TIER` | add rules disabled by default ON TOP of the standard set (`--select` replaces the set); the value forms are the same |
+| `--other-system SYSTEM` | another system the project names in its comments: comment/unknown-name does not judge a name next to it. Repeatable; several names comma-separated |
 | `--as-ci [FILE]` | check by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline come from .gitlab-ci.yml (or a GitHub workflow) next to the project; the file can be named explicitly |
 | `--as-ci-job JOB` | which job of the CI file to take: a pipeline runs the linter more than once when the project checks a second tree (a translation) by a set of its own; a part of the name is enough (`--as-ci-job` english), implies `--as-ci` |
 | `--baseline FILE` | suppress findings frozen in a baseline file (created by `--write-baseline`); new findings are reported as usual |
@@ -85,8 +86,9 @@ The xbsl LSP server (stdio)
 
 ```bash
 usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore IGNORE]
-                [--enable ENABLE] [--as-ci [AS_CI]] [--as-ci-job AS_CI_JOB] [--baseline BASELINE]
-                [--templates TEMPLATES] [--data-dir DATA_DIR] [--lang {ru,en}]
+                [--enable ENABLE] [--other-system OTHER_SYSTEM] [--as-ci [AS_CI]]
+                [--as-ci-job AS_CI_JOB] [--baseline BASELINE] [--templates TEMPLATES]
+                [--data-dir DATA_DIR] [--lang {ru,en}]
 ```
 
 **Options**
@@ -98,6 +100,7 @@ usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore I
 | `--select SELECT` | these rules only (comma-separated) |
 | `--ignore IGNORE` | exclude these rules (comma-separated) |
 | `--enable ENABLE` | enable rules on top of the default set |
+| `--other-system OTHER_SYSTEM` | other systems the project names in its comments, comma-separated (for comment/unknown-name) |
 | `--as-ci [AS_CI]` | judge by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline come from the xbsl command of the pipeline file (the file can be named); with no pipeline file the settings' set stands and the reason goes to stderr |
 | `--as-ci-job AS_CI_JOB` | which job of the CI file to take (implies `--as-ci`); a part of the name is enough |
 | `--baseline BASELINE` | the baseline file (absolute or relative to the workspace folder) – the findings listed there are suppressed; a missing file is not an error, it appears with the first exclusion |

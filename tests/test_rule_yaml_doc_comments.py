@@ -117,6 +117,23 @@ def test_comment_on_a_single_property_names_its_node(tmp_path):
     assert "в строке 9" in diags[0].message  # the first key of the label node
 
 
+def test_comment_above_a_key_of_the_outer_node_names_that_node(tmp_path):
+    """The comment stands above a key of the outer group, after the last line of the label.
+
+    PyYAML ends the mapping of the label at the next token, so judged by its lines the comment
+    fell inside the label and the message sent the reader there.
+    """
+    text = _COMPONENT.replace(
+        "            Значение: =Заголовок\n",
+        "            Значение: =Заголовок\n"
+        "    # Видимость зависит от режима.\n"
+        "    Видимость: Истина\n",
+    )
+    diags = _lint(tmp_path, text)
+    assert len(diags) == 1 and diags[0].fix is None
+    assert "в строке 6" in diags[0].message  # the first key of the outer group
+
+
 def test_property_declaration_holds_a_comment(tmp_path):
     text = _COMPONENT.replace(
         "        Имя: Заголовок\n", "        # Текст заголовка.\n        Имя: Заголовок\n"

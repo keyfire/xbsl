@@ -163,6 +163,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=i18n.t("cli.help.enable"),
     )
     parser.add_argument(
+        "--other-system",
+        metavar=i18n.t("cli.help.meta.system"),
+        action="append",
+        help=i18n.t("cli.help.other-system"),
+    )
+    parser.add_argument(
         "--as-ci",
         nargs="?",
         const="",
@@ -303,6 +309,11 @@ def _parse_set(values: list[str] | None) -> set[str] | None:
         return None
     parts = {part.strip() for value in values for part in value.split(",") if part.strip()}
     return parts or None
+
+
+def _parse_systems(values: list[str] | None) -> list[str]:
+    """The `--other-system` names in their order; a value may list several, comma-separated."""
+    return [part.strip() for value in values or () for part in value.split(",") if part.strip()]
 
 
 def _emit_report(text: str, out: str | None) -> None:
@@ -1443,6 +1454,7 @@ def _check_main(argv: list[str]) -> int:
     from xbsl.engine import (
         RULES, active_rules, load, make_source, matching_rules, near_rule_groups, run_sources,
     )
+    from xbsl.rules import comment_names
 
     adopted: cijob.CiLint | None = None
     if args.as_ci is not None or args.as_ci_job:
@@ -1468,6 +1480,7 @@ def _check_main(argv: list[str]) -> int:
         args.select = (args.select or []) + list(job.select)
         args.ignore = (args.ignore or []) + list(job.ignore)
         args.enable = (args.enable or []) + list(job.enable)
+        args.other_system = (args.other_system or []) + list(job.other_systems)
         if not args.baseline and not args.no_baseline:
             args.baseline = job.baseline_file()
             args.no_baseline = job.no_baseline
@@ -1486,6 +1499,7 @@ def _check_main(argv: list[str]) -> int:
     select = _parse_set(args.select)
     ignore = _parse_set(args.ignore)
     enable = _parse_set(args.enable)
+    comment_names.set_other_systems(_parse_systems(args.other_system))
 
     if args.list_rules:
         # Narrowed the way a run is: `--list-rules --select code/duplicate-method-body`

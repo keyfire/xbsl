@@ -272,7 +272,8 @@ def lint_paths(
                   baseline; default false. Rechecks after each pass and reports remaining
                   findings, with summary.fixed and summary.files_changed;
     as_ci       - check with the rule set the project's CI job runs: the --select/--ignore/
-                  --enable flags and the baseline of the xbsl command in `.gitlab-ci.yml`
+                  --enable flags, the --other-system names and the baseline of the xbsl
+                  command in `.gitlab-ci.yml`
                   (or a GitHub workflow) next to the project, ADDED to whatever this call
                   asks for. This is what a preflight needs - a project turns rules on in its
                   pipeline, and a run without them calls clean what the job fails on. The
@@ -364,20 +365,27 @@ def lint_paths(
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     fix_summary = {}
     fix_accepted = None
-    if fix:
-        from xbsl import fixer
+    from xbsl.rules import comment_names
 
-        target = named
-        if target is None and not no_baseline:
-            target = baseline_data.discover(requested if requested is not None else files)
-        diags, fix_summary, fix_accepted = fixer.fix_paths(
-            files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
-            requested=requested, baseline_path=None if no_baseline else target,
-        )
-    else:
-        diags = _filter_requested(
-            run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
-        )
+    # The systems the job declares hold for this call only: the server answers for many
+    # projects in one process.
+    with comment_names.other_systems(job.other_systems if job is not None else ()):
+        if fix:
+            from xbsl import fixer
+
+            target = named
+            if target is None and not no_baseline:
+                target = baseline_data.discover(
+                    requested if requested is not None else files
+                )
+            diags, fix_summary, fix_accepted = fixer.fix_paths(
+                files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+                requested=requested, baseline_path=None if no_baseline else target,
+            )
+        else:
+            diags = _filter_requested(
+                run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+            )
     counted = requested if requested is not None else files
     active = active_rules(*chosen)
     diags, extra = _through_baseline(
