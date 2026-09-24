@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 import sys
 import textwrap
 from collections.abc import Callable
@@ -364,6 +365,71 @@ def _selfupdate_main(argv: list[str]) -> int:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         return 2
     print(json.dumps({"updated": old != new, "from": old, "to": new}, ensure_ascii=False))
+    return 0
+
+
+def _fold_parser() -> argparse.ArgumentParser:
+    parser = i18n.ArgumentParser(prog="xbsl fold-comments",
+                                 description=i18n.t("cli.help.commands.fold-comments"))
+    parser.add_argument("paths", nargs="+", help=i18n.t("cli.help.fold-paths"))
+    parser.add_argument("--write", action="store_true", help=i18n.t("cli.help.fold-write"))
+    parser.add_argument("--all", action="store_true", dest="take_proposed",
+                        help=i18n.t("cli.help.fold-all"))
+    parser.add_argument("--format", choices=("text", "json"), default="text",
+                        help=i18n.t("cli.help.fold-format"))
+    return parser
+
+
+def _fold_main(argv: list[str]) -> int:
+    """`xbsl fold-comments`: show, and with --write apply, the fold of the yaml comments."""
+    import difflib
+
+    from xbsl import commentfold
+
+    args = _fold_parser().parse_args(argv)
+    files = [path for path in discover(args.paths) if path.suffix.lower() == ".yaml"]
+    folds = commentfold.fold_paths(files, take_proposed=args.take_proposed)
+    written = 0
+    if args.write:
+        for fold in folds:
+            if fold.changed:
+                Path(fold.rel).write_bytes(fold.text.encode("utf-8"))
+                written += 1
+    counts = Counter(
+        (move.kind, move.action) for fold in folds for move in fold.moves
+    )
+    if args.format == "json":
+        print(json.dumps({
+            "files": [fold.as_dict() for fold in folds],
+            "written": written,
+            "summary": {f"{kind}/{action}": count for (kind, action), count in sorted(counts.items())},
+        }, ensure_ascii=False, indent=1))
+        return 0
+    for fold in folds:
+        print(fold.rel)
+        for move in fold.moves:
+            where = f" -> {move.target_line}" if move.target_line else ""
+            subject = f" `{move.subject}`" if move.subject else ""
+            action = i18n.t(f"fold.action.{move.action}")
+            print(f"  {move.line}: {i18n.t(f'fold.kind.{move.kind}')}{subject}{where} - {action}")
+            if move.reason:
+                print(f"      {i18n.t(move.reason)}")
+            for note in move.notes:
+                print(f"      {note}")
+        for problem in fold.audit:
+            print(f"  ! {problem}")
+        if fold.changed and not args.write:
+            original = Path(fold.rel).read_bytes().decode("utf-8")
+            print("".join(difflib.unified_diff(
+                original.splitlines(keepends=True), fold.text.splitlines(keepends=True),
+                fromfile=fold.rel, tofile=fold.rel,
+            )))
+    applied = sum(count for (_kind, action), count in counts.items() if action == "applied")
+    proposed = sum(count for (_kind, action), count in counts.items() if action == "proposed")
+    left = sum(count for (_kind, action), count in counts.items() if action == "left")
+    key = "fold.summary.written" if args.write else "fold.summary.dry"
+    print(i18n.t(key, files=len(folds), written=written, applied=applied, proposed=proposed,
+                 left=left))
     return 0
 
 
@@ -1881,6 +1947,7 @@ COMMANDS: tuple[Command, ...] = (
     Command("self-update", "cli.help.commands.self-update", _selfupdate_main,
             parser=_selfupdate_parser),
     Command("mcp-log", "cli.help.commands.mcp-log", _mcplog_main, parser=_mcplog_parser),
+    Command("fold-comments", "cli.help.commands.fold-comments", _fold_main, parser=_fold_parser),
     *(Command(name, f"cli.help.scaf.{name}", partial(_scaffold_run, name),
               parser=_scaffold_parser, scaffold=True) for name in _META_COMMANDS),
 )

@@ -627,6 +627,28 @@ _CORE_MESSAGES = {
         "ru": "обновить xbsl распаковкой колеса с PyPI",
         "en": "update xbsl by unpacking the wheel from PyPI",
     },
+    "cli.help.commands.fold-comments": {
+        "ru": "свернуть комментарии yaml в описание узла, которое читает среда разработки: по "
+              "умолчанию только показать план",
+        "en": "fold the yaml comments into the description of the node the environment reads: "
+              "by default only show the plan",
+    },
+    "cli.help.fold-paths": {
+        "ru": "файлы и каталоги с описаниями элементов",
+        "en": "files and directories with element descriptions",
+    },
+    "cli.help.fold-write": {
+        "ru": "записать свернутые файлы; файл, не прошедший проверку, не пишется",
+        "en": "write the folded files; a file that fails the audit is not written",
+    },
+    "cli.help.fold-all": {
+        "ru": "применить и предложенные переносы - те, что можно прочитать двояко",
+        "en": "apply the proposed moves too - the ones that may be read two ways",
+    },
+    "cli.help.fold-format": {
+        "ru": "формат вывода: text - план и разница, json - для агентов",
+        "en": "output format: text - the plan and the diff, json - for agents",
+    },
     "cli.help.commands.mcp-log": {
         "ru": "журнал MCP-сервера: когда серверы запускались, как завершились и кто их остановил",
         "en": "the MCP server journal: when servers started, how they ended and who stopped them",
