@@ -42,12 +42,13 @@ What is NOT judged, each narrowing measured on real projects:
   another configuration or service, and the rule leaves its every mention alone. A member is
   judged only after a root the project or the platform knows, and never after a library type,
   whose members the archive does not list;
-- a name standing next to another system of the ecosystem: within two words of `Менеджер
-  сервиса`, `МС`, `1С:Предприятие`, `БСП`, `БТС` or their English names the name belongs to
-  that system - "документ НедоступностиРесурсов Менеджера сервиса", "как в БТС РезервныеКопии".
+- a name standing next to another system of the ecosystem: within two words of
+  `Менеджер сервиса`, `МС`, `1С:Предприятие`, `БСП`, `БТС` or their English names the name
+  belongs to that system - "документ НедоступностиРесурсов Менеджера сервиса", "как в БТС РезервныеКопии".
   Only that mention is let go. On the history of a project the window removed seven of the
   seventeen names of other systems and none of the thirty-three stale ones; a wider window, or
   one decision for the whole project, lost more of the project's own names than it saved.
+  English prose spends two words on "of the", so there the window lets fewer names go.
 
 What stays is a name of another product written with no system beside it -
 "документ ОстаткиДругойСистемы" reads exactly like a renamed object, and the rule reports it,
@@ -90,7 +91,7 @@ MESSAGES = {
               "(\"... Менеджера сервиса\") или запишите цепочкой \"Система.Имя\".",
         "en": "Name \"{name}\" exists neither in the project nor on the platform: it was renamed "
               "or removed, or it is misspelled. If it is a name of another system, name that "
-              "system next to it (\"... of the Service Manager\") or write it as a chain "
+              "system right beside it (\"Service Manager ...\") or write it as a chain "
               "\"System.Name\".",
     },
     "comment/unknown-name.off": {
