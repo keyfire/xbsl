@@ -69,3 +69,32 @@ Pasting a fragment places its notes by the same rules. This is what the MCP tool
 the component moves inside the node as `##` lines. A note with no place of its own stays as it
 is, and the answer names it in the notes. Without the Element data the places are unknown: the
 notes stay as pasted, and the answer says so.
+
+## Folding notes that have no place
+
+A note with no place of its own next to it is moved by `xbsl fold-comments`. It is a note about a
+property of a component, an item of a list without a description, a key of the element. The
+command gathers such blocks into the description of the nearest node that has a place, as an item
+of a list named after the subject:
+
+```yaml
+Inherits:
+    ## * `Visible`:
+    ##   The group is always visible.
+    Type: Group
+```
+
+The name of the subject stands on a line of its own, so the lines of the note keep their text
+and their pairs in the translation dictionary. The new lines with the names need pairs of their
+own, and `xbsl translate --gaps` shows them.
+
+By default the command only shows the plan and the diff; `--write` writes. A move that may be
+read two ways is proposed, not applied: the first block of the file above a key outside the head
+(it may describe the element or only that key), the heading of a section, a block in a
+localization file, an item of a list without a name, a block above a list. `--all` applies them
+too. A note at the end of the file is left alone: it has no owner.
+
+A file is written only when the result passes the audit. The yaml parses to the same data, every
+line of every comment is still there, the comment rules find nothing but the blocks left on
+purpose, and a second pass has nothing to move. The byte order mark and the line ends of the file
+are kept.

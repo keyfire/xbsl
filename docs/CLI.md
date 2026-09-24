@@ -77,6 +77,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `translate` | translate the project sources into English spellings |
 | `self-update` | update xbsl by unpacking the wheel from PyPI |
 | `mcp-log` | the MCP server journal: when servers started, how they ended and who stopped them |
+| `fold-comments` | fold the yaml comments into the description of the node the environment reads: by default only show the plan |
 
 Command options: xbsl &lt;command&gt; `--help`. The options above apply to the check mode.
 
@@ -304,6 +305,29 @@ usage: xbsl mcp-log [-h] [--last LAST] [--json]
 | `-h, --help` | show this help message and exit |
 | `--last LAST` | how many newest events to show (default 20; 0 - all) |
 | `--json` | the events as JSON, an object per journal line |
+
+## `xbsl fold-comments`
+
+fold the yaml comments into the description of the node the environment reads: by default only show the plan
+
+```bash
+usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [paths ...]
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `paths` | files and directories with element descriptions |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--write` | write the folded files; a file that fails the audit is not written |
+| `--all` | apply the proposed moves too - the ones that may be read two ways |
+| `--format {text,json}` | output format: text - the plan and the diff, json - for agents |
 
 ## Metadata scaffolding
 

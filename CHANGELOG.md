@@ -18,6 +18,17 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **`xbsl fold-comments` folds yaml comments into the description of their node.** A note with no
+  place of its own, such as a note about a property of a component or a key of the element, moves
+  into the description of the nearest node as an item named after the subject. By default the
+  command only shows the plan, and `--write` writes. Ambiguous moves are proposed, and a file is
+  written only after the audit: the same yaml data, every comment line in place, the comment
+  rules silent. ([#144](https://github.com/keyfire/xbsl/pull/144))
+
 ## 2026-09-24 – 0.118.0
 
 ### Changed
