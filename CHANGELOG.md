@@ -34,6 +34,16 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`comment/unknown-name` no longer takes a name next to another system for a stale one.** A
+  phrase like "an analog of Y from 1C:Enterprise" read as a renamed object of the project. A name
+  within two words of `Service Manager`, `1C:Enterprise`, `SSL`, `BTS` or their Russian names is
+  now left alone, and the message says how to name the system. On one project one finding of four
+  is left, and it is a real one. An argument line of commented-out code is no longer judged
+  either. ([#143](https://github.com/keyfire/xbsl/pull/143))
+- **The yaml comment rules name the node a comment belongs to.** For a comment above a key of the
+  outer node right after a nested one, the message named the nested node: PyYAML ends it at the
+  next key. The node is now found by the key after the comment. The page on yaml comments no
+  longer says that the attributes of a catalog have no place for a comment. ([#143](https://github.com/keyfire/xbsl/pull/143))
 - **`form/handler-signature` reports an event type unrelated to the signature.** The rule used
   to skip such types: the drop and autocomplete events seemed to miss the base `ComponentEvent` in
   the catalog. The compiler confirmed the catalog and refused such handlers. Project types the
