@@ -170,7 +170,7 @@ def describe(found: dict) -> str:
 
 
 def crash_note() -> str:
-    """The cause to name in the report of a crashed rule; "" when the code on disk is the loaded one.
+    """The cause a crashed rule names; "" while the code on disk is the loaded one.
 
     The state found is kept for `take_noted`: the MCP server writes it into its journal.
     """
