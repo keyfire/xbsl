@@ -36,6 +36,15 @@ entry either - say what the behaviour was, not which class name was compared.
   written only after the audit: the same yaml data, every comment line in place, the comment
   rules silent. ([#144](https://github.com/keyfire/xbsl/pull/144))
 
+### Fixed
+
+- **A list of files inside a project is judged the way the tree is.** A file named relative to the
+  working directory stayed relative while the project around it came in resolved, so its subsystem
+  was not found: `code/foreign-not-public` took the module for the project module, and
+  `code/unknown-resource` lost the resources of the project. Every file of such a run is resolved
+  now, and the file rules skip the context, which makes a list run about a fifth faster.
+  ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+
 ## 2026-09-24 – 0.118.0
 
 ### Changed

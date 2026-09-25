@@ -30,7 +30,7 @@ from xbsl import (
     cijob, formmodel, i18n, mcpjournal, metamodel, report, resource_usage, rundiff, scaffold,
     uischema,
 )
-from xbsl.cli import _filter_requested, discover_with_context
+from xbsl.cli import _context_of, _filter_requested, discover_with_context
 from xbsl.engine import (
     RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
     run, run_sources,
@@ -384,7 +384,9 @@ def lint_paths(
             )
         else:
             diags = _filter_requested(
-                run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+                run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+                    context=_context_of(files, requested)),
+                requested,
             )
     counted = requested if requested is not None else files
     active = active_rules(*chosen)
@@ -475,7 +477,9 @@ def baseline_prune(
     files, requested = discover_with_context(asked)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     diags = _filter_requested(
-        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+            context=_context_of(files, requested)),
+        requested,
     )
     counted = requested if requested is not None else files
     found = Path(named) if named else baseline_data.discover(counted)
