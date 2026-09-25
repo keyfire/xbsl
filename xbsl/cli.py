@@ -450,6 +450,16 @@ def _mcplog_line(event: dict) -> str:
     elif kind == "stopped":
         text = i18n.t("mcplog.stopped", target=event.get("target", "?"),
                       name=event.get("name", ""), reason=event.get("reason", ""))
+    elif kind == "stale":
+        # Written by the server that found the engine on disk replaced under it
+        # (xbsl/freshness.py): a version on disk it refuses over, or sources changed under a
+        # failing call.
+        key = "mcplog.stale.sources" if event.get("reason") == "sources" else "mcplog.stale.version"
+        error = event.get("error")
+        text = i18n.t(key, loaded=event.get("loaded", "?"), on_disk=event.get("on_disk", "?"),
+                      tool=event.get("tool", "?"))
+        if error:
+            text += "; " + i18n.t("mcplog.stale.error", error=error)
     else:
         text = i18n.t("mcplog.unknown", event=kind)
     return f"{event.get('time', '?')}  pid {event.get('pid', '?')}  {text}"

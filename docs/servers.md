@@ -67,6 +67,17 @@ the cause. Restarting the MCP client starts a new server. The journal is
 `%LOCALAPPDATA%\xbsl\mcp-journal.jsonl` on Windows and `$XDG_STATE_HOME/xbsl/mcp-journal.jsonl`
 elsewhere; the `XBSL_MCP_JOURNAL` variable points to another file.
 
+**When the engine on disk was updated under a running server.** The server loads some of its
+modules only when a tool needs them. After `self-update` or a `git pull` of an editable checkout,
+those modules come from the new code while the rest in memory stay old, and the two halves do
+not fit together. Before every call the server reads the version from `__init__.py` on disk.
+When it differs from the loaded one, every tool but `version_info` answers with an `error` that
+names both versions and asks for a restart, plus a `stale` record, instead of running.
+`version_info` still answers and shows `engine_on_disk`. If the version is the same but a tool
+fails, the server compares its code files with the state at start and names a restart when they
+changed. A crashed rule says the same in its own report. The server does not restart or exit on
+its own, and `xbsl mcp-log` shows the first time it noticed each change.
+
 Every `meta_*` tool and `lint_paths` take `root`, the caller's project root. An agent working in
 a git worktree does not share the server's working directory, which is why the parameter exists.
 Relative `directory`, `yaml_path`, `module_path`, `paths`, `baseline` and `compare` resolve
