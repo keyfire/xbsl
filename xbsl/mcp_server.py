@@ -2338,7 +2338,9 @@ def translate_status(root: str, against: str = "", full: bool = False) -> dict:
     other literal gap fails nothing: a literal of the code or of an `=` expression, a
     description, a text inside a component tree. `duplicates` counts the keys
     translated the same way in two places, two files or twice in one - harmless to the
-    lookups, listed by the CLI's `--check-duplicates` for the copy to take out.
+    lookups, listed by the CLI's `--check-duplicates` for the copy to take out. `drift` counts
+    the phrases whose translation names a name otherwise than its pair - the rows
+    `translate_drift` lists; like the duplicates, it does not decide whether the tree builds.
     """
     from xbsl.translation import cli as translate_cli
 
@@ -2366,6 +2368,7 @@ def translate_status(root: str, against: str = "", full: bool = False) -> dict:
         "literal_occurrences": totals["literal_occurrences"],
         "platform_gaps": totals["platform_gaps"],
         "duplicates": len(dictionary.duplicates),
+        "drift": translate_cli.drift_count(dictionary),
         "problems": report_obj.problems[:20],
         "dictionary": str(translate_cli.dictionary_path_for(project)),
     }

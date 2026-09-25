@@ -34,6 +34,13 @@ entry either - say what the behaviour was, not which class name was compared.
   the most moves and the moves worth a look, up to ten lines each, and every file the audit
   stopped.
 
+### Changed
+
+- **The plain `translate` report counts the phrases `--drift` lists.** The mode stays out of
+  `--strict`, so a drift was found only by someone who thought to run it. Now one line gives the
+  count and names the flag when there is something to count, the json report and
+  `translate_status` carry the same number, and the exit code does not change.
+
 ### Fixed
 
 - **The test that compares the two demo projects no longer depends on installed plugins.** A
