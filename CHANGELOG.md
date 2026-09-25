@@ -18,15 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
-
-### Fixed
-
-- **`translate` writes the title position of `StandardClientApplicationWithSections` as
-  `TitleLocation`.** It used to write `Parameter`, and the compiler refused the translated project
-  over an unknown property. ([#149](https://github.com/keyfire/xbsl/pull/149))
-
-## 2026-09-25 – 0.119.0
+## 2026-09-25 – 0.119.0, 0.119.1
 
 ### Added
 
@@ -73,6 +65,9 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`translate` writes the title position of `StandardClientApplicationWithSections` as
+  `TitleLocation`.** It used to write `Parameter`, and the compiler refused the translated project
+  over an unknown property. ([#149](https://github.com/keyfire/xbsl/pull/149))
 - **`self-update` right after a release no longer answers "already current".** Both release lists
   of PyPI can lag behind a new version for minutes. The command now reads both, asks for the page
   of the next version, says when the sources disagree and never installs an older release over a
