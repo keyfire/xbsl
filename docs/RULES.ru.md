@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 250.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 251.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -390,6 +390,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Серверный метод недоступен клиентскому обработчику [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | проект | Свойство `Изображение` компонента платформы обращается к серверу напрямую или через клиентские методы [подробнее](#d-code-image-binding-server-call) [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/computed-property-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | проект | Вычисляемые свойства обращаются к доступному с клиента серверному методу без штатного кеша результата [подробнее](/ru/linting#серверные-вызовы-из-вычисляемых-свойств) [доки](https://1cmycloud.com/docs/help/topics/calculated-property-values-for-ui-components/) |
+| `code/sequential-server-calls` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | проект | Клиентский метод на пути открытия обращается к серверу несколько раз подряд там, где один серверный метод с типизированным результатом обошелся бы одним обращением [подробнее](/ru/linting#последовательные-серверные-вызовы) [доки](https://1cmycloud.com/docs/help/topics/move-execution-from-client-to-server/) |
 | `code/resource-read-without-cache` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | проект | Доступный с клиента метод исполняется на сервере и только возвращает текст ресурса, прочитанный без штатного кеша результата [подробнее](/ru/linting#чтение-ресурса-без-кеша-результата) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Environments/AvailableFromClient_ru/) |
 | `code/client-annotation-in-server-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Клиентская аннотация в серверном общем модуле [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-module-in-http-service` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Клиентский общий модуль в серверном окружении [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |

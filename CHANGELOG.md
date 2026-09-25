@@ -28,6 +28,11 @@ entry either - say what the behaviour was, not which class name was compared.
   command only shows the plan, and `--write` writes. Ambiguous moves are proposed, and a file is
   written only after the audit: the same yaml data, every comment line in place, the comment
   rules silent. ([#144](https://github.com/keyfire/xbsl/pull/144))
+- **`code/sequential-server-calls` finds a client method that calls the server several times in a
+  row.** Each call is a round trip, and on page open the waits add up; the finding lists the calls
+  and suggests one server method with a typed result. The rule is informational and off by
+  default, judges the opening path unless `scope` is `all`, and leaves out branches, loops, cached
+  methods and calls split between different `try` statements.
 
 ## 2026-09-24 – 0.118.0
 

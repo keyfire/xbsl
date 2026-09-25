@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+
+- **The `code/sequential-server-calls` finding links to the documentation.** Its code in the
+  Problems panel opens the page about passing execution from the client to the server.
+
 ## 0.77.0
 
 ### Added
