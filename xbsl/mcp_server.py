@@ -2070,6 +2070,7 @@ def meta_fold_comments(
     dry_run: bool = True,
     take_proposed: bool = False,
     root: str | None = None,
+    compact: bool = False,
 ) -> dict:
     """Fold the yaml comments the development environment does not read into a node description.
 
@@ -2097,8 +2098,19 @@ def meta_fold_comments(
     to the same data, every line of every comment is still there, the comment rules find
     nothing but the blocks left on purpose, and a second pass has nothing to move. A path
     that does not exist is refused, naming it.
-    The report names every move, so pass the files you edited: over a project of three
-    hundred descriptions that have never been folded it runs to a quarter of a megabyte.
+    The report names every move: over a project of three hundred descriptions that have never
+    been folded it runs to a quarter of a megabyte. Pass the files you edited, or ask for
+    compact - the short report of a whole tree, a few kilobytes:
+    compact - `files` gives way to counts and the moves worth a look, the way `compact` of
+              `lint_paths` holds findings short. `written` and `summary` stay; `counts` - the
+              files with a block, the files the fold changes, the moves by action (applied,
+              proposed, left) and the notes; `by_file` - {file: {applied, proposed, left}}, the
+              files with the most moves first, up to 10, past that `by_file_hint`; `review` -
+              one line per move worth a look ("path:line kind action `subject` -> target_line -
+              reason; notes"): the proposed and left moves first, then the applied ones with a
+              note; up to 10, past that `review_hint` counts them; `reasons` - the proposed and
+              left moves counted by reason; `audit` - every file the audit stopped, whole
+              [{file, audit}]: such a file is not written.
     """
     from xbsl import commentfold
 
@@ -2112,7 +2124,8 @@ def meta_fold_comments(
              if path.suffix.lower() == ".yaml"]
     folds = commentfold.fold_paths(files, take_proposed=take_proposed)
     written = 0 if dry_run else commentfold.write_folds(folds)
-    answer = {"root": str(base), **commentfold.report(folds, written)}
+    shape = commentfold.compact_report if compact else commentfold.report
+    answer = {"root": str(base), **shape(folds, written)}
     if dry_run:
         answer["dry-run"] = True
     return answer

@@ -20,6 +20,13 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **`meta_fold_comments` answers briefly with `compact`.** Over a whole tree the report named
+  every move and ran to a quarter of a megabyte. The short answer keeps the counts, the files with
+  the most moves and the moves worth a look, up to ten lines each, and every file the audit
+  stopped.
+
 ### Fixed
 
 - **The test that compares the two demo projects no longer depends on installed plugins.** A
