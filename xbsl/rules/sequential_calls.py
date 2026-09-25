@@ -43,13 +43,13 @@ dropped. There is no autofix: the cure is a new composite server method.
 from __future__ import annotations
 
 import dataclasses
+from collections import deque
 from functools import lru_cache
 
 from xbsl import dataset, parser as P, terms
 from xbsl.engine import SourceFile
 from xbsl.lexer import linemap
-from xbsl.rules._server_calls import _type_head, server_call_mapper
-from xbsl.rules.environment import _pair_stem
+from xbsl.rules._server_calls import ServerCallGraph, _type_head, server_call_mapper
 from xbsl.rules.yaml_schema import _HAVE_YAML, _composed, _mapping_nodes, _scalar_entries
 
 if _HAVE_YAML:
@@ -374,3 +374,535 @@ def _extend(source: SourceFile, base: dict) -> dict:
         if isinstance(member, P.Method) and methods.get(member.name) is not None:
             flows[member.name] = compiler.method(member)
     return {**base, "flows": flows}
+
+
+# --- reduce: walking the flows ------------------------------------------------------------
+
+#: How deep same-module client methods are walked in place; a deeper call ends the walk there
+#: (on the projects measured, doubling the depth changed no finding).
+_MAX_INLINE = 6
+_EMPTY: frozenset = frozenset()
+#: Splits a walked path: a branch, a loop or a conditional operand stood between two calls.
+_BARRIER = object()
+
+
+class _Ev:
+    """One server call on a walked path, with what it depends on."""
+
+    __slots__ = ("id", "call", "line", "col", "via", "deps", "ctrl", "try_id", "guarded")
+
+    def __init__(self, ident: int, call: str, line: int, col: int, via: tuple, deps: frozenset,
+                 ctrl: frozenset, try_id: int | None, guarded: bool):
+        self.id = ident
+        self.call = call  # the callee as written: `Method`, `Module.Method`, `Components.X.M`
+        self.line = line
+        self.col = col
+        self.via = via  # the same-module methods walked in place below the host
+        self.deps = deps  # the calls whose results reach the receiver or the arguments
+        self.ctrl = ctrl  # the calls whose results decide whether this one runs
+        self.try_id = try_id  # the innermost `try` around the call
+        self.guarded = guarded  # an early exit of the host may leave before the call
+
+
+def _has_call(items: list) -> bool:
+    return any(isinstance(x, _Ev) for x in items)
+
+
+def _runs(items: list) -> list[list[_Ev]]:
+    """The calls between two barriers."""
+    runs: list[list[_Ev]] = []
+    current: list[_Ev] = []
+    for item in items:
+        if item is _BARRIER:
+            if current:
+                runs.append(current)
+            current = []
+        elif isinstance(item, _Ev):
+            current.append(item)
+    if current:
+        runs.append(current)
+    return runs
+
+
+class _Project:
+    """The flows of a project joined with the server-call graph."""
+
+    def __init__(self, facts: dict[str, dict]):
+        self.graph = ServerCallGraph(facts)
+        self.flows: dict[str, dict[str, dict]] = {}
+        self.rels: dict[str, str] = {}
+        self.children: dict[str, dict[str, str]] = {}
+        for rel, fact in facts.items():
+            if fact.get("k") == "x" and "flows" in fact:
+                self.flows[fact["stem"]] = fact["flows"]
+                self.rels[fact["stem"]] = rel
+            elif fact.get("k") == "y" and "children" in fact:
+                self.children[fact["stem"]] = fact["children"]
+        self._locals: dict[tuple[str, str], frozenset[str]] = {}
+        self._reaches: dict[tuple[str, str], bool] = {}
+        self._active: set[tuple[str, str]] = set()
+
+    def fact(self, stem: str, name: str) -> dict | None:
+        return ((self.graph.modules.get(stem) or {}).get("methods") or {}).get(name)
+
+    def env(self, stem: str, name: str) -> str | None:
+        fact = self.fact(stem, name)
+        return None if fact is None else self.graph.method_environment(stem, fact)
+
+    def flow(self, stem: str, name: str) -> dict | None:
+        return self.flows.get(stem, {}).get(name)
+
+    def local_names(self, stem: str, name: str) -> frozenset[str]:
+        key = (stem, name)
+        if key not in self._locals:
+            self._locals[key] = frozenset(self.flows[stem][name]["locals"])
+        return self._locals[key]
+
+    def module_target(self, stem: str, root: str, member: str) -> tuple[str, str] | None:
+        """Where `root.member(...)` lands, under the guards of ServerCallGraph.paths."""
+        graph = self.graph
+        if root in graph.declared(stem):
+            return None
+        target = graph.receiver(stem, root)
+        if target is None or not graph.metadata.get(target, {}).get("valid"):
+            return None
+        if self.fact(target, member) is None:
+            return None
+        return target, member
+
+    def child_target(self, stem: str, child: str, member: str) -> tuple[str, str] | None:
+        """Where `Components.child.member(...)` lands: the child's type must be one component."""
+        type_name = self.children.get(stem, {}).get(child)
+        if not type_name:
+            return None
+        choices = self.graph.components.get(type_name) or []
+        if len(choices) != 1:
+            return None
+        target = choices[0]["stem"]
+        if self.flow(target, member) is None:
+            return None
+        return target, member
+
+    def reaches_server(self, stem: str, name: str) -> bool:
+        """Whether every run of a client method calls the server: its main path holds a server
+        call before any early exit.
+
+        A method that reaches the server only in a branch, a loop or after a guard is not one
+        more call of the series that calls it - on the path the series takes it may return
+        without a trip.
+        """
+        key = (stem, name)
+        if key in self._reaches:
+            return self._reaches[key]
+        flow = self.flow(stem, name)
+        if flow is None or key in self._active:
+            return False
+        self._active.add(key)
+        try:
+            host = _Host(self, stem, name, flow)
+            host.run()
+            found = any(isinstance(x, _Ev) and not x.guarded for x in host.blocks[0][1])
+        finally:
+            self._active.discard(key)
+        self._reaches[key] = found
+        return found
+
+    def open_reach(self) -> set[tuple[str, str]]:
+        """The client methods an opening handler of a form may run."""
+        names = _forms("ПослеСоздания") | _forms("ПриОткрытииПоСсылке") | _forms("ПослеЧтения")
+        roots = [(stem, name) for stem in sorted(self.flows)
+                 if self.graph.metadata.get(stem, {}).get("kind") == "КомпонентИнтерфейса"
+                 for name in self.flows[stem] if name in names]
+        reached = set(roots)
+        queue = deque(roots)
+        while queue:
+            for target in self.edges(*queue.popleft()):
+                if target not in reached:
+                    reached.add(target)
+                    queue.append(target)
+        return reached
+
+    def edges(self, stem: str, name: str) -> list[tuple[str, str]]:
+        flow = self.flow(stem, name)
+        if flow is None:
+            return []
+        out: list[tuple[str, str]] = []
+        for edge in flow["edges"]:
+            if edge[0] == "m":
+                target = (stem, edge[1]) if edge[1] in self.flows.get(stem, {}) else None
+            elif edge[0] == "q":
+                target = self.module_target(stem, edge[1], edge[2])
+            else:
+                target = self.child_target(stem, edge[1], edge[2])
+            if target is not None and self.env(*target) == "client" and target not in out:
+                out.append(target)
+        return out
+
+
+class _Host:
+    """The ordered walk of one client method.
+
+    The main path collects the calls in execution order; a branch, a loop, a conditional
+    operand and a catch body are walked as blocks of their own and leave a barrier on the
+    path. A same-module client method is walked in place. Dependencies are a taint over names:
+    a name written from a call's result carries that call, a later call that reads it in its
+    receiver or arguments depends on it by data, and a call behind a condition that read it
+    depends on it by control.
+    """
+
+    def __init__(self, project: _Project, stem: str, name: str, flow: dict):
+        self.p = project
+        self.stem = stem
+        self.flow = flow
+        self.events: list[_Ev] = []
+        self.blocks: list[tuple[str, list]] = []
+        self.taint: dict[str, frozenset] = {}
+        self.ctrl: list[frozenset] = []
+        self.path_ctrl: set = set()
+        self.try_stack: list[int] = []
+        self.inline: list[str] = [name]
+        self.rets: list[set] = []
+        self.guarded = False
+        self.in_catch = 0
+
+    def run(self) -> None:
+        items = self.block(self.flow["body"])
+        self.blocks.insert(0, ("main", items))
+
+    def add_block(self, kind: str, items: list) -> None:
+        # Everything under a catch body is error handling, whatever nests inside it.
+        self.blocks.append(("catch" if self.in_catch else kind, items))
+
+    # --- taint -------------------------------------------------------------------------
+
+    def taint_of(self, key: str) -> frozenset:
+        if "." not in key:
+            return self.taint.get(key, _EMPTY)
+        parts = key.split(".")
+        found: set = set()
+        for i in range(1, len(parts) + 1):
+            found |= self.taint.get(".".join(parts[:i]), _EMPTY)
+        return frozenset(found)
+
+    def write(self, key: str, value: frozenset, op: str) -> None:
+        if op != "=":
+            value = value | self.taint.get(key, _EMPTY)
+        self.taint[key] = value
+
+    def current_ctrl(self) -> frozenset:
+        found = set(self.path_ctrl)
+        for condition in self.ctrl:
+            found |= condition
+        return frozenset(found)
+
+    def merge_into(self, merged: dict) -> None:
+        for key, value in self.taint.items():
+            merged[key] = merged.get(key, _EMPTY) | value
+
+    # --- statements ----------------------------------------------------------------------
+
+    def block(self, statements: list) -> list:
+        out: list = []
+        for st in statements:
+            kind = st[0]
+            if kind == "v":
+                items, taint = self.expr(st[2])
+                out += items
+                self.write(st[1], taint, "=")
+            elif kind == "a":
+                _kind, key, op, target, value = st
+                items, taint = self.expr(value)
+                if key is None:
+                    target_items, target_taint = self.expr(target)
+                    items = target_items + items
+                    taint = taint | target_taint
+                out += items
+                if key:
+                    self.write(key, taint, op)
+            elif kind == "e":
+                out += self.expr(st[1])[0]
+            elif kind == "r":
+                items, taint = self.expr(st[1])
+                out += items
+                if self.rets:
+                    self.rets[-1] |= taint
+                break
+            elif kind == "b":
+                break
+            elif kind == "if":
+                out += self.branches(st)
+            elif kind == "loop":
+                out += self.loop(st)
+            elif kind == "t":
+                out += self.attempt(st)
+            elif kind == "s":
+                out += self.block(st[1])
+        return out
+
+    def branches(self, st: list) -> list:
+        _kind, subject, arms, else_body, leaves = st
+        out: list = []
+        head: frozenset = _EMPTY
+        if subject is not None:
+            out, head = self.expr(subject)
+        # The first condition always runs; the others run only when the ones before fail.
+        for condition in (arms[0][0][:1] if arms else ()):
+            items, taint = self.expr(condition)
+            out += items
+            head = head | taint
+        saved = dict(self.taint)
+        merged = dict(self.taint)
+        saved_path_ctrl = set(self.path_ctrl)
+        saved_guarded = self.guarded
+        bodies = []
+        self.ctrl.append(head)
+        for index, (conditions, body) in enumerate(arms):
+            self.taint = dict(saved)
+            pre: list = []
+            for condition in (conditions[1:] if index == 0 else conditions):
+                pre += self.expr(condition)[0]
+            bodies.append(pre + self.block(body))
+            self.merge_into(merged)
+        if else_body is not None:
+            self.taint = dict(saved)
+            bodies.append(self.block(else_body))
+            self.merge_into(merged)
+        self.ctrl.pop()
+        self.path_ctrl = saved_path_ctrl
+        self.guarded = saved_guarded
+        self.taint = merged
+        if leaves:
+            self.guarded = True
+        if any(_has_call(body) for body in bodies):
+            out.append(_BARRIER)
+            for body in bodies:
+                if _has_call(body):
+                    self.add_block("branch", body)
+        elif head and leaves:
+            # A guard without calls of its own: what follows runs only when it lets through.
+            self.path_ctrl |= head
+        return out
+
+    def loop(self, st: list) -> list:
+        _kind, heads, condition, body = st
+        out: list = []
+        head: frozenset = _EMPTY
+        for expr in heads:
+            items, taint = self.expr(expr)
+            out += items
+            head = head | taint
+        pre: list = []
+        if condition is not None:
+            pre, head = self.expr(condition)
+        self.ctrl.append(head)
+        saved = dict(self.taint)
+        saved_path_ctrl = set(self.path_ctrl)
+        saved_guarded = self.guarded
+        walked = pre + self.block(body)
+        self.path_ctrl = saved_path_ctrl
+        self.guarded = saved_guarded
+        self.ctrl.pop()
+        self.merge_into(saved)
+        self.taint = saved
+        if _has_call(walked):
+            out.append(_BARRIER)
+            self.add_block("loop", walked)
+        return out
+
+    def attempt(self, st: list) -> list:
+        _kind, try_id, body, catches, final = st
+        self.try_stack.append(try_id)
+        out = self.block(body)
+        self.try_stack.pop()
+        for catch in catches:
+            saved = dict(self.taint)
+            self.in_catch += 1
+            walked = self.block(catch)
+            self.in_catch -= 1
+            self.taint = saved
+            if _has_call(walked):
+                self.add_block("catch", walked)
+        if final is not None:
+            out += self.block(final)
+        return out
+
+    # --- expressions ---------------------------------------------------------------------
+
+    def expr(self, e) -> tuple[list, frozenset]:
+        if e is None:
+            return [], _EMPTY
+        kind = e[0]
+        if kind == "n":
+            return [], self.taint_of(e[1])
+        if kind == "c":
+            return self.call(e)
+        if kind == "and" or kind == "??":
+            left, left_taint = self.expr(e[1])
+            right, right_taint = self.expr(e[2])
+            return left + self.conditional(right, kind), left_taint | right_taint
+        if kind == "?":
+            cond, cond_taint = self.expr(e[1])
+            then, then_taint = self.expr(e[2])
+            other, other_taint = self.expr(e[3])
+            return (cond + self.conditional(then, kind) + self.conditional(other, kind),
+                    cond_taint | then_taint | other_taint)
+        items: list = []
+        taint: frozenset = _EMPTY
+        for part in e[1]:
+            part_items, part_taint = self.expr(part)
+            items += part_items
+            taint = taint | part_taint
+        return items, taint
+
+    def conditional(self, items: list, kind: str) -> list:
+        """An operand that runs on some paths only: its calls become a block of their own."""
+        if not _has_call(items):
+            return items
+        self.add_block(kind, items)
+        return [_BARRIER]
+
+    def event(self, call: str, line: int, col: int, deps: frozenset) -> _Ev:
+        ev = _Ev(len(self.events), call, line, col, tuple(self.inline[1:]), deps,
+                 self.current_ctrl(), self.try_stack[-1] if self.try_stack else None,
+                 self.guarded)
+        self.events.append(ev)
+        return ev
+
+    def call(self, e: list) -> tuple[list, frozenset]:
+        _kind, target, receiver, args, line, col, spelled = e
+        items, taint = self.expr(receiver)
+        items = list(items)
+        arg_taints = []
+        for name, value in args:
+            arg_items, arg_taint = self.expr(value)
+            items += arg_items
+            taint = taint | arg_taint
+            arg_taints.append((name, arg_taint))
+        if target is None:
+            return items, taint
+        project = self.p
+        stem = self.stem
+        if target[0] == "m":
+            name = target[1]
+            if name in project.graph.declared(stem) or project.flow(stem, name) is None:
+                return items, taint
+            env = project.env(stem, name)
+            if env == "client":
+                return self.inline_call(name, items, taint, arg_taints)
+            fact = project.fact(stem, name)
+            if (env != "server" or fact is None or not fact["available"]
+                    or fact["cache"] not in ("missing", "false")):
+                return items, taint
+        elif target[0] == "q":
+            found = project.module_target(stem, target[1], target[2])
+            if found is None:
+                return items, taint
+            env = project.env(*found)
+            if env == "server":
+                fact = project.fact(*found)
+                if fact is None or (fact["available"]
+                                    and fact["cache"] not in ("missing", "false")):
+                    return items, taint  # the client cache answers a repeated call
+                if not project.graph.paths(stem, [target[1], target[2], spelled]):
+                    return items, taint
+            elif env != "client" or not project.reaches_server(*found):
+                return items, taint
+        else:
+            found = project.child_target(stem, target[1], target[2])
+            if (found is None or project.env(*found) != "client"
+                    or not project.reaches_server(*found)):
+                return items, taint
+        ev = self.event(spelled, line, col, taint)
+        return items + [ev], taint | {ev.id}
+
+    def inline_call(self, name: str, items: list, taint: frozenset,
+                    arg_taints: list) -> tuple[list, frozenset]:
+        """Walk a same-module client method in place, its parameters tainted by the arguments."""
+        if name in self.inline or len(self.inline) > _MAX_INLINE:
+            return items, taint
+        flow = self.p.flows[self.stem][name]
+        callee_locals = self.p.local_names(self.stem, name)
+        snapshot = dict(self.taint)
+        by_name = {arg: arg_taint for arg, arg_taint in arg_taints if arg}
+        positional = [arg_taint for arg, arg_taint in arg_taints if not arg]
+        for index, param in enumerate(flow["params"]):
+            self.taint[param] = by_name.get(
+                param, positional[index] if index < len(positional) else _EMPTY)
+        self.inline.append(name)
+        self.rets.append(set())
+        # An early return inside the callee ends the callee only, not the caller's path.
+        saved_path_ctrl = set(self.path_ctrl)
+        saved_guarded = self.guarded
+        body = self.block(flow["body"])
+        self.path_ctrl = saved_path_ctrl
+        self.guarded = saved_guarded
+        returned = frozenset(self.rets.pop())
+        self.inline.pop()
+        after = snapshot
+        for key, value in self.taint.items():
+            if key.split(".", 1)[0] not in callee_locals:
+                after[key] = value
+        self.taint = after
+        return items + body, taint | returned
+
+
+class _Series:
+    """A run of server calls found in one client method."""
+
+    __slots__ = ("stem", "host", "on_open", "calls")
+
+    def __init__(self, stem: str, host: str, on_open: bool, calls: list[_Ev]):
+        self.stem = stem
+        self.host = host
+        self.on_open = on_open
+        self.calls = calls
+
+    def data_dependency(self) -> tuple[_Ev, list[_Ev]] | None:
+        """The first call whose receiver or arguments come from an earlier call of the run."""
+        for index, later in enumerate(self.calls[1:], 1):
+            earlier = [e for e in self.calls[:index] if e.id in later.deps]
+            if earlier:
+                return later, earlier
+        return None
+
+
+def find_series(facts: dict[str, dict], scope: str,
+                min_calls: int) -> tuple[_Project, list[_Series]]:
+    """The runs of `min_calls` and more server calls, one per distinct set of call sites.
+
+    `scope` is "open" (the methods an opening handler may run) or "all" (every client
+    method). A run in a catch body and a run whose calls stand in different `try` statements
+    are left out before the runs are compared, so a clean run inside a mixed one survives.
+    The same call sites found from several methods are kept once, for the method that walks
+    the fewest levels in place; a run contained in a longer one is dropped.
+    """
+    project = _Project(facts)
+    if not project.graph.has_data:
+        return project, []
+    reach = project.open_reach()
+    found: list[_Series] = []
+    for stem in sorted(project.flows):
+        for name, flow in project.flows[stem].items():
+            if project.env(stem, name) != "client":
+                continue
+            on_open = (stem, name) in reach
+            if scope != "all" and not on_open:
+                continue
+            host = _Host(project, stem, name, flow)
+            host.run()
+            for kind, items in host.blocks:
+                if kind == "catch":
+                    continue
+                for run in _runs(items):
+                    if len(run) >= min_calls and len({e.try_id for e in run}) == 1:
+                        found.append(_Series(stem, name, on_open, run))
+    best: dict[frozenset, tuple[int, _Series]] = {}
+    for series in found:
+        key = frozenset((series.stem, e.line, e.col) for e in series.calls)
+        depth = sum(len(e.via) for e in series.calls)
+        if key not in best or depth < best[key][0]:
+            best[key] = (depth, series)
+    keys = list(best)
+    kept = [best[key][1] for key in keys if not any(key < other for other in keys)]
+    kept.sort(key=lambda s: (project.rels[s.stem], s.calls[0].line, s.calls[0].col))
+    return project, kept
