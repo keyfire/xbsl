@@ -214,9 +214,10 @@ class _Flow:
     and any other callee leave it None. A lambda and a method reference are not entered.
     """
 
-    def __init__(self, source: SourceFile, components: frozenset[str]):
+    def __init__(self, source: SourceFile, components: frozenset[str], timers: frozenset[str]):
         self.lines = linemap(source)
         self.components = components
+        self.timers = timers
         self.locals: set[str] = set()
 
     def method(self, method: P.Method) -> dict:
@@ -353,12 +354,15 @@ class _Flow:
     # --- reachability --------------------------------------------------------------------
 
     def edges(self, method: P.Method) -> list:
-        """Every method the body may run, timer lambdas included and method references not.
+        """Every method the body may run, the lambdas handed to a timer included.
 
         The opening path follows these: a handler that starts a timer with `() -> Load()`
-        opens the page through `Load` as much as through a direct call.
+        opens the page through `Load` as much as through a direct call. Any other lambda - a
+        subscription to an event, a filter - runs when something else happens, and a method
+        reference is not followed at all.
         """
         out: list = []
+        timed: set[int] = set()
         stack: list = [method.body]
         while stack:
             item = stack.pop()
@@ -367,10 +371,16 @@ class _Flow:
                 continue
             if not isinstance(item, P.Node) or isinstance(item, P.MethodRef):
                 continue
+            if isinstance(item, P.Lambda) and id(item) not in timed:
+                continue
             if isinstance(item, P.Call):
                 edge = self.edge(item.callee)
                 if edge is not None and edge not in out:
                     out.append(edge)
+                if (isinstance(item.callee, P.Name) and item.callee.name in self.timers
+                        and item.callee.name not in self.locals):
+                    timed.update(id(arg.value) for arg in item.args
+                                 if isinstance(arg.value, P.Lambda))
             stack.extend(reversed(_children(item)))
         return out
 
@@ -430,7 +440,7 @@ def _extend(source: SourceFile, base: dict) -> dict:
     module, errors = P.parse(source)  # cached: the shared mapper has already parsed it
     if errors:
         return base
-    compiler = _Flow(source, _forms("Компоненты"))
+    compiler = _Flow(source, _forms("Компоненты"), _forms("ПодключитьОбработчикТаймера"))
     flows = {}
     for member in module.members:
         if isinstance(member, P.Method) and methods.get(member.name) is not None:

@@ -23,6 +23,7 @@ WORDS = {
         "Обработчик": "Обработчик", "ПослеСоздания": "ПослеСоздания",
         "ПослеЧтения": "ПослеЧтения", "ПриОткрытииПоСсылке": "ПриОткрытииПоСсылке",
         "Истина": "Истина", "Ложь": "Ложь", "Таймер": "ПодключитьОбработчикТаймера",
+        "Подписка": "ПодключитьОбработчик",
         "Компоненты": "Компоненты", "мс": "мс", "Строка": "Строка", "Число": "Число",
         "Булево": "Булево", "Массив": "Массив", "НаСервере": "НаСервере",
         "НаКлиенте": "НаКлиенте", "ДоступноСКлиента": "ДоступноСКлиента",
@@ -35,6 +36,7 @@ WORDS = {
         "Обработчик": "Handler", "ПослеСоздания": "AfterCreate",
         "ПослеЧтения": "AfterRead", "ПриОткрытииПоСсылке": "OnOpenByLink",
         "Истина": "True", "Ложь": "False", "Таймер": "AttachTimerHandler",
+        "Подписка": "AttachHandler",
         "Компоненты": "Components", "мс": "ms", "Строка": "String", "Число": "Number",
         "Булево": "Boolean", "Массив": "Array", "НаСервере": "OnServer",
         "НаКлиенте": "OnClient", "ДоступноСКлиента": "AvailableFromClient",
@@ -491,6 +493,26 @@ def test_the_opening_path_follows_a_timer_lambda(lang, lint):
 """
     found = lint(files(lang, page))
     assert len(found) == 1 and "При открытии метод 'Отложено'" in found[0].message
+
+
+@pytest.mark.needs_data
+@LANGS
+def test_a_subscription_lambda_does_not_open_the_page(lang, lint):
+    """A handler subscribed on open runs when its event fires, not while the page opens."""
+    page = """@{Обработчик}
+{метод} {ПослеСоздания}()
+    Сигнал.{Подписка}(() -> Отложено())
+;
+
+{метод} Отложено()
+    Склады.Остатки()
+    Склады.Резервы("а")
+;
+"""
+    project = files(lang, page)
+    assert lint(project) == []
+    found = lint(project, scope="all")
+    assert len(found) == 1 and found[0].message.startswith("Метод 'Отложено'")
 
 
 @pytest.mark.needs_data
