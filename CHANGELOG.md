@@ -36,7 +36,7 @@ entry either - say what the behaviour was, not which class name was compared.
   missing – tables and lists, charts, the PDF view and a few more, some of them only in width –
   and the rule now follows that table. For a list it names both keys: with `VerticalStretch: False`
   alone a list grows with its rows, and the height holds only together with `VerticalScroll: True`.
-  ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  ([#146](https://github.com/keyfire/xbsl/pull/146))
 
 ## 2026-09-24 – 0.118.0
 
