@@ -44,10 +44,12 @@ from __future__ import annotations
 
 import dataclasses
 from collections import deque
+from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, parser as P, terms
-from xbsl.engine import SourceFile
+from xbsl import dataset, i18n, parser as P, terms
+from xbsl.diagnostics import Diagnostic, Severity
+from xbsl.engine import SourceFile, rule, rule_param
 from xbsl.lexer import linemap
 from xbsl.rules._server_calls import ServerCallGraph, _type_head, server_call_mapper
 from xbsl.rules.yaml_schema import _HAVE_YAML, _composed, _mapping_nodes, _scalar_entries
@@ -56,6 +58,66 @@ if _HAVE_YAML:
     import yaml
 
 RULE = "code/sequential-server-calls"
+
+MESSAGES = {
+    f"{RULE}.title": {
+        "ru": "Несколько обращений к серверу подряд",
+        "en": "Several server calls in a row",
+    },
+    f"{RULE}.open": {
+        "ru": "При открытии метод '{method}' обращается к серверу несколько раз подряд "
+              "({count}): {calls}.",
+        "en": "On open, method '{method}' calls the server several times in a row ({count}): "
+              "{calls}.",
+    },
+    f"{RULE}.any": {
+        "ru": "Метод '{method}' обращается к серверу несколько раз подряд ({count}): {calls}.",
+        "en": "Method '{method}' calls the server several times in a row ({count}): {calls}.",
+    },
+    f"{RULE}.advice": {
+        "ru": "Каждый вызов – отдельный круг до сервера и обратно, а те же данные может вернуть "
+              "один серверный метод с типизированным результатом. Объединение меняет границы "
+              "транзакций и обработку ошибок, поэтому сначала проверьте, что эти вызовы "
+              "допустимо выполнить за одно обращение.",
+        "en": "Each call is a round trip of its own, while one server method with a typed "
+              "result could return the same data. Merging changes transaction boundaries and "
+              "error handling, so first check that these calls may run as one request.",
+    },
+    f"{RULE}.data": {
+        "ru": "Аргументы '{later}' вычисляются из результата '{earlier}', и это вычисление "
+              "переедет на сервер вместе с вызовами.",
+        "en": "The arguments of '{later}' are computed from the result of '{earlier}', and that "
+              "computation moves to the server along with the calls.",
+    },
+    f"{RULE}.off": {
+        "ru": "находок на зрелом проекте десятки, и многие повторяют один узор форм, а "
+              "исправление архитектурное: новый составной серверный метод вместо правки строки. "
+              "Включайте, когда ищете лишние обращения к серверу при открытии страниц и форм",
+        "en": "a mature project gets dozens of findings, many of them one repeated form pattern, "
+              "and the fix is architectural: a new composite server method rather than an edit "
+              "of a line. Enable it when looking for extra server round trips on opening pages "
+              "and forms",
+    },
+    f"{RULE}.param.scope": {
+        "ru": "какие клиентские методы проверяются: open – достижимые от обработчиков открытия "
+              "(ПослеСоздания, ПослеЧтения, ПриОткрытииПоСсылке), all – все",
+        "en": "which client methods are judged: open - the ones reachable from the opening "
+              "handlers ({n[ПослеСоздания]}, {n[ПослеЧтения]}, {n[ПриОткрытииПоСсылке]}), "
+              "all - every one",
+    },
+    f"{RULE}.param.min-calls": {
+        "ru": "сколько обращений подряд составляют серию, от двух",
+        "en": "how many calls in a row make a run, two or more",
+    },
+}
+i18n.register(MESSAGES)
+
+#: Which client methods are judged: "open" - the ones an opening handler may run, "all" - all.
+SCOPE = rule_param(RULE, "scope", "open", f"{RULE}.param.scope",
+                   valid=lambda value: value in ("open", "all"))
+#: The shortest run that is reported.
+MIN_CALLS = rule_param(RULE, "min-calls", 2, f"{RULE}.param.min-calls",
+                       valid=lambda value: value >= 2)
 
 #: The short-circuit operators: their right operand runs only on some paths.
 _LOGIC_OPS = frozenset({"и", "или", "and", "or"})
@@ -906,3 +968,27 @@ def find_series(facts: dict[str, dict], scope: str,
     kept = [best[key][1] for key in keys if not any(key < other for other in keys)]
     kept.sort(key=lambda s: (project.rels[s.stem], s.calls[0].line, s.calls[0].col))
     return project, kept
+
+
+@rule(
+    RULE, f"{RULE}.title", "D", scope="project", severity=Severity.INFO,
+    enabled_by_default=False, off_reason=f"{RULE}.off", mapper=sequence_mapper,
+)
+def sequential_server_calls(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """One finding per run of server calls, on the line of its first call."""
+    project, found = find_series(facts, SCOPE, MIN_CALLS)
+    for series in found:
+        calls = ", ".join(f"{e.call}:{e.line}" for e in series.calls)
+        head = "open" if series.on_open else "any"
+        parts = [
+            i18n.t(f"{RULE}.{head}", method=series.host, count=len(series.calls), calls=calls),
+            i18n.t(f"{RULE}.advice"),
+        ]
+        dependency = series.data_dependency()
+        if dependency is not None:
+            later, earlier = dependency
+            parts.append(i18n.t(f"{RULE}.data", later=f"{later.call}:{later.line}",
+                                earlier=", ".join(f"{e.call}:{e.line}" for e in earlier)))
+        first = series.calls[0]
+        yield Diagnostic(project.rels[series.stem], first.line, first.col, RULE, Severity.INFO,
+                         " ".join(parts))

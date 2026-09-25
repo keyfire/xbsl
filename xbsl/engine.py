@@ -340,7 +340,10 @@ def params_of(rule_id: str) -> list[RuleParam]:
     return [p for p in PARAMS if p.rule_id == rule_id]
 
 
-def rule_param(rule_id: str, name: str, default: _ParamValue, doc: str) -> _ParamValue:
+def rule_param(
+    rule_id: str, name: str, default: _ParamValue, doc: str,
+    valid: Callable[[_ParamValue], bool] | None = None,
+) -> _ParamValue:
     """Declare a parameter of a rule and return the value in force.
 
     Used as the declaration of the constant itself:
@@ -354,13 +357,18 @@ def rule_param(rule_id: str, name: str, default: _ParamValue, doc: str) -> _Para
 
     A malformed environment value does not stop the run - the default stands and the
     mistake is said out loud, because a silently ignored override is a typo nobody notices.
+    `valid` narrows what counts as well formed: a word outside the choices a rule knows, or
+    a number below the one it makes sense from, is treated the same way.
     """
     env = param_env(rule_id, name)
     value = default
     raw = os.environ.get(env)
     if raw is not None and raw.strip():
         try:
-            value = type(default)(raw.strip())
+            parsed = type(default)(raw.strip())
+            if valid is not None and not valid(parsed):
+                raise ValueError(raw)
+            value = parsed
         except ValueError:
             print(
                 i18n.t("engine.param-bad-value", env=env, value=raw.strip(), default=default),
