@@ -67,6 +67,17 @@ the cause. Restarting the MCP client starts a new server. The journal is
 `%LOCALAPPDATA%\xbsl\mcp-journal.jsonl` on Windows and `$XDG_STATE_HOME/xbsl/mcp-journal.jsonl`
 elsewhere; the `XBSL_MCP_JOURNAL` variable points to another file.
 
+**When the engine on disk was updated under a running server.** The server loads some of its
+modules only when a tool needs them. After `self-update` or a `git pull` of an editable checkout,
+those modules come from the new code while the rest in memory stay old, and the two halves do
+not fit together. Before every call the server reads the version from `__init__.py` on disk.
+When it differs from the loaded one, every tool but `version_info` answers with an `error` that
+names both versions and asks for a restart, plus a `stale` record, instead of running.
+`version_info` still answers and shows `engine_on_disk`. If the version is the same but a tool
+fails, the server compares its code files with the state at start and names a restart when they
+changed. A crashed rule says the same in its own report. The server does not restart or exit on
+its own, and `xbsl mcp-log` shows the first time it noticed each change.
+
 Every `meta_*` tool and `lint_paths` take `root`, the caller's project root. An agent working in
 a git worktree does not share the server's working directory, which is why the parameter exists.
 Relative `directory`, `yaml_path`, `module_path`, `paths`, `baseline` and `compare` resolve
@@ -102,11 +113,11 @@ The three `docs_*` tools need the `docs.sqlite` database (see [Documentation sea
 
 | Tool | What it does |
 |---|---|
-| `translate_status(root, against)` | the coverage and what is left, the cheap check before deciding anything. A root without a dictionary is refused, and the answer names where a dictionary was looked for; `against` names a git ref and adds `collisions` - the keys the dictionary files of the working tree and of the ref translate differently or the same way, the report of `xbsl translate --check-duplicates` |
+| `translate_status(root, against, full)` | the coverage and what is left, the cheap check before deciding anything. A root without a dictionary is refused, and the answer names where a dictionary was looked for; `against` names a git ref and adds `collisions` - the keys the dictionary files of the working tree and of the ref translate differently or the same way, the report of `xbsl translate --check-duplicates`. The duplicates the ref already has come back the same on every call of a branch, so they are counted rather than listed (`duplicates_total`, `duplicates_at_ref`); `full=true` lists them all. The conflicts are listed whole either way |
 | `translate_gaps(root, kind, filter, limit, offset, compact)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint; `compact` keeps only the key, the kind and the count per row; the answer names the `dictionary` it read |
 | `translate_entries(root, kind, filter, limit, offset, compact)` | what the dictionary already says, with the file and line of each entry; ten rows a page by default, and `compact` keeps only the key, the kind and the value of each row |
 | `translate_unused(root, kind, filter, since, limit, offset, prune, compact, budget_seconds)` | dictionary entries no longer used by the project; `filter` accepts a substring or a list, `since` scopes candidates to one change. Preview lists full rows by default; `compact=true` keeps only key, kind, file and line. `prune=true` removes every key the filters select, whatever the page, with all its declarations, and normally omits the list: `removed` counts occurrences, `pruned.keys` counts pairs, and `pruned.by_kind` / `pruned.by_file` group them. Explicit `compact=false` includes full rows after removal. `counts` covers the whole filtered candidate set, and so does `prune`: pagination shapes only the list. `budget_seconds` (300 by default) bounds scanning; a `partial` answer lists candidates and never removes entries. |
-| `translate_set(root, edits, edits_file, target, comment)` | write entries back: add, correct in place (in every place the key is declared), or remove by emptying a value; `edits_file` is a batch file (the dictionary's own yaml format or the JSON list), `comment` is the head line a newly created file gets. Every plane is held to the spelling its pass reads: an entry that could not fire comes back in `refused`, and one with a single obvious reading - a phrase whose quote is escaped the literal way - is written by that reading and listed in `normalized` |
+| `translate_set(root, edits, edits_file, target, comment)` | write entries back: add, correct in place (in every place the key is declared), or remove by emptying a value; `edits_file` is a batch file (the dictionary's own yaml format, read by the dictionary's loader, so a batch dumped with every key in quotes reads too, or the JSON list; a batch with no entries is refused, naming the top-level keys it has), `comment` is the head line a newly created file gets. Every plane is held to the spelling its pass reads: an entry that could not fire comes back in `refused`, and one with a single obvious reading - a phrase whose quote is escaped the literal way - is written by that reading and listed in `normalized` |
 
 All four answer in pages over one engine core, so filling a dictionary of thousands of entries
 never means reading the files.
@@ -152,6 +163,7 @@ never means reading the files.
 | `meta_component_tree(yaml_path, node_id, name, max_depth, properties, brief)` | the node tree of an interface component; a big form can be taken in parts - a subtree (by node id or by its `Name`), a depth limit, without the property records, or as the skeleton alone (`brief` - ids, kinds, types, names and slots, a few kilobytes for a tree of hundreds); a big whole tree carries a hint naming these knobs |
 | `meta_add_component(yaml_path, parent_id, slot, ...)` | insert a new component into a slot of the parent node |
 | `meta_insert_fragment(yaml_path, parent_id, slot, fragment, ...)` | paste a ready yaml block of one component (a copied subtree) into a slot. A `#` note of the fragment goes where the development environment reads it: a comment above the component moves inside the node as `##` lines, and a note with no such place stays and is named in `notes`, see [Comments in yaml](yaml-comments) |
+| `meta_fold_comments(paths, dry_run, take_proposed, root)` | fold the comments the development environment does not read into the description of the nearest node that has room, as `xbsl fold-comments` does, see [Comments in yaml](yaml-comments). The answer is the report of `--format json`: the moves of each file, the audit, the number of files written and the moves counted by kind and action. `dry_run` is true by default and nothing is written; `dry_run=false` writes the files that pass the audit, and `take_proposed` applies the ambiguous moves too, like `--all` |
 | `meta_move_component(yaml_path, node_id, new_parent_id, slot, ...)` | move a node into another (or the same) slot; the comments above it travel along |
 | `meta_move_components(yaml_path, node_ids, ...)` | move several nodes in one operation, keeping their document order |
 | `meta_remove_component(yaml_path, node_id)` | remove a node with its attached comments |

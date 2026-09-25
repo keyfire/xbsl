@@ -98,3 +98,7 @@ A file is written only when the result passes the audit. The yaml parses to the 
 line of every comment is still there, the comment rules find nothing but the blocks left on
 purpose, and a second pass has nothing to move. The byte order mark and the line ends of the file
 are kept.
+
+An agent gets the same through the MCP tool `meta_fold_comments`. It answers with the report of
+`--format json` and writes nothing by default: `dry_run=false` writes, and `take_proposed`
+applies the ambiguous moves.

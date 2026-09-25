@@ -599,14 +599,19 @@ def _crash_diag(rule_id: str, path: str, exc: Exception) -> Diagnostic:
     # A missing or broken dataset is not a bug of the rule that happened to touch it first: it
     # breaks every rule at once and has its own report (cli.data-error, "install the data").
     # Turning it into a hundred identical findings would bury that message.
+    from xbsl import freshness
     from xbsl.dataset import DatasetError
 
     if isinstance(exc, DatasetError):
         raise exc
-    return Diagnostic(
-        path, 1, 1, rule_id, Severity.ERROR,
-        i18n.t("engine.rule-crashed", error=f"{type(exc).__name__}: {exc}"),
-    )
+    error = f"{type(exc).__name__}: {exc}"
+    # A long-lived process whose installation was replaced under it runs old and new modules
+    # side by side, and their interfaces disagree: that crash is not a bug to report but a
+    # restart to make, and the report says so (see xbsl/freshness.py).
+    stale = freshness.crash_note()
+    message = (i18n.t("engine.rule-crashed-stale", error=error, stale=stale) if stale
+               else i18n.t("engine.rule-crashed", error=error))
+    return Diagnostic(path, 1, 1, rule_id, Severity.ERROR, message)
 
 
 def _rule_diags(

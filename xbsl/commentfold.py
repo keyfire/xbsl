@@ -116,6 +116,10 @@ MESSAGES = {
         "ru": "после свертки yaml не разбирается",
         "en": "after the fold the yaml does not parse",
     },
+    "fold.missing-paths": {
+        "ru": "таких путей нет: {paths}",
+        "en": "no such paths: {paths}",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -607,3 +611,33 @@ def fold_paths(paths: Iterable, *, take_proposed: bool = False) -> list[FileFold
         if result.moves:
             out.append(result)
     return out
+
+
+def write_folds(folds: Iterable[FileFold]) -> int:
+    """Write every file the fold changed and the audit passed; returns how many were written.
+
+    A file with an audit finding is left as it is. The byte order mark and the line ends are
+    already in the new text, so it goes back as utf-8 bytes with nothing added.
+    """
+    from pathlib import Path
+
+    written = 0
+    for fold in folds:
+        if fold.changed and fold.text is not None:
+            Path(fold.rel).write_bytes(fold.text.encode("utf-8"))
+            written += 1
+    return written
+
+
+def report(folds: list[FileFold], written: int) -> dict:
+    """The machine report of a fold: `xbsl fold-comments --format json` and the MCP tool.
+
+    `files` - a record per file with a block to move: its moves and what the audit found;
+    `written` - the files written; `summary` - the moves counted as `kind/action`.
+    """
+    counts = Counter((move.kind, move.action) for fold in folds for move in fold.moves)
+    return {
+        "files": [fold.as_dict() for fold in folds],
+        "written": written,
+        "summary": {f"{kind}/{action}": count for (kind, action), count in sorted(counts.items())},
+    }

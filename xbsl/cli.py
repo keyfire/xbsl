@@ -389,21 +389,13 @@ def _fold_main(argv: list[str]) -> int:
     args = _fold_parser().parse_args(argv)
     files = [path for path in discover(args.paths) if path.suffix.lower() == ".yaml"]
     folds = commentfold.fold_paths(files, take_proposed=args.take_proposed)
-    written = 0
-    if args.write:
-        for fold in folds:
-            if fold.changed:
-                Path(fold.rel).write_bytes(fold.text.encode("utf-8"))
-                written += 1
+    written = commentfold.write_folds(folds) if args.write else 0
     counts = Counter(
         (move.kind, move.action) for fold in folds for move in fold.moves
     )
     if args.format == "json":
-        print(json.dumps({
-            "files": [fold.as_dict() for fold in folds],
-            "written": written,
-            "summary": {f"{kind}/{action}": count for (kind, action), count in sorted(counts.items())},
-        }, ensure_ascii=False, indent=1))
+        # The MCP tool meta_fold_comments answers with the same report.
+        print(json.dumps(commentfold.report(folds, written), ensure_ascii=False, indent=1))
         return 0
     for fold in folds:
         print(fold.rel)
@@ -458,6 +450,16 @@ def _mcplog_line(event: dict) -> str:
     elif kind == "stopped":
         text = i18n.t("mcplog.stopped", target=event.get("target", "?"),
                       name=event.get("name", ""), reason=event.get("reason", ""))
+    elif kind == "stale":
+        # Written by the server that found the engine on disk replaced under it
+        # (xbsl/freshness.py): a version on disk it refuses over, or sources changed under a
+        # failing call.
+        key = "mcplog.stale.sources" if event.get("reason") == "sources" else "mcplog.stale.version"
+        error = event.get("error")
+        text = i18n.t(key, loaded=event.get("loaded", "?"), on_disk=event.get("on_disk", "?"),
+                      tool=event.get("tool", "?"))
+        if error:
+            text += "; " + i18n.t("mcplog.stale.error", error=error)
     else:
         text = i18n.t("mcplog.unknown", event=kind)
     return f"{event.get('time', '?')}  pid {event.get('pid', '?')}  {text}"

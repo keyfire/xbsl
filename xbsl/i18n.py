@@ -297,6 +297,10 @@ _CORE_MESSAGES = {
         "en": "The rule crashed and was skipped, the others ran: {error}. "
               "This is a bug in the linter itself – please report it.",
     },
+    "engine.rule-crashed-stale": {
+        "ru": "Правило упало и пропущено, остальные отработали: {error}. Но {stale}.",
+        "en": "The rule crashed and was skipped, the others ran: {error}. But {stale}.",
+    },
     # -- help: check-mode argparse help (cli.py build_parser / _commands_help) --
     "cli.help.usage": {
         "ru": "%(prog)s [пути] [опции]        (без команды: проверка исходников)\n"
@@ -681,6 +685,18 @@ _CORE_MESSAGES = {
         "ru": "остановлен процесс {target} ({name}): {reason}",
         "en": "process {target} ({name}) stopped: {reason}",
     },
+    "mcplog.stale.version": {
+        "ru": "сервер {loaded} увидел на диске {on_disk} (вызов {tool}): инструменты отвечают "
+              "отказом до перезапуска",
+        "en": "server {loaded} saw {on_disk} on disk (call {tool}): the tools refuse until a "
+              "restart",
+    },
+    "mcplog.stale.sources": {
+        "ru": "исходники движка {loaded} на диске изменились после запуска сервера (вызов {tool})",
+        "en": "the engine sources of {loaded} changed on disk after the server started "
+              "(call {tool})",
+    },
+    "mcplog.stale.error": {"ru": "ошибка: {error}", "en": "error: {error}"},
     "mcplog.unknown": {"ru": "событие {event}", "en": "event {event}"},
     "cli.help.commands.extract": {
         "ru": "сгенерировать данные о языке из дистрибутива Элемента (--dist)",
@@ -830,6 +846,31 @@ _CORE_MESSAGES = {
     "selfupdate.up-to-date": {
         "ru": "уже актуально: xbsl {version}",
         "en": "already current: xbsl {version}",
+    },
+    "selfupdate.sources-differ": {
+        "ru": "источники PyPI расходятся: {sources}. Беру {version}: списки выпусков догоняют "
+              "новую версию за несколько минут",
+        "en": "the PyPI sources disagree: {sources}. Taking {version}: the release listings "
+              "catch up with a new version within minutes",
+    },
+    "selfupdate.source.simple": {
+        "ru": "простой индекс называет последней {version}",
+        "en": "the simple index names {version} as the latest",
+    },
+    "selfupdate.source.summary": {
+        "ru": "сводный JSON – {version}",
+        "en": "the JSON summary names {version}",
+    },
+    "selfupdate.source.page": {
+        "ru": "страница версии {version} уже опубликована",
+        "en": "the page of version {version} is already published",
+    },
+    "selfupdate.newer-installed": {
+        "ru": "установлена xbsl {installed}, а PyPI пока называет последней {latest}: списки "
+              "выпусков еще не догнали новую версию. Ничего не меняю",
+        "en": "xbsl {installed} is installed, while PyPI still names {latest} as the latest: "
+              "the release listings have not caught up with the new version yet. Nothing "
+              "changed",
     },
     "selfupdate.kind.native": {"ru": "нативное", "en": "native"},
     "selfupdate.kind.portable": {"ru": "переносимое", "en": "portable"},
