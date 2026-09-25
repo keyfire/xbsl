@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 250 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 251 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -471,6 +471,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/localization-ref-to-template` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `$Dictionary.Key` reference pointing at a key of the `Templates` section: a reference resolves against `Strings` alone, and the apply fails [details](#d-yaml-localization-ref-to-template) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `code/compare-with-localized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A call of the Url method `WithRequestParameters`: it encodes a parameter value only partially, and a value that is itself an address arrives cut at its first "&" [details](#d-code-url-params-partial-encoding) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
+| `code/url-data-scheme` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `data:` address passed as a literal to the Url constructor: the constructor parses it as a path, and a picture fed the result draws nothing [details](#d-code-url-data-scheme) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A property computed by an expression in the paired markup is assigned from code: the platform refuses such an assignment [details](#d-code-bound-property-assign) |
 | `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `EventLogEvent` description that does not set `Importance`: its default demands the value in every constructor, and one omission fails the apply [details](#d-yaml-event-needs-importance) [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
 | `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `EventLogEvent` property type outside the platform's closed list: the refusal comes only from the server-side compilation and costs the deploy [details](#d-yaml-event-property-type) [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
@@ -797,6 +798,11 @@ references is left alone: code calls it legitimately.
 <a id="d-code-url-params-partial-encoding"></a>**`code/url-params-partial-encoding`.** The "&" and
 "=" inside the value stay separators. Build the string with the parameters object and glue it to
 the base address. Off by default: whether a value can carry "&" is not statically visible.
+
+<a id="d-code-url-data-scheme"></a>**`code/url-data-scheme`.** The constructor puts a slash
+after the scheme and encodes ";" and "," as path characters, the browser refuses the address
+with ERR_INVALID_URL, and the `Image` property takes no string. Serve the image from an HTTP
+service of the project or as a resource. A data address kept in a variable is not traced.
 
 <a id="d-code-bound-property-assign"></a>**`code/bound-property-assign`.** It looks like `Height:
 =Common.IsNarrowScreen()?820:528`. Inside a try/catch the refusal is invisible. A data binding,

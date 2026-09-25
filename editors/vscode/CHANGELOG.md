@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+
+- **The `code/url-data-scheme` finding links to the documentation.** Its code in the Problems panel
+  opens the page of the Url type. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+
 ## 0.77.0
 
 ### Added

@@ -5439,6 +5439,20 @@ SEEDS: list[Seed] = [
         tokens={"Адреса": "Addresses", "Проба": "Probe"},
     ),
     Seed(
+        rule="code/url-data-scheme",
+        expect=FINDING,
+        note="a data address as the literal argument of the Url constructor",
+        files={"Картинки.xbsl": 'метод Значок(): Url\n    возврат новый Url("data:image/svg+xml;utf8,x")\n;\n'},
+        tokens={"Картинки": "Pictures", "Значок": "Badge"},
+    ),
+    Seed(
+        rule="code/url-data-scheme",
+        expect=CLEAN,
+        note="the same constructor with an http address",
+        files={"Картинки.xbsl": 'метод Значок(): Url\n    возврат новый Url("https://example.com/badge.svg")\n;\n'},
+        tokens={"Картинки": "Pictures", "Значок": "Badge"},
+    ),
+    Seed(
         rule="code/local-method-cross-component",
         expect=FINDING,
         note="a component method at the default visibility called through an instance from another component",

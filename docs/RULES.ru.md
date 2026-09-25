@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 250.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 251.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -466,6 +466,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/localization-ref-to-template` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Ссылка `$Словарь.Ключ` указывает на ключ секции `Шаблоны`: ссылка ищет ключ только в `Строки`, и применение падает [подробнее](#d-yaml-localization-ref-to-template) [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `code/compare-with-localized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Локализованное значение (`Словарь.Ключ()`, `Представление()`) сравнивается с литералом или со вторым локализованным – на другом языке ветка молча не срабатывает [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Вызов метода Url `СПараметрамиЗапроса`: значение параметра кодируется частично, и значение-адрес приходит обрезанным по первому "&" [подробнее](#d-code-url-params-partial-encoding) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
+| `code/url-data-scheme` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Адрес `data:` литералом в конструкторе Url: конструктор разбирает его как путь, и картинка с таким адресом не рисуется [подробнее](#d-code-url-data-scheme) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Свойство, вычисляемое выражением в парной разметке, присваивается из кода: платформа такое присваивание отвергает [подробнее](#d-code-bound-property-assign) |
 | `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: её умолчание требует значение в каждом конструкторе, и пропуск роняет применение [подробнее](#d-yaml-event-needs-importance) [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
 | `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип свойства `СобытиеЖурналаСобытий` вне закрытого списка платформы: отказ приходит только серверной компиляцией и стоит деплоя [подробнее](#d-yaml-event-property-type) [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
@@ -789,6 +790,11 @@ cannot apply to object with a "DeletionMark"` говорит компилято�
 <a id="d-code-url-params-partial-encoding"></a>**`code/url-params-partial-encoding`.** Знаки "&" и
 "=" внутри значения остаются разделителями. Строку собирают самим объектом параметров и клеят к
 базовому адресу. По умолчанию выключено: видны ли "&" в значениях, статически не решается.
+
+<a id="d-code-url-data-scheme"></a>**`code/url-data-scheme`.** Конструктор вставляет слэш
+после схемы и кодирует ";" и "," как символы пути, браузер отвечает на такой адрес
+ERR_INVALID_URL, а строку свойство `Изображение` не принимает. Картинку отдают адресом
+HTTP-сервиса проекта или ресурсом. Адрес data в переменной правило не прослеживает.
 
 <a id="d-code-bound-property-assign"></a>**`code/bound-property-assign`.** Выглядит это так:
 `Высота: =Общее.ЭтоУзкийЭкран()?820:528`. В попытка/поймать отказ не виден. Связь с данными, то

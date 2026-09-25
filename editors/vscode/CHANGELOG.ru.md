@@ -2,6 +2,13 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Добавлено
+
+- **Замечание `code/url-data-scheme` ведет в документацию.** Его код в панели "Проблемы" открывает
+  страницу типа Url. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+
 ## 0.77.0
 
 ### Добавлено

@@ -35,6 +35,10 @@ entry either - say what the behaviour was, not which class name was compared.
   command only shows the plan, and `--write` writes. Ambiguous moves are proposed, and a file is
   written only after the audit: the same yaml data, every comment line in place, the comment
   rules silent. ([#144](https://github.com/keyfire/xbsl/pull/144))
+- **`code/url-data-scheme` reports a data address passed to the Url constructor.** The
+  constructor parses `data:` as a path, the browser refuses the result, and a picture fed it draws
+  nothing; the `Image` property takes no string either. The warning points to an HTTP service of
+  the project or a resource instead. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
 
 ### Fixed
 

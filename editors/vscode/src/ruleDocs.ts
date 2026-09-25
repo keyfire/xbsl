@@ -350,6 +350,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "спараметрамизапроса",
   },
   {
+    match: (r) => r === "code/url-data-scheme",
+    page: "stdlib/element/xbsl/Std/Http/Url_ru",
+  },
+  {
     match: (r) => r === "code/permission-handlers-need-recalc",
     page: "topics/recalculate-access-permissions-and-keys",
   },
