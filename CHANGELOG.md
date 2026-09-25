@@ -18,6 +18,14 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **`translate` writes the title position of `StandardClientApplicationWithSections` as
+  `TitleLocation`.** It used to write `Parameter`, and the compiler refused the translated project
+  over an unknown property. ([#149](https://github.com/keyfire/xbsl/pull/149))
+
 ## 2026-09-25 – 0.119.0
 
 ### Added

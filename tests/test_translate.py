@@ -272,6 +272,27 @@ def test_yaml_value_outside_the_named_enumeration_is_left_alone():
     assert "SortingDirection: Наискосок" in out
 
 
+def test_yaml_title_placement_of_the_client_application_is_title_location():
+    """The standard client application with sections places its title by `TitleLocation`.
+
+    The flat compiler dictionary pairs the Russian name of the property with `Parameter`, and
+    the compiler refuses that spelling as an unknown property.
+    """
+    text = (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: ПанельЗадач\n"
+        "Наследует:\n"
+        "    Тип: СтандартноеКлиентскоеПриложениеСРазделами\n"
+        "    Путь: tasks\n"
+        "    РасположениеЗаголовка: НеОтображать\n"
+    )
+    out, report = _yaml(text, tokens={"ПанельЗадач": "TaskPanel"}, name="ПанельЗадач.yaml")
+
+    assert "    TitleLocation: NotDisplay\n" in out
+    assert "Parameter" not in out
+    assert report.platform_missing == 0 and report.user_missing == 0
+
+
 def test_yaml_localized_strings_and_translation_body():
     base = (
         "ВидЭлемента: ЛокализованныеСтроки\n"
