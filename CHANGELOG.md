@@ -30,28 +30,28 @@ entry either - say what the behaviour was, not which class name was compared.
   rules silent. ([#144](https://github.com/keyfire/xbsl/pull/144))
 - **The MCP tool `meta_fold_comments` folds yaml comments for an agent.** It does what
   `xbsl fold-comments` does and answers with the same report as `--format json`. Nothing is
-  written by default: `dry_run=false` writes, and `take_proposed` applies the ambiguous moves too.
+  written by default: `dry_run=false` writes, and `take_proposed` applies the ambiguous moves too. ([#145](https://github.com/keyfire/xbsl/pull/145))
 
 ### Changed
 
 - **`translate_status` with `against` no longer lists the duplicates the target branch already
   has.** They came back whole on every call of a branch, some three thousand characters each time.
   Now they are counted, only the duplicates the branch brings are listed, and `full=true` gives
-  the whole list.
+  the whole list. ([#145](https://github.com/keyfire/xbsl/pull/145))
 
 ### Fixed
 
 - **`self-update` right after a release no longer answers "already current".** Both release lists
   of PyPI can lag behind a new version for minutes. The command now reads both, asks for the page
   of the next version, says when the sources disagree and never installs an older release over a
-  newer one.
+  newer one. ([#145](https://github.com/keyfire/xbsl/pull/145))
 - **An MCP server whose engine was updated on disk says so instead of failing its rules.** Before
   each call it compares the version in `__init__.py` on disk with the loaded one; the tools then
   ask for a restart, and `version_info` shows both versions. A rule that crashes after the code
-  changed names the restart too, and `xbsl mcp-log` records when the server noticed.
+  changed names the restart too, and `xbsl mcp-log` records when the server noticed. ([#145](https://github.com/keyfire/xbsl/pull/145))
 - **`translate --set` and `translate_set` read a batch file as yaml.** A batch dumped with every
   key in quotes was refused as having no entries. It is now read by the loader of the dictionary
-  itself, and a refusal names the top-level keys the file has.
+  itself, and a refusal names the top-level keys the file has. ([#145](https://github.com/keyfire/xbsl/pull/145))
 
 ## 2026-09-24 – 0.118.0
 
