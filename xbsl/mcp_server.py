@@ -30,7 +30,7 @@ from xbsl import (
     cijob, formmodel, i18n, mcpjournal, metamodel, report, resource_usage, rundiff, scaffold,
     uischema,
 )
-from xbsl.cli import _filter_requested, discover_with_context
+from xbsl.cli import _filter_requested, discover, discover_with_context
 from xbsl.engine import (
     RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
     run, run_sources,
@@ -1966,6 +1966,61 @@ def meta_insert_fragment(
         "parent": parent_id, "slot": slot, "fragment": fragment,
         "before": before, "after": after,
     })
+
+
+@mcp.tool()
+@_documents_root
+def meta_fold_comments(
+    paths: list[str],
+    dry_run: bool = True,
+    take_proposed: bool = False,
+    root: str | None = None,
+) -> dict:
+    """Fold the yaml comments the development environment does not read into a node description.
+
+    The CLI `xbsl fold-comments`. The environment reads a comment of an element description
+    in one place only - a `##` block at the head of a node that has room for a description -
+    and the visual editor drops a plain `#` comment on its first save. A comment about a node
+    with no room of its own (a property of a component, an item of a list without a
+    description, a key of the element) moves into the description of the nearest node that
+    has room, as an item naming its subject: `## * \\`Path\\`:` over the lines of the comment,
+    which keep their text and so their pairs in a translation dictionary.
+
+    paths - files and folders with element descriptions (.yaml; a folder is walked);
+    dry_run - TRUE by default: the answer is the plan and nothing is written. Repeat with
+              dry_run=false to write; a file whose result fails the audit is never written;
+    take_proposed - apply the proposed moves too (the CLI --all): the ones that may be read two
+              ways - the first block of a file above a key outside the head, the heading of a
+              section, a block in a localization file, an item of a list without a name, a
+              block above a list. Without it they are listed with `action: proposed` and a
+              `reason`.
+    The answer is the report of `xbsl fold-comments --format json` plus `root` (and `dry-run`
+    on a dry run): `files` - a record per file with a block to move, {file (absolute),
+    changed, moves: [{line, kind, action (applied|proposed|left), target_line, subject,
+    reason, notes}], audit}; `written` - the files written; `summary` - the moves counted as
+    `kind/action`. The audit is the check a file passes before it is written: the yaml parses
+    to the same data, every line of every comment is still there, the comment rules find
+    nothing but the blocks left on purpose, and a second pass has nothing to move. A path
+    that does not exist is refused, naming it.
+    The report names every move, so pass the files you edited: over a project of three
+    hundred descriptions that have never been folded it runs to a quarter of a megabyte.
+    """
+    from xbsl import commentfold
+
+    base = _base(root)
+    asked = [_under(base, path) for path in paths]
+    missing = [str(path) if path is not None else repr(raw)
+               for raw, path in zip(paths, asked) if path is None or not path.exists()]
+    if missing:
+        return {"error": i18n.t("fold.missing-paths", paths=", ".join(missing)), "root": str(base)}
+    files = [path for path in discover([str(path) for path in asked])
+             if path.suffix.lower() == ".yaml"]
+    folds = commentfold.fold_paths(files, take_proposed=take_proposed)
+    written = 0 if dry_run else commentfold.write_folds(folds)
+    answer = {"root": str(base), **commentfold.report(folds, written)}
+    if dry_run:
+        answer["dry-run"] = True
+    return answer
 
 
 @mcp.tool()

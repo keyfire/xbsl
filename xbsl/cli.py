@@ -389,21 +389,13 @@ def _fold_main(argv: list[str]) -> int:
     args = _fold_parser().parse_args(argv)
     files = [path for path in discover(args.paths) if path.suffix.lower() == ".yaml"]
     folds = commentfold.fold_paths(files, take_proposed=args.take_proposed)
-    written = 0
-    if args.write:
-        for fold in folds:
-            if fold.changed:
-                Path(fold.rel).write_bytes(fold.text.encode("utf-8"))
-                written += 1
+    written = commentfold.write_folds(folds) if args.write else 0
     counts = Counter(
         (move.kind, move.action) for fold in folds for move in fold.moves
     )
     if args.format == "json":
-        print(json.dumps({
-            "files": [fold.as_dict() for fold in folds],
-            "written": written,
-            "summary": {f"{kind}/{action}": count for (kind, action), count in sorted(counts.items())},
-        }, ensure_ascii=False, indent=1))
+        # The MCP tool meta_fold_comments answers with the same report.
+        print(json.dumps(commentfold.report(folds, written), ensure_ascii=False, indent=1))
         return 0
     for fold in folds:
         print(fold.rel)
