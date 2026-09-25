@@ -338,13 +338,17 @@ def _component_english() -> dict[str, str]:
 #: Property spellings the extracted ui vocabulary gets WRONG, corrected against the compiler
 #: on a throwaway project. The uiterms table is built by pairing constant pools, and a shift
 #: there mis-pairs whole runs of names; a wrong pair here is not a missing translation but a
-#: confident wrong one, and the build refuses it ("unknown property"). Each entry below was
-#: accepted by the compiler in the spelling on the right and refused in the extracted one.
+#: confident wrong one, and the build refuses it ("unknown property"). The vocabulary asks the
+#: flat compiler dictionary first, and that one keeps a single spelling per word: the title
+#: placement of the standard client application with sections came out as `Parameter`, a pair
+#: the dictionary took from the reports package. Each entry below was accepted by the compiler
+#: in the spelling on the right and refused in the extracted one.
 _VERIFIED_PROPERTY_SPELLINGS: dict[str, str] = {
     "МинимальноеЗначение": "MinValue",
     "МаксимальноеЗначение": "MaxValue",
     "ШагИзменения": "ChangeStep",
     "ДлинаЦелойЧасти": "IntegerPartLength",
+    "РасположениеЗаголовка": "TitleLocation",
 }
 
 
