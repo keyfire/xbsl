@@ -2534,6 +2534,44 @@ def translate_redundant(
 
 
 @mcp.tool()
+def translate_drift(root: str, filter: str = "", limit: int = 50, offset: int = 0) -> dict:
+    """Phrases whose translation names a name otherwise than the name's own pair.
+
+    A phrase entry translates a comment line whole, names included, and nothing ties those
+    names to the tokens section: a token renamed after the phrase was written, or a line
+    translated as prose, leaves the English comment naming something the English tree does
+    not have. The tree builds, so the strict gate stays silent; the only trace was a finding
+    of `comment/unknown-name` on the English tree, pointing at the comment, not at the entry.
+
+    root   - the project directory (a root without a dictionary next to or above it is
+             refused with the places looked at);
+    filter - a substring of the name, the comment line, its translation or a name it says
+             instead;
+    limit/offset - the page (limit 0 means all); a cut page says so in `truncated`.
+
+    Each row: `name` (as the line writes it), `expected` (the token pair first, then the
+    platform's English spellings), `found` (the names the translation says instead - Latin
+    names that are neither a token value nor a word of the platform data), `key` and `value`
+    of the phrase, and the `file` and `line` of the entry. The check reads the dictionary
+    alone. A translation that renders the name in plain words names nothing and is not
+    listed: there is nothing to rename there.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    project, dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    path = translate_cli.dictionary_path_for(project)
+    rows = translate_cli.drift_rows(path, dictionary, filter or "")
+    page, paging = entries_module.page_of(rows, limit, offset)
+    out = {**paging, "dictionary": str(path), "drift": page}
+    if rows:
+        out["note"] = i18n.t("translate.drift.note")
+    return out
+
+
+@mcp.tool()
 def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = "",
                   target: str = "", comment: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.

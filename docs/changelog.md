@@ -43,6 +43,11 @@ entry either - say what the behaviour was, not which class name was compared.
   annotation marks an override of a handler of the base type, and the compiler refuses it on a
   handler of an event, a command or a route that the paired yaml names. The fix removes the
   annotation. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+- **`xbsl translate --drift` lists the phrases that name a name otherwise than its pair.** A token
+  renamed after its phrase was written left the English comment naming something the English tree
+  does not have, and only `comment/unknown-name` on the English tree noticed, at the comment. The
+  listing reads the dictionary alone and gives the file and line of each phrase; MCP has
+  `translate_drift`. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
 
 ### Fixed
 
