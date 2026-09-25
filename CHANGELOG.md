@@ -18,6 +18,15 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **The test that compares the two demo projects no longer depends on installed plugins.** A
+  plugin that turns on a rule about Russian prose gave the Russian demo a finding its English twin
+  cannot have, so the suite failed on such a machine while CI passed. The twins are now checked
+  with the published rule set.
+
 ## 2026-09-25 – 0.119.0, 0.119.1
 
 ### Added

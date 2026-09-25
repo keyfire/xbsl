@@ -13,6 +13,11 @@ answered `ID required` for an attribute without an `Ид`, hence the identifiers
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+
 import pytest
 
 from xbsl import dataset, engine, metamodel
@@ -218,10 +223,44 @@ def test_form_keys_are_canonicalized_forward():
 
 # --- the English demo project is the guard -----------------------------------------
 
-def _demo_findings(root) -> list[tuple[str, int]]:
-    """{rule: line} of a demo project - the shape both twins must report the same way."""
-    diags = engine.run(discover([str(root)]))
-    return sorted((d.rule_id, d.line) for d in diags)
+# The findings are taken in a SUBPROCESS with XBSL_NO_PLUGINS=1, the way test_metadata_sync reads
+# the registry. An installed plugin rewrites the default set at import time: one that turns on a
+# rule about Russian prose (`typography/yo-in-text` found a word with the letter yo in the Russian
+# demo) gives the Russian twin a finding the English one cannot have, and the test went red on
+# every machine with that plugin while the public CI stayed green. The twins are compared under
+# the published rule set; what a plugin adds is not what this guard is about. A plugin may also
+# be where the data comes from, so the child gets the data root this process resolved.
+_DEMO_FINDINGS = """
+import json
+import sys
+
+from xbsl import engine
+from xbsl.cli import discover
+
+print(json.dumps({
+    root: sorted([d.rule_id, d.line] for d in engine.run(discover([root])))
+    for root in sys.argv[1:]
+}))
+"""
+
+
+def _demo_findings(repo, *names: str) -> list[list[tuple[str, int]]]:
+    """[(rule, line)] of each named demo project - the shape both twins must report alike.
+
+    The child starts in the repository root, so it imports the engine of this checkout.
+    """
+    env = dict(
+        os.environ, XBSL_NO_PLUGINS="1", XBSL_DATA_DIR=str(dataset.data_root()),
+        PYTHONIOENCODING="utf-8", PYTHONUTF8="1",
+    )
+    roots = [str(repo / name) for name in names]
+    run = subprocess.run(
+        [sys.executable, "-c", _DEMO_FINDINGS, *roots],
+        cwd=repo, env=env, capture_output=True, text=True, encoding="utf-8",
+    )
+    assert run.returncode == 0, f"проверка демо-проектов не прошла:\n{run.stderr}"
+    found = json.loads(run.stdout)
+    return [[(rule, line) for rule, line in found[root]] for root in roots]
 
 
 def test_both_demo_projects_report_the_same_findings(request):
@@ -230,9 +269,7 @@ def test_both_demo_projects_report_the_same_findings(request):
     The deliberate findings sit on the same lines of the same module in both, so a rule that
     goes blind on English sources shows up here as a missing finding rather than as silence.
     """
-    root = request.config.rootpath
-    russian = _demo_findings(root / "demo")
-    english = _demo_findings(root / "demo-en")
+    russian, english = _demo_findings(request.config.rootpath, "demo", "demo-en")
     assert russian, "в русском демо-проекте нет находок - фикстура сломана"
     assert english == russian
 
