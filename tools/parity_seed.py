@@ -2083,6 +2083,35 @@ def _query_null_files(guard: str) -> dict[str, str]:
     }
 
 
+#: A page whose opening handler makes two server calls in a row, and the module it calls.
+_SEQUENTIAL_RU = {
+    "Page.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: Page\nСодержимое:\n"
+                 "  - Тип: List\n    Имя: Rows\n",
+    "Page.xbsl": "@Обработчик\nметод ПослеСоздания()\n    знч Items = Store.Read()\n"
+                 "    Store.Write(Items)\n;\n",
+    "List.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: List\n",
+    "List.xbsl": "метод Load()\n    Store.Read()\n;\n",
+    "Store.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Store\nОкружение: КлиентИСервер\n",
+    "Store.xbsl": "@НаСервере @ДоступноСКлиента\nметод Read(): Строка\n    возврат \"text\"\n;\n\n"
+                  "@НаСервере @ДоступноСКлиента\nметод Write(Text: Строка): Строка\n"
+                  "    возврат Text\n;\n",
+}
+_SEQUENTIAL_EN = {
+    "Page.yaml": "ElementKind: InterfaceComponent\nName: Page\nContent:\n"
+                 "  - Type: List\n    Name: Rows\n",
+    "Page.xbsl": "@Handler\nmethod AfterCreate()\n    val Items = Store.Read()\n"
+                 "    Store.Write(Items)\n;\n",
+    "List.yaml": "ElementKind: InterfaceComponent\nName: List\n",
+    "List.xbsl": "method Load()\n    Store.Read()\n;\n",
+    "Store.yaml": "ElementKind: CommonModule\nName: Store\nEnvironment: ClientAndServer\n",
+    "Store.xbsl": "@OnServer @AvailableFromClient\nmethod Read(): String\n    return \"text\"\n;\n\n"
+                  "@OnServer @AvailableFromClient\nmethod Write(Text: String): String\n"
+                  "    return Text\n;\n",
+}
+_SEQUENTIAL_OPEN_RU = "@Обработчик\nметод ПослеСоздания()\n"
+_SEQUENTIAL_OPEN_EN = "@Handler\nmethod AfterCreate()\n"
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -6967,6 +6996,37 @@ SEEDS: list[Seed] = [
         note="the chain fills every label of the stylesheet",
         files=_labels_files('.Заменить("{{SIZE}}", "1px")'),
         tokens=_LABELS_TOKENS,
+    ),
+    Seed(
+        rule="code/sequential-server-calls", expect=FINDING,
+        note="an opening handler reads and then writes through two server calls in a row",
+        files=_SEQUENTIAL_RU, english=_SEQUENTIAL_EN,
+    ),
+    Seed(
+        rule="code/sequential-server-calls", expect=FINDING,
+        note="a child component method that calls the server is one call of the run",
+        files={**_SEQUENTIAL_RU, "Page.xbsl": _SEQUENTIAL_OPEN_RU
+                + "    Компоненты.Rows.Load()\n    Store.Write(\"\")\n;\n"},
+        english={**_SEQUENTIAL_EN, "Page.xbsl": _SEQUENTIAL_OPEN_EN
+                  + "    Components.Rows.Load()\n    Store.Write(\"\")\n;\n"},
+    ),
+    Seed(
+        rule="code/sequential-server-calls", expect=CLEAN,
+        note="an endpoint with the standard result cache answers from the client",
+        files={**_SEQUENTIAL_RU, "Store.xbsl": _SEQUENTIAL_RU["Store.xbsl"].replace(
+            "@ДоступноСКлиента\nметод Read", "@ДоступноСКлиента(КешироватьРезультат = Истина)\nметод Read")},
+        english={**_SEQUENTIAL_EN, "Store.xbsl": _SEQUENTIAL_EN["Store.xbsl"].replace(
+            "@AvailableFromClient\nmethod Read", "@AvailableFromClient(CacheResult = True)\nmethod Read")},
+    ),
+    Seed(
+        rule="code/sequential-server-calls", expect=CLEAN,
+        note="a call inside a timer lambda runs in another tick, not in a row with the next one",
+        files={**_SEQUENTIAL_RU, "Page.xbsl": _SEQUENTIAL_OPEN_RU
+                + "    ПодключитьОбработчикТаймера(() -> Store.Read(), 1мс, Ложь)\n"
+                + "    Store.Write(\"\")\n;\n"},
+        english={**_SEQUENTIAL_EN, "Page.xbsl": _SEQUENTIAL_OPEN_EN
+                  + "    AttachTimerHandler(() -> Store.Read(), 1ms, False)\n"
+                  + "    Store.Write(\"\")\n;\n"},
     ),
 ]
 

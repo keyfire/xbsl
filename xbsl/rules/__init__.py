@@ -138,6 +138,8 @@ from . import missing_return  # noqa: F401
 
 from . import platform_translation_shadow  # noqa: F401
 
+from . import sequential_calls  # noqa: F401
+
 from . import procedure_value  # noqa: F401
 
 from . import contract_parameters  # noqa: F401

@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 250 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 251 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -395,6 +395,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Server method is unavailable to a client handler [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | project | A platform component's `Image` property reaches the server directly or through client methods [details](#d-code-image-binding-server-call) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/computed-property-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | Computed properties reach a client-available server method without the standard result cache [details](/linting#server-calls-in-computed-properties) [docs](https://1cmycloud.com/docs/help/topics/calculated-property-values-for-ui-components/) |
+| `code/sequential-server-calls` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | A client method on the opening path calls the server several times in a row, where one server method with a typed result would make a single trip [details](/linting#sequential-server-calls) [docs](https://1cmycloud.com/docs/help/topics/move-execution-from-client-to-server/) |
 | `code/resource-read-without-cache` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | project | A method available from the client runs on the server and only returns the text of a resource, read without the standard result cache [details](/linting#resource-text-read-without-the-result-cache) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Environments/AvailableFromClient_ru/) |
 | `code/client-annotation-in-server-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Client annotation in a server common module [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-module-in-http-service` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Client common module in a server environment [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |

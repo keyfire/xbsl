@@ -32,6 +32,7 @@ const IMAGES = "topics/image-library";
 // (see extract_docs); every pair is verified to exist.
 const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string; anchor?: string }> = [
   { match: (r) => r === "code/computed-property-server-call", page: "topics/calculated-property-values-for-ui-components" },
+  { match: (r) => r === "code/sequential-server-calls", page: "topics/move-execution-from-client-to-server" },
   { match: (r) => r === "code/resource-read-without-cache", page: "stdlib/element/xbsl/Std/Annotations/Environments/AvailableFromClient_ru" },
   { match: (r) => r === "code/deprecated-api", page: "topics/update-app-data" },
   { match: (r) => r === "code/deprecated-project", page: "stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru" },

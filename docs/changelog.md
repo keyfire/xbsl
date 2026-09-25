@@ -68,6 +68,11 @@ entry either - say what the behaviour was, not which class name was compared.
   and the rule now follows that table. For a list it names both keys: with `VerticalStretch: False`
   alone a list grows with its rows, and the height holds only together with `VerticalScroll: True`.
   ([#146](https://github.com/keyfire/xbsl/pull/146))
+- **`code/sequential-server-calls` finds a client method that calls the server several times in a
+  row.** Each call is a round trip, and on page open the waits add up; the finding lists the calls
+  and suggests one server method with a typed result. The rule is informational and off by
+  default, judges the opening path unless `scope` is `all`, and leaves out branches, loops, cached
+  methods and calls split between different `try` statements. ([#147](https://github.com/keyfire/xbsl/pull/147))
 
 ## 2026-09-24 – 0.118.0
 

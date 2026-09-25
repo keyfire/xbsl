@@ -2,6 +2,13 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Добавлено
+
+- **Замечание `code/sequential-server-calls` ведет в документацию.** Его код в панели
+  "Проблемы" открывает страницу о передаче исполнения с клиента на сервер. ([#147](https://github.com/keyfire/xbsl/pull/147))
+
 ## 0.77.0
 
 ### Добавлено

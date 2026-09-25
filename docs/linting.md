@@ -104,7 +104,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 250 rules of the base set** - severity, default state, scope, links to
+**The full list of all 251 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -296,6 +296,30 @@ rules read `WriteAndClose.Execute()` as a call of that property, even when a com
 has the same name. If the base type is unknown, the rules skip every `Name.Method()` call in
 that form and still follow calls of the form's own methods. Both rules also skip an element
 whose metadata has a field of the wrong type, such as a date in `Name`.
+
+### Sequential server calls
+
+Enable `code/sequential-server-calls` to find a client method that calls the server several
+times in a row on one path of execution. Each call is a round trip of its own, where one server
+method with a typed result would make a single one. By default the rule judges the methods an
+opening handler may run: `AfterCreate`, `AfterRead` and `OnOpenByLink`, followed through the
+module's own methods, client modules, `Components.X.M(...)` and timer lambdas. The `scope`
+parameter set to `all` (`XBSL_CODE_SEQUENTIAL_SERVER_CALLS_SCOPE=all`) judges every client
+method, and `min-calls` sets the shortest run. The check is informational and disabled by
+default: a mature project gets dozens of findings, and the fix is a new composite server method.
+
+A call counts when it reaches a client-available server method without `CacheResult = True`: a
+bare call of the module's own method, `Module.Method(...)`, or a client method of another
+module or of a child component whose main path calls the server before any early exit. The
+module's own client methods are walked in place. A branch of `if`/`case`, the right operand of
+`and`/`or`/`?:`/`??` and a loop split the path, and a loop body is not judged at all; a lambda
+and a method reference run in another tick. A run inside `catch` and a run whose calls stand in
+different `try` statements are skipped: such a split may be deliberate error handling.
+
+One finding per run sits on the line of its first call and lists the calls with their lines.
+When the arguments of a call are computed from the result of an earlier one, the message says
+so: that computation moves to the server as well. Merging changes transaction boundaries and
+error handling, so the rule suggests one server call rather than running the calls in parallel.
 
 ### Resource text read without the result cache
 
