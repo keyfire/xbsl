@@ -74,9 +74,18 @@ def discover_with_context(paths: list[str]) -> tuple[list[Path], list[Path] | No
 
     Returns (files, requested): files is what to lint; requested is the explicitly asked-for
     subset the caller must narrow the diagnostics down to (_filter_requested), or None when no
-    context was added and the diagnostics need no filtering."""
+    context was added and the diagnostics need no filtering.
+
+    With context added, every file of the run is RESOLVED, the requested ones included. The
+    context comes from the resolved project root, and a requested path left as typed (relative
+    to the working directory, another letter case, a `..` in it) lies under no folder of that
+    root: the placement model found no subsystem for it and code/foreign-not-public took the
+    module for the project module, the resources of the project were not found for it - a list
+    of four files of a subsystem got ten false visibility findings a tree run did not have.
+    The requested paths keep the typed form, and the narrowing reports under it."""
     files = discover(paths)
-    seen = {f.resolve() for f in files}
+    resolved = [f.resolve() for f in files]
+    seen = set(resolved)
     roots: list[Path] = []
     for raw in paths:
         p = Path(raw)
@@ -98,16 +107,25 @@ def discover_with_context(paths: list[str]) -> tuple[list[Path], list[Path] | No
                     added.append(f)
     if not added:
         return files, None
-    return files + added, files
+    return resolved + added, files
+
+
+def _context_of(files, requested):
+    """The files of a discover_with_context run that were loaded for the project picture
+    only: the project rules read them, the file rules skip them (engine.run_sources)."""
+    if requested is None:
+        return None
+    wanted = {p.resolve() for p in requested}
+    return frozenset(f for f in files if f not in wanted)
 
 
 def _filter_requested(diagnostics, requested):
-    """The diagnostics of the explicitly requested files: the project context loaded by
-    discover_with_context is checked for the cross-file picture, not reported on."""
+    """The diagnostics of the explicitly requested files, under the paths as they were typed:
+    the project context loaded by discover_with_context is checked for the cross-file picture,
+    not reported on."""
     if requested is None:
         return diagnostics
-    wanted = {p.resolve() for p in requested}
-    return [d for d in diagnostics if Path(d.path).resolve() in wanted]
+    return engine.narrow_to_requested(diagnostics, requested)
 
 
 def _commands_help() -> str:
@@ -557,7 +575,8 @@ def _baseline_main(argv: list[str]) -> int:
 
     diagnostics = _filter_requested(
         run_parallel(files, select=select, jobs=args.jobs,
-                     element_version=args.element_version or None),
+                     element_version=args.element_version or None,
+                     context=_context_of(files, requested)),
         requested,
     )
     added = baseline.add_entries(data, diagnostics, target.parent, reason=args.reason)
@@ -1702,6 +1721,7 @@ def _check_main(argv: list[str]) -> int:
                 run_parallel(
                     files, select=select, ignore=ignore, enable=enable,
                     jobs=args.jobs, element_version=args.element_version or None,
+                    context=_context_of(files, requested),
                 ),
                 requested,
             )

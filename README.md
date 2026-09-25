@@ -73,7 +73,7 @@ works are all in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/lint
 
 ## What it does
 
-**Rules.** 251 rules in the base set, in four tiers. **A** covers structure and the yaml schema.
+**Rules.** 253 rules in the base set, in four tiers. **A** covers structure and the yaml schema.
 **B** covers text and typography conventions. **C** covers code structure: blocks, brackets,
 unused locals, the `style/` conventions. **D** covers semantics against the platform data and the
 project itself: every type position in code and yaml, enumeration values, `Query{...}` block

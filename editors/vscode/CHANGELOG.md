@@ -15,6 +15,10 @@
 
 - **The `code/sequential-server-calls` finding links to the documentation.** Its code in the
   Problems panel opens the page about passing execution from the client to the server. ([#147](https://github.com/keyfire/xbsl/pull/147))
+- **The `code/bound-handler-annotation` finding links to the documentation.** Its code in the
+  Problems panel opens the page of the annotation. ([#148](https://github.com/keyfire/xbsl/pull/148))
+- **The `code/url-data-scheme` finding links to the documentation.** Its code in the Problems panel
+  opens the page of the Url type. ([#148](https://github.com/keyfire/xbsl/pull/148))
 
 ## 0.77.0
 

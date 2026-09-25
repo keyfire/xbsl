@@ -31,7 +31,7 @@ from xbsl import (
     cijob, formmodel, freshness, i18n, mcpjournal, metamodel, report, resource_usage, rundiff,
     scaffold, uischema,
 )
-from xbsl.cli import _filter_requested, discover, discover_with_context
+from xbsl.cli import _context_of, _filter_requested, discover, discover_with_context
 from xbsl.engine import (
     RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
     run, run_sources,
@@ -475,7 +475,9 @@ def lint_paths(
             )
         else:
             diags = _filter_requested(
-                run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+                run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+                    context=_context_of(files, requested)),
+                requested,
             )
     counted = requested if requested is not None else files
     active = active_rules(*chosen)
@@ -566,7 +568,9 @@ def baseline_prune(
     files, requested = discover_with_context(asked)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     diags = _filter_requested(
-        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+            context=_context_of(files, requested)),
+        requested,
     )
     counted = requested if requested is not None else files
     found = Path(named) if named else baseline_data.discover(counted)
@@ -2677,6 +2681,44 @@ def translate_redundant(
         ) if selected else {"removed": 0}
         out["removed"] = removed["removed"]
         out["pruned"] = {"keys": len(selected)}
+    return out
+
+
+@mcp.tool()
+def translate_drift(root: str, filter: str = "", limit: int = 50, offset: int = 0) -> dict:
+    """Phrases whose translation names a name otherwise than the name's own pair.
+
+    A phrase entry translates a comment line whole, names included, and nothing ties those
+    names to the tokens section: a token renamed after the phrase was written, or a line
+    translated as prose, leaves the English comment naming something the English tree does
+    not have. The tree builds, so the strict gate stays silent; the only trace was a finding
+    of `comment/unknown-name` on the English tree, pointing at the comment, not at the entry.
+
+    root   - the project directory (a root without a dictionary next to or above it is
+             refused with the places looked at);
+    filter - a substring of the name, the comment line, its translation or a name it says
+             instead;
+    limit/offset - the page (limit 0 means all); a cut page says so in `truncated`.
+
+    Each row: `name` (as the line writes it), `expected` (the token pair first, then the
+    platform's English spellings), `found` (the names the translation says instead - Latin
+    names that are neither a token value nor a word of the platform data), `key` and `value`
+    of the phrase, and the `file` and `line` of the entry. The check reads the dictionary
+    alone. A translation that renders the name in plain words names nothing and is not
+    listed: there is nothing to rename there.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    project, dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    path = translate_cli.dictionary_path_for(project)
+    rows = translate_cli.drift_rows(path, dictionary, filter or "")
+    page, paging = entries_module.page_of(rows, limit, offset)
+    out = {**paging, "dictionary": str(path), "drift": page}
+    if rows:
+        out["note"] = i18n.t("translate.drift.note")
     return out
 
 

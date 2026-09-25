@@ -372,7 +372,8 @@ The text report names the first twenty and counts the rest. The json payload car
 `planned` (the size of the tree the pass would write) and `removals`, all of them. Without `--out`
 there is no tree to describe, and the flag is refused rather than ignored.
 
-The table modes - `--gaps`, `--entries`, `--table`, `--unused`, `--redundant`, `--suggest` - write
+The table modes - `--gaps`, `--entries`, `--table`, `--unused`, `--redundant`, `--drift`,
+`--suggest` - write
 no tree at all. So they refuse `--out`, `--clean`, `--dry-run` and `--missing` as well, and name
 the run that does write the tree.
 
@@ -527,6 +528,7 @@ xbsl translate e1c/app --set правки.yaml                   # apply a batch
 xbsl translate e1c/app --unused                            # entries the project no longer uses
 xbsl translate e1c/app --stale --filter ПодсказкаТарифа     # the same, about the names of one deleted component
 xbsl translate e1c/app --redundant                         # entries the platform answers itself
+xbsl translate e1c/app --drift                             # phrases naming a name otherwise than its pair
 ```
 
 `--table` answers all three questions in one pass, and that is what it exists for. The editor table asks exactly those three. Asked apart they are two identical walks over the sources in two processes, plus a third reading of the same dictionary.
@@ -627,6 +629,18 @@ that happens with a word the platform spells in one role and not in another. An 
 never uses is not listed here at all, because that is the orphan question and `--unused` answers
 it.
 
+`--drift` looks at the phrases. A comment line is translated whole, names included, and nothing
+ties a name inside the translation to the tokens section. A token renamed after the phrase was
+written, or a line translated with its own idea of a name, leaves the English comment naming
+something the English tree does not have, and the only trace used to be a `comment/unknown-name`
+finding on the English tree - on the comment, not on the entry to fix. The mode lists every name
+of a phrase key that has a pair, a token of the project or the platform's English spelling, when
+the translation carries none of the pair's spellings and names something unknown in its place:
+`ОбщееСклада -> StockCommon, while the translation names WarehouseCommon`, with the file and line
+of the entry. A translation that renders the name in plain words names nothing and is not listed.
+The mode reads the dictionary alone, answers in seconds and stays out of `--strict`: the tree
+builds either way, and the gate answers whether it builds.
+
 `--gaps` shows the count, the first places to look at and `suggestion`, the platform's own
 spelling where it has one. A suggestion stays a hint: a name the project declared may deliberately
 need a different word. An internal platform name, such as the metadata class `CodeAttrMd`, is
@@ -663,6 +677,10 @@ never offered at all.
   engine. `filter` narrows it, `prune` (off by default) removes every entry `filter` selects,
   whatever the page, and `pruned.keys` counts them; unlike `translate_unused` it runs a full pass, because the verdict rests on the places
   the entry actually answered;
+- `translate_drift` - the phrases whose translation names a name otherwise than its pair (the
+  `--drift` listing): each row gives the name, the spellings of its pair, the names the
+  translation says instead and the file and line of the entry; `filter` narrows it by any of
+  those texts;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
 

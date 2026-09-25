@@ -73,6 +73,28 @@ entry either - say what the behaviour was, not which class name was compared.
   and suggests one server method with a typed result. The rule is informational and off by
   default, judges the opening path unless `scope` is `all`, and leaves out branches, loops, cached
   methods and calls split between different `try` statements. ([#147](https://github.com/keyfire/xbsl/pull/147))
+- **`code/url-data-scheme` reports a data address passed to the Url constructor.** The
+  constructor parses `data:` as a path, the browser refuses the result, and a picture fed it draws
+  nothing; the `Image` property takes no string either. The warning points to an HTTP service of
+  the project or a resource instead. ([#148](https://github.com/keyfire/xbsl/pull/148))
+- **`code/bound-handler-annotation` reports `@Handler` on a method the yaml binds.** The
+  annotation marks an override of a handler of the base type, and the compiler refuses it on a
+  handler of an event, a command or a route that the paired yaml names. The fix removes the
+  annotation. ([#148](https://github.com/keyfire/xbsl/pull/148))
+- **`xbsl translate --drift` lists the phrases that name a name otherwise than its pair.** A token
+  renamed after its phrase was written left the English comment naming something the English tree
+  does not have, and only `comment/unknown-name` on the English tree noticed, at the comment. The
+  listing reads the dictionary alone and gives the file and line of each phrase; MCP has
+  `translate_drift`. ([#148](https://github.com/keyfire/xbsl/pull/148))
+
+### Fixed
+
+- **A list of files inside a project is judged the way the tree is.** A file named relative to the
+  working directory stayed relative while the project around it came in resolved, so its subsystem
+  was not found: `code/foreign-not-public` took the module for the project module, and
+  `code/unknown-resource` lost the resources of the project. Every file of such a run is resolved
+  now, and the file rules skip the context, which makes a list run about a fifth faster.
+  ([#148](https://github.com/keyfire/xbsl/pull/148))
 
 ## 2026-09-24 – 0.118.0
 

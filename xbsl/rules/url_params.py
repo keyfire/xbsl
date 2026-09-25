@@ -1,4 +1,4 @@
-"""Tier D: the partial encoding of Url query parameter values.
+"""Tier D: two ways the Url type spoils an address - the query parameters and the data scheme.
 
 The code/url-params-partial-encoding rule. The chain `новый Url(...).СПараметрамиЗапроса(...)`
 encodes a parameter VALUE only partially: "&" and "=" inside the value stay separators, so a
@@ -24,6 +24,21 @@ The rule stays info and OFF by default: whether a value can carry "&" is invisib
 static check, and a call whose values are known to be plain - an OAuth state, a fixed scope,
 a random token - is legitimate and common. Enable it point-wise when an address (a return
 link, a page reference) can end up among the values.
+
+The code/url-data-scheme rule. The constructor parses a `data:` address as a hierarchical
+one: it puts a slash after the scheme, collapses `//` inside the payload and encodes `;`, `,`,
+`+` and `=` as path characters. A live probe (a web client, 2026-09) handed the `<img>` node
+`data:/image/svg%2Bxml%3Butf8%2C...`, the browser answered `net::ERR_INVALID_URL` and drew a
+broken image; the second argument (`РаскодироватьЗначение = Ложь`) only encodes `%` once more.
+The `Image` property of a picture takes a Url or a binary object reference, not a
+string, so there is no way to hand the data address over as it is. The cure is an address the
+browser can fetch: an HTTP service of the project that renders the image, or a resource.
+
+What is judged is a string literal opening with `data:` (the scheme in any letter case) as the
+first argument of the constructor, positional or named, in either spelling of the keyword and
+with or without the `Стд::Http::` qualifier. A data address built elsewhere and passed in a
+variable is not traced: the literal is the shape the live case had, and a finding there is
+certain. Hence a warning, on by default.
 """
 
 from __future__ import annotations
@@ -52,6 +67,22 @@ MESSAGES = {
               "first '&'. When an address can end up among the values, build the string "
               "with 'UrlParameters.ToEncodedString()' itself and glue it to the base "
               "address (the leading '?' is part of what it returns).",
+    },
+    "code/url-data-scheme.title": {
+        "ru": "Адрес data в конструкторе Url",
+        "en": "A data address passed to the Url constructor",
+    },
+    "code/url-data-scheme.found": {
+        "ru": "'{new} Url' разбирает адрес data как путь: вставляет слэш после схемы и кодирует "
+              "';' и ',' как символы пути. Браузер отвечает на такой адрес ERR_INVALID_URL, и "
+              "картинка не рисуется; второй аргумент конструктора не помогает, а строку "
+              "свойство Изображение не принимает. Отдавайте картинку адресом HTTP-сервиса "
+              "проекта или ресурсом.",
+        "en": "'{new} Url' parses a data address as a path: it puts a slash after the scheme "
+              "and encodes ';' and ',' as path characters. The browser answers such an address "
+              "with ERR_INVALID_URL and draws no image; the second argument of the constructor "
+              "does not help, and the {n[Изображение]} property takes no string. Serve the "
+              "image by the address of an HTTP service of the project or as a resource.",
     },
 }
 i18n.register(MESSAGES)
@@ -107,3 +138,65 @@ def url_params_partial_encoding(source: SourceFile) -> Iterable[Diagnostic]:
             Severity.INFO,
             i18n.t("code/url-params-partial-encoding.call", method=tok.value),
         )
+
+
+#: The type the constructor builds; the English form, if it ever differs, from the dictionary.
+_URL_TYPE = "Url"
+
+#: The scheme of the address the constructor spoils (RFC 2397 names it case-insensitively).
+_DATA_SCHEME = "data:"
+
+
+@lru_cache(maxsize=1)
+def _url_spellings() -> frozenset[str]:
+    """The spellings of the type name; without the data - the catalog name alone."""
+    try:
+        from xbsl import terms
+
+        return frozenset({_URL_TYPE, *terms.forms(_URL_TYPE, "types")})
+    except Exception:  # noqa: BLE001 - no data is an answer, not a failure
+        return frozenset({_URL_TYPE})
+
+
+dataset.register_reset(_url_spellings.cache_clear)
+
+
+def _is_data_literal(tok) -> bool:
+    """A plain string literal whose text opens with the data scheme."""
+    return tok.kind == "STRING" and tok.value[1:].lower().startswith(_DATA_SCHEME)
+
+
+@rule(
+    "code/url-data-scheme", "code/url-data-scheme.title", "D",
+    severity=Severity.WARNING,
+)
+def url_data_scheme(source: SourceFile) -> Iterable[Diagnostic]:
+    if source.kind != "xbsl" or _DATA_SCHEME not in source.text.lower():
+        return
+    toks = code_tokens(source)
+    count = len(toks)
+    for index, tok in enumerate(toks):
+        if tok.kind != "KEYWORD" or tok.canonical != "NEW":
+            continue
+        name = index + 1
+        # `новый Стд::Http::Url(...)`: the qualifier is skipped, the last name decides.
+        while (name + 1 < count and toks[name].kind == "IDENT"
+               and toks[name + 1].kind == "OP" and toks[name + 1].value == "::"):
+            name += 2
+        if name + 1 >= count or toks[name].kind != "IDENT":
+            continue
+        if toks[name].value not in _url_spellings():
+            continue
+        if toks[name + 1].kind != "OP" or toks[name + 1].value != "(":
+            continue
+        first = name + 2
+        # A named first argument: `новый Url(Ссылка = "data:...")`.
+        if (first + 1 < count and toks[first].kind == "IDENT"
+                and toks[first + 1].kind == "OP" and toks[first + 1].value == "="):
+            first += 2
+        if first < count and _is_data_literal(toks[first]):
+            literal = toks[first]
+            yield Diagnostic(
+                source.rel, literal.line, literal.col, "code/url-data-scheme",
+                Severity.WARNING, i18n.t("code/url-data-scheme.found", new=tok.value),
+            )

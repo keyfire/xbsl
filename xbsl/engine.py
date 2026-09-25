@@ -13,7 +13,7 @@ import difflib
 import os
 import re
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TypeVar
@@ -655,7 +655,16 @@ def run_sources(
     ignore: set[str] | None = None,
     enable: set[str] | None = None,
     scopes: tuple[str, ...] = ("file", "project"),
+    context: Collection[Path] | None = None,
 ) -> list[Diagnostic]:
+    """Run the active rules over the sources.
+
+    `context` names the sources loaded for the project picture only (the rest of the project
+    around a file checked on its own): the project rules read them, the file rules skip them.
+    A file rule reports on the file it is given - checked on four corpora, not one finding of
+    theirs lands elsewhere - so its findings on a context file would be narrowed away anyway,
+    and on a project that was a quarter of a list run.
+    """
     from xbsl import dataset
 
     # Data installed while an editor or an MCP server keeps running is picked up here: a read
@@ -671,6 +680,8 @@ def run_sources(
     if "file" in scopes:
         file_rules = [r for r in active if r.scope == "file"]
         for src in sources:
+            if context and src.path in context:
+                continue
             for r in file_rules:
                 diags.extend(_rule_diags(r, src.rel, lambda r=r, src=src: r.func(src)))
     if "project" in scopes:
@@ -696,9 +707,33 @@ def run(
     select: set[str] | None = None,
     ignore: set[str] | None = None,
     enable: set[str] | None = None,
+    context: Collection[Path] | None = None,
 ) -> list[Diagnostic]:
     sources = [load(p) for p in paths]
-    return run_sources(sources, select=select, ignore=ignore, enable=enable)
+    return run_sources(sources, select=select, ignore=ignore, enable=enable, context=context)
+
+
+def narrow_to_requested(
+    diagnostics: Iterable[Diagnostic], requested: Iterable[Path],
+) -> list[Diagnostic]:
+    """The findings of the requested files, each under the path the way it was asked for.
+
+    A run with project context checks every file under its resolved path (the placement of a
+    file is read against the resolved project root), while the report speaks of the files
+    the way the caller named them. A path is resolved once per distinct string: a report of
+    thousands of findings repeats a handful of paths.
+    """
+    typed = {p.resolve(): str(p) for p in requested}
+    resolved: dict[str, Path] = {}
+    out: list[Diagnostic] = []
+    for d in diagnostics:
+        key = resolved.get(d.path)
+        if key is None:
+            key = resolved[d.path] = Path(d.path).resolve()
+        path = typed.get(key)
+        if path is not None:
+            out.append(d if d.path == path else replace(d, path=path))
+    return out
 
 
 # --- parallel run ------------------------------------------------------------------------
@@ -718,7 +753,8 @@ def _worker_lint(payload: tuple) -> tuple[list[Diagnostic], dict[str, dict[str, 
     A file worker additionally runs the mappers of the map-reduce project rules
     (mapped_ids) over its shard - the AST/yaml caches are already warm there - and
     returns the facts as {rule_id: {rel: fact}}; the reduce runs in the parent."""
-    kind, paths, select, ignore, enable, lang, element_version, mapped_ids, data_root = payload
+    (kind, paths, select, ignore, enable, lang, element_version, mapped_ids, data_root,
+     context) = payload
     from xbsl import dataset, i18n
 
     i18n.set_lang(lang)
@@ -732,7 +768,10 @@ def _worker_lint(payload: tuple) -> tuple[list[Diagnostic], dict[str, dict[str, 
         dataset.set_version(element_version)
     sources = [load(Path(p)) for p in paths]
     scopes = ("project",) if kind == "project" else ("file",)
-    diags = run_sources(sources, select=select, ignore=ignore, enable=enable, scopes=scopes)
+    diags = run_sources(
+        sources, select=select, ignore=ignore, enable=enable, scopes=scopes,
+        context=frozenset(Path(p) for p in context),
+    )
     facts: dict[str, dict[str, object]] = {}
     if kind == "file" and mapped_ids:
         by_id = {r.id: r for r in RULES if r.mapper is not None}
@@ -773,15 +812,16 @@ def run_parallel(
     jobs: int = 0,
     lang: str | None = None,
     element_version: str | None = None,
+    context: Collection[Path] | None = None,
 ) -> list[Diagnostic]:
     """run() with the file rules sharded across processes.
 
     Diagnostics are sorted by (file, line, column) - the parallel and the sequential
-    runs produce the same report.
+    runs produce the same report. `context` - as in run_sources.
     """
     workers = resolve_jobs(jobs, len(paths))
     if workers <= 1:
-        diags = run(paths, select=select, ignore=ignore, enable=enable)
+        diags = run(paths, select=select, ignore=ignore, enable=enable, context=context)
         return sorted(diags, key=lambda d: (d.path, d.line, d.col, d.rule_id))
 
     from concurrent.futures import ProcessPoolExecutor
@@ -810,12 +850,14 @@ def run_parallel(
     file_workers = max(1, workers - group_count)
     chunks = [[str(p) for p in paths[i::file_workers]] for i in range(file_workers)]
     pinned_root = dataset.pinned_root()
+    skipped = sorted(str(p) for p in context) if context else []
     payloads: list[tuple] = [
-        ("file", chunk, select, ignore, enable, lang, element_version, mapped_ids, pinned_root)
+        ("file", chunk, select, ignore, enable, lang, element_version, mapped_ids, pinned_root,
+         skipped)
         for chunk in chunks if chunk
     ]
     payloads += [
-        ("project", all_paths, group, None, None, lang, element_version, (), pinned_root)
+        ("project", all_paths, group, None, None, lang, element_version, (), pinned_root, [])
         for group in project_groups
     ]
     diags: list[Diagnostic] = []

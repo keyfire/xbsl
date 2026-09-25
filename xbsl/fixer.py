@@ -109,6 +109,9 @@ def fix_paths(
 
     data = baseline.load(baseline_path, strict=True) if baseline_path is not None else None
     wanted = {p.resolve() for p in requested} if requested is not None else None
+    # The context of a list run feeds the project rules only (engine.run_sources).
+    context = (frozenset(p for p in files if p.resolve() not in wanted)
+               if wanted is not None else None)
     fixed = 0
     changed: set[Path] = set()
     frozen: list[_AcceptedOccurrence] = []
@@ -121,7 +124,9 @@ def fix_paths(
             lines = starts[diagnostic.path]
             return lines[min(diagnostic.line - 1, len(lines) - 1)] + diagnostic.col - 1
 
-        diagnostics = engine.run_sources(sources, select=select, ignore=ignore, enable=enable)
+        diagnostics = engine.run_sources(
+            sources, select=select, ignore=ignore, enable=enable, context=context,
+        )
         if wanted is not None:
             diagnostics = [d for d in diagnostics if Path(d.path).resolve() in wanted]
         if iteration == 0 and data is not None:
@@ -182,4 +187,13 @@ def fix_paths(
                 progress = True
         if not progress:
             break
+    if requested is not None:
+        # The run went over resolved paths (cli.discover_with_context); the report names the
+        # files as they were asked for. The findings are already narrowed to those files, so
+        # the two lists align one to one, and the pinned pairs follow their current finding.
+        narrowed = engine.narrow_to_requested(diagnostics, requested)
+        renamed = {id(old): new for old, new in zip(diagnostics, narrowed)}
+        accepted = [(renamed.get(id(current), current), original)
+                    for current, original in accepted]
+        diagnostics = narrowed
     return diagnostics, {"fixed": fixed, "files_changed": len(changed)}, accepted
