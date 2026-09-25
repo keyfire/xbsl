@@ -136,14 +136,17 @@ def _forms(name: str) -> frozenset[str]:
 dataset.register_reset(_forms.cache_clear)
 
 
-@lru_cache(maxsize=None)
-def _fields(cls: type) -> tuple[str, ...]:
-    """Field names of a node class (a node of the native build has no instance dictionary)."""
-    return tuple(f.name for f in dataclasses.fields(cls))
+#: Field names per node class, read from the class: a node of the native build has no
+#: instance dictionary.
+_FIELDS: dict[type, tuple[str, ...]] = {}
 
 
 def _children(node) -> list:
-    return [getattr(node, name) for name in _fields(type(node))]
+    cls = type(node)
+    names = _FIELDS.get(cls)
+    if names is None:
+        names = _FIELDS[cls] = tuple(f.name for f in dataclasses.fields(cls))
+    return [getattr(node, name) for name in names]
 
 
 def _path_key(expr) -> str | None:
@@ -340,11 +343,11 @@ class _Flow:
         if target is None and receiver is None and all(value is None for _n, value in args):
             return None
         line, col = self.lines.linecol(e.start)
-        callee = e.callee
         if target is None:
             spelled = ""
         elif target[0] == "k":
-            spelled = f"{callee.obj.obj.name}.{target[1]}.{target[2]}"
+            # `Components` as the module wrote it: the message quotes the source.
+            spelled = ".".join((_path_key(e.callee) or "").split(".")[:1] + target[1:])
         elif target[0] == "q":
             spelled = f"{target[1]}.{target[2]}"
         else:
