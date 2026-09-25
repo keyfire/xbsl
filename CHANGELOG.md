@@ -32,7 +32,7 @@ entry either - say what the behaviour was, not which class name was compared.
   row.** Each call is a round trip, and on page open the waits add up; the finding lists the calls
   and suggests one server method with a typed result. The rule is informational and off by
   default, judges the opening path unless `scope` is `all`, and leaves out branches, loops, cached
-  methods and calls split between different `try` statements.
+  methods and calls split between different `try` statements. ([#147](https://github.com/keyfire/xbsl/pull/147))
 
 ## 2026-09-24 – 0.118.0
 

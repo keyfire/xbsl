@@ -14,7 +14,7 @@
 ### Added
 
 - **The `code/sequential-server-calls` finding links to the documentation.** Its code in the
-  Problems panel opens the page about passing execution from the client to the server.
+  Problems panel opens the page about passing execution from the client to the server. ([#147](https://github.com/keyfire/xbsl/pull/147))
 
 ## 0.77.0
 
