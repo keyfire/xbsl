@@ -41,33 +41,68 @@ the width of its row), which the collapse does not touch.
 
 --- yaml/size-needs-no-stretch (a fixed size without disabling the stretch) ---
 
-The platform gotcha: РастягиватьПоВертикали/РастягиватьПоГоризонтали are `Авто|Булево` and at
-`Авто` the platform decides on its own whether to stretch the component (the docs topic
-"Размещение компонентов на экране"). When it decides to stretch, flex-grow takes the parent's
-leftover space and the fixed Height/Width is overridden - blank space below the component,
-inflated neighbours. The fix is an explicit `РастягиватьПоВертикали: Ложь` (respectively
-`РастягиватьПоГоризонтали: Ложь`) next to the size.
+The platform gotcha: `VerticalStretch`/`HorizontalStretch` are `Auto|Boolean`, and at `Auto`
+the platform resolves the stretch by the component kind (the docs topic on arranging
+components on the screen). When it resolves to "stretch", flex-grow takes the parent's leftover
+space and the fixed Height/Width is overridden - blank space below the component, inflated
+neighbours. The fix is an explicit `VerticalStretch: False` (respectively
+`HorizontalStretch: False`) next to the size.
 
-Narrowing - driven by a survey of a real deployed project (130 yaml, 195 nodes carrying
-Высота/Ширина), where a formal "size without Растягивать" is often perfectly valid:
+Which kinds stretch at the auto value is not in the data. The ui schema gives both stretch
+properties of every component the same type and one line of text, no default. The
+documentation spells a resolution out twice, and the two lists disagree. The page of the base
+component type names the table, the HTML container and a multi-line input field as stretching
+and every other kind as not, a group and pages by their children. The pages of the components
+name only the table (and a matrix group), so the HTML container does not stretch there. The web
+client agrees with neither list in full. So the checked set is an OBSERVATION, kept in
+`_STRETCH_AT_AUTO` below. A live page (25.09.2026) put every kind that needs no data of its own
+into cells of a fixed size - `Height: 100` in a vertical cell 420 high, `Width: 100` in a
+horizontal cell 360 wide - in four variants: no key, `Auto`, `False`, `True`; the computed flex
+of the component and its size were read in the browser. The variant without the key matched
+`Auto` on every kind, `True` stretched every kind, `False` stopped the stretch on every kind
+(flex-grow 0, the control). What `Auto` did:
 
-- components with an intrinsic (content) size - pictures (80 nodes), groups (7), labels (1),
-  HTML editors (1) - practically never set stretching next to a size and work fine: for them
-  `Авто` reliably resolves to "do not stretch", so they are not checked;
-- HTML containers - the only kind with mass evidence both ways: 73 of 93 size-carrying nodes set
-  `Растягивать*: Ложь` (or a binding), yet 20 deployed nodes omit it and still work (the parent
-  has no leftover space along that axis, which is not statically decidable). The convention is
-  strong but not a 100% law, so a warning is impossible without false positives;
-- tables (3 without / 1 with) and standard cards (bindings only) - singular samples,
-  not checked.
+- stretched along both axes: the HTML container, the table, the standard and the custom list,
+  the formatted document, the PDF view, the speedometer and the pie chart, the separating group;
+- stretched along the width only: pages, the tags panel, the stages panel, the file list, a
+  multi-line input field (`StringInputSettings` with `Multiline: True`);
+- kept the size along both axes: the label, the picture, a single-line input field, the button,
+  the checkbox, the group (a matrix one too, against the component pages), the stack group, the
+  collapsible component, the standard and the custom card, the choice component, the value
+  choice, the HTML editor, the file choice.
+
+The groups follow their content, as both lists say: a group, a stack group or pages holding an
+HTML container without the key stretched along both axes. The rule does not follow that chain -
+the content is judged on its own line.
+
+A kind that was not measured is not judged: whether it stretches is exactly what a file cannot
+tell, and a guess would either stay silent where it matters or speak where it does not. A new
+kind joins the table only with a measurement on a live page behind it.
+
+A list kind - the table, the standard list, the custom list - does not keep its height with the
+stretch off alone: its rows area keeps a content minimum (`min-height: min-content`), the list
+grows with its rows, and `Height` becomes a lower bound (three rows under `Height: 100` came out
+156-220 pixels high). `VerticalScroll: True` lifts the minimum, and only the pair holds the
+height. So for a list the vertical advice names both keys, and `VerticalStretch: False` without
+that scroll is judged as well - it is where an author who followed half of the advice ends up,
+and the height does not hold there either. The width of a list holds with `False` alone.
+
+The stretch acts along the main axis of the parent: a height inside a horizontal group (a width
+inside a vertical one) kept its size on every measured kind with the key and without it, the
+lists aside. The yaml does not tell the axis of the parent reliably - forms, pages and slots lay
+their content out by their own defaults - so the rule does not try, which is one more reason it
+is a hint. Some kinds also keep a minimum of their own that `False` does not lift (the formatted
+document 200 pixels either way, the stages panel 300 in width, the file list its content height):
+a size below it does not hold with any key, and that is not this rule's business.
 
 Hence the rule is a diagnostic hint, not a warning: severity INFO and disabled by default (the
-style/line-length model). Enable it point-blank (`--select yaml/size-needs-no-stretch`) when a
-layout shows the symptom - blank space or inflated neighbours around a fixed-size component -
-to list the candidates. Checked are only КонтейнерHtml nodes (an iframe has no intrinsic size,
-so `Auto` most often resolves to "stretch") whose size is set: a positive number or a binding.
-The auto value and zero are skipped. Only a missing stretch key fires - an explicit
-`Авто` or `Истина` is taken as the author's deliberate choice.
+style/line-length model). A live project keeps 20 of 93 size-carrying HTML containers without the
+key, and they work - their parent has no leftover space along that axis, which is not statically
+decidable. Enable the rule point-blank (`--select yaml/size-needs-no-stretch`) when a layout shows
+the symptom - blank space or inflated neighbours around a fixed-size component - to list the
+candidates. Judged is a size that is set: a positive number or a binding; the auto value and zero
+are skipped. Only a missing stretch key fires (and the list case above) - an explicit `Auto` or
+`True` is taken as the author's deliberate choice.
 
 A binding (`Height: =FrameHeightPx`) is a set size: it yields a number at run time, and the
 stretch overrides that number exactly as it overrides a literal. Skipping bindings hid the case
@@ -75,15 +110,6 @@ the rule exists for: an insert whose height followed its widget through a bindin
 whole leftover height of a full-screen phone window and pushed the button below it under the
 browser toolbar, while a point-blank run over the project reported nothing. A binding with an
 `Auto` branch is judged too - its numeric branch is overridden all the same.
-
-Which kinds stretch at the auto value is not in the data. The ui schema gives both stretch
-properties a type and one line of text, no default. The documentation page of the HTML
-container does spell out what the auto value resolves to per kind: false for every kind the
-list does not name, true for a table and a matrix group, the verdict of the content for a
-group. The HTML container itself is not named there, so by the book it does not stretch - yet
-the web client gives a container without the key `flex: 1 0 auto` on a live project, along
-either axis. The checked set is therefore kept by observation rather than read from that list,
-and a kind joins it only with a measurement on a live page behind it.
 
 --- yaml/col-width-needs-no-stretch (a column width that turns into a share) ---
 
@@ -114,7 +140,7 @@ drifting away from its neighbour). The message carries both cures: `HorizontalSt
 False` for a pixel width, and `MinWidth` for a share with a guaranteed minimum - 30
 columns of the surveyed project already live that way.
 
-A SEPARATE rule rather than a new entry in `_CHECKED_TYPES`: a point-blank `--select` must
+A SEPARATE rule rather than a new entry in `_STRETCH_AT_AUTO`: a point-blank `--select` must
 tell columns from `HtmlContainer`, and a column is judged on the `Width` axis alone - the
 `Height` axis of a column has not been surveyed.
 
@@ -183,11 +209,30 @@ MESSAGES = {
     },
     "yaml/size-needs-no-stretch.missing": {
         "ru": "У компонента {type} задан размер {size_key}: {value}, но нет {stretch_key}: {n[Ложь]} – "
-              "при 'Авто' платформа может растянуть компонент на остаток родителя, "
+              "при 'Авто' компонент этого вида растягивается на остаток родителя, "
               "и заданный размер будет перебит.",
         "en": "The {type} component has a fixed {size_key}: {value} but no {stretch_key}: {n[Ложь]} – "
-              "at '{n[Авто]}' the platform may stretch the component over the parent's leftover space, "
+              "at '{n[Авто]}' a component of this kind stretches over the parent's leftover space, "
               "overriding the size.",
+    },
+    "yaml/size-needs-no-stretch.missing-scroll": {
+        "ru": "У компонента {type} задан размер {size_key}: {value}, но нет {stretch_key}: {n[Ложь]} – "
+              "при 'Авто' список растягивается на остаток родителя, и заданный размер будет "
+              "перебит. Одного {stretch_key}: {n[Ложь]} списку мало: без {scroll_key}: {n[Истина]} "
+              "он растёт по своим строкам и высоту не держит – нужны оба ключа.",
+        "en": "The {type} component has a fixed {size_key}: {value} but no {stretch_key}: {n[Ложь]} – "
+              "at '{n[Авто]}' a list stretches over the parent's leftover space, overriding the "
+              "size. {stretch_key}: {n[Ложь]} alone is not enough for a list: without "
+              "{scroll_key}: {n[Истина]} it grows with its rows and does not keep the height – "
+              "set both keys.",
+    },
+    "yaml/size-needs-no-stretch.no-scroll": {
+        "ru": "У компонента {type} заданы {size_key}: {value} и {stretch_key}: {n[Ложь]}, но нет "
+              "{scroll_key}: {n[Истина]} – без своей прокрутки список растёт по строкам, и "
+              "высота работает только как нижняя граница.",
+        "en": "The {type} component has a fixed {size_key}: {value} and {stretch_key}: {n[Ложь]} "
+              "but no {scroll_key}: {n[Истина]} – without a scroll of its own the list grows with "
+              "its rows, and the height works only as a lower bound.",
     },
     "yaml/col-width-needs-no-stretch.title": {
         "ru": "Ширина колонки без отключения растягивания",
@@ -219,14 +264,48 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# The component kinds checked: only where `Авто` regularly resolves to "stretch" (no
-# intrinsic size) and the `Растягивать*: Ложь` convention is the norm.
-_CHECKED_TYPES = frozenset({"КонтейнерHtml"})
+_HEIGHT, _WIDTH = "Высота", "Ширина"
+
+#: The kinds whose stretch resolves to "stretch" at `Auto`, and the size keys it overrides
+#: there. An observation of the web client, not data (the ui schema carries no default): the
+#: live page described in the module docstring. The kinds measured as keeping their size are
+#: absent on purpose, as are the kinds never measured.
+_STRETCH_AT_AUTO: dict[str, frozenset[str]] = {
+    "КонтейнерHtml": frozenset({_HEIGHT, _WIDTH}),
+    "Таблица": frozenset({_HEIGHT, _WIDTH}),
+    "СтандартныйСписок": frozenset({_HEIGHT, _WIDTH}),
+    "ПроизвольныйСписок": frozenset({_HEIGHT, _WIDTH}),
+    "ФорматированныйДокумент": frozenset({_HEIGHT, _WIDTH}),
+    "ПросмотрPdf": frozenset({_HEIGHT, _WIDTH}),
+    "ДиаграммаСпидометр": frozenset({_HEIGHT, _WIDTH}),
+    "КруговаяДиаграмма": frozenset({_HEIGHT, _WIDTH}),
+    "РазделяющаяГруппа": frozenset({_HEIGHT, _WIDTH}),
+    "Страницы": frozenset({_WIDTH}),
+    "ПанельТегов": frozenset({_WIDTH}),
+    "ПанельЭтапов": frozenset({_WIDTH}),
+    "СписокФайлов": frozenset({_WIDTH}),
+}
+
+#: The list kinds: with the stretch off their rows area still keeps a content minimum, and the
+#: height holds only together with a scroll of their own.
+_SCROLLED_LISTS = frozenset({"Таблица", "СтандартныйСписок", "ПроизвольныйСписок"})
+
+#: An input field stretches along the width only when it is multi-line; a single-line one keeps
+#: its size (both measured). The setting lives in a nested block of the node.
+_INPUT_FIELD = "ПолеВвода"
+_STRING_INPUT_SETTINGS = "НастройкиВводаСтроки"
+_MULTILINE = "Многострочная"
+_V_SCROLL_KEY = "ПрокруткаПоВертикали"
+#: The literal values of a boolean key, in either spelling of the file; anything else (a
+#: binding) is left to the author.
+_TRUE_VALUES = frozenset({"Истина", "True", "true"})
+_FALSE_VALUES = frozenset({"Ложь", "False", "false"})
+_LITERALS = _TRUE_VALUES | _FALSE_VALUES | frozenset({"Авто", "Auto"})
 
 # (the size key, the stretch key of the same axis)
 _AXES = (
-    ("Высота", "РастягиватьПоВертикали"),
-    ("Ширина", "РастягиватьПоГоризонтали"),
+    (_HEIGHT, "РастягиватьПоВертикали"),
+    (_WIDTH, "РастягиватьПоГоризонтали"),
 )
 
 
@@ -437,6 +516,7 @@ def card_literal_stretch_weight(source: SourceFile) -> Iterable[Diagnostic]:
     severity=Severity.INFO, enabled_by_default=False, off_reason="yaml/size-needs-no-stretch.off",
 )
 def size_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
+    """A set size on a kind that stretches at `Auto` - the stretch overrides the size."""
     if source.kind != "yaml" or not _HAVE_YAML:
         return
     data, err = _parsed(source)
@@ -448,33 +528,99 @@ def size_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
     for mapping in _mapping_nodes(root):
         keys = _scalar_entries(mapping)
         type_entry = keys.get("Тип")
-        if (
-            type_entry is None
-            or not isinstance(type_entry[1], yaml.ScalarNode)
-            or uischema.canonical_component(type_entry[1].value) not in _CHECKED_TYPES
-        ):
+        if type_entry is None or not isinstance(type_entry[1], yaml.ScalarNode):
+            continue
+        written_type = type_entry[1].value.split("<", 1)[0].strip()
+        kind = uischema.canonical_component(written_type)
+        stretched_sizes = _stretched_sizes(mapping, kind)
+        if not stretched_sizes:
             continue
         for size_key, stretch_key in _AXES:
             entry = keys.get(size_key)
-            if entry is None or stretch_key in keys or not _set_size(entry[1]):
+            if size_key not in stretched_sizes or entry is None or not _set_size(entry[1]):
+                continue
+            message_key = _size_verdict(keys, kind, size_key, stretch_key)
+            if message_key is None:
                 continue
             key_node = entry[0]
             # The advice names the keys the way the file spells them: telling an English-spelled
             # form to add `РастягиватьПоВертикали` would send the author looking for a key that
             # does not belong in it.
-            shown_stretch = stretch_key
+            shown_stretch, shown_scroll = stretch_key, _V_SCROLL_KEY
             if key_node.value.isascii():
                 shown_stretch = terms.common_english(stretch_key) or stretch_key
+                shown_scroll = terms.common_english(_V_SCROLL_KEY) or _V_SCROLL_KEY
             yield Diagnostic(
                 source.rel,
                 key_node.start_mark.line + 1, key_node.start_mark.column + 1,
                 "yaml/size-needs-no-stretch", Severity.INFO,
                 i18n.t(
-                    "yaml/size-needs-no-stretch.missing",
-                    type=type_entry[1].value, size_key=key_node.value,
-                    value=entry[1].value, stretch_key=shown_stretch,
+                    message_key,
+                    type=written_type, size_key=key_node.value, value=entry[1].value,
+                    stretch_key=shown_stretch, scroll_key=shown_scroll,
                 ),
             )
+
+
+def _stretched_sizes(mapping, kind: str | None) -> frozenset[str]:
+    """The size keys the stretch at `Auto` overrides on this node, empty when it keeps them."""
+    sizes = _STRETCH_AT_AUTO.get(kind or "")
+    if sizes:
+        return sizes
+    if kind == _INPUT_FIELD and _is_multiline(mapping):
+        return frozenset({_WIDTH})
+    return frozenset()
+
+
+def _is_multiline(mapping) -> bool:
+    """Whether an input field node sets `Multiline: True` in its string input settings."""
+    for key, value in mapping.value:
+        if (
+            isinstance(key, yaml.ScalarNode)
+            and uischema.canonical_property(key.value) == _STRING_INPUT_SETTINGS
+            and isinstance(value, yaml.MappingNode)
+        ):
+            entry = _scalar_entries(value).get(_MULTILINE)
+            return (
+                entry is not None
+                and isinstance(entry[1], yaml.ScalarNode)
+                and entry[1].value.strip() in _TRUE_VALUES
+            )
+    return False
+
+
+def _size_verdict(keys: dict, kind: str | None, size_key: str, stretch_key: str) -> str | None:
+    """The message key for a set size on a kind that stretches at `Auto`, or None when it holds.
+
+    A missing stretch key is the finding everywhere. The height of a list needs its own scroll
+    as well, so there a missing key is reported with both keys named, and a literal `False`
+    without `VerticalScroll: True` is reported too. Any other value the author wrote - `Auto`,
+    `True`, a binding, a bound scroll - is a deliberate choice and stays silent.
+    """
+    needs_scroll = kind in _SCROLLED_LISTS and size_key == _HEIGHT
+    scroll = keys.get(_V_SCROLL_KEY)
+    scroll_value = (
+        scroll[1].value.strip() if scroll is not None and isinstance(scroll[1], yaml.ScalarNode)
+        else None
+    )
+    scrolls = scroll_value in _TRUE_VALUES
+    # A bound scroll is the author's call: no advice about it either way.
+    scroll_literal = scroll is None or scroll_value in _LITERALS
+    stretch = keys.get(stretch_key)
+    if stretch is None:
+        if needs_scroll and not scrolls and scroll_literal:
+            return "yaml/size-needs-no-stretch.missing-scroll"
+        return "yaml/size-needs-no-stretch.missing"
+    if not needs_scroll or scrolls or not scroll_literal:
+        return None
+    stretch_off = (
+        isinstance(stretch[1], yaml.ScalarNode) and stretch[1].value.strip() in _FALSE_VALUES
+    )
+    if not stretch_off:
+        return None
+    return "yaml/size-needs-no-stretch.no-scroll"
+
+
 #: The table column kinds: the abstract base and both concrete kinds alike carry `Width`
 #: and `HorizontalStretch` in the ui schema, so all three are judged.
 _COLUMN_TYPES = frozenset({

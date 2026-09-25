@@ -396,6 +396,11 @@ _COLUMN_EN = ("    Content:\n        Type: Table<DynamicList>\n        Name: Lis
               "        Columns:\n            -\n                Type: StandardTableColumn\n"
               "                Width: 40\n")
 _COLUMN_TOKENS = {**_FORM_TOKENS, "Список": "List"}
+#: A table over a dynamic list with a fixed height; `{keys}` is the stretch and scroll lines.
+_LIST_HEIGHT_RU = ("    Содержимое:\n        Тип: Таблица<ДинамическийСписок>\n        Имя: Список\n"
+                   "        Высота: 200\n{keys}")
+_LIST_HEIGHT_EN = ("    Content:\n        Type: Table<DynamicList>\n        Name: List\n"
+                   "        Height: 200\n{keys}")
 #: Common modules of one environment each - the pair the environment family judges.
 _CLIENT_MODULE_RU = """\
 ВидЭлемента: ОбщийМодуль
@@ -3252,6 +3257,36 @@ SEEDS: list[Seed] = [
         files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_BOUND_RU},
         english={"ApplicationForm.yaml": _FORM_EN + _INSET_BOUND_EN},
         tokens=_INSET_BOUND_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=FINDING,
+        note="a table stretches at the auto value as well – a fixed height without the key is "
+             "overridden",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _LIST_HEIGHT_RU.format(keys="")},
+        english={"ApplicationForm.yaml": _FORM_EN + _LIST_HEIGHT_EN.format(keys="")},
+        tokens=_COLUMN_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=FINDING,
+        note="the stretch off alone does not hold the height of a list – without its own scroll "
+             "the list grows with its rows",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _LIST_HEIGHT_RU.format(
+            keys="        РастягиватьПоВертикали: Ложь\n")},
+        english={"ApplicationForm.yaml": _FORM_EN + _LIST_HEIGHT_EN.format(
+            keys="        VerticalStretch: False\n")},
+        tokens=_COLUMN_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=CLEAN,
+        note="the stretch off and a scroll of its own – the pair that holds the height of a list",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _LIST_HEIGHT_RU.format(
+            keys="        РастягиватьПоВертикали: Ложь\n        ПрокруткаПоВертикали: Истина\n")},
+        english={"ApplicationForm.yaml": _FORM_EN + _LIST_HEIGHT_EN.format(
+            keys="        VerticalStretch: False\n        VerticalScroll: True\n")},
+        tokens=_COLUMN_TOKENS,
     ),
     Seed(
         rule="yaml/col-width-needs-no-stretch",
