@@ -7,9 +7,9 @@
 ### Добавлено
 
 - **Замечание `code/bound-handler-annotation` ведет в документацию.** Его код в панели
-  "Проблемы" открывает страницу аннотации. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  "Проблемы" открывает страницу аннотации. ([#148](https://github.com/keyfire/xbsl/pull/148))
 - **Замечание `code/url-data-scheme` ведет в документацию.** Его код в панели "Проблемы" открывает
-  страницу типа Url. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  страницу типа Url. ([#148](https://github.com/keyfire/xbsl/pull/148))
 
 ## 0.77.0
 

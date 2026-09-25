@@ -38,16 +38,16 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`code/url-data-scheme` reports a data address passed to the Url constructor.** The
   constructor parses `data:` as a path, the browser refuses the result, and a picture fed it draws
   nothing; the `Image` property takes no string either. The warning points to an HTTP service of
-  the project or a resource instead. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  the project or a resource instead. ([#148](https://github.com/keyfire/xbsl/pull/148))
 - **`code/bound-handler-annotation` reports `@Handler` on a method the yaml binds.** The
   annotation marks an override of a handler of the base type, and the compiler refuses it on a
   handler of an event, a command or a route that the paired yaml names. The fix removes the
-  annotation. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  annotation. ([#148](https://github.com/keyfire/xbsl/pull/148))
 - **`xbsl translate --drift` lists the phrases that name a name otherwise than its pair.** A token
   renamed after its phrase was written left the English comment naming something the English tree
   does not have, and only `comment/unknown-name` on the English tree noticed, at the comment. The
   listing reads the dictionary alone and gives the file and line of each phrase; MCP has
-  `translate_drift`. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  `translate_drift`. ([#148](https://github.com/keyfire/xbsl/pull/148))
 
 ### Fixed
 
@@ -56,7 +56,7 @@ entry either - say what the behaviour was, not which class name was compared.
   was not found: `code/foreign-not-public` took the module for the project module, and
   `code/unknown-resource` lost the resources of the project. Every file of such a run is resolved
   now, and the file rules skip the context, which makes a list run about a fifth faster.
-  ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+  ([#148](https://github.com/keyfire/xbsl/pull/148))
 
 ## 2026-09-24 – 0.118.0
 
