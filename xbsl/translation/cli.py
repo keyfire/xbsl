@@ -488,6 +488,12 @@ MESSAGES = {
         "ru": "ключей, переведённых одинаково дважды, нет",
         "en": "no key is translated the same way twice",
     },
+    "translate.duplicates-at-ref": {
+        "ru": "дублей, которые есть и в {ref}: {count}, они только посчитаны; весь список"
+              " покажет full=true",
+        "en": "duplicates {ref} has as well: {count}, counted rather than listed; full=true"
+              " lists them all",
+    },
     "translate.summary-duplicates": {
         "ru": "ключей, переведённых одинаково в нескольких местах: {entries}"
               " (список – --check-duplicates)",
@@ -1514,7 +1520,7 @@ def dictionary_path_for(root: Path) -> Path | None:
     return entries_module.discover(root)
 
 
-def collisions_report(dictionary: Path, against: str = "") -> dict:
+def collisions_report(dictionary: Path, against: str = "", *, compact: bool = False) -> dict:
     """The keys translated in more than one place - the answer of `--check-duplicates`.
 
     `{"dictionary", "against", "conflicts", "duplicates"}`, or `{"error"}` when a file does
@@ -1524,10 +1530,17 @@ def collisions_report(dictionary: Path, against: str = "") -> dict:
     The rows are those of `dictionary.collisions`: every place a file and a line, the
     files named relative to the dictionary and the ref's copies as `ref:name`, with the lines
     that copy has.
+
+    `compact` (with a ref) lists only the duplicates the ref does not have - the ones the
+    working tree brings - and counts the rest: `duplicates_total`, `duplicates_at_ref` and
+    `duplicates_hint`. A duplicate is harmless to the load and stays until a person takes the
+    copy out, so the same rows came back whole on every check of a branch: six of them, some
+    three thousand characters a call. The conflicts are listed whole either way.
     """
     from xbsl.translation import dictionary as dictionary_module
     from xbsl.translation import entries as entries_module
 
+    at_ref: list = []
     try:
         files = dictionary_module.read_sections(dictionary)
         compared = None
@@ -1554,10 +1567,24 @@ def collisions_report(dictionary: Path, against: str = "") -> dict:
     except ValueError as exc:
         return {"error": str(exc)}
     conflicts, duplicates = dictionary_module.collisions(files)
-    return {
+    report = {
         "dictionary": str(dictionary), "against": compared,
         "conflicts": conflicts, "duplicates": duplicates,
     }
+    if compact and compared is not None:
+        # The ref's own duplicates, read from its files alone: a key it already declares twice
+        # is not this branch's doing, whichever copies the three-way view shows for it.
+        known = {(row["section"], row["key"])
+                 for row in dictionary_module.collisions(at_ref)[1]}
+        brought = [row for row in duplicates if (row["section"], row["key"]) not in known]
+        omitted = len(duplicates) - len(brought)
+        report["duplicates"] = brought
+        report["duplicates_total"] = len(duplicates)
+        report["duplicates_at_ref"] = omitted
+        if omitted:
+            report["duplicates_hint"] = i18n.t("translate.duplicates-at-ref", ref=against,
+                                               count=omitted)
+    return report
 
 
 def load_for_tools(root: str) -> tuple[Path, object, str]:

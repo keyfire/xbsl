@@ -2286,7 +2286,7 @@ def meta_add_handler(
 
 
 @mcp.tool()
-def translate_status(root: str, against: str = "") -> dict:
+def translate_status(root: str, against: str = "", full: bool = False) -> dict:
     """Coverage of the project's translation dictionary: how much is done and what is left.
 
     root - the project directory (the one with the project descriptor), next to which - or
@@ -2302,6 +2302,11 @@ def translate_status(root: str, against: str = "") -> dict:
     selected ref entries. One-sided edits and removals do not resurrect the base copy. A dictionary that does not load - a conflict already in the
     working tree - answers with the `error` naming every conflict and, when a ref was given,
     the `collisions` report next to it.
+    full - list every duplicate in `collisions`. By default `duplicates` there holds only the
+    ones the ref does not have - what this branch brings - and the rest are counted:
+    `duplicates_total`, `duplicates_at_ref` and a `duplicates_hint`. A duplicate the target
+    branch already carries is the same on every call of a branch (six rows came to some three
+    thousand characters a call); the conflicts are listed whole either way.
     Returns the totals only - a cheap health check before deciding what to fill.
     Two units live here, so read the names: `missing_tokens`, `missing_phrases`,
     `literals_translated` and `missing_literals` count DISTINCT entries - what a dictionary line
@@ -2325,7 +2330,7 @@ def translate_status(root: str, against: str = "") -> dict:
     if against and project.is_dir():
         found = translate_cli.dictionary_path_for(project)
         if found is not None:
-            collisions = translate_cli.collisions_report(found, against)
+            collisions = translate_cli.collisions_report(found, against, compact=not full)
     if error:
         return {"error": error, "collisions": collisions} if collisions else {"error": error}
     from xbsl.translation import project as project_module

@@ -632,7 +632,8 @@ never offered at all.
 **The MCP tools** are the same six, for an agent that fills the dictionary:
 
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
-  `against` names a git ref and adds the collision report of `--check-duplicates` against it;
+  `against` names a git ref and adds the collision report of `--check-duplicates` against it,
+  where the duplicates the ref already has are counted rather than listed (`full` lists them);
 - `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`),
   the answer naming the `dictionary` it read;
   `compact` returns only `{key, kind, count}` per row - the worklist shape that fits an
