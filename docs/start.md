@@ -33,6 +33,11 @@ leaves busy stubs alone, and they call the new code the next time they start. Re
 long-living processes yourself after the update. `--version X.Y.Z` installs a specific version.
 In an editable install from a clone the command refuses: `git pull` updates that one.
 
+For a release published minutes ago, both PyPI lists of releases may still name the previous
+one. Without `--version` the command reads both of them and also asks for the page of the next
+version, which PyPI serves as soon as the release is out. When the sources disagree, the
+command prints what each of them said. It never replaces an installation with an older release.
+
 The lexer and the parser are the hot modules, and mypyc can compile them into C extensions. Set
 `XBSL_MYPYC=1` at build time; you need mypy and a C compiler for that, which means MSVC Build
 Tools on Windows, Xcode CLT on macOS, gcc on Linux. Users never need a compiler. CI builds the

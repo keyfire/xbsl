@@ -64,7 +64,7 @@ def fake_site(tmp_path, monkeypatch):
 
 def test_self_update_extracts_wheel(fake_site, monkeypatch):
     monkeypatch.setattr(selfupdate, "_wheel_url",
-                        lambda v, native=False: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE))
+                        lambda v, **_: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE))
     monkeypatch.setattr(
         selfupdate.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9"))
     )
@@ -82,7 +82,7 @@ def test_self_update_extracts_wheel(fake_site, monkeypatch):
 
 def test_self_update_noop_when_current(fake_site, monkeypatch):
     monkeypatch.setattr(selfupdate, "_wheel_url",
-                        lambda v, native=False: ("http://pypi/x.whl", xbsl.__version__, selfupdate.PORTABLE))
+                        lambda v, **_: ("http://pypi/x.whl", xbsl.__version__, selfupdate.PORTABLE))
 
     def boom(*a, **k):
         raise AssertionError("скачивание не должно происходить")
@@ -101,7 +101,7 @@ def test_self_update_refuses_editable(monkeypatch, tmp_path):
 
 def test_cli_dispatch(fake_site, monkeypatch, capsys):
     monkeypatch.setattr(selfupdate, "_wheel_url",
-                        lambda v, native=False: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE))
+                        lambda v, **_: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE))
     monkeypatch.setattr(
         selfupdate.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9"))
     )
@@ -124,7 +124,7 @@ def test_cli_reports_error_as_json(monkeypatch, tmp_path, capsys):
 def _stub_download(monkeypatch, payload=None):
     monkeypatch.setattr(
         selfupdate, "_wheel_url",
-        lambda v, native=False: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE),
+        lambda v, **_: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE),
     )
     monkeypatch.setattr(
         selfupdate.urllib.request, "urlopen",
@@ -222,7 +222,7 @@ def test_portable_install_is_healed_with_the_native_wheel(fake_site, monkeypatch
     # Сквозной контроль сообщения: установка в fake_site переносимая (без .pyd), колесо
     # нативное - об исцелении говорится вслух.
     monkeypatch.setattr(selfupdate, "_wheel_url",
-                        lambda v: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.NATIVE))
+                        lambda v, **_: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.NATIVE))
     monkeypatch.setattr(
         selfupdate.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9"))
     )
@@ -444,7 +444,9 @@ def _serve(monkeypatch, index: bytes | None, meta: dict | None = None,
            missing: bool = False) -> list[str]:
     """Answer the index and the JSON metadata separately; returns the list of asked urls.
 
-    `missing` makes the JSON metadata answer 404, as PyPI does for an unknown version.
+    `missing` makes the JSON metadata answer 404, as PyPI does for an unknown version, and
+    so does a call without `meta`: the latest version is asked of every source, and a page
+    this test does not serve is one PyPI does not have.
     """
     asked: list[str] = []
 
@@ -457,13 +459,17 @@ def _serve(monkeypatch, index: bytes | None, meta: dict | None = None,
             if index is None:
                 raise OSError("index unreachable")
             return _FakeResp(index)
-        if missing:
+        if missing or meta is None:
             raise selfupdate.urllib.error.HTTPError(url, 404, "Not Found", {}, None)
-        assert meta is not None, "the JSON metadata must not be asked at all"
         return _FakeResp(json.dumps(meta).encode("utf-8"))
 
     monkeypatch.setattr(selfupdate.urllib.request, "urlopen", urlopen)
     return asked
+
+
+def _pages(*versions: str) -> list[str]:
+    """The version pages the look past the listings asks, in its order."""
+    return [selfupdate.PYPI_VERSION.format(version=version) for version in versions]
 
 
 def test_wheel_url_reads_the_simple_index(monkeypatch):
@@ -479,7 +485,8 @@ def test_wheel_url_reads_the_simple_index(monkeypatch):
 
     assert (version, kind) == ("0.51.0", selfupdate.NATIVE)
     assert url.endswith("cp314-cp314-win_amd64.whl")
-    assert asked == [selfupdate.PYPI_SIMPLE]
+    assert asked == [selfupdate.PYPI_SIMPLE, selfupdate.PYPI_LATEST,
+                     *_pages("0.51.1", "0.52.0", "1.0.0")]
 
 
 def test_a_fresh_release_is_installable_while_the_json_still_lags(monkeypatch):
@@ -521,7 +528,8 @@ def test_an_index_without_pep691_falls_back_to_the_json(monkeypatch):
     url, version, kind = selfupdate._wheel_url(None)
 
     assert (url, version, kind) == ("http://pypi/pure.whl", "0.50.0", selfupdate.PORTABLE)
-    assert asked == [selfupdate.PYPI_SIMPLE, selfupdate.PYPI_LATEST]
+    assert asked == [selfupdate.PYPI_SIMPLE, selfupdate.PYPI_LATEST,
+                     *_pages("0.50.1", "0.51.0", "1.0.0")]
 
 
 def test_a_version_missing_from_a_lagging_index_comes_from_its_page(monkeypatch):

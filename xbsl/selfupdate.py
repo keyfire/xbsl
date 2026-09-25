@@ -50,14 +50,18 @@ from pathlib import Path
 
 from xbsl import __version__, i18n, mcpjournal
 
-#: Where the files come from. The simple index (PEP 691) is served straight from the upload,
-#: while the JSON metadata below is a cache that lags behind a release by minutes - see
-#: `_wheel_url`. The JSON is kept as the fallback for an index that does not speak PEP 691.
+#: Where the files come from. Two of these LIST the releases - the simple index (PEP 691) and
+#: the JSON summary - and both are cached on the CDN, each node on its own, so either may lag
+#: behind a release by minutes and sometimes by half an hour. The page of one version is the
+#: fresh one: right after a release nobody has asked for it yet. See `_latest`.
 PYPI_SIMPLE = "https://pypi.org/simple/xbsl/"
 PYPI_VERSION = "https://pypi.org/pypi/xbsl/{version}/json"
 PYPI_LATEST = "https://pypi.org/pypi/xbsl/json"
 #: The same URL answers an HTML page unless JSON is asked for by name.
 SIMPLE_ACCEPT = "application/vnd.pypi.simple.v1+json"
+#: How many releases past the listings the pages are followed (see `_newer_on_pages`): two
+#: releases inside one lag window are rare, and every round costs three requests.
+_PAGE_ROUNDS = 3
 
 # What belongs to the xbsl wheel in site-packages. The xbsl-*.dist-info pattern will not
 # touch the metapackage's xbsllint-*.dist-info: glob matches the prefix literally.
@@ -106,7 +110,7 @@ def _fetch_json(url: str) -> dict:
         if error.code == 404:
             raise SelfUpdateError(i18n.t("selfupdate.no-version")) from error
         raise SelfUpdateError(i18n.t("selfupdate.pypi-status", status=error.code)) from error
-    except OSError as error:
+    except (OSError, ValueError) as error:  # ValueError: a page that is not JSON
         raise SelfUpdateError(i18n.t("selfupdate.pypi-unreachable", error=error)) from error
 
 
@@ -169,6 +173,78 @@ def _latest_release(files: list[dict]) -> str:
     return max(ranked)[1] if ranked else ""
 
 
+def _newest(*versions: str) -> str:
+    """The newest plain release among the versions; "" when none of them ranks."""
+    ranked = [(key, version) for version in versions if (key := _release_key(version)) is not None]
+    return max(ranked)[1] if ranked else ""
+
+
+def _next_versions(version: str) -> list[str]:
+    """The numbers the release after `version` may carry: the next patch, minor and major.
+
+    `0.117.0` gives `0.117.1`, `0.118.0` and `1.0.0`. A post-release steps from its base; a
+    version that does not rank (a pre-release, a dev build) gives nothing.
+    """
+    key = _release_key(version)
+    if key is None:
+        return []
+    parts = list(key[0])
+    out = []
+    for index in range(len(parts) - 1, -1, -1):
+        bumped = parts[:index] + [parts[index] + 1] + [0] * (len(parts) - index - 1)
+        out.append(".".join(str(part) for part in bumped))
+    return out
+
+
+def _page_wheels(version: str) -> list[dict]:
+    """The wheels the page of one version lists; empty when PyPI does not know the version.
+
+    Quiet on purpose: this is a look past the listings, and a 404 is its usual answer - a
+    failure here must not stop an update the listings already allow. A yanked release and
+    its yanked files never count, and neither does a page that names another version.
+    """
+    try:
+        with urllib.request.urlopen(PYPI_VERSION.format(version=version), timeout=30) as resp:
+            data = json.load(resp)
+    except (OSError, ValueError):  # HTTPError (the 404) is an OSError too
+        return []
+    info = data.get("info") if isinstance(data, dict) else None
+    if not isinstance(info, dict) or info.get("yanked") or info.get("version") != version:
+        return []
+    return [
+        item for item in data.get("urls") or []
+        if str(item.get("filename") or "").lower().endswith(".whl") and not item.get("yanked")
+    ]
+
+
+def _newer_on_pages(version: str) -> tuple[str, list[dict]]:
+    """A release newer than `version` that only its own page shows yet: (version, wheels).
+
+    The listings lag behind a release; the page of the new version does not - nobody has
+    asked the CDN for it before the release, so the first answer comes from PyPI itself.
+    The pages of the next patch, minor and major are asked, the newest one found wins, and
+    the look goes on from it in case two releases fell into one lag window. ("", []) when
+    nothing newer is published.
+
+    A 404 of such a page is cached by the CDN for about a minute (measured 25.09.2026: every
+    fourth request at 15-second steps missed the cache). That is the price: a
+    `--version X.Y.Z` in the minute after someone probed for X.Y.Z before it was published
+    may be told the version is not there, and one more minute settles it.
+    """
+    found, wheels = "", []
+    current = version
+    for _round in range(_PAGE_ROUNDS):
+        step, step_wheels = "", []
+        for candidate in _next_versions(current):
+            listed = _page_wheels(candidate)
+            if listed and _newest(step, candidate) == candidate:
+                step, step_wheels = candidate, listed
+        if not step:
+            break
+        found, wheels, current = step, step_wheels, step
+    return found, wheels
+
+
 # -- what is installed and which wheel fits it ---------------------------------------------
 
 
@@ -227,7 +303,7 @@ def _pick_wheel(entries: list[dict]) -> tuple[str, str]:
     return portable, PORTABLE
 
 
-def _wheel_url(version: str | None) -> tuple[str, str, str]:
+def _wheel_url(version: str | None, log=None) -> tuple[str, str, str]:
     """URL, exact version and kind of the wheel from PyPI (latest or the given one).
 
     The file list is taken from the SIMPLE index, not from the JSON metadata. Caught live
@@ -241,22 +317,79 @@ def _wheel_url(version: str | None) -> tuple[str, str, str]:
     The index lags too. On 23.09.2026 it served the previous release for more than half an
     hour after publishing, while the version page already listed every file. So a version
     named explicitly and missing from the index is looked up on its own page; only a 404
-    there means the version does not exist.
+    there means the version does not exist. The latest version is not taken from one
+    listing either - see `_latest`; `log` hears when the sources disagree.
     """
     files = _simple_files()
+    if version is None:
+        target, wheels = _latest(files, log or (lambda _message: None))
+        url, kind = _pick_wheel(wheels)
+        return url, target, kind
     if files:
-        target = version or _latest_release(files)
         entries = [
             item for item in files
-            if item["version"] == target and item["filename"].lower().endswith(".whl")
+            if item["version"] == version and item["filename"].lower().endswith(".whl")
         ]
-        if target and entries:
+        if entries:
             url, kind = _pick_wheel(entries)
-            return url, target, kind
-    data = _fetch_json(PYPI_VERSION.format(version=version) if version else PYPI_LATEST)
+            return url, version, kind
+    data = _fetch_json(PYPI_VERSION.format(version=version))
     resolved = data["info"]["version"]
     url, kind = _pick_wheel(data["urls"])
     return url, resolved, kind
+
+
+def _latest(files: list[dict], log) -> tuple[str, list[dict]]:
+    """The newest release and the files to pick its wheel from, asked of every source.
+
+    Caught live on 24.09.2026: two minutes after 0.118.0 was published the command answered
+    "already current: xbsl 0.117.0", while `--version 0.118.0` went through at once. The
+    latest version came from the simple index alone, and the index still listed the previous
+    release; the explicit version was found on its own page (see `_wheel_url`). Both
+    listings are cached on the CDN node by node, and 31.07 showed each of them lagging while
+    the other was fresh. So:
+
+    1. both listings are read - the simple index and the JSON summary - and the newer of the
+       two is taken;
+    2. the pages of the next versions are asked (`_newer_on_pages`): a release the listings
+       do not show yet is already there;
+    3. when the sources disagree, `log` hears a line naming what each of them said, so an
+       answer is never mistaken for a fact the moment after a release.
+
+    Only when neither listing answers is the failure raised, in the words of the JSON one.
+    """
+    listed = _latest_release(files)
+    try:
+        summary = _fetch_json(PYPI_LATEST)
+    except SelfUpdateError:
+        if not files:
+            raise
+        summary = {}
+    info = summary.get("info") if isinstance(summary.get("info"), dict) else {}
+    summarized = _newest(str(info.get("version") or ""))
+    best = _newest(listed, summarized)
+    paged, paged_wheels = _newer_on_pages(best) if best else ("", [])
+    target = paged or best
+    if paged or (listed and summarized and listed != summarized):
+        sources = [
+            i18n.t(key, version=said)
+            for key, said in (("selfupdate.source.simple", listed),
+                              ("selfupdate.source.summary", summarized),
+                              ("selfupdate.source.page", paged))
+            if said
+        ]
+        log(i18n.t("selfupdate.sources-differ", sources="; ".join(sources), version=target))
+    if paged:
+        return target, paged_wheels
+    wheels = [
+        item for item in files
+        if item["version"] == target and item["filename"].lower().endswith(".whl")
+    ]
+    if not wheels and summarized == target:
+        wheels = [item for item in summary.get("urls") or [] if not item.get("yanked")]
+    if not target or not wheels:
+        raise SelfUpdateError(i18n.t("selfupdate.no-wheel"))
+    return target, wheels
 
 
 # -- holders -------------------------------------------------------------------------------
@@ -554,9 +687,14 @@ def self_update(version: str | None = None, log=print, *, stop_busy: bool = Fals
     _ensure_regular_install(site)
     was_native = is_native(site)
 
-    url, target, kind = _wheel_url(version)
+    url, target, kind = _wheel_url(version, log=log)
     if version is None and target == __version__:
         log(i18n.t("selfupdate.up-to-date", version=__version__))
+        return __version__, __version__
+    if version is None and _newest(target, __version__) == __version__:
+        # Every source lags behind a release installed by its number a minute ago: without
+        # this the plain command would have "updated" back to the previous release.
+        log(i18n.t("selfupdate.newer-installed", installed=__version__, latest=target))
         return __version__, __version__
     if was_native and kind == PORTABLE:
         log(i18n.t("selfupdate.native-missing"))
