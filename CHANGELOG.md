@@ -53,6 +53,15 @@ entry either - say what the behaviour was, not which class name was compared.
   key in quotes was refused as having no entries. It is now read by the loader of the dictionary
   itself, and a refusal names the top-level keys the file has. ([#145](https://github.com/keyfire/xbsl/pull/145))
 
+### Changed
+
+- **`yaml/size-needs-no-stretch` checks every kind that stretches at `Auto`.** The set used to hold
+  `HtmlContainer` alone. A live page showed which kinds the web client stretches when the key is
+  missing – tables and lists, charts, the PDF view and a few more, some of them only in width –
+  and the rule now follows that table. For a list it names both keys: with `VerticalStretch: False`
+  alone a list grows with its rows, and the height holds only together with `VerticalScroll: True`.
+  ([#146](https://github.com/keyfire/xbsl/pull/146))
+
 ## 2026-09-24 – 0.118.0
 
 ### Changed
