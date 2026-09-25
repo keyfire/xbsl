@@ -626,14 +626,20 @@ class _Host:
         self.rets: list[set] = []
         self.guarded = False
         self.in_catch = 0
+        self.in_loop = 0
 
     def run(self) -> None:
         items = self.block(self.flow["body"])
         self.blocks.insert(0, ("main", items))
 
     def add_block(self, kind: str, items: list) -> None:
-        # Everything under a catch body is error handling, whatever nests inside it.
-        self.blocks.append(("catch" if self.in_catch else kind, items))
+        # Whatever nests in a catch body is error handling, and whatever nests in a loop body
+        # repeats per item: neither is judged, so an inner block takes the outer kind.
+        if self.in_catch:
+            kind = "catch"
+        elif self.in_loop:
+            kind = "loop"
+        self.blocks.append((kind, items))
 
     # --- taint -------------------------------------------------------------------------
 
@@ -754,6 +760,7 @@ class _Host:
             out += items
             head = head | taint
         pre: list = []
+        self.in_loop += 1  # the condition of `while` runs per iteration as well
         if condition is not None:
             pre, head = self.expr(condition)
         self.ctrl.append(head)
@@ -761,6 +768,7 @@ class _Host:
         saved_path_ctrl = set(self.path_ctrl)
         saved_guarded = self.guarded
         walked = pre + self.block(body)
+        self.in_loop -= 1
         self.path_ctrl = saved_path_ctrl
         self.guarded = saved_guarded
         self.ctrl.pop()
@@ -933,8 +941,9 @@ def find_series(facts: dict[str, dict], scope: str,
     """The runs of `min_calls` and more server calls, one per distinct set of call sites.
 
     `scope` is "open" (the methods an opening handler may run) or "all" (every client
-    method). A run in a catch body and a run whose calls stand in different `try` statements
-    are left out before the runs are compared, so a clean run inside a mixed one survives.
+    method). A run in a catch or a loop body and a run whose calls stand in different `try`
+    statements are left out before the runs are compared, so a clean run inside a mixed one
+    survives.
     The same call sites found from several methods are kept once, for the method that walks
     the fewest levels in place; a run contained in a longer one is dropped.
     """
@@ -953,7 +962,7 @@ def find_series(facts: dict[str, dict], scope: str,
             host = _Host(project, stem, name, flow)
             host.run()
             for kind, items in host.blocks:
-                if kind == "catch":
+                if kind in ("catch", "loop"):
                     continue
                 for run in _runs(items):
                     if len(run) >= min_calls and len({e.try_id for e in run}) == 1:
