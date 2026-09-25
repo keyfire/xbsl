@@ -38,36 +38,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The MCP tool `meta_fold_comments` folds yaml comments for an agent.** It does what
   `xbsl fold-comments` does and answers with the same report as `--format json`. Nothing is
   written by default: `dry_run=false` writes, and `take_proposed` applies the ambiguous moves too. ([#145](https://github.com/keyfire/xbsl/pull/145))
-
-### Changed
-
-- **`translate_status` with `against` no longer lists the duplicates the target branch already
-  has.** They came back whole on every call of a branch, some three thousand characters each time.
-  Now they are counted, only the duplicates the branch brings are listed, and `full=true` gives
-  the whole list. ([#145](https://github.com/keyfire/xbsl/pull/145))
-
-### Fixed
-
-- **`self-update` right after a release no longer answers "already current".** Both release lists
-  of PyPI can lag behind a new version for minutes. The command now reads both, asks for the page
-  of the next version, says when the sources disagree and never installs an older release over a
-  newer one. ([#145](https://github.com/keyfire/xbsl/pull/145))
-- **An MCP server whose engine was updated on disk says so instead of failing its rules.** Before
-  each call it compares the version in `__init__.py` on disk with the loaded one; the tools then
-  ask for a restart, and `version_info` shows both versions. A rule that crashes after the code
-  changed names the restart too, and `xbsl mcp-log` records when the server noticed. ([#145](https://github.com/keyfire/xbsl/pull/145))
-- **`translate --set` and `translate_set` read a batch file as yaml.** A batch dumped with every
-  key in quotes was refused as having no entries. It is now read by the loader of the dictionary
-  itself, and a refusal names the top-level keys the file has. ([#145](https://github.com/keyfire/xbsl/pull/145))
-
-### Changed
-
-- **`yaml/size-needs-no-stretch` checks every kind that stretches at `Auto`.** The set used to hold
-  `HtmlContainer` alone. A live page showed which kinds the web client stretches when the key is
-  missing – tables and lists, charts, the PDF view and a few more, some of them only in width –
-  and the rule now follows that table. For a list it names both keys: with `VerticalStretch: False`
-  alone a list grows with its rows, and the height holds only together with `VerticalScroll: True`.
-  ([#146](https://github.com/keyfire/xbsl/pull/146))
 - **`code/sequential-server-calls` finds a client method that calls the server several times in a
   row.** Each call is a round trip, and on page open the waits add up; the finding lists the calls
   and suggests one server method with a typed result. The rule is informational and off by
@@ -87,8 +57,32 @@ entry either - say what the behaviour was, not which class name was compared.
   listing reads the dictionary alone and gives the file and line of each phrase; MCP has
   `translate_drift`. ([#148](https://github.com/keyfire/xbsl/pull/148))
 
+### Changed
+
+- **`translate_status` with `against` no longer lists the duplicates the target branch already
+  has.** They came back whole on every call of a branch, some three thousand characters each time.
+  Now they are counted, only the duplicates the branch brings are listed, and `full=true` gives
+  the whole list. ([#145](https://github.com/keyfire/xbsl/pull/145))
+- **`yaml/size-needs-no-stretch` checks every kind that stretches at `Auto`.** The set used to hold
+  `HtmlContainer` alone. A live page showed which kinds the web client stretches when the key is
+  missing – tables and lists, charts, the PDF view and a few more, some of them only in width –
+  and the rule now follows that table. For a list it names both keys: with `VerticalStretch: False`
+  alone a list grows with its rows, and the height holds only together with `VerticalScroll: True`.
+  ([#146](https://github.com/keyfire/xbsl/pull/146))
+
 ### Fixed
 
+- **`self-update` right after a release no longer answers "already current".** Both release lists
+  of PyPI can lag behind a new version for minutes. The command now reads both, asks for the page
+  of the next version, says when the sources disagree and never installs an older release over a
+  newer one. ([#145](https://github.com/keyfire/xbsl/pull/145))
+- **An MCP server whose engine was updated on disk says so instead of failing its rules.** Before
+  each call it compares the version in `__init__.py` on disk with the loaded one; the tools then
+  ask for a restart, and `version_info` shows both versions. A rule that crashes after the code
+  changed names the restart too, and `xbsl mcp-log` records when the server noticed. ([#145](https://github.com/keyfire/xbsl/pull/145))
+- **`translate --set` and `translate_set` read a batch file as yaml.** A batch dumped with every
+  key in quotes was refused as having no entries. It is now read by the loader of the dictionary
+  itself, and a refusal names the top-level keys the file has. ([#145](https://github.com/keyfire/xbsl/pull/145))
 - **A list of files inside a project is judged the way the tree is.** A file named relative to the
   working directory stayed relative while the project around it came in resolved, so its subsystem
   was not found: `code/foreign-not-public` took the module for the project module, and
