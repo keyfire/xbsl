@@ -133,7 +133,10 @@ def _forms(name: str) -> frozenset[str]:
     return frozenset(found)
 
 
+# Spellings read while the term dictionary was missing lack the English half; the recheck
+# drops them together with the other answers built without the data.
 dataset.register_reset(_forms.cache_clear)
+dataset.register_recheck(_forms.cache_clear)
 
 
 #: Field names per node class, read from the class: a node of the native build has no
