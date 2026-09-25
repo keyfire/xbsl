@@ -91,6 +91,7 @@ from . import (  # noqa: F401
     event_log,
     full_names,
     handlers,
+    handler_annotation,
     image_binding,
     resource_cache,
     load_object,

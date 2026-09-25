@@ -13,6 +13,8 @@
 
 ### Added
 
+- **The `code/bound-handler-annotation` finding links to the documentation.** Its code in the
+  Problems panel opens the page of the annotation. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
 - **The `code/url-data-scheme` finding links to the documentation.** Its code in the Problems panel
   opens the page of the Url type. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
 

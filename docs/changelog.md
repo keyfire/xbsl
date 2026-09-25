@@ -39,6 +39,10 @@ entry either - say what the behaviour was, not which class name was compared.
   constructor parses `data:` as a path, the browser refuses the result, and a picture fed it draws
   nothing; the `Image` property takes no string either. The warning points to an HTTP service of
   the project or a resource instead. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
+- **`code/bound-handler-annotation` reports `@Handler` on a method the yaml binds.** The
+  annotation marks an override of a handler of the base type, and the compiler refuses it on a
+  handler of an event, a command or a route that the paired yaml names. The fix removes the
+  annotation. ([#PR](https://github.com/keyfire/xbsl/pull/PR))
 
 ### Fixed
 
