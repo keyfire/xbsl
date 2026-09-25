@@ -417,21 +417,32 @@ class ServerCallGraph:
             return "client"
         return None
 
+    def receiver(self, stem: str, root: str) -> str | None:
+        """The element a `root.Method(...)` call written in module `stem` lands in, or None.
+
+        None when the name is hidden (a declaration or an inherited name of the component, a
+        method of the module itself), is a platform name, or names no element or several.
+        An unknown scope may hide the element behind an inherited name, so it answers None too.
+        """
+        scope = self.shadows(stem)
+        if (scope is None or root in scope
+                or root in (self.modules.get(stem, {}).get("methods") or {})):
+            return None
+        choices = self.names.get(root, ())
+        if root in self.stdlib or len(choices) != 1:
+            return None
+        return choices[0]
+
     def paths(self, stem: str, call: list[str], *, legacy_image: bool = False,
               active: frozenset = frozenset()) -> list[tuple[str, str, list[str]]]:
         root, name, spelled = call
         if not self.has_data or (root or name) in self.declared(stem):
             return []
         if root:
-            # An unknown scope may hide the module behind an inherited name.
-            scope = self.shadows(stem)
-            if (scope is None or root in scope
-                    or root in (self.modules.get(stem, {}).get("methods") or {})):
+            found = self.receiver(stem, root)
+            if found is None:
                 return []
-            choices = self.names.get(root, ())
-            if root in self.stdlib or len(choices) != 1:
-                return []
-            target = choices[0]
+            target = found
         else:
             target = stem
         meta = self.metadata.get(target, {})
