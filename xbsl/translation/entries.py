@@ -42,9 +42,24 @@ MESSAGES = {
     },
     "translate.entries.edits-empty": {
         "ru": "в файле правок не найдено ни одной записи: нужны секции"
-              " tokens/phrases/literals формата словаря либо список JSON",
+              " tokens/phrases/literals формата словаря либо список JSON. Ключи верхнего"
+              " уровня в файле: {found}",
         "en": "no entries found in the edits file: it needs tokens/phrases/literals"
-              " sections in the dictionary format, or a JSON list",
+              " sections in the dictionary format, or a JSON list. The top-level keys of"
+              " the file: {found}",
+    },
+    "translate.entries.edits-section-empty": {
+        "ru": "{section} (пустая)",
+        "en": "{section} (empty)",
+    },
+    "translate.entries.edits-no-keys": {
+        "ru": "ни одного",
+        "en": "none",
+    },
+    "translate.entries.edits-not-yaml": {
+        "ru": "файл правок не разбирается как yaml, и построчно записей в нем тоже нет: {error}",
+        "en": "the edits file does not parse as yaml, and read line by line it holds no"
+              " entries either: {error}",
     },
     "translate.entries.no-key": {
         "ru": "запись без ключа не записывается. Ключ – это имя, строка комментария или"
@@ -1212,7 +1227,15 @@ def read_edits_file(path: Path) -> list[dict]:
     stays accepted: it is what scripts already produce for `--set`.
 
     Raises ValueError when neither shape yields entries: a silently empty batch would read
-    as "nothing to change" over a file that simply had its sections misspelled.
+    as "nothing to change" over a file that simply had its sections misspelled. The refusal
+    names the top-level keys the file does have.
+
+    The yaml is read by the loader of the dictionary itself (`dictionary.batch_pairs`), not
+    line by line. A batch a script wrote with `yaml.safe_dump(data, default_style='"')` -
+    every key in quotes, `version: !!int "1"` - is the same yaml as one written by hand, and
+    the line reader, which knew only bare section heads, refused it as "no entries". A file
+    the loader cannot read at all goes through that line reader still: it is lenient where
+    yaml is not (a tab in the indentation, `key: value: tail`).
     """
     text = path.read_text(encoding="utf-8-sig")
     if text.lstrip().startswith(("[", "{")):
@@ -1221,10 +1244,24 @@ def read_edits_file(path: Path) -> list[dict]:
         if not isinstance(edits, list):
             raise ValueError(i18n.t("translate.entries.edits-not-list"))
         return [dict(item) for item in edits if isinstance(item, dict)]
-    entries = read_entries(path)
-    if not entries:
-        raise ValueError(i18n.t("translate.entries.edits-empty"))
-    return [{"key": e.key, "value": e.value, "kind": e.kind} for e in entries]
+    try:
+        pairs, keys = dictionary_module.batch_pairs(text, tuple(KIND_OF_SECTION))
+    except yaml.YAMLError as exc:
+        entries = read_entries(path)
+        if not entries:
+            raise ValueError(i18n.t("translate.entries.edits-not-yaml", error=exc)) from exc
+        return [{"key": e.key, "value": e.value, "kind": e.kind} for e in entries]
+    edits = [
+        {"key": key, "value": value, "kind": KIND_OF_SECTION[section]}
+        for section, listed in pairs.items() for key, value in listed
+    ]
+    if not edits:
+        found = ", ".join(
+            i18n.t("translate.entries.edits-section-empty", section=key) if key in pairs else key
+            for key in keys
+        ) or i18n.t("translate.entries.edits-no-keys")
+        raise ValueError(i18n.t("translate.entries.edits-empty", found=found))
+    return edits
 
 
 def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,

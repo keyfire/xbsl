@@ -535,7 +535,10 @@ xbsl translate e1c/app --redundant                         # entries the platfor
 `tokens`, `phrases` and `literals` sections, the same quoting as the dictionary files, and an
 empty value removes the entry. The other is the JSON list `[{key, value, kind}]` that scripts
 produce. A batch of hundreds of entries is authored the way the dictionary itself is written,
-rather than as JSON on the command line.
+rather than as JSON on the command line. The yaml is read by the loader of the dictionary itself,
+so a batch a script dumps with every key in quotes (`yaml.safe_dump(..., default_style='"')`)
+reads as well as one written by hand. A batch with no entries is refused, and the refusal names
+the top-level keys the file has.
 
 The writer warns about two shapes it can see without walking the project, and writes the pair all
 the same. A value another key of the same scope already takes is the collision above, met at the

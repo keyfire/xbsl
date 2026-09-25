@@ -120,6 +120,16 @@ MESSAGES = {
         "ru": "{path}: секция '{section}' должна быть соответствием строк",
         "en": "{path}: the '{section}' section must be a string-to-string mapping",
     },
+    "translate.dictionary.batch-not-mapping": {
+        "ru": "под секцией {section} должны стоять пары \"ключ: значение\"",
+        "en": "the {section} section needs \"key: value\" pairs under it",
+    },
+    "translate.dictionary.batch-not-text": {
+        "ru": "секция {section}, строка {line}: ключ и значение – тексты, а здесь список или "
+              "соответствие",
+        "en": "section {section}, line {line}: a key and a value are texts, and here stands a "
+              "list or a mapping",
+    },
     "translate.dictionary.stub-literals-note": {
         "ru": "Ключ и перевод – текст между кавычками ровно так, как он написан в исходнике:"
               "\nкавычка внутри – \\\", обратный слеш – \\\\, перенос строки – \\н."
@@ -725,6 +735,57 @@ def _parse(label: str | Path, text: str) -> tuple[dict, _Declared]:
     if version != 1:
         raise DictionaryError(i18n.t("translate.dictionary.bad-version", path=label, version=version))
     return data, declared
+
+
+def batch_pairs(text: str, sections: Sequence[str]) -> tuple[dict[str, list[tuple[str, str]]], list[str]]:
+    """The pairs of the given sections of a batch of edits, and every top-level key it holds.
+
+    The loader and the node-by-node reading of `_parse`: the quoting, the escapes and the
+    explicit `? key` form are the parser's business, a section head written in quotes is the
+    same head, and a key the batch names twice keeps both of its pairs. Unlike a dictionary
+    file, a batch keeps its empty values - an empty value removes an entry - and takes a scalar
+    the loader would make a number or a truth value as the text it is written with: `Да: Yes`
+    names a word. The version is not checked: a batch is not a dictionary file.
+
+    Raises yaml.YAMLError when the text is not yaml and ValueError when a section holds
+    anything but pairs of texts - the message names the section and the key.
+    """
+    loader = _LOADER(text)
+    pairs: dict[str, list[tuple[str, str]]] = {}
+    keys: list[str] = []
+    try:
+        root = loader.get_single_node()
+        if not isinstance(root, yaml.MappingNode):
+            return pairs, keys
+        loader.flatten_mapping(root)
+        for key_node, value_node in root.value:
+            name = _batch_text(loader, key_node, "") if isinstance(key_node, yaml.ScalarNode) else "?"
+            keys.append(name)
+            if name not in sections:
+                continue
+            listed = pairs.setdefault(name, [])
+            if isinstance(value_node, yaml.ScalarNode) and _batch_text(loader, value_node, name) == "":
+                continue  # a head with nothing under it
+            if not isinstance(value_node, yaml.MappingNode):
+                raise ValueError(i18n.t("translate.dictionary.batch-not-mapping", section=name))
+            loader.flatten_mapping(value_node)
+            for pair_key, pair_value in value_node.value:
+                listed.append((_batch_text(loader, pair_key, name),
+                               _batch_text(loader, pair_value, name)))
+    finally:
+        loader.dispose()
+    return pairs, keys
+
+
+def _batch_text(loader, node, section: str) -> str:
+    """One scalar of a batch as text: null is empty, anything else is the text as written."""
+    if not isinstance(node, yaml.ScalarNode):
+        raise ValueError(i18n.t("translate.dictionary.batch-not-text", section=section,
+                                line=node.start_mark.line + 1))
+    value = loader.construct_object(node)
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else node.value
 
 
 def _sections(label: str | Path, data: dict, declared: _Declared, notes: list[str]) -> Sections:
