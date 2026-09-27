@@ -38,7 +38,7 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`code/handler-overrides-nothing` finds `@Handler` on a method that overrides nothing.** The
   compiler refuses such a method in a component module, but the linter had no list of handlers to
   check the name against. The stdlib step now keeps the handler lists from the component
-  descriptions the distribution ships, in both spellings; the other modules are not checked yet.
+  descriptions the distribution ships, in both spellings; the other modules are not checked yet. ([#152](https://github.com/keyfire/xbsl/pull/152))
 
 ### Changed
 
@@ -56,7 +56,7 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The translator spells an overridden handler the way the platform does.** An override such as
   `AfterCreate` stayed Russian in the English tree unless the dictionary had an entry for it: every
   method was taken for a name of the project. Such an entry is now reported as redundant, and one
-  that spells the handler otherwise as a dictionary defect.
+  that spells the handler otherwise as a dictionary defect. ([#152](https://github.com/keyfire/xbsl/pull/152))
 
 ## 2026-09-25 – 0.119.0, 0.119.1
 
