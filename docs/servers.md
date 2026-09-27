@@ -24,6 +24,13 @@ outside the root are not checked.
 The whole-project check reads only the root and the dictionary. Any other open file, such as a module
 outside the root, keeps the findings of its own check until you close it.
 
+The server lives as long as the editor window, so the code on disk can change under it:
+`self-update`, a `git pull` of an editable checkout, a plugin upgrade. It keeps checking with what
+it loaded at start, and its findings then differ from the CLI and CI. So the server compares the
+engine version, the installed plugins and its code files with the state at start, and when one of
+them changed it shows a warning once per change and asks for a restart (in VS Code, the command
+"XBSL: Restart the linter"). The checks go on, and the server does not restart on its own.
+
 Everything an editor needs for code is standard LSP, so a plain client works with no extra
 wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
 on them, and another editor would use the same requests to reproduce those panels:
@@ -78,6 +85,13 @@ fails, the server compares its code files with the state at start and names a re
 changed. A crashed rule says the same in its own report. The server does not restart or exit on
 its own, and `xbsl mcp-log` shows the first time it noticed each change.
 
+The plugins are compared too. When the plugins installed differ from the ones the server loaded,
+the tools still run, on the rules loaded at start, and every answer that is an object starts with
+`stale`: reason `plugins`, the `changed` distributions with both versions and a request to restart
+the server. `version_info` shows `plugins_on_disk` next to `plugins`. The server lists the installed
+distributions again only when a folder they are installed into changes, so a call costs one check
+of that folder.
+
 Every `meta_*` tool and `lint_paths` take `root`, the caller's project root. An agent working in
 a git worktree does not share the server's working directory, which is why the parameter exists.
 Relative `directory`, `yaml_path`, `module_path`, `paths`, `baseline` and `compare` resolve
@@ -94,7 +108,7 @@ yours.
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go |
 | `list_rules(select, ignore, filter)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry, and `filter` narrows further: a word that IS a group (the part of an id before `/`) lists that group alone, while any other word is looked for as an id substring or as a word of the title or the description – every i18n text registered under the rule's id (the title and the message templates its diagnostics are built from), in either language, plus its English docstring; `docs/RULES.md` is not read, since it ships with neither the sdist nor the wheel. Matching is case-insensitive. A `filter` that matches nothing answers `{error, near_groups}` – the groups closest to it by spelling – instead of an empty list |
-| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file |
+| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file. `engine_on_disk` and `plugins_on_disk` say what is installed now, and `stale` appears when that differs from what the server loaded |
 
 **Platform reference and schemas**
 
@@ -113,7 +127,7 @@ The three `docs_*` tools need the `docs.sqlite` database (see [Documentation sea
 
 | Tool | What it does |
 |---|---|
-| `translate_status(root, against, full)` | the coverage and what is left, the cheap check before deciding anything. A root without a dictionary is refused, and the answer names where a dictionary was looked for; `against` names a git ref and adds `collisions` - the keys the dictionary files of the working tree and of the ref translate differently or the same way, the report of `xbsl translate --check-duplicates`. The duplicates the ref already has come back the same on every call of a branch, so they are counted rather than listed (`duplicates_total`, `duplicates_at_ref`); `full=true` lists them all. The conflicts are listed whole either way |
+| `translate_status(root, against, full)` | the coverage and what is left, the cheap check before deciding anything. A root without a dictionary is refused, and the answer names where a dictionary was looked for; `against` names a git ref and adds `collisions` - the keys the dictionary files of the working tree and of the ref translate differently or the same way, the report of `xbsl translate --check-duplicates`. The duplicates the ref already has come back the same on every call of a branch, so they are counted rather than listed (`duplicates_total`, `duplicates_at_ref`); `full=true` lists them all. The conflicts are listed whole either way. `drift` counts the phrases `translate_drift` lists |
 | `translate_gaps(root, kind, filter, limit, offset, compact)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint; `compact` keeps only the key, the kind and the count per row; the answer names the `dictionary` it read |
 | `translate_entries(root, kind, filter, limit, offset, compact)` | what the dictionary already says, with the file and line of each entry; ten rows a page by default, and `compact` keeps only the key, the kind and the value of each row |
 | `translate_unused(root, kind, filter, since, limit, offset, prune, compact, budget_seconds)` | dictionary entries no longer used by the project; `filter` accepts a substring or a list, `since` scopes candidates to one change. Preview lists full rows by default; `compact=true` keeps only key, kind, file and line. `prune=true` removes every key the filters select, whatever the page, with all its declarations, and normally omits the list: `removed` counts occurrences, `pruned.keys` counts pairs, and `pruned.by_kind` / `pruned.by_file` group them. Explicit `compact=false` includes full rows after removal. `counts` covers the whole filtered candidate set, and so does `prune`: pagination shapes only the list. `budget_seconds` (300 by default) bounds scanning; a `partial` answer lists candidates and never removes entries. |
@@ -163,7 +177,7 @@ never means reading the files.
 | `meta_component_tree(yaml_path, node_id, name, max_depth, properties, brief)` | the node tree of an interface component; a big form can be taken in parts - a subtree (by node id or by its `Name`), a depth limit, without the property records, or as the skeleton alone (`brief` - ids, kinds, types, names and slots, a few kilobytes for a tree of hundreds); a big whole tree carries a hint naming these knobs |
 | `meta_add_component(yaml_path, parent_id, slot, ...)` | insert a new component into a slot of the parent node |
 | `meta_insert_fragment(yaml_path, parent_id, slot, fragment, ...)` | paste a ready yaml block of one component (a copied subtree) into a slot. A `#` note of the fragment goes where the development environment reads it: a comment above the component moves inside the node as `##` lines, and a note with no such place stays and is named in `notes`, see [Comments in yaml](yaml-comments) |
-| `meta_fold_comments(paths, dry_run, take_proposed, root)` | fold the comments the development environment does not read into the description of the nearest node that has room, as `xbsl fold-comments` does, see [Comments in yaml](yaml-comments). The answer is the report of `--format json`: the moves of each file, the audit, the number of files written and the moves counted by kind and action. `dry_run` is true by default and nothing is written; `dry_run=false` writes the files that pass the audit, and `take_proposed` applies the ambiguous moves too, like `--all` |
+| `meta_fold_comments(paths, dry_run, take_proposed, root, compact)` | fold the comments the development environment does not read into the description of the nearest node that has room, as `xbsl fold-comments` does, see [Comments in yaml](yaml-comments). The answer is the report of `--format json`: the moves of each file, the audit, the number of files written and the moves counted by kind and action. `dry_run` is true by default and nothing is written; `dry_run=false` writes the files that pass the audit, and `take_proposed` applies the ambiguous moves too, like `--all`. Over a whole tree the report runs to hundreds of kilobytes, and `compact` gives the short one: the counts, the files with the most moves and the moves worth a look (the ambiguous and the left ones first), up to ten lines each, plus every file the audit stopped |
 | `meta_move_component(yaml_path, node_id, new_parent_id, slot, ...)` | move a node into another (or the same) slot; the comments above it travel along |
 | `meta_move_components(yaml_path, node_ids, ...)` | move several nodes in one operation, keeping their document order |
 | `meta_remove_component(yaml_path, node_id)` | remove a node with its attached comments |

@@ -470,12 +470,20 @@ def _mcplog_line(event: dict) -> str:
                       name=event.get("name", ""), reason=event.get("reason", ""))
     elif kind == "stale":
         # Written by the server that found the engine on disk replaced under it
-        # (xbsl/freshness.py): a version on disk it refuses over, or sources changed under a
-        # failing call.
-        key = "mcplog.stale.sources" if event.get("reason") == "sources" else "mcplog.stale.version"
+        # (xbsl/freshness.py): a version on disk it refuses over, plugins it answers with a
+        # warning over, or sources changed under a failing call.
+        reason = event.get("reason")
+        key = f"mcplog.stale.{reason}" if reason in ("sources", "plugins") else (
+            "mcplog.stale.version")
         error = event.get("error")
+        changes = ""
+        if reason == "plugins":
+            from xbsl import freshness
+
+            changes = freshness.plugin_changes(event.get("changed") or []) or (
+                f"{event.get('loaded', '?')} -> {event.get('on_disk', '?')}")
         text = i18n.t(key, loaded=event.get("loaded", "?"), on_disk=event.get("on_disk", "?"),
-                      tool=event.get("tool", "?"))
+                      tool=event.get("tool", "?"), changes=changes)
         if error:
             text += "; " + i18n.t("mcplog.stale.error", error=error)
     else:

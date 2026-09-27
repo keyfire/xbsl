@@ -120,6 +120,20 @@ MESSAGES = {
         "ru": "таких путей нет: {paths}",
         "en": "no such paths: {paths}",
     },
+    "fold.by-file-hint": {
+        "ru": "файлов с блоками: {count}, перечислены {limit} с наибольшим числом переносов. Счет "
+              "по каждому файлу – в полном отчете (без compact) или по более узким paths",
+        "en": "files with blocks: {count}, the {limit} with the most moves are listed. The count "
+              "for every file is in the whole report (without compact) or over narrower paths",
+    },
+    "fold.review-hint": {
+        "ru": "переносов, на которые стоит взглянуть: {count} (спорных и оставленных – {disputed}, "
+              "с заметкой – {noted}), перечислены первые {limit}. Весь список – в полном отчете "
+              "(без compact) или по более узким paths",
+        "en": "moves worth a look: {count} ({disputed} proposed or left, {noted} with a note), the "
+              "first {limit} are listed. The whole list is in the whole report (without compact) "
+              "or over narrower paths",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -635,9 +649,86 @@ def report(folds: list[FileFold], written: int) -> dict:
     `files` - a record per file with a block to move: its moves and what the audit found;
     `written` - the files written; `summary` - the moves counted as `kind/action`.
     """
-    counts = Counter((move.kind, move.action) for fold in folds for move in fold.moves)
     return {
         "files": [fold.as_dict() for fold in folds],
         "written": written,
-        "summary": {f"{kind}/{action}": count for (kind, action), count in sorted(counts.items())},
+        "summary": _kind_counts(folds),
     }
+
+
+def _kind_counts(folds: list[FileFold]) -> dict:
+    """The moves counted as `kind/action`: the `summary` of both reports."""
+    counts = Counter((move.kind, move.action) for fold in folds for move in fold.moves)
+    return {f"{kind}/{action}": count for (kind, action), count in sorted(counts.items())}
+
+
+def compact_report(folds: list[FileFold], written: int) -> dict:
+    """The report of a fold held short: `meta_fold_comments` with `compact`.
+
+    The whole report names every move, and over a tree that was never folded it ran to a
+    quarter of a megabyte (333 files, 1184 blocks) - most of it the moves the fold applies on
+    its own, which a reader does not act on one by one. This one keeps what a reader acts on,
+    in the manner of the compact lint answer (report.compact):
+
+    - `written` and `summary` as in the whole report;
+    - `counts`: the files with a block, the files the fold changes (their audit passed), the
+      moves by action and the notes;
+    - `by_file`: the moves of a file counted by action, the files with the most moves first, up
+      to report.COMPACT_FINDINGS_LIMIT; past it `by_file_hint` says how many files there are;
+    - `review`: the moves worth a look, one line each - first the ones the fold does not apply
+      on its own (proposed, left), then the applied ones with a note (the text points at a place
+      the move takes away); up to the same limit, past it `review_hint` counts them;
+    - `reasons`: the proposed and left moves counted by reason - what `take_proposed` would
+      decide over, when the lines stop at the limit;
+    - `audit`: every file the audit stopped, whole, since such a file is not written - like
+      the error-level findings a compact lint answer keeps.
+    """
+    from xbsl.report import COMPACT_FINDINGS_LIMIT as limit
+
+    actions = ("applied", "proposed", "left")
+    by_file = {
+        fold.rel: {action: sum(1 for move in fold.moves if move.action == action)
+                   for action in actions}
+        for fold in sorted(folds, key=lambda fold: (-len(fold.moves), fold.rel))
+    }
+    disputed = [(fold, move) for fold in folds for move in fold.moves if move.action != "applied"]
+    noted = [(fold, move) for fold in folds for move in fold.moves
+             if move.action == "applied" and move.notes]
+    review = disputed + noted
+    out: dict = {
+        "written": written,
+        "summary": _kind_counts(folds),
+        "counts": {
+            "files": len(folds),
+            "changed": sum(1 for fold in folds if fold.changed),
+            **{action: sum(counts[action] for counts in by_file.values()) for action in actions},
+            "notes": sum(len(move.notes) for fold in folds for move in fold.moves),
+        },
+        "by_file": dict(list(by_file.items())[:limit]),
+    }
+    if len(by_file) > limit:
+        out["by_file_hint"] = i18n.t("fold.by-file-hint", count=len(by_file), limit=limit)
+    out["review"] = [_review_line(fold, move) for fold, move in review[:limit]]
+    if len(review) > limit:
+        out["review_hint"] = i18n.t(
+            "fold.review-hint", count=len(review), disputed=len(disputed), noted=len(noted),
+            limit=limit,
+        )
+    reasons = Counter(i18n.t(move.reason) for _fold, move in disputed if move.reason)
+    out["reasons"] = dict(sorted(reasons.items(), key=lambda item: (-item[1], item[0])))
+    out["audit"] = [{"file": fold.rel, "audit": list(fold.audit)} for fold in folds if fold.audit]
+    return out
+
+
+def _review_line(fold: FileFold, move: Move) -> str:
+    """One move as a line: "path:line kind action `subject` -> target - reason; notes".
+
+    The dash before the reason is an en dash, as in a compact lint finding (report.py): the line
+    is read by a person, not parsed.
+    """
+    subject = f" `{move.subject}`" if move.subject else ""
+    where = f" -> {move.target_line}" if move.target_line else ""
+    said = [i18n.t(move.reason)] if move.reason else []
+    said += move.notes
+    tail = f" – {'; '.join(said)}" if said else ""
+    return f"{fold.rel}:{move.line} {move.kind} {move.action}{subject}{where}{tail}"

@@ -101,4 +101,6 @@ are kept.
 
 An agent gets the same through the MCP tool `meta_fold_comments`. It answers with the report of
 `--format json` and writes nothing by default: `dry_run=false` writes, and `take_proposed`
-applies the ambiguous moves.
+applies the ambiguous moves. The report names every move, and over a whole tree it runs to
+hundreds of kilobytes; `compact=true` answers with the counts, the files with the most moves and
+the moves worth a look, and lists every file the audit stopped.
