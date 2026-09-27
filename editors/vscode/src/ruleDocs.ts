@@ -294,6 +294,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "yaml/dynlist-filter-disabled",
     page: "topics/dynamic-list",
   },
+  {
+    match: (r) => r === "yaml/dynlist-filter-computed-alias",
+    page: "topics/dynamic-list",
+    anchor: "фильтрация-данных",
+  },
   { match: (r) => r === "yaml/list-form-needs-dynlist", page: "topics/list-form-component" },
   { match: (r) => r === "yaml/badge-column-image", page: "topics/standard-table-column-component" },
   { match: (r) => r === "yaml/popup-in-markup", page: "topics/popup-component" },

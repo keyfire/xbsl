@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 253.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 254.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -373,6 +373,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик `ПриРедактированииСтроки` у списка с плоским динамическим источником: платформа его не вызывает вовсе [подробнее](#d-yaml-dynlist-row-editing) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр (`&Имя`) или биндинг (`=...`) в аргументах либо фильтре присоединённой таблицы динамического списка: он не вычисляется, и список отказывает уже при работе [подробнее](#d-yaml-dynlist-joined-table-param) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Отбор динамического списка объявлен с `Использовать: Ложь`, а парный модуль включает его присваиванием: первый кадр покажет всю таблицу [подробнее](#d-yaml-dynlist-filter-disabled) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `ЭлементФильтра` динамического списка назван псевдонимом вычисляемого поля: фильтр ищет поле среди столбцов таблиц, поэтому молча отбирает по одноименному столбцу или роняет применение сборки [подробнее](#d-yaml-dynlist-filter-computed-alias) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Форма наследует `ФормаСписка`, а таблица в её содержимом взята по `ИсточникДанныхМассив`: пункт навигации молча исчезает [подробнее](#d-yaml-list-form-needs-dynlist) [доки](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ссылочное `ПолеВвода` без своего узла `Команды`: платформа рисует рядом собственную кнопку, которая открывает значение в отдельном окне [подробнее](#d-yaml-ref-input-auto-commands) [доки](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Две соседние `ОбычныеКоманды` с зеркальной `Видимость` (`=X` и `=не X`) изображают одну команду с двумя состояниями, которая у платформы уже есть [подробнее](#d-yaml-toggle-command-pair) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -543,6 +544,12 @@ HTML-страницы. Код не трогаем – селекторы, иде
 <a id="d-yaml-dynlist-filter-disabled"></a>**`yaml/dynlist-filter-disabled`.** Это гонка первого
 показа: платформа рисует список, не дожидаясь кода. Отбор объявляют включённым, с пустым
 значением.
+
+<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** Поле
+фильтра ищется среди столбцов основной и присоединенных таблиц, а не среди полей списка, хотя
+сортировка псевдоним принимает. Для отбора по вычисленному значению нужен
+`ЭлементФильтраВыражение` с выражением поля и привязкой `Использовать`; если нужен столбец, его
+называют с псевдонимом таблицы.
 
 <a id="d-yaml-list-form-needs-dynlist"></a>**`yaml/list-form-needs-dynlist`.** Каркас формы списка
 заточен под таблицу динамического списка, а в содержимом нет ни одного типа с

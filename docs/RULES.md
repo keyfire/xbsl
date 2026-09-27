@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 253 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 254 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -378,6 +378,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `OnRowEdit` handler on a list over a flat dynamic source: the platform never calls it at all [details](#d-yaml-dynlist-row-editing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A parameter (`&Name`) or a binding (`=...`) in the arguments or the filter of a joined table of a dynamic list: it is never evaluated and the list fails at runtime [details](#d-yaml-dynlist-joined-table-param) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A dynamic-list filter declared with `Use: False` while the paired module enables it by assignment: the first frame shows the whole table [details](#d-yaml-dynlist-filter-disabled) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `FilterItem` of a dynamic list is named after the alias of a computed field: a filter reads the columns of the tables, so it silently goes by a column of that name or fails the apply [details](#d-yaml-dynlist-filter-computed-alias) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A form inherits `ListForm` while the table in its content comes from an `ArrayDataSource`: the navigation item silently disappears [details](#d-yaml-list-form-needs-dynlist) [docs](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A reference `Edit` with no `Commands` of its own: the platform draws its own button next to it, opening the value in a separate window [details](#d-yaml-ref-input-auto-commands) [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Two adjacent `UsualCommand` nodes with mirrored `Visible` (`=X` against `=not X`) emulate one command with two states, which the platform already has [details](#d-yaml-toggle-command-pair) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -548,6 +549,12 @@ literal in the yaml and assign the live value from code: `Source.JoinedTables[i]
 <a id="d-yaml-dynlist-filter-disabled"></a>**`yaml/dynlist-filter-disabled`.** That is the
 first-render race: the platform draws the list without waiting for the code. Declare the filter
 enabled, with an empty value.
+
+<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** A
+filter looks its `Field` up among the columns of the main and the joined tables, not among the
+fields of the list, while sorting does take an alias. To filter by the computed value, use a
+`FilterItemExpression` with the expression of the field and switch it on with a binding of `Use`;
+when the column is meant, name it with the table alias.
 
 <a id="d-yaml-list-form-needs-dynlist"></a>**`yaml/list-form-needs-dynlist`.** The list-form
 skeleton is built around a dynamic-list table, and the content holds not a single type with

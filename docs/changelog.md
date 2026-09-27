@@ -27,6 +27,14 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **`yaml/dynlist-filter-computed-alias` catches a dynamic-list filter by the alias of a computed
+  field.** A filter looks its field up among the columns of the tables, not among the fields of
+  the list, so such a filter silently went by a column of the same name or failed the apply. The
+  warning names that column when it sees one and points to a `FilterItemExpression` for the
+  computed value.
+
 ### Fixed
 
 - **`comment/emphasis-caps` reads the FETCH clause as a cited query.** A comment that named the
