@@ -296,10 +296,10 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     """
     if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
         return data
-    optional = {"type_param_variance", "generic_bases"}
+    optional = {"type_param_variance", "generic_bases", "module_handlers"}
     for section in ("type_members", "member_types", "member_signatures", "bases", "type_ctors",
                     "type_params", "type_param_variance", "generic_bases",
-                    "member_type_params", "deprecated_members"):
+                    "member_type_params", "deprecated_members", "module_handlers"):
         entries = data.get(section)
         if not entries:
             continue
