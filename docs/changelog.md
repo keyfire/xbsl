@@ -32,30 +32,30 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`meta_fold_comments` answers briefly with `compact`.** Over a whole tree the report named
   every move and ran to a quarter of a megabyte. The short answer keeps the counts, the files with
   the most moves and the moves worth a look, up to ten lines each, and every file the audit
-  stopped.
+  stopped. ([#150](https://github.com/keyfire/xbsl/pull/150))
 - **The MCP server says when the plugins on disk are not the ones it loaded.** After a plugin
   upgrade under a running server, `lint_paths` judged by the old rule set while the CLI and CI ran
   the new one, and the answer did not say so. The tools still run, but every answer that is an
   object starts with `stale`, which names both versions and asks for a restart; `version_info`
-  shows `plugins_on_disk`.
+  shows `plugins_on_disk`. ([#150](https://github.com/keyfire/xbsl/pull/150))
 - **The language server warns when the code on disk changed under it.** It lives as long as the
   editor window, and after `self-update`, a pull or a plugin upgrade it went on checking with the
   old code. Now it compares the engine version, the plugins and its code files with the state at
-  start, and shows one warning per change asking for a restart.
+  start, and shows one warning per change asking for a restart. ([#150](https://github.com/keyfire/xbsl/pull/150))
 
 ### Changed
 
 - **The plain `translate` report counts the phrases `--drift` lists.** The mode stays out of
   `--strict`, so a drift was found only by someone who thought to run it. Now one line gives the
   count and names the flag when there is something to count, the json report and
-  `translate_status` carry the same number, and the exit code does not change.
+  `translate_status` carry the same number, and the exit code does not change. ([#150](https://github.com/keyfire/xbsl/pull/150))
 
 ### Fixed
 
 - **The test that compares the two demo projects no longer depends on installed plugins.** A
   plugin that turns on a rule about Russian prose gave the Russian demo a finding its English twin
   cannot have, so the suite failed on such a machine while CI passed. The twins are now checked
-  with the published rule set.
+  with the published rule set. ([#150](https://github.com/keyfire/xbsl/pull/150))
 
 ## 2026-09-25 – 0.119.0, 0.119.1
 
