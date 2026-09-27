@@ -94,6 +94,15 @@ def all_names() -> frozenset[str]:
     )
 
 
+def base_head(written: str) -> str:
+    """The name a base is looked up by: `ObjectForm<Tasks.Object>` -> `ObjectForm`.
+
+    The generic arguments and the package (`Std::Interface::Forms::Form`) are dropped - the
+    catalog keys a type by its head, and so does a project its components.
+    """
+    return written.split("<", 1)[0].strip().rpartition("::")[2].strip()
+
+
 def platform_base(head: str, project_base, limit: int = 32) -> str:
     """The platform type a component module finally builds on, or "" when that cannot be told.
 

@@ -261,9 +261,7 @@ def _base_head(data: dict, kind: str) -> str:
     """The base a component names (`Наследует.Тип`): no generic arguments, no package."""
     inherits = value_of(data, "Наследует", kind)
     written = value_of(inherits, "Тип") if isinstance(inherits, dict) else None
-    if not isinstance(written, str):
-        return ""
-    return written.split("<", 1)[0].strip().rpartition("::")[2].strip()
+    return modulehandlers.base_head(written) if isinstance(written, str) else ""
 
 
 def _component_fact(source: SourceFile) -> dict | None:

@@ -502,6 +502,7 @@ def translate_project(
                     source, resolver, file_report,
                     owner=project_names_module.module_owner(path, engine.load),
                     form_nodes=project_names_module.form_nodes(path, engine.load),
+                    handlers=project_names_module.module_handlers(path, root, engine.load),
                 )
         elif path.suffix == ".json":
             translated = _translate_json_bytes(path.read_bytes(), dictionary, fields, file_report)
