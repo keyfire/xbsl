@@ -25,6 +25,15 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **`comment/emphasis-caps` reads the FETCH clause as a cited query.** A comment that named the
+  clause by its keyword after the word for "clause", or wrote FETCH and OFFSET in the English line
+  of the dictionary, was reported as a word stressed in capitals. The same verb stressed in prose
+  is still reported.
+
 ## 2026-09-25 – 0.119.0, 0.119.1
 
 ### Added

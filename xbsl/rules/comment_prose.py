@@ -540,6 +540,9 @@ _QUERY_MARKERS = frozenset((
     "РАЗЛИЧНЫЕ", "СУЩЕСТВУЕТ", "ЕСТЬNULL", "NULL", "ВЫРАЗИТЬ", "ПОДОБНО", "ИМЕЮЩИЕ", "ИЕРАРХИИ",
     "SELECT", "FROM", "WHERE", "JOIN", "UNION", "EXISTS", "ISNULL", "DISTINCT", "HAVING",
 ))
+#: A keyword of two words, each an ordinary word alone: the pair in capitals cites a query
+#: ("ПОЛУЧИТЬ 10 СО СМЕЩЕНИЕМ 20", the offset of the FETCH clause) just as a marker does.
+_QUERY_MARKER_PHRASES = re.compile(r"(?<![\w-])СО[ \t]+СМЕЩЕНИЕМ(?![\w-])")
 
 #: The aggregate functions of the query language: written in capitals exactly like this, the
 #: word names the function ("по МИНИМУМ и МАКСИМУМ", "КОЛИЧЕСТВО(*)"). A stressed word is
@@ -548,12 +551,13 @@ _QUERY_FUNCTIONS = frozenset(("МИНИМУМ", "МАКСИМУМ", "КОЛИЧ�
 
 #: Query keywords that are ordinary words as well. In capitals such a word is syntax only when
 #: code follows it (`_code_around`): "Т.Поле В (&Список)", "Склады КАК Склады",
-#: "ГДЕ НЕ Удалён". Otherwise it is judged like any other word.
+#: "ГДЕ НЕ Удалён" - or when a word naming a part of a query stands before it
+#: ("предложение ПОЛУЧИТЬ"). Otherwise it is judged like any other word.
 _QUERY_WORDS = frozenset((
     "В", "И", "ИЛИ", "НЕ", "КАК", "ПО", "ИЗ", "ГДЕ", "ЕСТЬ", "ВСЕ", "МЕЖДУ", "КОГДА", "ТОГДА",
-    "ИНАЧЕ", "КОНЕЦ", "ПЕРВЫЕ",
+    "ИНАЧЕ", "КОНЕЦ", "ПЕРВЫЕ", "ПОЛУЧИТЬ",
     "IN", "AND", "OR", "NOT", "AS", "ON", "IS", "BY", "ALL", "BETWEEN", "WHEN", "THEN", "ELSE",
-    "END", "LIKE",
+    "END", "LIKE", "FETCH", "OFFSET",
 ))
 
 #: A word that names a part of a query right before its keyword: "операнд условия В" cites
@@ -568,8 +572,9 @@ _QUERY_NOUNS_ENGLISH = frozenset("""
 condition conditions operator operators clause clauses keyword keywords operation operations
 section statement expression
 """.split())
-#: A clause keyword after a preposition names the clause: "отбор в коде, а не в ГДЕ".
-_CLAUSE_WORDS = frozenset(("ГДЕ", "ИЗ", "ИМЕЮЩИЕ"))
+#: A clause keyword after a preposition names the clause: "отбор в коде, а не в ГДЕ",
+#: "сортировка стоит перед ПОЛУЧИТЬ".
+_CLAUSE_WORDS = frozenset(("ГДЕ", "ИЗ", "ИМЕЮЩИЕ", "ПОЛУЧИТЬ"))
 _CLAUSE_PREPOSITIONS = frozenset(("в", "во", "из", "до", "после", "перед"))
 
 #: What follows a keyword of a query and not a word of prose: a parameter, a dotted name with
@@ -637,6 +642,8 @@ def _body_start(prose: str) -> int:
 
 
 def _cites_query(text: str) -> bool:
+    if _QUERY_MARKER_PHRASES.search(text):
+        return True
     return any(w in _QUERY_MARKERS for w in _ANY_CAPS_WORD.findall(text))
 
 

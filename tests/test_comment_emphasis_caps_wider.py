@@ -170,6 +170,10 @@ def test_a_negation_in_capitals_is_lowered(tmp_path):
     "#     ПО Склады.Код == Партии.Склад",
     "# остатки считаются агрегатом КОЛИЧЕСТВО(*)",
     "# отбор по дате делается в коде, а не в ГДЕ: дата приходит параметром",
+    "# а предложение ПОЛУЧИТЬ принимает размер и смещение только константами",
+    "#     ПОЛУЧИТЬ 10 СО СМЕЩЕНИЕМ 20",
+    "# партии читаются порциями, начало порции задаёт СО СМЕЩЕНИЕМ",
+    "# сортировка стоит перед ПОЛУЧИТЬ",
 ))
 def test_a_cited_query_is_syntax_not_stress(comment):
     assert _lint_yaml(comment + "\n") == []
@@ -180,6 +184,7 @@ def test_a_cited_query_is_syntax_not_stress(comment):
     ("# партии берутся ИЗ АРХИВА, архив пополняет задание", ["ИЗ", "АРХИВА"]),
     ("# ПересчётОстатков НЕ меняет дату", ["НЕ"]),
     ("# метод пересчёта нарочно НЕ @ДоступноСКлиента", ["НЕ"]),
+    ("# права нужно ПОЛУЧИТЬ заранее", ["ПОЛУЧИТЬ"]),
 ))
 def test_a_query_word_among_prose_is_a_stress(comment, words):
     """What follows the keyword decides: prose puts its own word there even after a name."""
@@ -283,6 +288,19 @@ def test_a_query_keyword_of_an_english_line(tmp_path):
     ))
 
     assert _words(_lint_dictionary(tmp_path)) == ["OR", "ALL"]
+
+
+def test_the_fetch_clause_of_an_english_line_is_syntax(tmp_path):
+    """The keyword pairs of the FETCH clause: a key that cites the clause passes its keyword on,
+    and a stressed verb of the key stays a stress in its translation."""
+    _dictionary(tmp_path, (
+        "phrases:\n"
+        '    "а предложение ПОЛУЧИТЬ принимает размер": "and the FETCH clause takes the size"\n'
+        '    "партии читаются СО СМЕЩЕНИЕМ": "the batches are read with an OFFSET"\n'
+        '    "сначала ПОЛУЧИТЬ права": "FETCH the rights first"\n'
+    ))
+
+    assert _words(_lint_dictionary(tmp_path)) == ["FETCH"]
 
 
 def test_a_pronoun_that_is_also_a_product_counts_only_in_a_phrase(tmp_path):
