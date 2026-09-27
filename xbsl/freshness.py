@@ -23,7 +23,9 @@ Three checks, by cost:
   distributions costs tens of milliseconds, hundreds in a big environment, so it runs only when
   a folder the distributions live in changed its modification time since the last walk - the
   signal importlib.metadata itself reads to know that its view of a folder is stale. An install
-  or a removal renames folders there. Otherwise a check is a stat of a folder or two;
+  or a removal renames folders there. A folder that changed within the last two seconds may
+  still be changing, so its verdict is taken again on the next check. Otherwise a check is a
+  stat of a folder or two;
 - the SOURCES: a fingerprint of the code files of the engine and of the plugin packages - path,
   size, modification time - taken when the process starts (`remember`) against one taken now
   (`sources_state`). A walk over some two hundred files, a couple of milliseconds: it covers
@@ -124,6 +126,14 @@ _noted: dict | None = None
 _marks: dict[str, int] | None = None
 #: The verdict of that walk: the plugins state, None while the disk holds the loaded plugins.
 _plugins_found: dict | None = None
+#: How long after its last change a watched folder counts as still changing, in nanoseconds.
+#: The time of a folder moves in ticks of the system clock, and an install writes several
+#: entries within one: a walk in the middle of an install could see half of it and then keep
+#: that verdict, the later changes leaving the time where it was. So a verdict taken while a
+#: folder is this fresh is not kept - the next check walks again.
+_SETTLE_NS = 2_000_000_000
+#: Whether the last walk saw a folder that was still changing (see _SETTLE_NS).
+_unsettled = False
 
 
 def disk_version(package: Path | None = None) -> str:
@@ -237,9 +247,9 @@ def remember() -> None:
     The plugins are not walked here: at start the disk holds what was just loaded, so the
     modification times of the watched folders are enough to tell a later change by.
     """
-    global _started, _checked, _marks, _plugins_found
+    global _started, _checked, _marks, _plugins_found, _unsettled
     _started, _checked = fingerprint(), None
-    _marks, _plugins_found = _folder_marks(_watched()), None
+    _marks, _plugins_found, _unsettled = _folder_marks(_watched()), None, False
 
 
 def _listed(versions: dict[str, str]) -> str:
@@ -271,15 +281,18 @@ def plugins_state() -> dict | None:
     `changed` holds {name, loaded, on_disk} per distribution that differs ("" for none). None in
     a process that did not call `remember`. The installed distributions are walked only when a
     watched folder changed since the last walk, and the verdict of that walk stands until the
-    next change.
+    next change - unless a folder was still changing when it was taken (see _SETTLE_NS): then
+    the next check walks again.
     """
-    global _marks, _plugins_found
+    global _marks, _plugins_found, _unsettled
     if _marks is None:
         return None
     marks = _folder_marks(list(_marks))
-    if marks != _marks:
+    if marks != _marks or _unsettled:
         _marks = marks
         _plugins_found = _compare_plugins()
+        now = time.time_ns()
+        _unsettled = any(mark >= 0 and now - mark < _SETTLE_NS for mark in marks.values())
     return _plugins_found
 
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -58,11 +59,21 @@ class _Installed:
         return self(group=group)
 
 
+def _settle(folder: Path) -> None:
+    """The folder as an install left it a minute ago: its time is not a fresh one."""
+    past = time.time_ns() - 60_000_000_000
+    os.utime(folder, ns=(past, past))
+
+
 def _bump(folder: Path) -> None:
-    """An install in the folder: a new entry, and the time moved on whatever the clock step."""
+    """An install in the folder: a new entry, and a time of its own.
+
+    The time goes BACK ten seconds from the last one: two installs a test makes in a row may
+    fall into one tick of the clock, and a time in the past is one the folder has settled at.
+    """
+    before = folder.stat().st_mtime_ns
     (folder / f"entry-{len(list(folder.iterdir()))}").mkdir()
-    stat = folder.stat()
-    os.utime(folder, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+    os.utime(folder, ns=(before, before - 10_000_000_000))
 
 
 @pytest.fixture()
@@ -81,7 +92,10 @@ def site(tmp_path, monkeypatch):
         "purelib": str(environment), "platlib": str(environment)})
     for name in ("_started", "_checked", "_noted", "_marks", "_plugins_found"):
         monkeypatch.setattr(freshness, name, None)
+    monkeypatch.setattr(freshness, "_unsettled", False)
     monkeypatch.setattr(freshness, "_SOURCES_TTL", 0.0)
+    _settle(folder)
+    _settle(environment)
     plugins.installed()  # the walk that loads the plugins reads their versions
     return SimpleNamespace(folder=folder, environment=environment, ep=ep, installed=installed)
 
@@ -158,6 +172,25 @@ def test_an_upgrade_under_the_process_is_found_by_one_walk(site, monkeypatch):
     assert freshness.state() == found
     assert freshness.describe(found) == (
         "надстройки на диске сменились после запуска этого процесса: acme-rules 1.0.0 -> 2.0.0")
+
+
+def test_a_folder_still_changing_is_walked_again_until_it_settles(site, monkeypatch):
+    """An install writes several entries within one tick of the clock: a walk made in the
+    middle of it would keep seeing half an install if its verdict stood."""
+    freshness.remember()
+    walks = _count_walks(monkeypatch)
+    now = time.time_ns()
+    (site.folder / "half-written").mkdir()
+    os.utime(site.folder, ns=(now, now))
+
+    freshness.plugins_state()
+    freshness.plugins_state()
+    assert len(walks) == 2  # the folder changed just now: its verdict is taken again
+
+    os.utime(site.folder, ns=(now, now - 10 * freshness._SETTLE_NS))  # the install is over
+    freshness.plugins_state()
+    freshness.plugins_state()
+    assert len(walks) == 3  # one more walk sees it settled, and that verdict stands
 
 
 def test_a_removed_and_a_new_plugin_are_both_named(site):

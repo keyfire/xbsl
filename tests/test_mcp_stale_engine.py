@@ -44,6 +44,7 @@ def disk(tmp_path, monkeypatch):
     monkeypatch.setattr(freshness, "_noted", None)
     monkeypatch.setattr(freshness, "_marks", None)
     monkeypatch.setattr(freshness, "_plugins_found", None)
+    monkeypatch.setattr(freshness, "_unsettled", False)
     monkeypatch.setattr(freshness, "_SOURCES_TTL", 0.0)
     return folder
 
