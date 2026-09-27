@@ -35,6 +35,10 @@ entry either - say what the behaviour was, not which class name was compared.
   editor window, and after `self-update`, a pull or a plugin upgrade it went on checking with the
   old code. Now it compares the engine version, the plugins and its code files with the state at
   start, and shows one warning per change asking for a restart. ([#150](https://github.com/keyfire/xbsl/pull/150))
+- **`code/handler-overrides-nothing` finds `@Handler` on a method that overrides nothing.** The
+  compiler refuses such a method in a component module, but the linter had no list of handlers to
+  check the name against. The stdlib step now keeps the handler lists from the component
+  descriptions the distribution ships, in both spellings; the other modules are not checked yet.
 
 ### Changed
 
@@ -49,6 +53,10 @@ entry either - say what the behaviour was, not which class name was compared.
   plugin that turns on a rule about Russian prose gave the Russian demo a finding its English twin
   cannot have, so the suite failed on such a machine while CI passed. The twins are now checked
   with the published rule set. ([#150](https://github.com/keyfire/xbsl/pull/150))
+- **The translator spells an overridden handler the way the platform does.** An override such as
+  `AfterCreate` stayed Russian in the English tree unless the dictionary had an entry for it: every
+  method was taken for a name of the project. Such an entry is now reported as redundant, and one
+  that spells the handler otherwise as a dictionary defect.
 
 ## 2026-09-25 – 0.119.0, 0.119.1
 

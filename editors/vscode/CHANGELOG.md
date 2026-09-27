@@ -19,6 +19,8 @@
   Problems panel opens the page of the annotation. ([#148](https://github.com/keyfire/xbsl/pull/148))
 - **The `code/url-data-scheme` finding links to the documentation.** Its code in the Problems panel
   opens the page of the Url type. ([#148](https://github.com/keyfire/xbsl/pull/148))
+- **The `code/handler-overrides-nothing` finding links to the documentation.** Its code in the
+  Problems panel opens the page of the annotation.
 
 ## 0.77.0
 
