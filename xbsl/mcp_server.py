@@ -28,8 +28,8 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, freshness, i18n, mcpjournal, metamodel, report, resource_usage, rundiff,
-    scaffold, uischema,
+    cijob, formmodel, freshness, i18n, mcpjournal, metamodel, plugins, report, resource_usage,
+    rundiff, scaffold, uischema,
 )
 from xbsl.cli import _context_of, _filter_requested, discover, discover_with_context
 from xbsl.engine import (
@@ -80,6 +80,10 @@ mcp = _new_server()
 # checked against the fingerprint of the sources taken at start. The server never exits over it:
 # a client such as Codex does not start a failed server again. The first sighting of each state
 # goes into the journal, where `xbsl mcp-log` shows it.
+#
+# Plugins changed on disk are not a reason to refuse: the loaded plugin stays whole in memory and
+# answers consistently - only not the way the CLI and CI answer now. So the tool runs, and a dict
+# answer carries `stale` first, with the plugins loaded and installed and the advice to restart.
 
 #: The tools that answer on a stale engine too: the one that names the environment.
 _ANSWER_WHEN_STALE = frozenset({"version_info"})
@@ -99,8 +103,19 @@ def _stale_answer(found: dict, message: str) -> dict:
     return {"error": message, "stale": {**found, "location": environment.location()}}
 
 
+def _warned(answer, found: dict):
+    """The answer of a tool that ran with the plugins loaded at start, the plugins on disk
+    being others: `stale` goes first in a dict answer. Another answer (a list) is left as it
+    is - the journal still hears it, and version_info names the state."""
+    if not isinstance(answer, dict) or "stale" in answer:
+        return answer
+    message = i18n.t("freshness.plugins-warning", state=freshness.describe(found))
+    return {"stale": {**found, "location": environment.location(), "message": message}, **answer}
+
+
 def _stale_guard(fn):
-    """The tool behind the check: refused on a stale engine, its failure explained on one."""
+    """The tool behind the check: refused on a stale engine, its failure explained on one,
+    its answer marked when the plugins on disk are not the loaded ones."""
 
     @functools.wraps(fn)
     def call(*args, **kwargs):
@@ -122,6 +137,10 @@ def _stale_guard(fn):
         noted = freshness.take_noted()
         if noted is not None:
             _journal_stale(noted, fn.__name__)
+        found = freshness.plugins_state()
+        if found is not None:
+            _journal_stale(found, fn.__name__)
+            answer = _warned(answer, found)
         return answer
 
     return call
@@ -232,13 +251,24 @@ def version_info() -> dict:
     `engine_on_disk` is the version the installation on disk declares now. This tool answers
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
     server is restarted, since the modules it would load next are from another version.
+
+    `plugins` are the plugins this server loaded at start, `plugins_on_disk` the ones installed
+    now. When those differ, `stale` names both (reason `plugins`, with the `changed`
+    distributions): the other tools run on the loaded rules and carry the same `stale` in their
+    answers until the server is restarted.
     """
     info = environment.snapshot()
     info["engine_on_disk"] = freshness.disk_version()
+    try:
+        info["plugins_on_disk"] = plugins.on_disk()
+    except Exception as exc:  # noqa: BLE001 - the diagnostic tool answers whatever the disk is like
+        info["plugins_on_disk"] = {"error": f"{type(exc).__name__}: {exc}"}
     found = freshness.version_state()
+    key = "freshness.refusal"
+    if found is None:
+        found, key = freshness.plugins_state(), "freshness.plugins-warning"
     if found is not None:
-        info["stale"] = {**found, "message": i18n.t(
-            "freshness.refusal", state=freshness.describe(found))}
+        info["stale"] = {**found, "message": i18n.t(key, state=freshness.describe(found))}
     return info
 
 
@@ -2070,6 +2100,7 @@ def meta_fold_comments(
     dry_run: bool = True,
     take_proposed: bool = False,
     root: str | None = None,
+    compact: bool = False,
 ) -> dict:
     """Fold the yaml comments the development environment does not read into a node description.
 
@@ -2097,8 +2128,19 @@ def meta_fold_comments(
     to the same data, every line of every comment is still there, the comment rules find
     nothing but the blocks left on purpose, and a second pass has nothing to move. A path
     that does not exist is refused, naming it.
-    The report names every move, so pass the files you edited: over a project of three
-    hundred descriptions that have never been folded it runs to a quarter of a megabyte.
+    The report names every move: over a project of three hundred descriptions that have never
+    been folded it runs to a quarter of a megabyte. Pass the files you edited, or ask for
+    compact - the short report of a whole tree, a few kilobytes:
+    compact - `files` gives way to counts and the moves worth a look, the way `compact` of
+              `lint_paths` holds findings short. `written` and `summary` stay; `counts` - the
+              files with a block, the files the fold changes, the moves by action (applied,
+              proposed, left) and the notes; `by_file` - {file: {applied, proposed, left}}, the
+              files with the most moves first, up to 10, past that `by_file_hint`; `review` -
+              one line per move worth a look ("path:line kind action `subject` -> target_line -
+              reason; notes"): the proposed and left moves first, then the applied ones with a
+              note; up to 10, past that `review_hint` counts them; `reasons` - the proposed and
+              left moves counted by reason; `audit` - every file the audit stopped, whole
+              [{file, audit}]: such a file is not written.
     """
     from xbsl import commentfold
 
@@ -2112,7 +2154,8 @@ def meta_fold_comments(
              if path.suffix.lower() == ".yaml"]
     folds = commentfold.fold_paths(files, take_proposed=take_proposed)
     written = 0 if dry_run else commentfold.write_folds(folds)
-    answer = {"root": str(base), **commentfold.report(folds, written)}
+    shape = commentfold.compact_report if compact else commentfold.report
+    answer = {"root": str(base), **shape(folds, written)}
     if dry_run:
         answer["dry-run"] = True
     return answer
@@ -2325,7 +2368,9 @@ def translate_status(root: str, against: str = "", full: bool = False) -> dict:
     other literal gap fails nothing: a literal of the code or of an `=` expression, a
     description, a text inside a component tree. `duplicates` counts the keys
     translated the same way in two places, two files or twice in one - harmless to the
-    lookups, listed by the CLI's `--check-duplicates` for the copy to take out.
+    lookups, listed by the CLI's `--check-duplicates` for the copy to take out. `drift` counts
+    the phrases whose translation names a name otherwise than its pair - the rows
+    `translate_drift` lists; like the duplicates, it does not decide whether the tree builds.
     """
     from xbsl.translation import cli as translate_cli
 
@@ -2353,6 +2398,7 @@ def translate_status(root: str, against: str = "", full: bool = False) -> dict:
         "literal_occurrences": totals["literal_occurrences"],
         "platform_gaps": totals["platform_gaps"],
         "duplicates": len(dictionary.duplicates),
+        "drift": translate_cli.drift_count(dictionary),
         "problems": report_obj.problems[:20],
         "dictionary": str(translate_cli.dictionary_path_for(project)),
     }

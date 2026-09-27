@@ -639,7 +639,9 @@ the translation carries none of the pair's spellings and names something unknown
 `ОбщееСклада -> StockCommon, while the translation names WarehouseCommon`, with the file and line
 of the entry. A translation that renders the name in plain words names nothing and is not listed.
 The mode reads the dictionary alone, answers in seconds and stays out of `--strict`: the tree
-builds either way, and the gate answers whether it builds.
+builds either way, and the gate answers whether it builds. The plain report counts such phrases
+in one line that points at `--drift` when there are any (`dictionary_drift` in json); the exit
+code does not change over them.
 
 `--gaps` shows the count, the first places to look at and `suggestion`, the platform's own
 spelling where it has one. A suggestion stays a hint: a name the project declared may deliberately
@@ -651,6 +653,7 @@ never offered at all.
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
   `against` names a git ref and adds the collision report of `--check-duplicates` against it,
   where the duplicates the ref already has are counted rather than listed (`full` lists them);
+  `drift` counts the phrases `translate_drift` lists;
 - `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`),
   the answer naming the `dictionary` it read;
   `compact` returns only `{key, kind, count}` per row - the worklist shape that fits an

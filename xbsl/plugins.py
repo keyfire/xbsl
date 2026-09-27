@@ -34,10 +34,12 @@ nobody notices.
 from __future__ import annotations
 
 import os
+import sys
+from collections.abc import Iterable
 from functools import lru_cache
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 RULES_GROUP = "xbsl.rules"
 DATA_GROUP = "xbsl.data"
@@ -63,22 +65,34 @@ def disabled() -> bool:
     return raw.strip().lower() not in _FALSY
 
 
+#: The groups a plugin may declare, in the order its distribution is named by.
+_GROUPS = (RULES_GROUP, DATA_GROUP, SEVERITY_GROUP)
+
+
+class Found(NamedTuple):
+    """The distribution behind an entry point, as one reading of its metadata saw it."""
+
+    name: str
+    version: str
+    #: The folder the distribution is installed into (its site-packages); None for a stub.
+    folder: str | None
+
+
+#: The distribution of every entry point the cached walk found, read by that walk:
+#: {entry point: Found}. The walk is where a plugin is found and its modules imported, so this is
+#: the version the process runs. The metadata on disk may say otherwise later - an upgrade under
+#: a running server replaces it and leaves the loaded modules as they were.
+_as_loaded: dict = {}
+
+
 def _points(group: str) -> list[EntryPoint]:
     if disabled():
         return []
     return list(_scan(group, entry_points))
 
 
-@lru_cache(maxsize=None)
-def _scan(group: str, scan: Callable) -> tuple[EntryPoint, ...]:
-    """One entry-point walk per group and process.
-
-    A walk reads every installed distribution's metadata, and the callers (the dataset
-    root resolution, the severity overrides) come back many times per run - uncached
-    it was the single largest share of a whole-project pass. The scanning callable is
-    part of the cache key on purpose: a test that monkeypatches `entry_points` gets a
-    fresh walk through its stub, with no cache reset to remember.
-    """
+def _walk(group: str, scan: Callable) -> tuple[EntryPoint, ...]:
+    """The entry points of a group and of its legacy twin, each once, ordered by name."""
     found = list(scan(group=group))
     legacy = _LEGACY_GROUPS.get(group)
     if legacy:
@@ -89,6 +103,51 @@ def _scan(group: str, scan: Callable) -> tuple[EntryPoint, ...]:
     return tuple(sorted(found, key=lambda ep: ep.name))
 
 
+@lru_cache(maxsize=None)
+def _scan(group: str, scan: Callable) -> tuple[EntryPoint, ...]:
+    """One entry-point walk per group and process.
+
+    A walk reads every installed distribution's metadata, and the callers (the dataset
+    root resolution, the severity overrides) come back many times per run - uncached
+    it was the single largest share of a whole-project pass. The scanning callable is
+    part of the cache key on purpose: a test that monkeypatches `entry_points` gets a
+    fresh walk through its stub, with no cache reset to remember. The distribution of each
+    entry point is read here too (`_as_loaded`): this is the walk the plugins are loaded by.
+    """
+    found = _walk(group, scan)
+    for ep in found:
+        if ep not in _as_loaded:
+            _as_loaded[ep] = _distribution(ep)
+    return found
+
+
+def _distribution(ep) -> Found | None:
+    """The distribution behind an entry point, read now; None for a stub or unreadable metadata."""
+    dist = getattr(ep, "dist", None)
+    if dist is None:
+        return None
+    try:
+        name, version = dist.metadata["Name"], dist.version
+    except Exception:
+        return None
+    if not name:
+        return None
+    try:
+        folder = str(dist.locate_file(""))
+    except Exception:
+        folder = None
+    return Found(str(name), str(version or ""), folder)
+
+
+def _named(found: Iterable[Found | None]) -> list[dict]:
+    """[{"name", "version"}] ordered by name, each distribution once (the first reading wins)."""
+    versions: dict[str, str] = {}
+    for one in found:
+        if one is not None:
+            versions.setdefault(one.name, one.version)
+    return [{"name": name, "version": versions[name]} for name in sorted(versions)]
+
+
 def _load(ep: EntryPoint):
     try:
         return ep.load()
@@ -97,6 +156,24 @@ def _load(ep: EntryPoint):
             f"Точка расширения '{ep.name}' группы {ep.group} не загрузилась "
             f"({ep.value}): {exc}"
         ) from exc
+
+
+def module_files() -> list[str]:
+    """The files of the top-level modules the plugin entry points name, for those imported.
+
+    A plugin package is loaded code as much as the engine is: a pull in the checkout of an
+    editable plugin changes the rules a running server holds while the version stays the
+    same, so the fingerprint of xbsl/freshness.py walks these as well.
+    """
+    files: list[str] = []
+    for group in _GROUPS:
+        for ep in _points(group):
+            top = str(getattr(ep, "value", "")).split(":", 1)[0].split(".", 1)[0].strip()
+            module = sys.modules.get(top) if top else None
+            file = getattr(module, "__file__", None)
+            if file and file not in files:
+                files.append(file)
+    return files
 
 
 def load_rules() -> list[str]:
@@ -128,20 +205,43 @@ def installed() -> list[dict]:
     here: the names come from the entry-point metadata alone, so the answer is safe even
     when a plugin is broken. An entry point without a distribution (a test stub) is
     skipped.
+
+    The versions are the ones the walk read when it loaded the plugins, not the ones on disk
+    now: a long-lived server keeps the modules it imported, and after an upgrade under it the
+    metadata on disk describes code it does not run. `on_disk` reads the disk.
     """
-    found: dict[str, str] = {}
-    for group in (RULES_GROUP, DATA_GROUP, SEVERITY_GROUP):
+    return _named(_as_loaded.get(ep) or _distribution(ep)
+                  for group in _GROUPS for ep in _points(group))
+
+
+def installed_folders() -> list[str]:
+    """The folders the loaded plugin distributions are installed into, each once."""
+    folders: list[str] = []
+    for group in _GROUPS:
         for ep in _points(group):
-            dist = getattr(ep, "dist", None)
-            if dist is None:
-                continue
-            try:
-                name, version = dist.metadata["Name"], dist.version
-            except Exception:
-                continue
-            if name:
-                found.setdefault(str(name), str(version or ""))
-    return [{"name": name, "version": found[name]} for name in sorted(found)]
+            found = _as_loaded.get(ep)
+            if found is not None and found.folder and found.folder not in folders:
+                folders.append(found.folder)
+    return folders
+
+
+def on_disk() -> list[dict]:
+    """The plugin distributions installed now, as `installed` names them: a walk past the cache.
+
+    What a long-lived process compares its plugins with (xbsl/freshness.py). One walk reads the
+    entry points of every installed distribution: tens of milliseconds in a small environment,
+    hundreds in one with a hundred packages - so the caller walks only when a folder the
+    distributions live in has changed. A walk that fails raises; the caller decides what that
+    is worth.
+    """
+    if disabled():
+        return []
+    everything = entry_points()
+
+    def select(group: str):
+        return everything.select(group=group)
+
+    return _named(_distribution(ep) for group in _GROUPS for ep in _walk(group, select))
 
 
 def severity_overrides() -> dict[str, str]:

@@ -524,6 +524,10 @@ MESSAGES = {
         "en": "keys translated the same way in several places: {entries}"
               " (list them with --check-duplicates)",
     },
+    "translate.summary-drift": {
+        "ru": "фраз, где имя названо не по паре: {entries} (список – --drift)",
+        "en": "phrases naming a name otherwise than its pair: {entries} (list them with --drift)",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -680,12 +684,13 @@ def cli_main(argv: list[str] | None = None) -> int:
         )
 
     lag = _dictionary_lag(report, root, found)
+    drifted = drift_count(loaded) if found is not None else 0
     if args.format == "json":
-        print(json.dumps(_as_json(report, args, found, lag, loaded.duplicates),
+        print(json.dumps(_as_json(report, args, found, lag, loaded.duplicates, drifted),
                          ensure_ascii=False, indent=1))
     else:
         _print_text(report, args, missing_tokens, missing_phrases, missing_literals, lag,
-                    loaded.duplicates)
+                    loaded.duplicates, drifted)
 
     if report.write_failed:
         # The tree is the job of a run with --out; a run that could not write it must not
@@ -777,7 +782,7 @@ def _no_dictionary(root: Path) -> int:
 
 
 def _as_json(report, args, dictionary: Path | None, lag: dict | None = None,
-             duplicates: list[dict] | None = None) -> dict:
+             duplicates: list[dict] | None = None, drifted: int = 0) -> dict:
     out = {
         "dictionary": str(dictionary) if dictionary else None,
         "dictionary_behind": lag,
@@ -785,6 +790,8 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None,
         # keeps them, the redundant copy is what a person takes out (`--check-duplicates`
         # lists the same).
         "dictionary_duplicates": duplicates or [],
+        # Counted, not listed: `--drift` lists them with the file and line of each entry.
+        "dictionary_drift": drifted,
         "totals": report.totals(),
         "ready": _ready(report),
         "problems": report.problems,
@@ -880,7 +887,8 @@ def _dictionary_lag(report, root: Path, dictionary: Path | None) -> dict | None:
 
 
 def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
-                lag: dict | None = None, duplicates: list[dict] | None = None) -> None:
+                lag: dict | None = None, duplicates: list[dict] | None = None,
+                drifted: int = 0) -> None:
     totals = report.totals()
     print(i18n.t("translate.summary", **{k: totals[k] for k in ("files", "surfaces", "translated", "coverage")}))
     print(i18n.t(
@@ -903,6 +911,8 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
         print(i18n.t("translate.summary-redundant", entries=totals["echoed_entries"]))
     if duplicates:
         print(i18n.t("translate.summary-duplicates", entries=len(duplicates)))
+    if drifted:
+        print(i18n.t("translate.summary-drift", entries=drifted))
     if totals["warnings"]:
         # The details, not only the count: a warning asks a person to look at ONE place, and
         # a bare number sends them hunting for it with the json mode.
@@ -1168,6 +1178,19 @@ def _render_redundant(args, page: list, total: int, payload: dict) -> None:
         if len(page) < total:
             print(i18n.t("translate.prune-partial", shown=len(page), total=total))
         print(i18n.t("translate.pruned", removed=removed))
+
+
+def drift_count(loaded) -> int:
+    """How many rows `--drift` would list: the plain report and `translate_status` count them.
+
+    The listing is a mode of its own and stays out of `--strict`, so a drift was found only by
+    whoever thought of asking; the plain report now carries one line when there is any. The
+    count reads the dictionary alone, a fraction of a second on twenty thousand phrases against
+    a pass of tens of seconds.
+    """
+    from xbsl.translation import drift as drift_module
+
+    return len(drift_module.phrase_drift(loaded))
 
 
 def drift_rows(path: Path, loaded, needle: str = "") -> list[dict]:
