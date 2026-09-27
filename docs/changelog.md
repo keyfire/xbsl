@@ -33,21 +33,21 @@ entry either - say what the behaviour was, not which class name was compared.
   field.** A filter looks its field up among the columns of the tables, not among the fields of
   the list, so such a filter silently went by a column of the same name or failed the apply. The
   warning names that column when it sees one and points to a `FilterItemExpression` for the
-  computed value.
+  computed value. ([#151](https://github.com/keyfire/xbsl/pull/151))
 
 ### Changed
 
 - **`yaml/list-scroll-without-loading` also finds a list the page scrolls.** A list over an array
   with `Navigation: None` and no page size shows one portion of ten rows, and without a scroll of
   its own the rows after the tenth were lost silently. A list over a tree source is no longer
-  judged: it loads on scroll whatever the property says.
+  judged: it loads on scroll whatever the property says. ([#151](https://github.com/keyfire/xbsl/pull/151))
 
 ### Fixed
 
 - **`comment/emphasis-caps` reads the FETCH clause as a cited query.** A comment that named the
   clause by its keyword after the word for "clause", or wrote FETCH and OFFSET in the English line
   of the dictionary, was reported as a word stressed in capitals. The same verb stressed in prose
-  is still reported.
+  is still reported. ([#151](https://github.com/keyfire/xbsl/pull/151))
 
 ## 2026-09-25 – 0.119.0, 0.119.1
 
