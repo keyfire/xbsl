@@ -33,6 +33,15 @@ entry either - say what the behaviour was, not which class name was compared.
   every move and ran to a quarter of a megabyte. The short answer keeps the counts, the files with
   the most moves and the moves worth a look, up to ten lines each, and every file the audit
   stopped.
+- **The MCP server says when the plugins on disk are not the ones it loaded.** After a plugin
+  upgrade under a running server, `lint_paths` judged by the old rule set while the CLI and CI ran
+  the new one, and the answer did not say so. The tools still run, but every answer that is an
+  object starts with `stale`, which names both versions and asks for a restart; `version_info`
+  shows `plugins_on_disk`.
+- **The language server warns when the code on disk changed under it.** It lives as long as the
+  editor window, and after `self-update`, a pull or a plugin upgrade it went on checking with the
+  old code. Now it compares the engine version, the plugins and its code files with the state at
+  start, and shows one warning per change asking for a restart.
 
 ### Changed
 

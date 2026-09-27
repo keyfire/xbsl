@@ -24,6 +24,13 @@ outside the root are not checked.
 The whole-project check reads only the root and the dictionary. Any other open file, such as a module
 outside the root, keeps the findings of its own check until you close it.
 
+The server lives as long as the editor window, so the code on disk can change under it:
+`self-update`, a `git pull` of an editable checkout, a plugin upgrade. It keeps checking with what
+it loaded at start, and its findings then differ from the CLI and CI. So the server compares the
+engine version, the installed plugins and its code files with the state at start, and when one of
+them changed it shows a warning once per change and asks for a restart (in VS Code, the command
+"XBSL: Restart the linter"). The checks go on, and the server does not restart on its own.
+
 Everything an editor needs for code is standard LSP, so a plain client works with no extra
 wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
 on them, and another editor would use the same requests to reproduce those panels:
@@ -78,6 +85,13 @@ fails, the server compares its code files with the state at start and names a re
 changed. A crashed rule says the same in its own report. The server does not restart or exit on
 its own, and `xbsl mcp-log` shows the first time it noticed each change.
 
+The plugins are compared too. When the plugins installed differ from the ones the server loaded,
+the tools still run, on the rules loaded at start, and every answer that is an object starts with
+`stale`: reason `plugins`, the `changed` distributions with both versions and a request to restart
+the server. `version_info` shows `plugins_on_disk` next to `plugins`. The server lists the installed
+distributions again only when a folder they are installed into changes, so a call costs one check
+of that folder.
+
 Every `meta_*` tool and `lint_paths` take `root`, the caller's project root. An agent working in
 a git worktree does not share the server's working directory, which is why the parameter exists.
 Relative `directory`, `yaml_path`, `module_path`, `paths`, `baseline` and `compare` resolve
@@ -94,7 +108,7 @@ yours.
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go |
 | `list_rules(select, ignore, filter)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry, and `filter` narrows further: a word that IS a group (the part of an id before `/`) lists that group alone, while any other word is looked for as an id substring or as a word of the title or the description – every i18n text registered under the rule's id (the title and the message templates its diagnostics are built from), in either language, plus its English docstring; `docs/RULES.md` is not read, since it ships with neither the sdist nor the wheel. Matching is case-insensitive. A `filter` that matches nothing answers `{error, near_groups}` – the groups closest to it by spelling – instead of an empty list |
-| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file |
+| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file. `engine_on_disk` and `plugins_on_disk` say what is installed now, and `stale` appears when that differs from what the server loaded |
 
 **Platform reference and schemas**
 

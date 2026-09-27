@@ -44,7 +44,7 @@ except ImportError:  # pragma: no cover - the extra is not installed
 
 from xbsl import (
     __version__, baseline, bindingcomplete, cijob, dataset, doccomments, docs, engine, environment,
-    formedits, formhandlers, formmodel, formsearch, i18n, indexer, metamodel, scaffold,
+    formedits, formhandlers, formmodel, formsearch, freshness, i18n, indexer, metamodel, scaffold,
     templates, terms, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
@@ -273,6 +273,9 @@ class _State:
         # it - the adoption happens once, at startup, and a line in the output channel is
         # not something anyone reads while judging a finding.
         self.ci: Optional[dict] = None
+        # The stale states the editor was told about, (reason, what is on disk): once per
+        # state, not on every keystroke (see tell_if_stale).
+        self.stale_told: set[tuple[str, str]] = set()
 
 
 STATE = _State()
@@ -480,7 +483,33 @@ def _make_server() -> "LanguageServer":
 
     # --- diagnostics ------------------------------------------------------------------
 
+    def tell_if_stale() -> None:
+        """Say once per state that the code on disk is not the code this server runs.
+
+        The server lives as long as the editor window, the way the MCP server lives as long as
+        an agent session, and goes stale the same way (xbsl/freshness.py): `self-update` or a
+        pull in an editable checkout replaces the engine under it, an upgrade replaces a
+        plugin, and the findings stop matching the CLI and CI without a word. The checks go
+        on - the editor has no answer to refuse with - and the user is told by a message and
+        a line of the log. The check costs a small file and a stat per call, the fingerprint
+        of the sources a couple of milliseconds every few seconds at most.
+        """
+        try:
+            found = freshness.state(sources=True)
+        except Exception:  # noqa: BLE001 - the check must never cost the diagnostics
+            return
+        if found is None:
+            return
+        told = (found["reason"], found["on_disk"])
+        if told in STATE.stale_told:
+            return
+        STATE.stale_told.add(told)
+        text = i18n.t("freshness.editor", state=freshness.describe(found))
+        server.show_message_log(text)
+        server.show_message(text, lsp.MessageType.Warning)
+
     def lint_buffer(uri: str) -> None:
+        tell_if_stale()
         doc = server.workspace.get_text_document(uri)
         path = uri_to_path(uri)
         if path is None:
@@ -544,6 +573,7 @@ def _make_server() -> "LanguageServer":
         return STATE.lookup
 
     def project_lint() -> None:
+        tell_if_stale()
         root = STATE.root
         if root is None:
             return
@@ -2251,6 +2281,9 @@ def main() -> None:
     if args.as_ci is not None or args.as_ci_job:
         _adopt_ci(args)
     comment_names.set_other_systems(STATE.other_systems)
+    # The code and the plugins as they were loaded: every check later is judged against them
+    # (see tell_if_stale).
+    freshness.remember()
     _make_server().start_io()
 
 

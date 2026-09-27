@@ -696,6 +696,12 @@ _CORE_MESSAGES = {
         "en": "the engine sources of {loaded} changed on disk after the server started "
               "(call {tool})",
     },
+    "mcplog.stale.plugins": {
+        "ru": "надстройки на диске сменились после запуска сервера: {changes} (вызов {tool}); "
+              "инструменты отвечают с предупреждением до перезапуска",
+        "en": "the plugins on disk changed after the server started: {changes} (call {tool}); "
+              "the tools answer with a warning until a restart",
+    },
     "mcplog.stale.error": {"ru": "ошибка: {error}", "en": "error: {error}"},
     "mcplog.unknown": {"ru": "событие {event}", "en": "event {event}"},
     "cli.help.commands.extract": {

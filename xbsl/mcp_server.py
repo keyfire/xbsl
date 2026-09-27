@@ -28,8 +28,8 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, freshness, i18n, mcpjournal, metamodel, report, resource_usage, rundiff,
-    scaffold, uischema,
+    cijob, formmodel, freshness, i18n, mcpjournal, metamodel, plugins, report, resource_usage,
+    rundiff, scaffold, uischema,
 )
 from xbsl.cli import _context_of, _filter_requested, discover, discover_with_context
 from xbsl.engine import (
@@ -80,6 +80,10 @@ mcp = _new_server()
 # checked against the fingerprint of the sources taken at start. The server never exits over it:
 # a client such as Codex does not start a failed server again. The first sighting of each state
 # goes into the journal, where `xbsl mcp-log` shows it.
+#
+# Plugins changed on disk are not a reason to refuse: the loaded plugin stays whole in memory and
+# answers consistently - only not the way the CLI and CI answer now. So the tool runs, and a dict
+# answer carries `stale` first, with the plugins loaded and installed and the advice to restart.
 
 #: The tools that answer on a stale engine too: the one that names the environment.
 _ANSWER_WHEN_STALE = frozenset({"version_info"})
@@ -99,8 +103,19 @@ def _stale_answer(found: dict, message: str) -> dict:
     return {"error": message, "stale": {**found, "location": environment.location()}}
 
 
+def _warned(answer, found: dict):
+    """The answer of a tool that ran with the plugins loaded at start, the plugins on disk
+    being others: `stale` goes first in a dict answer. Another answer (a list) is left as it
+    is - the journal still hears it, and version_info names the state."""
+    if not isinstance(answer, dict) or "stale" in answer:
+        return answer
+    message = i18n.t("freshness.plugins-warning", state=freshness.describe(found))
+    return {"stale": {**found, "location": environment.location(), "message": message}, **answer}
+
+
 def _stale_guard(fn):
-    """The tool behind the check: refused on a stale engine, its failure explained on one."""
+    """The tool behind the check: refused on a stale engine, its failure explained on one,
+    its answer marked when the plugins on disk are not the loaded ones."""
 
     @functools.wraps(fn)
     def call(*args, **kwargs):
@@ -122,6 +137,10 @@ def _stale_guard(fn):
         noted = freshness.take_noted()
         if noted is not None:
             _journal_stale(noted, fn.__name__)
+        found = freshness.plugins_state()
+        if found is not None:
+            _journal_stale(found, fn.__name__)
+            answer = _warned(answer, found)
         return answer
 
     return call
@@ -232,13 +251,24 @@ def version_info() -> dict:
     `engine_on_disk` is the version the installation on disk declares now. This tool answers
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
     server is restarted, since the modules it would load next are from another version.
+
+    `plugins` are the plugins this server loaded at start, `plugins_on_disk` the ones installed
+    now. When those differ, `stale` names both (reason `plugins`, with the `changed`
+    distributions): the other tools run on the loaded rules and carry the same `stale` in their
+    answers until the server is restarted.
     """
     info = environment.snapshot()
     info["engine_on_disk"] = freshness.disk_version()
+    try:
+        info["plugins_on_disk"] = plugins.on_disk()
+    except Exception as exc:  # noqa: BLE001 - the diagnostic tool answers whatever the disk is like
+        info["plugins_on_disk"] = {"error": f"{type(exc).__name__}: {exc}"}
     found = freshness.version_state()
+    key = "freshness.refusal"
+    if found is None:
+        found, key = freshness.plugins_state(), "freshness.plugins-warning"
     if found is not None:
-        info["stale"] = {**found, "message": i18n.t(
-            "freshness.refusal", state=freshness.describe(found))}
+        info["stale"] = {**found, "message": i18n.t(key, state=freshness.describe(found))}
     return info
 
 
