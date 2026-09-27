@@ -100,7 +100,7 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Путь `{{поставщик}}/{{имя}}` разошёлся с дескриптором – сборка отвергнет проект до компиляции [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у другого компонента ui-схемы есть: применение отвечает `Неизвестное свойство` [подробнее](#a-yaml-unknown-component-property) [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке: применение отвергает узел и откатывает проект [подробнее](#a-yaml-inline-command-name) [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
-| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с прокруткой по вертикали, у которого `Навигация: Отсутствует`: строки берутся одной порцией, и хвост данных прокруткой недостижим [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с `Навигация: Отсутствует` не догружает хвост: прокрутка по вертикали крутит одну порцию, а список над массивом без своей прокрутки оставляет автоматическую порцию в десять строк [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Комментарий `#` в описании элемента: визуальный редактор пишет файл заново из модели и сохраняет только документирующий комментарий `##` в первых строках узла, у которого он есть (элемент, компонент, объявленное свойство, табличная часть и подобные). Автоисправление меняет маркер у блока, который уже стоит на таком месте, и переносит внутрь узла блок, стоящий перед `-` элемента списка (кроме экземпляра компонента проекта в списке: на нём комментарий ломает сборку); остальное называется вместе с ближайшим узлом, у которого комментарий есть |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `##` стоит там, где среда разработки его не читает: перед `-` элемента списка, над отдельным свойством, у узла без документирующего комментария (стандартный реквизит вроде `Код` и `Наименование`, команда, поле динамического списка). Он пропадёт так же, как комментарий `#`. Отдельный случай – экземпляр компонента проекта или библиотеки в списке: с блоком `##` на таком узле сервер не применяет проект, и правило называет эту причину |
 
@@ -148,8 +148,11 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 
 <a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** Порцию
 задаёт `РазмерСтраницы`, и прокрутка крутит только её: запись находится поиском списка, но не
-прокруткой. Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список, который прокрутку не обещает, и
-выражение в `Навигации` правило не судит.
+прокруткой. Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список над массивом без своей прокрутки
+правило судит, пока `РазмерСтраницы` автоматический (десять строк): страница прокручивает одну
+порцию, и лечит размер страницы по пределу данных либо подгрузка со своей прокруткой списка.
+Источник-дерево подгружается при прокрутке при любом значении и не судится; не судятся и
+динамический список без прокрутки, и выражение в `Навигации`.
 
 ### Тир B – текст и соглашения
 

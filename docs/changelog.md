@@ -35,6 +35,13 @@ entry either - say what the behaviour was, not which class name was compared.
   warning names that column when it sees one and points to a `FilterItemExpression` for the
   computed value.
 
+### Changed
+
+- **`yaml/list-scroll-without-loading` also finds a list the page scrolls.** A list over an array
+  with `Navigation: None` and no page size shows one portion of ten rows, and without a scroll of
+  its own the rows after the tenth were lost silently. A list over a tree source is no longer
+  judged: it loads on scroll whatever the property says.
+
 ### Fixed
 
 - **`comment/emphasis-caps` reads the FETCH clause as a cited query.** A comment that named the
