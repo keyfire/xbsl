@@ -88,23 +88,23 @@ MESSAGES = {
     },
     f"{OVERRIDE_RULE}.found": {
         "ru": "Метод '{name}' помечен @{annotation}, но переопределять ему нечего: модуль "
-              "компонента на базе {base} переопределяет только {handlers_ru}, а парный yaml "
+              "компонента на базе {base} переопределяет только {handlers}, а парный yaml "
               "этот метод не привязывает. Сборка откажет: \"A handler associated with method "
               "\"{name}\" is not found\". Если метод подключается к событию в коде или "
               "вызывается из модуля, снимите аннотацию.",
         "en": "Method '{name}' carries @{annotation}, yet it has nothing to override: a module "
-              "of a component built on {base} overrides only {handlers_en}, and the paired yaml "
+              "of a component built on {base} overrides only {handlers}, and the paired yaml "
               "does not bind the method. The build refuses it: \"A handler associated with "
               "method \"{name}\" is not found\". If the method is attached to an event in code "
               "or called from the module, remove the annotation.",
     },
     f"{OVERRIDE_RULE}.misspelled": {
         "ru": "Метод '{name}' помечен @{annotation}, но модуль компонента на базе {base} "
-              "такого обработчика не переопределяет. Похоже на опечатку в {similar_ru}: сборка "
+              "такого обработчика не переопределяет. Похоже на опечатку в {similar}: сборка "
               "откажет (\"A handler associated with method \"{name}\" is not found\"), а "
               "переименованный метод платформа будет вызывать как обработчик.",
         "en": "Method '{name}' carries @{annotation}, but a module of a component built on "
-              "{base} overrides no such handler. It looks like a misspelled {similar_en}: the "
+              "{base} overrides no such handler. It looks like a misspelled {similar}: the "
               "build refuses it (\"A handler associated with method \"{name}\" is not "
               "found\"), and once renamed the platform will call the method as the handler.",
     },
@@ -293,8 +293,9 @@ def _override_mapper(source: SourceFile) -> dict | None:
     return None
 
 
-def _spelled(rows, language: str) -> str:
-    return ", ".join(row[language] for row in rows)
+def _language() -> str:
+    """The spelling a message names a handler in: the reader's language."""
+    return "en" if i18n.current_lang() == "en" else "ru"
 
 
 @rule(
@@ -338,13 +339,12 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 meant = next(row for row in rows if near[0] in (row["ru"], row["en"]))
                 yield Diagnostic(
                     rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
-                    i18n.t(f"{OVERRIDE_RULE}.misspelled", similar_ru=meant["ru"],
-                           similar_en=meant["en"], **fields),
+                    i18n.t(f"{OVERRIDE_RULE}.misspelled", similar=meant[_language()], **fields),
                 )
                 continue
             yield Diagnostic(
                 rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
-                i18n.t(f"{OVERRIDE_RULE}.found", handlers_ru=_spelled(rows, "ru"),
-                       handlers_en=_spelled(rows, "en"), **fields),
+                i18n.t(f"{OVERRIDE_RULE}.found",
+                       handlers=", ".join(row[_language()] for row in rows), **fields),
                 fix=TextEdit(method["start"], method["end"], ""),
             )
