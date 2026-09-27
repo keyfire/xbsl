@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from xbsl import engine, i18n, libs, scaffold, terms
+from xbsl import engine, i18n, libs, modulehandlers, scaffold, terms
 from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
@@ -482,6 +482,13 @@ def translate_project(
         project_index=ProjectIndex.build(root),
     )
     fields = project_names_module.collect_structure_fields(root, engine.load)
+    # Read once for the pass: a project-wide walk is stamped by the bytes of every source, and
+    # asked once per module it made the pass quadratic in the size of the project. Without the
+    # handler lists nobody asks, and the walk is not paid for at all.
+    component_bases = (
+        project_names_module.component_bases(root, engine.load)
+        if modulehandlers.available() else {}
+    )
     report = ProjectReport(root=root)
     swaps = _localization_map(root, files) if swap_localization else {}
     outputs: dict[Path, tuple[str, bytes | str, engine.SourceFile | None]] = {}
@@ -502,6 +509,8 @@ def translate_project(
                     source, resolver, file_report,
                     owner=project_names_module.module_owner(path, engine.load),
                     form_nodes=project_names_module.form_nodes(path, engine.load),
+                    handlers=project_names_module.module_handlers(
+                        path, engine.load, component_bases),
                 )
         elif path.suffix == ".json":
             translated = _translate_json_bytes(path.read_bytes(), dictionary, fields, file_report)

@@ -13,8 +13,12 @@ name as written EVERYWHERE (a consistent no-op) and is reported. When a project 
 thing after a platform word, the dictionary entry usually repeats the platform spelling - which
 is exactly the answer that keeps the declaration and its uses together.
 
-Two exceptions stay with the platform: the built-in items a collection dispatches by name (the standard code, name and owner
-attributes and their kin - the platform declares them, the sources only mention them) and anything a project spells in Latin already.
+Three exceptions stay with the platform: the built-in items a collection dispatches by name (the standard code, name and owner
+attributes and their kin - the platform declares them, the sources only mention them), anything a project spells in Latin already,
+and an override of a platform handler. A method under the handler annotation named like a handler the platform lists for a
+module (see xbsl/modulehandlers.py) is found by the compiler under the platform's own word, so the English tree has to spell it
+the way the platform does - a dictionary entry could only get it wrong. The names of the handlers the platform does not list
+yet stay with the project, as before.
 """
 
 from __future__ import annotations
@@ -25,10 +29,11 @@ from dataclasses import dataclass
 from functools import lru_cache, wraps
 from pathlib import Path
 
-from xbsl import dataset, libs, metamodel
+from xbsl import dataset, libs, metamodel, modulehandlers, terms
 from xbsl.lexer import tokens
 from xbsl.engine import SourceFile
 from xbsl.restext import RESOURCE_DIRS
+from xbsl.rules._syntax import annotations_before
 from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
 
 #: `Имя:` / `Name:` of a yaml node, any nesting (a list item dash counts as indent).
@@ -222,7 +227,8 @@ def _module_declarations(source: SourceFile) -> tuple[set[str], dict[str, set[st
             inside_declaration = False
             inside_structure = False
             structure_name = ""
-            _add_next_name(toks, index, out)
+            if not overrides_a_handler(toks, index):
+                _add_next_name(toks, index, out)
         elif tok.kind == "KEYWORD" and tok.canonical in ("STRUCTURE", "ENUMERATION"):
             inside_declaration = True
             inside_structure = tok.canonical == "STRUCTURE"
@@ -250,6 +256,32 @@ def _module_declarations(source: SourceFile) -> tuple[set[str], dict[str, set[st
             if starts_line and ends_line:
                 out.add(tok.value)
     return out, fields
+
+
+@lru_cache(maxsize=1)
+def _handler_annotations() -> frozenset[str]:
+    """Both spellings of the handler annotation."""
+    return frozenset({"Обработчик", *terms.key_forms("Обработчик")})
+
+
+dataset.register_reset(_handler_annotations.cache_clear)
+
+
+def overrides_a_handler(toks: list, index: int) -> bool:
+    """Whether the method declared at `index` overrides a handler the platform lists.
+
+    It has to carry the handler annotation AND be named like a handler of some component
+    module. The name alone is not enough - a project may call a method of its own after an
+    event - and the annotation alone is not either: the platform lists the handlers of the
+    component modules only, and an override of any other module stays the project's word.
+    """
+    keyword = toks[index]
+    if keyword.kind != "KEYWORD" or keyword.canonical != "METHOD":
+        return False
+    name = _next_name(toks, index)
+    if not name or name not in modulehandlers.all_names():
+        return False
+    return not _handler_annotations().isdisjoint(annotations_before(toks, index))
 
 
 def _add_next_name(toks: list, index: int, out: set[str], skip_keywords: bool = False) -> None:
@@ -664,6 +696,78 @@ def module_owner(path: Path, loader) -> ModuleOwner:
     if kind == _STRUCTURE_KIND:
         return ModuleOwner(frozenset(name for name, _item in _item_names(data, "Поля", kind)))
     return ModuleOwner()
+
+
+def _base_head(data: dict, kind: str) -> str:
+    """The base a component names (`Наследует.Тип`): no generic arguments, no package."""
+    inherits = value_of(data, "Наследует", kind)
+    written = value_of(inherits, "Тип") if isinstance(inherits, dict) else None
+    return modulehandlers.base_head(written) if isinstance(written, str) else ""
+
+
+@_by_sources
+def component_bases(root: Path, loader) -> dict[str, str]:
+    """{interface component of the project: the base it names} - "" for a name met twice.
+
+    What a chain of components is walked by: a component may build on another component of
+    the project, and only the end of that chain is the platform's type (see module_handlers).
+    """
+    out: dict[str, str] = {}
+    for path in sorted(root.rglob("*.yaml")):
+        if any(part.startswith(".") for part in path.relative_to(root).parts):
+            continue
+        try:
+            source = loader(path)
+        except OSError:
+            continue
+        if not _COMPONENT_KIND_RE.search(source.text):
+            continue
+        data, error = _parsed(source)
+        kind = object_kind(data) if error is None else None
+        if kind != _COMPONENT_KIND:
+            continue
+        name = value_of(data, "Имя", kind)
+        if isinstance(name, str) and name:
+            out[name] = "" if name in out else _base_head(data, kind)
+    return out
+
+
+@dataclass(frozen=True)
+class ModuleHandlers:
+    """The handlers a module may override: the platform type that lists them, and
+    {Russian name: English spelling} of each."""
+
+    base: str
+    spellings: dict[str, str]
+
+
+def module_handlers(path: Path, loader, bases: dict[str, str]) -> ModuleHandlers | None:
+    """The handlers the module at `path` may override, or None.
+
+    Only the module of an interface component answers - `Имя.xbsl` beside the `Имя.yaml` of
+    the component - with the handlers of the platform type its chain of bases ends at; `bases`
+    are the components of the project (component_bases), read once for the whole pass. Any
+    other module, a chain that cannot be told and data without the lists answer None.
+    """
+    if not modulehandlers.available() or not path.name.endswith(".xbsl"):
+        return None
+    stem = path.name[: -len(".xbsl")]
+    if any(stem.endswith(tail) for tail in _OBJECT_MODULE_TAILS):
+        return None
+    pair = path.with_name(f"{stem}.yaml")
+    if not pair.is_file():
+        return None
+    try:
+        data, error = _parsed(loader(pair))
+    except OSError:
+        return None
+    kind = object_kind(data) if error is None else None
+    if kind != _COMPONENT_KIND:
+        return None
+    base = modulehandlers.platform_base(_base_head(data, kind), bases.get)
+    if not base:
+        return None
+    return ModuleHandlers(base, {row["ru"]: row["en"] for row in modulehandlers.rows_of(base)})
 
 
 @_by_sources

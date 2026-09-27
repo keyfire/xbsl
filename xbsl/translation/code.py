@@ -54,7 +54,7 @@ from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules import _syntax
 from xbsl.translation import platform_map
 from xbsl.translation.dictionary import Dictionary
-from xbsl.translation.names import ModuleOwner
+from xbsl.translation.names import ModuleHandlers, ModuleOwner, overrides_a_handler
 from xbsl.translation.reporting import FileReport
 from xbsl.translation.codewrap import wrap_code
 from xbsl.translation.rewrap import rewrap_comments
@@ -715,13 +715,15 @@ def apply_edits(text: str, edits: list[Edit]) -> str:
 
 def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
                    owner: ModuleOwner | None = None,
-                   form_nodes: dict[str, str] | None = None) -> str:
+                   form_nodes: dict[str, str] | None = None,
+                   handlers: ModuleHandlers | None = None) -> str:
     """The translated text of one module (or standalone query file).
 
     `owner` is what the element of the module puts in scope of its methods (see
     names.module_owner); without it a bare name is a property of nothing. `form_nodes` are the
     nodes of the component tree the module pairs with and the components they are (see
-    names.form_nodes).
+    names.form_nodes). `handlers` are the handlers the module may override, with the spelling
+    the platform gives each (see names.module_handlers): an override takes that spelling.
     """
     edits: list[Edit] = []
     toks = lexer.tokens(source)
@@ -736,7 +738,8 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
                         owner_scopes=owner_scopes(source, owner),
                         form_nodes=form_nodes, chains=chains,
                         chain_scopes=(owner_scopes(source, chains.owner(owner))
-                                      if chains is not None else None))
+                                      if chains is not None else None),
+                        handlers=handlers)
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and English is the longer language: a line that
     # fitted the width limit in Russian stops fitting it here. The lines of code that the
@@ -764,6 +767,7 @@ def collect_token_edits(
     query_aliases: frozenset[str] = frozenset(),
     chains: ChainTypes | None = None,
     chain_scopes: list[tuple[int, int, frozenset[str]]] | None = None,
+    handlers: ModuleHandlers | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -783,10 +787,14 @@ def collect_token_edits(
     `chains` types the chain before a member whose receiver no declaration types (see
     ChainTypes); a fragment has none and reads such a member by its name alone. `chain_scopes`
     are the methods with the names a chain root may be typed by there (see ChainTypes.owner).
+    `handlers` are the handlers the module may override (see names.module_handlers): a method
+    of the module overriding one of them, and every bare call of it, takes the platform's word.
     """
     # The paths inside `Ресурс{...}` are spelled first, off the text: the tokens of such a path
     # are file names, and the walk below must not read them as code.
     resource_tokens = _resource_literal_edits(text, toks, base, resolver, report, edits, at)
+    #: {method: the platform's spelling} of the handlers this module overrides.
+    overrides = _handler_overrides(toks, handlers.spellings) if handlers else {}
     prev_dot = False
     prev_ident = ""
     #: The ROOT of the current dotted chain: `Components.Tags.Remove` is a member of a
@@ -873,7 +881,9 @@ def collect_token_edits(
             # Met live - two Russian words that English spells alike, and the tree went out
             # with two handlers named the same while every check called the translation done.
             if method_name:
-                translated, _plane = resolver.identifier(method_name, scope=root_scope)
+                translated = overrides.get(method_name)
+                if translated is None:
+                    translated, _plane = resolver.identifier(method_name, scope=root_scope)
                 if translated:
                     line, col = at if at is not None else (method_token.line, method_token.col)
                     report.note_name("module", method_name, translated, line, col)
@@ -941,6 +951,11 @@ def collect_token_edits(
                 _annotation_identifier_edit(tok, base, resolver, report, edits, at)
             elif not tok.value.isascii() and not in_query and type_ranges and _inside(type_ranges, base + tok.start):
                 _type_identifier_edit(tok, base, prev_dot, resolver, report, edits, at)
+            elif (tok.value in overrides and not prev_dot and not in_query and not field_of
+                    and tok.value not in local_names and tok.value not in owner_names):
+                # The override and every bare call of it: the method of this module.
+                _override_edit(tok, base, overrides[tok.value], resolver, report, edits, at,
+                               root_scope, handlers.base if handlers else "")
             elif not tok.value.isascii():
                 query_receiver = _query_reference_receiver(toks, index, query_aliases)
                 scope = field_of or query_receiver or (prev_ident if prev_dot else root_scope)
@@ -1931,6 +1946,44 @@ def _annotation_identifier_edit(tok, base, resolver, report, edits, at=None) -> 
         return
     line, col = at if at is not None else (tok.line, tok.col)
     report.note_missing(tok.value, line, col, plane)
+
+
+def _handler_overrides(toks: list, spellings: dict[str, str]) -> dict[str, str]:
+    """{method: the platform's spelling} of the handlers the module overrides.
+
+    An override carries the handler annotation and is named like a handler the platform lists
+    (names.overrides_a_handler); of those, only the handlers of this module's own base answer
+    here. A method named like a handler of some other component overrides nothing in this
+    module - the compiler refuses it, and the translator leaves it to the dictionary.
+    """
+    found: dict[str, str] = {}
+    for index, tok in enumerate(toks):
+        if tok.kind != "KEYWORD" or tok.canonical != "METHOD":
+            continue
+        if not overrides_a_handler(toks, index):
+            continue
+        name = _next_ident_token(toks, index)
+        if name is not None and name.value in spellings:
+            found[name.value] = spellings[name.value]
+    return found
+
+
+def _override_edit(tok, base, spelling, resolver, report, edits, at, scope, owner) -> None:
+    """Spell an override of a platform handler the way the platform does.
+
+    The compiler finds an override by the platform's own name, so the dictionary is not asked
+    what to write here, only whether it agrees. An entry spelling the handler otherwise is
+    reported as the defect it is - the platform wins, as it does over a member of a platform
+    type; an entry spelling it the same way did nothing here and is judged an echo.
+    """
+    entry = resolver.dictionary.token(tok.value, scope)
+    if entry is not None and entry != spelling:
+        line, col = at if at is not None else (tok.line, tok.col)
+        report.note_shadow(tok.value, line, col, entry, spelling, owner)
+    else:
+        resolver.note_platform_win(tok.value, spelling)
+    if spelling != tok.value:
+        edits.append((base + tok.start, base + tok.end, spelling))
 
 
 def _inside(ranges: list[tuple[int, int]], offset: int) -> bool:

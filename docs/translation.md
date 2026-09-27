@@ -209,6 +209,15 @@ The exceptions stay with the platform: the built-in items a collection dispatche
 are the standard code, name and owner attributes, and the facet after a dot in a type
 expression.
 
+An override of a platform handler is the platform's word too. A method under `@Handler` named
+like a handler the platform lists is not a name of the project: the compiler finds the override
+by the platform's name. In the module of an interface component whose base declares that
+handler, the declaration and the calls in the module take the English spelling from the lists in
+the data (`AfterCreate` for the after-create override); in other modules the platform
+dictionaries translate the name. A project dictionary entry that spells it otherwise is reported
+as a dictionary defect, and one that spells it the same way as redundant. Data without the lists
+leaves such a name to the dictionary, as before.
+
 A type is the platform's wherever only a type can stand: in a type expression, at the root of a
 static call and right before a facet, as in `Entity.Privilege`. A field, an attribute or a method
 the project spelled the same way holds nothing there. Only a type the project declares under that

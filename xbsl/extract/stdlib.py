@@ -1410,7 +1410,7 @@ def extract(dist: Path) -> tuple:
             facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
             type_variance, method_params,
             deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired,
-            component_floors(descriptions))
+            component_floors(descriptions), component_handlers(descriptions, names))
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1483,6 +1483,37 @@ def _description_rows(record: dict, kind: str, *, typed: bool) -> list[dict]:
     return found
 
 
+def _mode_text(value: object) -> str:
+    """A compatibility mode as the description writes it (`8.0`, or the number 8.0), or ""."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return ""
+    return str(value).strip()
+
+
+def _handler_rows(record: dict) -> list[dict]:
+    """The handlers a module of the component overrides by name, as the description lists them.
+
+    The `moduleHandlers` section: the handler the platform itself calls in the module of a
+    component built on this type (`AfterCreate` of every component, `BeforeClose` of a form,
+    `BeforeWrite` of an object form), both spellings and, where the description states them,
+    the compatibility modes it lives in. The reference pages tell the same thing in prose and
+    not always the same way - one entry says "overridable handler", the next only shows the
+    signature - so the machine description is read, not the page.
+    """
+    found: list[dict] = []
+    for row in record.get("moduleHandlers") or ():
+        term = _description_term(row.get("term")) if isinstance(row, dict) else None
+        if term is None:
+            continue
+        entry = {"ru": term["ru"], "en": term["en"]}
+        for bound in ("from", "to"):
+            mode = _mode_text(row.get(bound))
+            if mode:
+                entry[bound] = mode
+        found.append(entry)
+    return found
+
+
 def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
     """{Russian component name: the runtime facts of one interface component descriptor}.
 
@@ -1531,8 +1562,23 @@ def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
                 "to": data.get("to"),
                 "properties": _description_rows(data, "properties", typed=True),
                 "events": _description_rows(data, "events", typed=False),
+                "handlers": _handler_rows(data),
             }
     return found
+
+
+def component_handlers(descriptions: dict[str, dict], named: set[str]) -> dict[str, list[dict]]:
+    """{Russian component name: the handlers a module of a component built on it overrides}.
+
+    Only the type's OWN handlers, the way the description lists them: a component inherits
+    those of its bases, and the reader walks `bases` for them, as it does for the members.
+    A component the help never names is left out, for the reason retired_components gives.
+    """
+    return {
+        russian: record["handlers"]
+        for russian, record in sorted(descriptions.items())
+        if record.get("handlers") and russian in named
+    }
 
 
 def component_floors(descriptions: dict[str, dict]) -> dict[str, str]:
@@ -1922,7 +1968,8 @@ def main(argv=None) -> int:
      managers, manager_returns,
      facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
      type_variance, method_params,
-     deprecated, folds, checked_methods, retired, component_from) = extract(dist)
+     deprecated, folds, checked_methods, retired, component_from,
+     module_handlers) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1953,7 +2000,9 @@ def main(argv=None) -> int:
                     " при загрузке), под обеими формами имени"
                     " + типы, описанные только в topics-страницах (TOPIC_ONLY_TYPES)"
                     " + члены самих порождаемых типов, разделом generated_members"
-                    " (Вид.Объект, Вид.Данные, Вид.ПараметрыЗаписи)",
+                    " (Вид.Объект, Вид.Данные, Вид.ПараметрыЗаписи)"
+                    " + переопределяемые обработчики модулей компонентов, разделом"
+                    " module_handlers (moduleHandlers описаний компонентов в поставке)",
         },
         "names": sorted(names),
         "object_members": {k: sorted(v) for k, v in sorted(members.items())},
@@ -1965,6 +2014,10 @@ def main(argv=None) -> int:
         # The compatibility mode a component is registered from, as its shipped description
         # states it (see component_floors); the schema step reads it. Older datasets omit it.
         **({"component_from": component_from} if component_from else {}),
+        # The handlers a module of a component overrides by name, each type with its OWN ones
+        # (see component_handlers); the reader adds those of the bases. Older datasets omit it,
+        # and a consumer then judges no override at all.
+        **({"module_handlers": module_handlers} if module_handlers else {}),
         "type_members": {k: _members_json(v) for k, v in sorted(own_types.items())},
         # Global context: members of Стд and its first-level packages, available by bare name.
         "globals": sorted(globals_),

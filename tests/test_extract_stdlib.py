@@ -1104,6 +1104,60 @@ def test_the_shipped_description_never_overrules_the_help_and_names_no_new_type(
     assert "БлокСхема" not in data["type_members"] and "БлокСхема" not in data["names"]
 
 
+# --- the handlers a component module overrides -------------------------------------------
+
+_MODULE_HANDLERS = """\
+moduleHandlers:
+- term:
+    en: "AfterCreate"
+    ru: "ПослеСоздания"
+  hasReturnValue: false
+- term:
+    en: "GetChatData"
+    ru: "ПолучитьДанныеЧата"
+  to: "8.0"
+  hasReturnValue: true
+- term:
+    en: "HalfSpelled"
+- "not a row"
+"""
+
+
+def test_the_handlers_a_component_module_overrides_come_from_the_shipped_description(tmp_path):
+    """The description names the handlers of a module built on the component, both spellings.
+
+    Only the rows that state both halves of the term are kept, with the compatibility mode
+    where the description gives one; a component the help never names stays out, as it does
+    for the retired ones.
+    """
+    import json
+
+    extra = {
+        "Group": _spell(_SHIPPED_DESCRIPTION, REPLACE_EN="Group", REPLACE_RU="Группа",
+                        REPLACE_BASE="Component") + _MODULE_HANDLERS,
+        "BlockSchema": _spell(_SHIPPED_DESCRIPTION, REPLACE_EN="BlockSchema",
+                              REPLACE_RU="БлокСхема", REPLACE_BASE="Group") + _MODULE_HANDLERS,
+    }
+    _retired_car(tmp_path, extra)
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["module_handlers"] == {"Группа": [
+        {"ru": "ПослеСоздания", "en": "AfterCreate"},
+        {"ru": "ПолучитьДанныеЧата", "en": "GetChatData", "to": "8.0"},
+    ]}
+
+
+def test_a_distribution_whose_descriptions_name_no_handler_writes_no_section(tmp_path):
+    import json
+
+    _retired_car(tmp_path)
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    assert "module_handlers" not in json.loads(output.read_text(encoding="utf-8"))
+
+
 # --- a member name that opens with a lowercase letter ------------------------------------
 
 _LOWERCASE_MEMBER_PAGE = (

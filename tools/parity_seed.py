@@ -70,7 +70,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from xbsl import engine  # noqa: E402
+from xbsl import dataset, engine  # noqa: E402
 import xbsl.rules  # noqa: F401,E402  - registers every rule
 from xbsl.translation.dictionary import Dictionary  # noqa: E402
 from xbsl.translation.project import translate_project  # noqa: E402
@@ -106,6 +106,10 @@ class Seed:
     #: does not fail the run - but if it starts AGREEING, the run says so loudly, because
     #: that means the gap closed and this note is now a lie.
     known: str = ""
+    #: A section of stdlib.json the rule cannot judge without. Data extracted before the section
+    #: existed keeps such a rule silent by design, and the seed is then not run at all ("no-data")
+    #: rather than read as a violation nobody reports.
+    needs_section: str = ""
 
 
 _REGISTER_RU = """\
@@ -2110,6 +2114,25 @@ _SEQUENTIAL_EN = {
 }
 _SEQUENTIAL_OPEN_RU = "@Обработчик\nметод ПослеСоздания()\n"
 _SEQUENTIAL_OPEN_EN = "@Handler\nmethod AfterCreate()\n"
+
+#: A form whose module overrides handlers: the base names what it may override.
+_OVERRIDE_FORM_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f31
+Имя: ПанельСкладов
+ОбластьВидимости: ВПодсистеме
+Наследует:
+    Тип: Форма
+"""
+_OVERRIDE_FORM_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f31
+Name: StockPanel
+VisibilityScope: InSubsystem
+Inherits:
+    Type: Form
+"""
+_OVERRIDE_TOKENS = {"ПанельСкладов": "StockPanel", "Пересчитать": "Recalculate"}
 
 
 #: A list form over a dynamic list of the catalog: one field computed over a column, and a
@@ -5564,6 +5587,31 @@ SEEDS: list[Seed] = [
         tokens={"КарточкаСклада": "StockCard", "ЗаписатьСклад": "WriteStock"},
     ),
     Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the handler annotation on a form method nothing binds and no base declares",
+        files={"ПанельСкладов.yaml": _OVERRIDE_FORM_RU,
+               "ПанельСкладов.xbsl": "@Обработчик\nметод Пересчитать()\n;\n"},
+        english={"StockPanel.yaml": _OVERRIDE_FORM_EN,
+                 "StockPanel.xbsl": "@Handler\nmethod Recalculate()\n;\n"},
+        tokens=_OVERRIDE_TOKENS,
+        needs_section="module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the form overrides the after-create handler of every component and its own "
+             "before-close one - the translated tree spells both the platform's way",
+        files={"ПанельСкладов.yaml": _OVERRIDE_FORM_RU,
+               "ПанельСкладов.xbsl": "@Обработчик\nметод ПослеСоздания()\n;\n\n"
+                                     "@Обработчик\nметод ПередЗакрытием(Событие: ПараметрыЗакрытияФормы)\n;\n"},
+        english={"StockPanel.yaml": _OVERRIDE_FORM_EN,
+                 "StockPanel.xbsl": "@Handler\nmethod AfterCreate()\n;\n\n"
+                                    "@Handler\nmethod BeforeClose(Event: FormCloseParams)\n;\n"},
+        tokens=_OVERRIDE_TOKENS,
+        needs_section="module_handlers",
+    ),
+    Seed(
         rule="code/local-method-cross-component",
         expect=FINDING,
         note="a component method at the default visibility called through an instance from another component",
@@ -7161,8 +7209,19 @@ def _translator_differences(hand: dict[str, str], translated: Path) -> list[str]
     return differing
 
 
+def _has_section(name: str) -> bool:
+    """Whether the stdlib.json in use carries the section at all."""
+    return bool((dataset.load_optional("stdlib.json") or {}).get(name))
+
+
 def run_seed(seed: Seed) -> dict:
     """Plant the seed, translate it, run the rule on every tree, judge them together."""
+    if seed.needs_section and not _has_section(seed.needs_section):
+        return {
+            "rule": seed.rule, "expect": seed.expect, "note": seed.note, "known": seed.known,
+            "status": "no-data", "russian": 0, "english": 0, "translated": None,
+            "translator_differs": [], "translation_problems": [],
+        }
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         russian = _plant(base / "ru", seed.files)
@@ -7255,9 +7314,11 @@ def main(argv: list[str] | None = None) -> int:
 
     results = [run_seed(seed) for seed in seeds]
     # A documented gap does not fail the run; a gap that CLOSED does, so the note gets removed.
+    # A seed the data cannot judge yet is not a disagreement either - it is counted apart.
     bad = [r for r in results
-           if r["status"] != "ok" and not r["status"].startswith("known")]
+           if r["status"] not in ("ok", "no-data") and not r["status"].startswith("known")]
     known = [r for r in results if r["status"].startswith("known")]
+    unjudged = [r for r in results if r["status"] == "no-data"]
 
     if args.json:
         print(json.dumps(
@@ -7285,8 +7346,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"          translation: {result['translation_problems']}")
 
     covered = len({s.rule for s in SEEDS})
-    print(f"\nseeds: {len(results)}, disagreements: {len(bad)}, known gaps: {len(known)}; "
-          f"rules with a seed: {covered}, without: {len(_uncovered())}")
+    unjudged_note = f", not judged without their data: {len(unjudged)}" if unjudged else ""
+    print(f"\nseeds: {len(results)}, disagreements: {len(bad)}, known gaps: {len(known)}"
+          f"{unjudged_note}; rules with a seed: {covered}, without: {len(_uncovered())}")
     return 1 if bad else 0
 
 

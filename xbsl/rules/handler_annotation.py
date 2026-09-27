@@ -1,4 +1,4 @@
-"""Tier D: the handler annotation on a method the paired yaml binds.
+"""Tier D: the handler annotation on a method that overrides nothing.
 
 `@Обработчик` marks an OVERRIDE: a handler the base type of the module declares and the
 platform calls by its name - the after-create handler of a form, the before-write handler of
@@ -11,40 +11,58 @@ the yaml, and for a method nobody binds; the form's own after-create handler und
 annotation compiled. Without the annotation the bound methods compiled as well - the yaml
 binds them, nothing else is needed.
 
-The rule reports the case the sources prove: a method under the annotation whose name the
-paired yaml binds - as the value of an event of a component (the event names come from the
-interface schema, in both spellings) or of a handler key (a command, a route). A bound method
-is a handler of the yaml, not an override. A method nobody binds is refused too, but telling
-it from an override takes the complete list of the overridable handlers of every kind of
-module, and the data does not carry one: the list kept for code/unused-method misses five
-names the corpora override (the handler of a scheduled job, two handlers of an object module,
-two of a self-registration parameter) and knows no English spelling at all. A rule built on
-it would call legal overrides errors, so that half is not judged.
+Two rules, one per thing the sources prove.
 
-A bound name that is also a known overridable handler is left alone: whether a yaml may bind
-the base handler by its own name is not proven either way.
+code/bound-handler-annotation - a method under the annotation whose name the paired yaml
+binds, as the value of an event of a component (the event names come from the interface
+schema, in both spellings) or of a handler key (a command, a route). A bound method is a
+handler of the yaml, not an override. A bound name that is also a known overridable handler is
+left alone: whether a yaml may bind the base handler by its own name is not proven either way.
 
-The fix removes the annotation - with its line when nothing else stands there.
+code/handler-overrides-nothing - a method of an interface component module, under the
+annotation, bound by nothing and named like no handler the component's base declares. The
+handlers of a component module are listed by the distribution itself - the description of
+each component names the handlers of a module built on it, both spellings included (see
+xbsl/modulehandlers.py) - and a component inherits those of its bases. The other modules (an
+object module, the module of a register or of a scheduled job) are not judged: the compiler
+declares their handlers in code, some of them after the element's own yaml (the operations of a
+processing), and no description lists them. A chain of components ending outside the project
+and the catalog, and data without the lists, are not judged either.
+
+Both fixes remove the annotation - with its line when nothing else stands there. When the name
+is a near miss of a handler the base does declare, the second rule offers no fix: the author
+more likely misspelled the override than put the annotation on the wrong method, and taking
+the annotation away would quietly turn a broken override into a method nobody calls.
 """
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, terms
+from xbsl import dataset, i18n, modulehandlers, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.rules.handlers import _IDENT_RE, _event_names, _handler_pair_stem
 from xbsl.rules.unused_methods import _PLATFORM_EVENTS
-from xbsl.rules.yaml_schema import _HAVE_YAML, _composed, _mapping_nodes
+from xbsl.rules.yaml_schema import (
+    _HAVE_YAML,
+    _composed,
+    _mapping_nodes,
+    _parsed,
+    object_kind,
+    object_kind_fast,
+    value_of,
+)
 
 if _HAVE_YAML:
     import yaml
 
 RULE = "code/bound-handler-annotation"
+OVERRIDE_RULE = "code/handler-overrides-nothing"
 
 MESSAGES = {
     f"{RULE}.title": {
@@ -63,6 +81,32 @@ MESSAGES = {
               "{n[ПослеЗаписи]}, and the build refuses it: \"A handler associated with method "
               "\"{name}\" is not found\". Remove the annotation: the yaml binds the method "
               "to its event already.",
+    },
+    f"{OVERRIDE_RULE}.title": {
+        "ru": "@Обработчик у метода, который ничего не переопределяет",
+        "en": "@Handler on a method that overrides nothing",
+    },
+    f"{OVERRIDE_RULE}.found": {
+        "ru": "Метод '{name}' помечен @{annotation}, но переопределять ему нечего: модуль "
+              "компонента на базе {base} переопределяет только {handlers}, а парный yaml "
+              "этот метод не привязывает. Сборка откажет: \"A handler associated with method "
+              "\"{name}\" is not found\". Если метод подключается к событию в коде или "
+              "вызывается из модуля, снимите аннотацию.",
+        "en": "Method '{name}' carries @{annotation}, yet it has nothing to override: a module "
+              "of a component built on {base} overrides only {handlers}, and the paired yaml "
+              "does not bind the method. The build refuses it: \"A handler associated with "
+              "method \"{name}\" is not found\". If the method is attached to an event in code "
+              "or called from the module, remove the annotation.",
+    },
+    f"{OVERRIDE_RULE}.misspelled": {
+        "ru": "Метод '{name}' помечен @{annotation}, но модуль компонента на базе {base} "
+              "такого обработчика не переопределяет. Похоже на опечатку в {similar}: сборка "
+              "откажет (\"A handler associated with method \"{name}\" is not found\"), а "
+              "переименованный метод платформа будет вызывать как обработчик.",
+        "en": "Method '{name}' carries @{annotation}, but a module of a component built on "
+              "{base} overrides no such handler. It looks like a misspelled {similar}: the "
+              "build refuses it (\"A handler associated with method \"{name}\" is not "
+              "found\"), and once renamed the platform will call the method as the handler.",
     },
 }
 i18n.register(MESSAGES)
@@ -201,5 +245,106 @@ def bound_handler_annotation(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, method["line"], method["col"], RULE, Severity.ERROR,
                 i18n.t(f"{RULE}.found", name=name, key=key, line=line,
                        annotation=method["annotation"]),
+                fix=TextEdit(method["start"], method["end"], ""),
+            )
+
+
+# --- code/handler-overrides-nothing ------------------------------------------------------
+
+#: The kind of the element whose module this rule judges.
+_COMPONENT_KIND = "КомпонентИнтерфейса"
+#: How close a written name must come to a handler of the base to read as its misspelling.
+_NEAR_MISS = 0.8
+
+
+def _base_head(data: dict, kind: str) -> str:
+    """The base a component names (`Наследует.Тип`): no generic arguments, no package."""
+    inherits = value_of(data, "Наследует", kind)
+    written = value_of(inherits, "Тип") if isinstance(inherits, dict) else None
+    return modulehandlers.base_head(written) if isinstance(written, str) else ""
+
+
+def _component_fact(source: SourceFile) -> dict | None:
+    """What the reduce needs of a component description: its name, base and bound methods."""
+    if not _HAVE_YAML or object_kind_fast(source) != _COMPONENT_KIND:
+        return None
+    data, error = _parsed(source)
+    kind = object_kind(data) if error is None else None
+    if kind != _COMPONENT_KIND:
+        return None
+    name = value_of(data, "Имя", kind)
+    bound = _yaml_fact(source)
+    return {
+        "k": "c",
+        "stem": _handler_pair_stem(source.rel),
+        "name": name if isinstance(name, str) else "",
+        "head": _base_head(data, kind),
+        "bound": sorted(bound["bound"]) if bound else [],
+    }
+
+
+def _override_mapper(source: SourceFile) -> dict | None:
+    if not modulehandlers.available():
+        return None
+    if source.kind == "xbsl":
+        return _module_fact(source)
+    if source.kind == "yaml":
+        return _component_fact(source)
+    return None
+
+
+def _language() -> str:
+    """The spelling a message names a handler in: the reader's language."""
+    return "en" if i18n.current_lang() == "en" else "ru"
+
+
+@rule(
+    OVERRIDE_RULE, f"{OVERRIDE_RULE}.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_override_mapper,
+)
+def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    components: dict[str, list[str]] = {}
+    by_stem: dict[str, dict] = {}
+    for fact in facts.values():
+        if fact["k"] == "c":
+            components.setdefault(fact["name"], []).append(fact["head"])
+            by_stem[fact["stem"]] = fact
+
+    def project_base(name: str) -> str | None:
+        heads = components.get(name)
+        if heads is None:
+            return None
+        # Two components under one name: which one a base means cannot be told from here.
+        return heads[0] if len(heads) == 1 else ""
+
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        component = by_stem.get(fact["stem"])
+        if component is None:
+            continue
+        base = modulehandlers.platform_base(component["head"], project_base)
+        allowed = modulehandlers.of_type(base) if base else {}
+        if not allowed:
+            continue
+        rows = modulehandlers.rows_of(base)
+        bound = set(component["bound"])
+        for method in fact["annotated"]:
+            name = method["name"]
+            if name in bound or name in allowed:
+                continue
+            fields = {"name": name, "annotation": method["annotation"], "base": base}
+            near = difflib.get_close_matches(name, list(allowed), n=1, cutoff=_NEAR_MISS)
+            if near:
+                meant = next(row for row in rows if near[0] in (row["ru"], row["en"]))
+                yield Diagnostic(
+                    rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                    i18n.t(f"{OVERRIDE_RULE}.misspelled", similar=meant[_language()], **fields),
+                )
+                continue
+            yield Diagnostic(
+                rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                i18n.t(f"{OVERRIDE_RULE}.found",
+                       handlers=", ".join(row[_language()] for row in rows), **fields),
                 fix=TextEdit(method["start"], method["end"], ""),
             )

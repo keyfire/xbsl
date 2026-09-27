@@ -14,6 +14,8 @@
   страницу типа Url. ([#148](https://github.com/keyfire/xbsl/pull/148))
 - **Замечание `yaml/dynlist-filter-computed-alias` ведет в документацию.** Его код в панели
   "Проблемы" открывает раздел о фильтрации на странице динамического списка. ([#151](https://github.com/keyfire/xbsl/pull/151))
+- **Замечание `code/handler-overrides-nothing` ведет в документацию.** Его код в панели
+  "Проблемы" открывает страницу аннотации. ([#152](https://github.com/keyfire/xbsl/pull/152))
 
 ## 0.77.0
 

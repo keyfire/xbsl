@@ -4,9 +4,9 @@ The annotation marks an override of a handler the base type of the module declar
 the yaml binds to an event, a command or a route overrides nothing, and the compiler refuses
 the annotation at its line ("A handler associated with method X is not found"). A server probe
 gave that refusal for all three bindings and compiled the form's own after-create handler under
-the same annotation. A method nobody binds is refused as well, but it cannot be told from an
-override without a complete list of the overridable handlers, which the data does not carry -
-so the rule leaves it alone.
+the same annotation. A method nobody binds is refused as well; telling it from an override takes
+the handlers of the component's base, and that is code/handler-overrides-nothing - this rule
+leaves it alone.
 
 The mapper parses the module and reads the event names from the interface schema, so the tests
 that lint carry `needs_data`; the registration check runs in every checkout.
@@ -118,7 +118,7 @@ def test_a_route_handler_of_an_http_service_is_reported():
 
 @pytest.mark.needs_data
 def test_an_unbound_method_is_not_judged():
-    """The compiler refuses it too, but only a complete list of overrides could tell."""
+    """The compiler refuses it too - code/handler-overrides-nothing judges it, not this rule."""
     module = FORM_XBSL + "\n@Обработчик\nметод Пересчитать()\n;\n"
     assert _lint({"Склады/КарточкаСклада.yaml": FORM_YAML,
                   "Склады/КарточкаСклада.xbsl": module}) == []

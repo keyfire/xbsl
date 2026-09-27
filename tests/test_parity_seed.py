@@ -49,6 +49,8 @@ def test_seed_reads_the_same_in_both_spellings(seed):
     stale excuse attached to it.
     """
     result = _TOOL.run_seed(seed)
+    if result["status"] == "no-data":
+        pytest.skip(f"the data carries no {seed.needs_section} section: {seed.note}")
     detail = (f"{result['status']}: {seed.note} "
               f"(ru={result['russian']}, en={result['english']})")
     if seed.known:
@@ -77,6 +79,21 @@ def test_a_seed_that_stops_planting_its_case_is_reported_stale():
         tokens={"Цены": "Prices", "Проба": "Probe"},
     )
     assert _TOOL.run_seed(stale)["status"] == "stale"
+
+
+def test_a_seed_whose_data_section_is_missing_is_not_judged():
+    """A rule that reads a section of the data is silent without it by design: a FINDING seed
+    would read as a miss of both trees ("stale"), so the seed is not run at all."""
+    seed = _TOOL.Seed(
+        rule="structure/xbsl-pair",
+        expect=_TOOL.FINDING,
+        note="a seed that asks for a section no data carries",
+        files={"Цены.yaml": _TOOL._REGISTER_RU},
+        needs_section="section_no_data_carries",
+    )
+    result = _TOOL.run_seed(seed)
+    assert result["status"] == "no-data"
+    assert (result["russian"], result["english"]) == (0, 0)
 
 
 def test_a_hand_written_twin_the_rule_misreads_is_blamed_on_the_rule():
