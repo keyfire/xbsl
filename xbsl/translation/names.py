@@ -741,11 +741,12 @@ class ModuleHandlers:
     spellings: dict[str, str]
 
 
-def module_handlers(path: Path, root: Path, loader) -> ModuleHandlers | None:
+def module_handlers(path: Path, loader, bases: dict[str, str]) -> ModuleHandlers | None:
     """The handlers the module at `path` may override, or None.
 
     Only the module of an interface component answers - `Имя.xbsl` beside the `Имя.yaml` of
-    the component - with the handlers of the platform type its chain of bases ends at. Any
+    the component - with the handlers of the platform type its chain of bases ends at; `bases`
+    are the components of the project (component_bases), read once for the whole pass. Any
     other module, a chain that cannot be told and data without the lists answer None.
     """
     if not modulehandlers.available() or not path.name.endswith(".xbsl"):
@@ -763,7 +764,6 @@ def module_handlers(path: Path, root: Path, loader) -> ModuleHandlers | None:
     kind = object_kind(data) if error is None else None
     if kind != _COMPONENT_KIND:
         return None
-    bases = component_bases(root, loader)
     base = modulehandlers.platform_base(_base_head(data, kind), bases.get)
     if not base:
         return None
