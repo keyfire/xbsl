@@ -19,6 +19,8 @@
   Problems panel opens the page of the annotation. ([#148](https://github.com/keyfire/xbsl/pull/148))
 - **The `code/url-data-scheme` finding links to the documentation.** Its code in the Problems panel
   opens the page of the Url type. ([#148](https://github.com/keyfire/xbsl/pull/148))
+- **The `yaml/dynlist-filter-computed-alias` finding links to the documentation.** Its code in the
+  Problems panel opens the section about filtering on the dynamic list page. ([#151](https://github.com/keyfire/xbsl/pull/151))
 
 ## 0.77.0
 

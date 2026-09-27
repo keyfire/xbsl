@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 253 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 254 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -103,7 +103,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The `{{vendor}}/{{name}}` path diverged from the descriptor – a build refuses the project before compiling [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does: the apply rejects the node as an unknown property [details](#a-yaml-unknown-component-property) [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
-| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A vertically scrolled list with `Navigation: None`: the rows come in a single portion, and the tail of the data is out of reach of the scrolling [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A list with `Navigation: None` never loads the tail: a vertical scroll moves through one portion, and a list over an array without a scroll of its own keeps the automatic portion of ten rows [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
 
@@ -152,8 +152,11 @@ element of its own.
 
 <a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** `PageSize`
 sets the portion and the scrolling moves through that portion alone: the list search still finds a
-row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list that promises no
-scroll and an expression in `Navigation` are left alone.
+row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list over an array
+without a scroll of its own is judged too while `PageSize` is automatic (ten rows): the page
+scrolls around one portion, and the cure is a page size by the limit of the data or loading with a
+scroll of the list's own. A tree source loads on scroll whatever is written and is not judged;
+neither is a dynamic list without a scroll, nor an expression in `Navigation`.
 
 ### Tier B - text and conventions
 
@@ -378,6 +381,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `OnRowEdit` handler on a list over a flat dynamic source: the platform never calls it at all [details](#d-yaml-dynlist-row-editing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A parameter (`&Name`) or a binding (`=...`) in the arguments or the filter of a joined table of a dynamic list: it is never evaluated and the list fails at runtime [details](#d-yaml-dynlist-joined-table-param) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A dynamic-list filter declared with `Use: False` while the paired module enables it by assignment: the first frame shows the whole table [details](#d-yaml-dynlist-filter-disabled) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `FilterItem` of a dynamic list is named after the alias of a computed field: a filter reads the columns of the tables, so it silently goes by a column of that name or fails the apply [details](#d-yaml-dynlist-filter-computed-alias) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A form inherits `ListForm` while the table in its content comes from an `ArrayDataSource`: the navigation item silently disappears [details](#d-yaml-list-form-needs-dynlist) [docs](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A reference `Edit` with no `Commands` of its own: the platform draws its own button next to it, opening the value in a separate window [details](#d-yaml-ref-input-auto-commands) [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Two adjacent `UsualCommand` nodes with mirrored `Visible` (`=X` against `=not X`) emulate one command with two states, which the platform already has [details](#d-yaml-toggle-command-pair) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -548,6 +552,12 @@ literal in the yaml and assign the live value from code: `Source.JoinedTables[i]
 <a id="d-yaml-dynlist-filter-disabled"></a>**`yaml/dynlist-filter-disabled`.** That is the
 first-render race: the platform draws the list without waiting for the code. Declare the filter
 enabled, with an empty value.
+
+<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** A
+filter looks its `Field` up among the columns of the main and the joined tables, not among the
+fields of the list, while sorting does take an alias. To filter by the computed value, use a
+`FilterItemExpression` with the expression of the field and switch it on with a binding of `Use`;
+when the column is meant, name it with the table alias.
 
 <a id="d-yaml-list-form-needs-dynlist"></a>**`yaml/list-form-needs-dynlist`.** The list-form
 skeleton is built around a dynamic-list table, and the content holds not a single type with

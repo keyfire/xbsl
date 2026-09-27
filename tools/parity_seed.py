@@ -2112,6 +2112,37 @@ _SEQUENTIAL_OPEN_RU = "@Обработчик\nметод ПослеСоздан�
 _SEQUENTIAL_OPEN_EN = "@Handler\nmethod AfterCreate()\n"
 
 
+#: A list form over a dynamic list of the catalog: one field computed over a column, and a
+#: filter item whose `{field}` the seed plants.
+_COMPUTED_ALIAS_LIST_RU = (
+    "    Содержимое:\n"
+    "        Тип: Таблица<ДинамическийСписок>\n"
+    "        Имя: Список\n"
+    "        Источник:\n"
+    "            ОсновнаяТаблица:\n"
+    "                Таблица: Заявки\n"
+    "                Псевдоним: Заявки\n"
+    "            Поля:\n"
+    "                -\n"
+    "                    Тип: ПолеДинамическогоСписка\n"
+    "                    Выражение: Заявки.Код * 2\n"
+    "                    Псевдоним: Код\n"
+    "            Фильтр:\n"
+    "                Элементы:\n"
+    "                    -\n"
+    "                        Тип: ЭлементФильтра\n"
+    "                        Поле: {field}\n"
+    "                        ВидСравнения: Равно\n"
+    "                        Значение: 1\n"
+)
+_NO_SCROLL_LIST_RU = (
+    "    Содержимое:\n"
+    "        Тип: ПроизвольныйСписок<ИсточникДанныхМассив<Строка>>\n"
+    "        Имя: Список\n"
+    "        Навигация: Отсутствует\n"
+)
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -7057,6 +7088,39 @@ SEEDS: list[Seed] = [
         english={**_SEQUENTIAL_EN, "Page.xbsl": _SEQUENTIAL_OPEN_EN
                   + "    AttachTimerHandler(() -> Store.Read(), 1ms, False)\n"
                   + "    Store.Write(\"\")\n;\n"},
+    ),
+    Seed(
+        rule="yaml/list-scroll-without-loading",
+        expect=FINDING,
+        note="a list over an array the page scrolls keeps the automatic portion of ten rows",
+        files={"СписокЗаявок.yaml": _LIST_FORM_RU + _NO_SCROLL_LIST_RU},
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/list-scroll-without-loading",
+        expect=CLEAN,
+        note="the same list with a page size of the author's own",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _NO_SCROLL_LIST_RU
+                                 + "        РазмерСтраницы: 50\n",
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-filter-computed-alias",
+        expect=FINDING,
+        note="a filter item named after the alias of a computed field reads the column",
+        files={"СписокЗаявок.yaml": _LIST_FORM_RU + _COMPUTED_ALIAS_LIST_RU.format(field="Код")},
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-filter-computed-alias",
+        expect=CLEAN,
+        note="the same filter naming the column with the table alias",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _COMPUTED_ALIAS_LIST_RU.format(field="Заявки.Код"),
+        },
+        tokens=_LIST_FORM_TOKENS,
     ),
 ]
 

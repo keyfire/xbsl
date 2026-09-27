@@ -29,6 +29,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`yaml/dynlist-filter-computed-alias` catches a dynamic-list filter by the alias of a computed
+  field.** A filter looks its field up among the columns of the tables, not among the fields of
+  the list, so such a filter silently went by a column of the same name or failed the apply. The
+  warning names that column when it sees one and points to a `FilterItemExpression` for the
+  computed value. ([#151](https://github.com/keyfire/xbsl/pull/151))
 - **`meta_fold_comments` answers briefly with `compact`.** Over a whole tree the report named
   every move and ran to a quarter of a megabyte. The short answer keeps the counts, the files with
   the most moves and the moves worth a look, up to ten lines each, and every file the audit
@@ -45,6 +50,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Changed
 
+- **`yaml/list-scroll-without-loading` also finds a list the page scrolls.** A list over an array
+  with `Navigation: None` and no page size shows one portion of ten rows, and without a scroll of
+  its own the rows after the tenth were lost silently. A list over a tree source is no longer
+  judged: it loads on scroll whatever the property says. ([#151](https://github.com/keyfire/xbsl/pull/151))
 - **The plain `translate` report counts the phrases `--drift` lists.** The mode stays out of
   `--strict`, so a drift was found only by someone who thought to run it. Now one line gives the
   count and names the flag when there is something to count, the json report and
@@ -52,6 +61,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`comment/emphasis-caps` reads the FETCH clause as a cited query.** A comment that named the
+  clause by its keyword after the word for "clause", or wrote FETCH and OFFSET in the English line
+  of the dictionary, was reported as a word stressed in capitals. The same verb stressed in prose
+  is still reported. ([#151](https://github.com/keyfire/xbsl/pull/151))
 - **The test that compares the two demo projects no longer depends on installed plugins.** A
   plugin that turns on a rule about Russian prose gave the Russian demo a finding its English twin
   cannot have, so the suite failed on such a machine while CI passed. The twins are now checked

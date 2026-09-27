@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 253.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 254.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -100,7 +100,7 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Путь `{{поставщик}}/{{имя}}` разошёлся с дескриптором – сборка отвергнет проект до компиляции [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у другого компонента ui-схемы есть: применение отвечает `Неизвестное свойство` [подробнее](#a-yaml-unknown-component-property) [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке: применение отвергает узел и откатывает проект [подробнее](#a-yaml-inline-command-name) [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
-| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с прокруткой по вертикали, у которого `Навигация: Отсутствует`: строки берутся одной порцией, и хвост данных прокруткой недостижим [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с `Навигация: Отсутствует` не догружает хвост: прокрутка по вертикали крутит одну порцию, а список над массивом без своей прокрутки оставляет автоматическую порцию в десять строк [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Комментарий `#` в описании элемента: визуальный редактор пишет файл заново из модели и сохраняет только документирующий комментарий `##` в первых строках узла, у которого он есть (элемент, компонент, объявленное свойство, табличная часть и подобные). Автоисправление меняет маркер у блока, который уже стоит на таком месте, и переносит внутрь узла блок, стоящий перед `-` элемента списка (кроме экземпляра компонента проекта в списке: на нём комментарий ломает сборку); остальное называется вместе с ближайшим узлом, у которого комментарий есть |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `##` стоит там, где среда разработки его не читает: перед `-` элемента списка, над отдельным свойством, у узла без документирующего комментария (стандартный реквизит вроде `Код` и `Наименование`, команда, поле динамического списка). Он пропадёт так же, как комментарий `#`. Отдельный случай – экземпляр компонента проекта или библиотеки в списке: с блоком `##` на таком узле сервер не применяет проект, и правило называет эту причину |
 
@@ -148,8 +148,11 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 
 <a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** Порцию
 задаёт `РазмерСтраницы`, и прокрутка крутит только её: запись находится поиском списка, но не
-прокруткой. Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список, который прокрутку не обещает, и
-выражение в `Навигации` правило не судит.
+прокруткой. Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список над массивом без своей прокрутки
+правило судит, пока `РазмерСтраницы` автоматический (десять строк): страница прокручивает одну
+порцию, и лечит размер страницы по пределу данных либо подгрузка со своей прокруткой списка.
+Источник-дерево подгружается при прокрутке при любом значении и не судится; не судятся и
+динамический список без прокрутки, и выражение в `Навигации`.
 
 ### Тир B – текст и соглашения
 
@@ -373,6 +376,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик `ПриРедактированииСтроки` у списка с плоским динамическим источником: платформа его не вызывает вовсе [подробнее](#d-yaml-dynlist-row-editing) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр (`&Имя`) или биндинг (`=...`) в аргументах либо фильтре присоединённой таблицы динамического списка: он не вычисляется, и список отказывает уже при работе [подробнее](#d-yaml-dynlist-joined-table-param) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Отбор динамического списка объявлен с `Использовать: Ложь`, а парный модуль включает его присваиванием: первый кадр покажет всю таблицу [подробнее](#d-yaml-dynlist-filter-disabled) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `ЭлементФильтра` динамического списка назван псевдонимом вычисляемого поля: фильтр ищет поле среди столбцов таблиц, поэтому молча отбирает по одноименному столбцу или роняет применение сборки [подробнее](#d-yaml-dynlist-filter-computed-alias) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Форма наследует `ФормаСписка`, а таблица в её содержимом взята по `ИсточникДанныхМассив`: пункт навигации молча исчезает [подробнее](#d-yaml-list-form-needs-dynlist) [доки](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ссылочное `ПолеВвода` без своего узла `Команды`: платформа рисует рядом собственную кнопку, которая открывает значение в отдельном окне [подробнее](#d-yaml-ref-input-auto-commands) [доки](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Две соседние `ОбычныеКоманды` с зеркальной `Видимость` (`=X` и `=не X`) изображают одну команду с двумя состояниями, которая у платформы уже есть [подробнее](#d-yaml-toggle-command-pair) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -543,6 +547,12 @@ HTML-страницы. Код не трогаем – селекторы, иде
 <a id="d-yaml-dynlist-filter-disabled"></a>**`yaml/dynlist-filter-disabled`.** Это гонка первого
 показа: платформа рисует список, не дожидаясь кода. Отбор объявляют включённым, с пустым
 значением.
+
+<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** Поле
+фильтра ищется среди столбцов основной и присоединенных таблиц, а не среди полей списка, хотя
+сортировка псевдоним принимает. Для отбора по вычисленному значению нужен
+`ЭлементФильтраВыражение` с выражением поля и привязкой `Использовать`; если нужен столбец, его
+называют с псевдонимом таблицы.
 
 <a id="d-yaml-list-form-needs-dynlist"></a>**`yaml/list-form-needs-dynlist`.** Каркас формы списка
 заточен под таблицу динамического списка, а в содержимом нет ни одного типа с
