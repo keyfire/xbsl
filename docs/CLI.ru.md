@@ -395,13 +395,13 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | способ доступа: у HttpСервис пишется в Разрешения.Вызов, у объектов данных – в Разрешения.ПоУмолчанию (отдельные права ставит set-access) |
 | `--routes ROUTES` | маршруты HttpСервис: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | описание отчёта (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | Представление – заголовок элемента (без него первый же линт даёт naming/presentation) |
+| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра и обработки, в раздел Интерфейс (без него первый же линт дает naming/presentation) |
 | `--base BASE` | базовый тип компонента интерфейса (Группа, ФормаОбъекта&lt;Товар.Объект&gt;); только для вида КомпонентИнтерфейса |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
 ### `xbsl add-field`
 
-добавить реквизит/измерение/ресурс/значение/свойство/ТЧ; см. также set-field-property – свойства уже существующего элемента, set-localization – тексты строки ЛокализованныеСтроки по языкам
+добавить реквизит/измерение/ресурс/значение/свойство/событие/ТЧ; см. также set-field-property – свойства уже существующего элемента, set-localization – тексты строки ЛокализованныеСтроки по языкам
 
 ```bash
 usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--doc DOC]
@@ -564,7 +564,7 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 
 ### `xbsl add-localization`
 
-добавить файл перевода (секция Локализация) в элемент ЛокализованныеСтроки; см. также set- localization – текст строки сразу во всех языках
+добавить файл перевода (секция Локализация) в элемент ЛокализованныеСтроки; см. также set-localization – текст строки сразу во всех языках
 
 ```bash
 usage: xbsl add-localization [-h] [--dry-run] yaml_path language
@@ -586,7 +586,7 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 
 ### `xbsl set-localization`
 
-записать строку локализации во все языки сразу: в элемент и в его переводы; см. также add- localization – добавить язык, add-field – завести саму строку
+записать строку локализации во все языки сразу: в элемент и в его переводы; см. также add-localization – добавить язык, add-field – завести саму строку
 
 ```bash
 usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--entries-file ФАЙЛ]
@@ -615,7 +615,7 @@ usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTI
 
 ### `xbsl set-field-property`
 
-задать свойства существующего элемента секции (константы, реквизита ...); см. также add-field – добавить элемент, rename-object – переименование
+задать свойства существующего элемента секции (константы, реквизита, свойства или события компонента ...); см. также add-field – добавить элемент, rename-object – переименование
 
 ```bash
 usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular TABULAR] [--dry-run]
@@ -627,7 +627,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 | Параметр | Описание |
 |---|---|
 | `yaml_path` | yaml объекта, в который добавить поле |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие |
 | `name` | имя элемента в секции |
 
 **Параметры**
@@ -739,7 +739,7 @@ usage: xbsl rename-package [-h] [--dry-run] root package_dir new_name
 
 ### `xbsl move-resource`
 
-перенести файл ресурса или папку в другую папку того же каталога Ресурсы (несуществующая папка создаётся): ключи Ресурс{...} и значения свойств-картинок, которые указывают на перенесённые файлы, переписываются, обращения по строке перечисляются в заметках; см. также rename-resource- folder – переименовать папку
+перенести файл ресурса или папку в другую папку того же каталога Ресурсы (несуществующая папка создаётся): ключи Ресурс{...} и значения свойств-картинок, которые указывают на перенесённые файлы, переписываются, обращения по строке перечисляются в заметках; см. также rename-resource-folder – переименовать папку
 
 ```bash
 usage: xbsl move-resource [-h] [--dry-run] root resource_path target_dir
@@ -929,7 +929,7 @@ usage: xbsl unused-resources [-h] [--include-protected] [--limit LIMIT] root
 
 ### `xbsl localization-info`
 
-языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization; тексты пишет set- localization)
+языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization; тексты пишет set-localization)
 
 ```bash
 usage: xbsl localization-info [-h] yaml_path
@@ -1022,7 +1022,7 @@ usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name
 
 ### `xbsl form-handlers`
 
-обработчики парного модуля компонента: список методов или заготовка обработчика; см. также form- tree – ид узлов, add-method – метод вне события
+обработчики парного модуля компонента: список методов или заготовка обработчика; см. также form-tree – ид узлов, add-method – метод вне события
 
 ```bash
 usage: xbsl form-handlers [-h] [--node NODE] [--key KEY] [--method METHOD] [--signature SIGNATURE]

@@ -1,5 +1,7 @@
 """Checks of the yaml/property-since-compat rule (a property newer than the compatibility mode)."""
 
+import pytest
+
 from xbsl import engine, uischema
 
 _RULE = "yaml/property-since-compat"
@@ -50,6 +52,14 @@ def test_a_newer_property_is_reported_under_an_older_mode():
 
 def test_the_same_property_is_silent_under_its_own_mode():
     assert _lint(_NEWER_SINCE) == []
+
+
+@pytest.mark.parametrize("mode", ["5.0", "8.5", "новейший"],
+                         ids=["below-the-oldest", "between-two", "not-a-mode"])
+def test_a_mode_the_platform_does_not_support_is_read_as_the_newest(mode):
+    # The build refuses such a description for its mode alone, and its reader goes on in the
+    # newest mode, where every property of the schema is there: the property is no finding.
+    assert _lint(mode) == []
 
 
 def test_older_property_is_silent():

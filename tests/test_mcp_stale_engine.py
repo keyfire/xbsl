@@ -193,6 +193,16 @@ def _after_xbsl(words: list[str]) -> list[str]:
     return words[words.index("-m") + 2:]
 
 
+def _words(line: str) -> list[str]:
+    """The words of a line of one run. On Python 3.10 the run stands in a subshell that changes
+    into a folder first, `(cd FOLDER && ...)` (mcpcli._start_folder): its words are inside."""
+    words = shlex.split(line)
+    if words[0] == "(cd":
+        assert words[2] == "&&" and words[-1].endswith(")"), words
+        words = [*words[3:-1], words[-1][:-1]]
+    return words
+
+
 def test_a_refusal_names_the_cli_command_of_the_same_call(mcp_module, disk, tmp_path):
     _update(disk, "9.9.9")
 
@@ -201,7 +211,7 @@ def test_a_refusal_names_the_cli_command_of_the_same_call(mcp_module, disk, tmp_
     assert list(answer) == ["error", "cli", "stale"]
     assert "Перезапустите сервер MCP" in answer["error"]
     assert "команда из поля cli" in answer["error"]
-    assert _after_xbsl(shlex.split(answer["cli"])) == [
+    assert _after_xbsl(_words(answer["cli"])) == [
         str(tmp_path / "acme" / "Задачи.xbsl"), "--select", "code", "--format", "json"]
 
 
@@ -211,7 +221,7 @@ def test_a_refused_lint_source_saves_its_text_for_the_stdin_of_the_command(mcp_m
 
     answer = mcp_module.mcp.tools["lint_source"](filename="Задачи.xbsl", content=content)
 
-    words = shlex.split(answer["cli"])
+    words = _words(answer["cli"])
     staged = words[words.index("<") + 1]
     assert Path(staged).read_bytes() == content.encode("utf-8")
     assert staged in answer["cli_note"] and "--stdin" in words
@@ -254,7 +264,7 @@ def test_a_failure_after_the_sources_moved_names_the_command_too(mcp_module, dis
     answer = guarded(root=str(tmp_path), filter="Задач")
 
     assert answer["stale"]["reason"] == "sources" and "TypeError: drift_rows()" in answer["error"]
-    assert _after_xbsl(shlex.split(answer["cli"])) == [
+    assert _after_xbsl(_words(answer["cli"])) == [
         "translate", str(tmp_path), "--drift", "--filter", "Задач", "--limit", "50",
         "--format", "json"]
 

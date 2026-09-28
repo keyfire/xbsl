@@ -609,13 +609,16 @@ _QUERY_SHAPES = (
     rf"DELETE[ \t]+FROM[ \t]+{_TABLE_NAME}(?=[ \t]*(?:$|(?:USING|WHERE)(?![\w-])))",
 )
 
-#: Reserved words of the query language the keyword table does not hold: the literals of the
-#: Boolean values and of the empty value, both spellings, and `TEMP`, a reserved word without a
-#: Russian spelling (as `NULL` is). They are ordinary words like the words of the table: syntax
-#: in context (`ГДЕ Т.Активен = ИСТИНА И Т.Код В (&Коды)`), a stressed word otherwise. A literal
-#: stands at the end of a comparison more often than not, so for a literal a comparison sign
-#: right before it is context as well (`Т.Активен = ИСТИНА`): prose puts no such sign there.
-_WORDS_OUTSIDE_THE_TABLE = frozenset((
+#: Reserved words of the query language the keyword table does not hold, when the data carries
+#: no list of the reserved words (a public checkout, data extracted before the list existed):
+#: the literals of the Boolean values and of the empty value, both spellings, and `TEMP`, a
+#: reserved word without a Russian spelling (as `NULL` is). With the list - `query_reserved` of
+#: terms.json, the table of the platform documentation - the words are read from it instead
+#: (`_query_language`). They are ordinary words like the words of the table: syntax in context
+#: (`ГДЕ Т.Активен = ИСТИНА И Т.Код В (&Коды)`), a stressed word otherwise. A literal stands at the
+#: end of a comparison more often than not, so for a literal a comparison sign right before it is
+#: context as well (`Т.Активен = ИСТИНА`): prose puts no such sign there.
+_FALLBACK_WORDS_OUTSIDE_THE_TABLE = frozenset((
     "ИСТИНА", "ЛОЖЬ", "НЕОПРЕДЕЛЕНО", "TRUE", "FALSE", "UNDEFINED", "TEMP",
 ))
 #: A comparison sign at the end of the text before a word: `=`, `==`, `<>`, `!=`, `<`, `>`...
@@ -745,31 +748,60 @@ def _phrase_pattern(words: list[str]) -> str:
     return r"[ \t]+".join(re.escape(word) for word in words)
 
 
+def _upper_words(keywords: Iterable[object]) -> set[str]:
+    """The upper-cased words of keywords written in one or several words (non-strings skipped)."""
+    return {part for keyword in keywords if isinstance(keyword, str)
+            for part in keyword.upper().split()}
+
+
+def _outside_the_table(data: dict, table_words: set[str]) -> frozenset[str]:
+    """The reserved words of the query language the keyword table does not hold, both spellings.
+
+    Read from the list of the reserved words the data keeps (the documentation's table, and the
+    words it names without a Russian spelling), less the words of the keyword table and the
+    markers, which a line is judged by on their own (`NULL`). Without the list - the words kept
+    by hand (`_FALLBACK_WORDS_OUTSIDE_THE_TABLE`).
+    """
+    reserved = data.get("query_reserved")
+    if not isinstance(reserved, dict) or not reserved:
+        return _FALLBACK_WORDS_OUTSIDE_THE_TABLE
+    english_only = data.get("query_reserved_english_only")
+    words = _upper_words([word for pair in reserved.items() for word in pair])
+    words |= _upper_words(english_only if isinstance(english_only, list) else ())
+    return frozenset(words - table_words - _QUERY_MARKERS)
+
+
 @lru_cache(maxsize=1)
-def _query_language() -> tuple[frozenset[str], re.Pattern[str]]:
-    """(the ordinary words of the query language, the phrases and shapes that cite a query).
+def _query_language() -> tuple[frozenset[str], re.Pattern[str], frozenset[str]]:
+    """(the ordinary words of the query language, the phrases and shapes that cite a query, the
+    reserved words the keyword table does not hold).
 
     Read once from the platform's keyword table, both spellings, upper-cased. The ordinary
     words are the words of the table that are neither markers nor functions, the words of its
     phrases included: a word of a phrase is a word of the language all the same, and the
     hand-kept tables knew `BY` of ORDER BY as one. A one-letter word counts only when it is a
     word of Russian (`В`, `И`) - the `Т` of the table is the most common alias of a table. The
-    reserved words the table does not hold (`_WORDS_OUTSIDE_THE_TABLE`) and the shapes no
-    keyword marks (`_QUERY_SHAPES`) are added whatever the data says.
+    reserved words the table does not hold (`_outside_the_table`) and the shapes no keyword
+    marks (`_QUERY_SHAPES`) are added whatever the table says.
 
     Without the table the rule falls back on the words and the phrase it kept by hand before it
     read the table (`_FALLBACK_WORDS`, `_FALLBACK_PHRASES`), and a query cited with them is
     judged as it was then. The words only ever spare a finding, they never add one.
     """
-    pairs = (dataset.load_optional("terms.json") or {}).get("query")
-    words: set[str] = set(_WORDS_OUTSIDE_THE_TABLE)
+    data = dataset.load_optional("terms.json") or {}
+    pairs = data.get("query")
     phrases: set[str] = set(_QUERY_SHAPES)
     if isinstance(pairs, dict) and pairs:
         keywords = [word for pair in pairs.items() for word in pair]
+        table_words = _upper_words(keywords)
+        words: set[str] = set()
     else:
         keywords = []
-        words.update(_FALLBACK_WORDS)
+        table_words = set(_FALLBACK_WORDS) | _upper_words(_FALLBACK_PHRASES)
+        words = set(_FALLBACK_WORDS)
         phrases.update(_phrase_pattern(phrase.split()) for phrase in _FALLBACK_PHRASES)
+    outside = _outside_the_table(data, table_words)
+    words |= outside
     for keyword in keywords:
         if not isinstance(keyword, str):
             continue
@@ -778,7 +810,8 @@ def _query_language() -> tuple[frozenset[str], re.Pattern[str]]:
         if len(parts) > 1 and " ".join(parts) not in _PROSE_PHRASES:
             phrases.add(_phrase_pattern(parts))
     ordinary = frozenset(words - _RUSSIAN_MARKERS - _ENGLISH_MARKERS - _QUERY_FUNCTIONS)
-    return ordinary, re.compile(r"(?<![\w-])(?:" + "|".join(sorted(phrases)) + r")(?![\w-])")
+    pattern = re.compile(r"(?<![\w-])(?:" + "|".join(sorted(phrases)) + r")(?![\w-])")
+    return ordinary, pattern, outside
 
 
 # Rebuilt when the data root or version changes, and when data missing at the first read has
@@ -790,6 +823,11 @@ dataset.register_recheck(_query_language.cache_clear)
 def _query_words() -> frozenset[str]:
     """The ordinary words of the query language (`_query_language`)."""
     return _query_language()[0]
+
+
+def _words_outside_the_table() -> frozenset[str]:
+    """The reserved words of the query language outside the keyword table (`_query_language`)."""
+    return _query_language()[2]
 
 
 def _cites_query(text: str) -> bool:
@@ -919,7 +957,7 @@ def _query_syntax(word: str, text: str, start: int, end: int, opens: bool) -> bo
         return True
     if word in _CLAUSE_WORDS and previous in _CLAUSE_PREPOSITIONS:
         return True
-    if word in _WORDS_OUTSIDE_THE_TABLE and _COMPARED.search(text, 0, start):
+    if word in _words_outside_the_table() and _COMPARED.search(text, 0, start):
         return True  # a literal compared with: `Т.Активен = ИСТИНА`
     following = re.match(r"\s*([A-Za-z]+)", text[end:])
     if following and following.group(1).lower() in _QUERY_NOUNS_ENGLISH:
@@ -1224,7 +1262,7 @@ def _english_findings(
     text = _CITED.sub(lambda m: " " * len(m.group(0)), value)
     if not re.search(r"[a-z]", text):
         return []  # a heading in capitals from end to end: no single word is stressed
-    ordinary, phrases = _query_language()
+    ordinary, phrases, _outside = _query_language()
     if phrases.search(text) or any(
         word in _ENGLISH_QUERY_MARKERS for word in _ENGLISH_CAPS.findall(text)
     ):

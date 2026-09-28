@@ -20,12 +20,22 @@ Every pair here comes from the distribution, never from a translation:
   no English name for this" - and that was wrong. Reading what the distribution declares
   yields thousands of pairs the other sources never see (Реквизиты/Attributes,
   ТабличныеЧасти/TabularParts, СоздатьОбъект/CreateObject).
+- keywords of the query language - the vocabulary of the query parser (`query`), and the
+  reserved words as the help page on the syntax of query text lists them (`query_reserved`,
+  plus `query_reserved_english_only` for the words that have no Russian spelling). The
+  parser's vocabulary holds no literal of the language at all: neither TRUE nor UNDEFINED, in
+  either spelling.
 
-Keywords are NOT duplicated here: language.json already stores every form of each keyword.
+The keywords of the language itself are NOT duplicated here: language.json already stores
+every form of each keyword.
 
 The result is xbsl/data/element/<version>/terms.json:
     { "types": {ru: en}, "facets": {ru: en}, "properties": {ru: en}, "enums": {ru: en},
-      "members": {en type: {ru: en}}, "common": {ru: en} }
+      "query": {ru: en}, "kinds": {ru: en},
+      "query_reserved": {ru: en}, "query_reserved_english_only": [en] }
+and terms_full.json beside it: { "members": {en type: {ru: en}}, "common": {ru: en},
+"manager_owners": {kind: en type} }. The two reserved-word keys are absent when the help has
+no such table.
 
 `members` keeps the owner, because a word may be translated differently depending on where it
 sits (`Ссылка` is `Reference` on a data-object facet and `Link` on a navigation property);
@@ -42,6 +52,7 @@ import struct
 import zipfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from html import unescape
 from pathlib import Path
 
 from xbsl.extract import _distro, classcode
@@ -632,6 +643,55 @@ def _query_scan(names: list[str]) -> tuple[dict[str, str], set[str]]:
     return pairs, without
 
 
+#: The help page on the syntax of query text: it lists the RESERVED words of the query language.
+_QUERY_SYNTAX_PAGE = "data/docs/help/ru/topics/query-syntax/index.html"
+_TABLE_RE = re.compile(r"<table\b.*?</table>", re.S)
+#: A minified site leaves out the closing tags of rows and cells, so a row runs to the next row
+#: and a cell to the next cell: the markup is split at the opening tags, never matched in pairs.
+_ROW_RE = re.compile(r"<tr\b[^>]*>")
+_CELL_RE = re.compile(r"<t[hd]\b[^>]*>")
+_TAGS_RE = re.compile(r"<[^>]+>")
+#: The paragraph after the table, cut at its closing tag or at the next block when that is left out.
+_PARAGRAPH_RE = re.compile(r"<p\b[^>]*>(.*?)(?=</p>|<p\b|<div\b|<table\b|<h\d|<pre\b|$)", re.S)
+_RESERVED_RU_RE = re.compile(r"^[А-ЯЁ]+(?: [А-ЯЁ]+)*$")
+_RESERVED_EN_RE = re.compile(r"^[A-Z]+(?: [A-Z]+)*$")
+_CODE_WORD_RE = re.compile(r"<code>([A-Z][A-Z_]*)</code>")
+
+
+def _cell_text(cell: str) -> str:
+    return re.sub(r"\s+", " ", unescape(_TAGS_RE.sub("", cell))).strip()
+
+
+def query_reserved_words(page: str) -> tuple[dict[str, str], list[str]]:
+    """({Russian reserved word: English}, [reserved words without a Russian spelling]).
+
+    The page on the syntax of query text lists the reserved words as a table of both spellings,
+    told from the other tables by its header (the Russian and the English column), and names the
+    words without a Russian spelling in the paragraph right after it (`NULL`, `TEMP`). This is
+    the only source of the LITERALS of the language: the vocabulary of the query parser
+    (`_scan_query_terms`) holds no `ИСТИНА` at all. Nothing is guessed - a page without such a
+    table answers with nothing, and the readers keep the words they know by hand.
+    """
+    for table in _TABLE_RE.finditer(page):
+        rows = _ROW_RE.split(table.group(0))[1:]
+        header = [_cell_text(cell) for cell in _CELL_RE.split(rows[0])[1:]] if rows else []
+        if len(header) < 2 or not (header[0].startswith("Русск")
+                                   and header[1].startswith("Английск")):
+            continue
+        pairs: dict[str, str] = {}
+        for row in rows[1:]:
+            cells = [_cell_text(cell) for cell in _CELL_RE.split(row)[1:]]
+            if (len(cells) >= 2 and _RESERVED_RU_RE.match(cells[0])
+                    and _RESERVED_EN_RE.match(cells[1])):
+                pairs[cells[0]] = cells[1]
+        after = _PARAGRAPH_RE.search(page, table.end())
+        english_only: set[str] = set()
+        if after and "русск" in after.group(1):  # "... без варианта на русском языке ..."
+            english_only = set(_CODE_WORD_RE.findall(after.group(1))) - set(pairs.values())
+        return pairs, sorted(english_only)
+    return {}, []
+
+
 def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
     from xbsl.extract import stdlib  # the page reader: stdlib imports this module in turn
 
@@ -685,6 +745,10 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
         managers = ManagerEvidence()
         members, common, declared_types = _scan_meta_objects(z, managers)
         query = _scan_query_terms(z)
+        try:
+            reserved, english_only = query_reserved_words(stdlib._page(z, _QUERY_SYNTAX_PAGE))
+        except KeyError:  # a distribution whose help has no such page
+            reserved, english_only = {}, []
         kind_table = scan_kind_table(z)
         manager_table = manager_owners(z, members, managers)
 
@@ -705,6 +769,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
         "types": types, "facets": facets, "properties": properties, "enums": enums,
         "members": members, "common": common, "query": query, "kinds": kind_table,
         "class_types": class_types, "manager_owners": manager_table,
+        "query_reserved": reserved, "query_reserved_english_only": english_only,
     }, conflicts
 
 
@@ -735,6 +800,11 @@ def main(argv=None) -> None:
     small = {"meta": meta, **{name: dict(sorted(sections[name].items()))
                               for name in ("types", "facets", "properties", "enums", "query",
                                            "kinds")}}
+    # The reserved words go in only when the help lists them: an absent key tells a reader to
+    # keep its own list, an empty one would claim the language reserves nothing.
+    if sections["query_reserved"]:
+        small["query_reserved"] = dict(sorted(sections["query_reserved"].items()))
+        small["query_reserved_english_only"] = sections["query_reserved_english_only"]
     full = {"meta": meta, "members": sections["members"], "common": sections["common"],
             "manager_owners": sections["manager_owners"]}
 
@@ -756,6 +826,9 @@ def main(argv=None) -> None:
             extra += f", из них объявлено классами: {len(sections['class_types'])}"
         print(f"  {name}: {len(sections[name])}{extra}")
     print(f"  query: {len(sections['query'])} ключевых слов языка запросов")
+    only = ", ".join(sections["query_reserved_english_only"]) or "–"
+    print(f"  query_reserved: {len(sections['query_reserved'])} зарезервированных слов языка "
+          f"запросов по справке, без русского написания: {only}")
     print(f"  kinds: {len(sections['kinds'])} видов элементов (написания сериализатора)")
     print(f"Записано: {out_full}")
     print(f"  members: {len(sections['members'])} типов, common: {len(sections['common'])} имён")

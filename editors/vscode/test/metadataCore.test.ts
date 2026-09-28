@@ -13,6 +13,7 @@ import {
   describeMetaNode,
   describeStandardAttr,
   existingModule,
+  existingRowModules,
   hintName,
   insertItemEdit,
   MODULE_TAIL_ENGLISH,
@@ -22,6 +23,9 @@ import {
   modulePathFor,
   moduleTailsOf,
   parseInternals,
+  ROW_MODULE_KINDS,
+  rowModuleMenuTokens,
+  rowModulePathFor,
   SERIALIZER_KIND_SPELLINGS,
   setMetaKeyAliases,
   stringAttributeNames,
@@ -518,6 +522,59 @@ test("existing module: either spelling of the tail, the Russian one first", () =
   assert.strictEqual(existingModule("/p/Цены.yaml", "НаборЗаписей", exists), "/p/Цены.НаборЗаписей.xbsl");
   assert.strictEqual(existingModule("/p/Цены.yaml", "Запись", exists), undefined);
   assert.strictEqual(existingModule("/p/Цены.yaml", "", exists), undefined);
+});
+
+// -- the module of the row of a tabular section ------------------------------------------------
+
+test("row module: named after the element and the section, beside the description", () => {
+  assert.strictEqual(rowModulePathFor("/p/Каталог/Товары.yaml", "Позиции"), "/p/Каталог/Товары.Позиции.xbsl");
+  // The section keeps its own name in an English project: there is no tail to translate.
+  assert.strictEqual(rowModulePathFor("/p/Goods.yaml", "Items"), "/p/Goods.Items.xbsl");
+});
+
+test("row module: a catalog and a document offer to create it, the other kinds only open one", () => {
+  assert.deepStrictEqual(rowModuleMenuTokens("Справочник", false), ["newtcmod"]);
+  assert.deepStrictEqual(rowModuleMenuTokens("Документ", false), ["newtcmod"]);
+  assert.deepStrictEqual(rowModuleMenuTokens("Документ", true), ["tcmod"]);
+  // Tabular sections without a confirmed row module: nothing to create, an existing file still opens.
+  for (const kind of ["ПланОбмена", "ИнтегрируемоеПриложение", "ХранилищеНастроек", "КонтрактСущности"]) {
+    assert.deepStrictEqual(rowModuleMenuTokens(kind, false), [], kind);
+    assert.deepStrictEqual(rowModuleMenuTokens(kind, true), ["tcmod"], kind);
+  }
+  assert.deepStrictEqual([...ROW_MODULE_KINDS].sort(), ["Документ", "Справочник"]);
+});
+
+test("row module: the modules that are there are found by the name of their section", () => {
+  const files = new Set(["/p/Товары.Позиции.xbsl", "/p/Товары.Объект.xbsl", "/p/Цены.Позиции.xbsl"]);
+  const exists = (candidate: string): boolean => files.has(candidate);
+  assert.deepStrictEqual(existingRowModules("/p/Товары.yaml", ["Позиции", "Скидки"], exists), {
+    Позиции: "/p/Товары.Позиции.xbsl",
+  });
+  assert.deepStrictEqual(existingRowModules("/p/Товары.yaml", [], exists), {});
+});
+
+test("row module: the tree menu opens and creates it by tokens of its own and hides both from the palette", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
+  const menus = pkg.contributes.menus;
+  const node = (present: boolean): string =>
+    ["member field props addtcattr", ...rowModuleMenuTokens("Справочник", present)].join(" ");
+  for (const [command, token, present] of [
+    ["xbsl.metadata.openRowModule", "tcmod", true],
+    ["xbsl.metadata.createRowModule", "newtcmod", false],
+  ] as const) {
+    assert.ok(pkg.contributes.commands.some((c: { command: string }) => c.command === command), command);
+    const item = menus["view/item/context"].find((m: { command: string }) => m.command === command);
+    assert.ok(item && item.when.includes(`/\\b${token}\\b/`), `${command}: the menu is keyed by ${token}`);
+    // The item shows on the node that carries its token and not on the other one: `tcmod` is the
+    // tail of `newtcmod`, and only the word boundary keeps "open" off a node with no module.
+    const keyed = new RegExp(/=~ \/(.+)\/$/.exec(item.when)![1]);
+    assert.ok(keyed.test(node(present)), `${command}: shown on its node`);
+    assert.ok(!keyed.test(node(!present)), `${command}: hidden on the other node`);
+    assert.ok(
+      menus.commandPalette.some((m: { command: string; when: string }) => m.command === command && m.when === "false"),
+      `${command}: hidden from the palette`
+    );
+  }
 });
 
 // -- own members of an interface component ---------------------------------------------------

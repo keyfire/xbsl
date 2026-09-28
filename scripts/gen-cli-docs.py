@@ -122,6 +122,17 @@ def run(args: list[str], lang: str) -> str:
     return text
 
 
+def glued(prev: str, tail: str) -> str:
+    """Two wrapped lines as one.
+
+    argparse wraps a long word on its hyphen: `--write-` ends one line and `baseline` starts
+    the next, and so do `set-field-` and `property` in a description. Such a wrap is joined
+    without a space, otherwise a flag or a command name is torn apart on the page.
+    """
+    glue = "" if prev.endswith("-") and prev[-2:-1].isalnum() and tail[:1].isalnum() else " "
+    return (prev + glue + tail).strip()
+
+
 def parse(help_text: str) -> dict:
     """Parse argparse output: the usage line, the description and the entry sections."""
     lines = help_text.split("\n")
@@ -130,9 +141,9 @@ def parse(help_text: str) -> dict:
         usage.append(lines[i]); i += 1
     while i < len(lines) and not lines[i].strip():
         i += 1
-    description = []
+    description = ""
     while i < len(lines) and lines[i].strip() and not SECTION_RE.match(lines[i].strip()):
-        description.append(lines[i].strip()); i += 1
+        description = glued(description, lines[i].strip()); i += 1
 
     sections, current, entries, epilog = [], None, [], []
     while i < len(lines):
@@ -160,15 +171,11 @@ def parse(help_text: str) -> dict:
                 else:
                     epilog.append(line.strip())
             elif entries:                                  # wrapped description of the previous entry
-                prev, tail = entries[-1][1], line.strip()
-                # argparse wraps a long word on its hyphen (`--write-\nbaseline`); such a wrap
-                # is joined without a space, otherwise a flag in the description is torn apart.
-                glue = "" if prev.endswith("-") and tail[:1].isalnum() else " "
-                entries[-1][1] = (prev + glue + tail).strip()
+                entries[-1][1] = glued(entries[-1][1], line.strip())
         i += 1
     if current:
         sections.append((current, entries))
-    return {"usage": "\n".join(usage), "description": " ".join(description),
+    return {"usage": "\n".join(usage), "description": description,
             "sections": sections, "epilog": epilog}
 
 

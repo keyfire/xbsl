@@ -4,7 +4,9 @@ The reader of a project description in the platform takes the declared mode when
 supported one. No mode at all, a value that names no mode and a mode outside the supported
 range are errors of the description - the build refuses the project - and the reader goes on in
 the newest mode. The rules that depend on the mode (code/handler-overrides-nothing,
-code/deprecated-api, code/contract-parameter-name) read it through `typeinfer.project_modes`.
+code/deprecated-api, code/contract-parameter-name, yaml/property-since-compat) read it through
+`typeinfer.project_modes`, and the visibility of a resources folder without a descriptor
+through `resources.project_compatibility`, which reads it with `typeinfer.read_mode`.
 
 Every test builds its own tiny data root with the enumeration of the modes, so the module is
 checked in a public checkout too.
@@ -14,7 +16,7 @@ import json
 
 import pytest
 
-from xbsl import dataset, engine, typeinfer
+from xbsl import dataset, engine, resources, typeinfer
 
 #: The enumeration of the modes the way the catalog keeps it: a value per supported mode, and
 #: a member that is not a mode at all.
@@ -111,3 +113,123 @@ def test_each_project_of_a_run_is_read_in_its_own_mode(modes):
     assert found["Склады/Остатки.txt"] == ((7, 0), False)
     # A description at the root of the run speaks for the sources outside the nested project.
     assert found["Учет/Остатки.txt"] == ((10, 0), True)
+
+
+# --- yaml/property-since-compat -------------------------------------------------------------------
+
+#: The data of a platform whose newest mode is 8.0, with a component property that appeared in
+#: 9.0: a project read in the newest mode still uses a property newer than its mode, so the
+#: rule has something to say about a description that declares no supported mode.
+_STDLIB_UP_TO_8 = {
+    "names": ["РежимСовместимости"],
+    "type_members": {"РежимСовместимости": {
+        "properties": ["Версия6_0", "Версия7_0", "Версия8_0"],
+    }},
+}
+_UI_SCHEMA = {"components": {"Таблица": {"props": {
+    "ИспользоватьМножественнуюСортировку": {"since": "9.0"},
+}}}}
+
+_ORDERS_FORM = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Ид: 4b7e2a90-6c1d-4f38-9e52-0a8d3c6b1f27\n"
+    "Имя: СписокЗаказов\n"
+    "Наследует:\n"
+    "    Тип: Форма\n"
+    "    Содержимое:\n"
+    "        Тип: Таблица<ДинамическийСписок>\n"
+    "        Имя: Список\n"
+    "        ИспользоватьМножественнуюСортировку: Истина\n"
+)
+
+_SINCE_RULE = "yaml/property-since-compat"
+
+
+@pytest.fixture
+def since_data(tmp_path):
+    version = tmp_path / "9.9.9"
+    version.mkdir()
+    (tmp_path / "index.json").write_text(
+        json.dumps({"available": ["9.9.9"], "default": "9.9.9"}), encoding="utf-8")
+    for name, data in (("stdlib.json", _STDLIB_UP_TO_8), ("uischema.json", _UI_SCHEMA)):
+        (version / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    dataset.set_data_root(tmp_path)
+    try:
+        yield
+    finally:
+        dataset.set_data_root(None)
+
+
+def _since_findings(*sources: tuple[str, str]):
+    return engine.run_sources([engine.load_text(rel, text) for rel, text in sources],
+                              select={_SINCE_RULE})
+
+
+@pytest.mark.parametrize("line", [
+    "",
+    "РежимСовместимости: новейший\n",
+    "РежимСовместимости: 5.0\n",
+], ids=["no-mode", "not-a-mode", "below-the-oldest"])
+def test_property_since_judges_a_description_without_a_supported_mode_in_the_newest_one(
+        since_data, line):
+    found = _since_findings(("Склады/Проект.yaml", _PROJECT + line),
+                            ("Склады/Основное/СписокЗаказов.yaml", _ORDERS_FORM))
+
+    assert [d.rule_id for d in found] == [_SINCE_RULE]
+    # The message names the mode the project is read in and says it is assumed, not declared.
+    assert "8.0 (новейший" in found[0].message
+    assert "5.0" not in found[0].message
+
+
+def test_property_since_judges_a_supported_mode_as_declared(since_data):
+    found = _since_findings(("Склады/Проект.yaml", _PROJECT + "РежимСовместимости: 7.0\n"),
+                            ("Склады/Основное/СписокЗаказов.yaml", _ORDERS_FORM))
+
+    assert [d.rule_id for d in found] == [_SINCE_RULE]
+    assert "7.0" in found[0].message and "новейший" not in found[0].message
+
+
+def test_property_since_knows_no_mode_outside_every_described_project(since_data):
+    found = _since_findings(("Склады/Проект.yaml", _PROJECT),
+                            ("Архив/СписокЗаказов.yaml", _ORDERS_FORM))
+
+    assert found == []
+
+
+# --- resources.project_compatibility ---------------------------------------------------------------
+
+
+def _described(tmp_path, text: str | None):
+    project = tmp_path / "Склады"
+    project.mkdir()
+    if text is not None:
+        (project / "Проект.yaml").write_text(text, encoding="utf-8")
+    return project
+
+
+@pytest.mark.parametrize("line, expected", [
+    ("РежимСовместимости: 7.0\n", (7, 0)),
+    ("", (10, 0)),
+    ("РежимСовместимости: новейший\n", (10, 0)),
+    ("РежимСовместимости: 5.0\n", (10, 0)),
+], ids=["declared", "no-mode", "not-a-mode", "below-the-oldest"])
+def test_the_resources_read_the_mode_the_platform_reads(modes, tmp_path, line, expected):
+    # Below 8.0 a resources folder without a descriptor is public, from 8.0 on private: a
+    # description the platform reads in the newest mode keeps such a folder private.
+    assert resources.project_compatibility(_described(tmp_path, _PROJECT + line)) == expected
+
+
+def test_the_resources_know_no_mode_without_the_description(modes, tmp_path):
+    assert resources.project_compatibility(_described(tmp_path, None)) is None
+    assert resources.project_compatibility(None) is None
+
+
+def test_without_data_the_resources_take_the_declared_mode_as_written(tmp_path):
+    dataset.set_data_root(tmp_path / "no-data")
+    try:
+        assert resources.project_compatibility(
+            _described(tmp_path, _PROJECT + "РежимСовместимости: 5.0\n")) == (5, 0)
+        (tmp_path / "Склады" / "Проект.yaml").write_text(_PROJECT, encoding="utf-8")
+        assert resources.project_compatibility(tmp_path / "Склады") is None
+    finally:
+        dataset.set_data_root(None)

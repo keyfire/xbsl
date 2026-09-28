@@ -91,9 +91,11 @@ mcp = _new_server()
 # Where exec keeps the process, the new image has lost the session: it waits for `initialize`
 # and refuses every request before it ("Received request before initialization was
 # complete"), while the client, initialized long ago, sends `tools/call`. Whatever the old image
-# had read ahead from stdin is lost too, and the client waits for those answers forever. A
-# supervisor that owns stdio and restarts a worker behind it, replaying the handshake, could do
-# it safely - but that is a different server, not a line in this one.
+# had read ahead from stdin is lost too, and the client waits for those answers forever. What
+# does it safely is a different process, not a line in this one: `xbsl-mcp-supervisor`
+# (xbsl/mcp_supervisor.py) owns stdio, runs this server as a worker behind it and replaces the
+# worker, replaying the handshake. It reads `stale.ran` of a refusal: false means the tool did
+# not run, and the same call goes to the new worker as it is.
 #
 # Plugins changed on disk are not a reason to refuse: the loaded plugin stays whole in memory and
 # answers consistently - only not the way the CLI and CI answer now. So the tool runs, and a dict
@@ -113,9 +115,15 @@ def _journal_stale(found: dict, tool: str, error: str = "") -> None:
     mcpjournal.record("stale", tool=tool, **found, **({"error": error[:500]} if error else {}))
 
 
-def _stale_answer(found: dict, message: str, same: dict | None = None) -> dict:
-    """The refusal: the message, the CLI command of the same call when there is one, the state."""
-    stale = {**found, "location": environment.location()}
+def _stale_answer(found: dict, message: str, same: dict | None = None, *, ran: bool) -> dict:
+    """The refusal: the message, the CLI command of the same call when there is one, the state.
+
+    `stale.ran` says whether the tool ran before this answer. False: it was refused on sight of
+    the replaced engine, nothing was done, and the same call can be sent again as it is to a new
+    process - the supervisor (xbsl/mcp_supervisor.py) does exactly that. True: it failed on the
+    way and may have written something before it did.
+    """
+    stale = {**found, "location": environment.location(), "ran": ran}
     if not same:
         return {"error": message, "stale": stale}
     return {"error": f"{message}. {i18n.t('mcpcli.same-call')}", **same, "stale": stale}
@@ -159,7 +167,7 @@ def _stale_guard(fn):
             _journal_stale(found, fn.__name__)
             return _stale_answer(
                 found, i18n.t("freshness.refusal", state=freshness.describe(found)),
-                same_call(args, kwargs),
+                same_call(args, kwargs), ran=False,
             )
         freshness.take_noted()  # a crash an earlier call noted is not this call's
         try:
@@ -172,7 +180,7 @@ def _stale_guard(fn):
             _journal_stale(found, fn.__name__, error)
             return _stale_answer(found, i18n.t(
                 "freshness.failure", state=freshness.describe(found), error=error),
-                same_call(args, kwargs))
+                same_call(args, kwargs), ran=True)
         noted = freshness.take_noted()
         if noted is not None:
             _journal_stale(noted, fn.__name__)
@@ -291,10 +299,14 @@ def version_info() -> dict:
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
     server is restarted, since the modules it would load next are from another version. The
     refusal of a tool the CLI can run (lint_paths, lint_source, baseline_prune, list_rules,
-    meta_fold_comments, translate_*) carries `cli`: the command line of the same call for a
-    POSIX shell (Git Bash on Windows), which runs this server's interpreter on the code now on
-    disk. `cli_note` names the file the command reads data from - the text of lint_source, the
-    inline edits of translate_set.
+    translate_*, meta_fold_comments and the readers meta_project_info, meta_object_info,
+    meta_localization_info, meta_component_tree, meta_resource_references,
+    meta_unused_resources) carries `cli`: the command line of the same call for a POSIX shell
+    (Git Bash on Windows), which runs this server's interpreter on the code now on disk. A
+    reader's command prints the tool's data without the `root` and `file` the tool repeats; the
+    one of meta_resource_references lists every place, whatever `limit` says. `cli_note` names
+    the file the command reads data from - the text of lint_source, the inline edits of
+    translate_set.
 
     `plugins` are the plugins this server loaded at start, `plugins_on_disk` the ones installed
     now. When those differ, `stale` names both (reason `plugins`, with the `changed`
@@ -1150,11 +1162,14 @@ def meta_new_object(
     access sets access control (authenticated users, etc.); routes configures HTTP services
     routes like "GET /, POST /, GET /{id}" (handlers are stubbed in the module);
     report_spec - for Report: {source, rows: [...], columns: [...], measures: [{expr, title}], title};
-    presentation - Presentation of the element. Beware of what the kind means by it: a
-    report or a command carries a CAPTION there, while a catalog, a document, an exchange
-    plan and a settings storage carry the NAME of a string attribute whose value the
-    platform shows for a record (a caption written there fails to compile). Pass it:
-    without one the very first lint of the new file answers naming/presentation.
+    presentation - the caption of the element, written where the kind keeps it: the top-level
+    Presentation of a report, a command or a constants set; for a catalog, a document, an
+    exchange plan, an integrable application and a settings storage - whose top-level
+    Presentation is the NAME of a string attribute, a caption there fails to compile - the
+    list caption `Interface.List.Presentation` (the notes name the object caption beside it),
+    as for a register, which has no top-level one; `Interface.Presentation` of a processing.
+    Pass it: without one the very first lint of the
+    new file answers naming/presentation.
     base - for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
@@ -1240,7 +1255,8 @@ def meta_add_field(
     "Длина", "Уникальность" and "Автонумерация" where a regular attribute does not). Names
     are checked against that class in either language; Name/Type/Id belong to the parameters
     above, not here. A scalar is written as a yaml scalar (quoted where a bare one would be
-    ambiguous). A nested block is a dict - {"Автонумерация": {"Префикс": "ЗА", "Формат":
+    ambiguous); a boolean in the words of the file's language - `True`/`False` in an English
+    file, their Russian pair in a Russian one. A nested block is a dict - {"Автонумерация": {"Префикс": "ЗА", "Формат":
     {"ДлинаПрефикса": 2}}} - or dotted keys ({"Автонумерация.Префикс": "ЗА"}), checked the
     same way level by level; a list property ("СерииНумерации") is a list of scalars. A
     block the metamodel describes as opaque ("Представление") is refused with its class

@@ -68,11 +68,10 @@ def _query_spellings() -> dict[str, tuple[str, ...]]:
     lookup over it pulls in words that are not query keywords at all (FROM would also match
     the property `ОТ`, JOIN the string method `СОЕДИНИТЬ`), and the rules would start seeing
     tables where there are none.
+
+    Read as optional data: a miss is noted, and the next pass looks at the disk again.
     """
-    try:
-        section = (dataset.load_json("terms.json") or {}).get("query") or {}
-    except (dataset.DatasetError, KeyError, ValueError):
-        return {}
+    section = (dataset.load_optional("terms.json") or {}).get("query") or {}
     reverse: dict[str, list[str]] = {}
     for russian, english in section.items():
         reverse.setdefault(english.upper(), []).append(russian.upper())

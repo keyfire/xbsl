@@ -36,6 +36,8 @@
   "cmd.metadata.createRecordSetModule": "Create record set module (.RecordSet.xbsl)",
   "cmd.metadata.openRecordKeyModule": "Open record key module (.RecordKey.xbsl)",
   "cmd.metadata.createRecordKeyModule": "Create record key module (.RecordKey.xbsl)",
+  "cmd.metadata.openRowModule": "Open row module (Object.TabularSection.xbsl)",
+  "cmd.metadata.createRowModule": "Create row module (Object.TabularSection.xbsl)",
   "cmd.metadata.previewForm": "Open in the form designer",
   "cmd.metadata.openAppModule": "Open application module (Project.xbsl)",
   "cmd.metadata.props": "Properties",

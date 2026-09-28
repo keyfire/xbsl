@@ -339,16 +339,22 @@ def test_a_descriptorless_resource_is_public_before_compatibility_8(tmp_path, li
     assert engine.run(discover([str(project)]), select={_UNKNOWN}) == []
 
 
-def test_descriptorless_visibility_is_left_unproven_without_a_compatibility_mode(
-        tmp_path, library):
+@pytest.mark.parametrize("compatibility", [None, "5.0"], ids=["no-mode", "below-the-oldest"])
+def test_descriptorless_visibility_follows_the_newest_mode_without_a_supported_one(
+        tmp_path, library, compatibility):
+    # The build refuses a description that declares no supported mode, and the reader of the
+    # platform goes on in the newest mode - where a folder without a descriptor is private.
     project = _scoped_project(
         tmp_path,
         _resource_module("Shared.svg", "Foreign::Pack"),
         {"Foreign::Pack": (("Shared.svg",), False)},
-        compatibility=None,
+        compatibility=compatibility,
     )
 
-    assert engine.run(discover([str(project)]), select={_UNKNOWN}) == []
+    found = engine.run(discover([str(project)]), select={_UNKNOWN})
+
+    assert len(found) == 1
+    assert found[0].data["resolution"] == "hidden"
 
 
 def test_the_platform_library_is_only_a_fallback_after_local_ambiguity(tmp_path, library):

@@ -1958,8 +1958,9 @@ def _handler_overrides(toks: list, spellings: dict[str, str]) -> dict[str, str]:
 
     An override carries the handler annotation and is named like a handler the platform lists
     (names.overrides_a_handler); of those, only the handlers of this module's own base answer
-    here. A method named like a handler of some other component overrides nothing in this
-    module - the compiler refuses it, and the translator leaves it to the dictionary.
+    here - the base of a component, or the kind and the module of another element. A method
+    named like a handler of some other module overrides nothing in this one - the compiler
+    refuses it, and the translator leaves it to the dictionary.
     """
     found: dict[str, str] = {}
     for index, tok in enumerate(toks):

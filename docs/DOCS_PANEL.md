@@ -16,9 +16,9 @@ platform version you actually run, and it works offline.
 - **The "Contents" tree** - a hand-curated table of contents that matches the site: the
   developer guide, the administrator guide, the language types (`Std`, `Std::Collections` →
   `Array`, ...), the properties of project elements and interface components (the keys of their
-  yaml descriptions), the integration process schema and the query language. Sections inside a
-  page (`Type hierarchy`, `Examples`, `Literals`) sit under its node, so a click lands on the
-  right spot straight away.
+  yaml descriptions), the integration process schema, the query language and the glossary.
+  Sections inside a page (`Type hierarchy`, `Examples`, `Literals`) sit under its node, so a
+  click lands on the right spot straight away.
 - **The page** opens as an editor tab beside the current one and **does not steal the focus**.
   It carries the article's code, tables and images, a **Copy** button on samples, and a
   **Primary source** link to the same page on the site. Internal links open other pages in the

@@ -1279,6 +1279,14 @@ _SECTION_FOLLOWS: dict[tuple[str, str], tuple[str, ...]] = {
     ("КомпонентИнтерфейса", "События"): ("Свойства",),
 }
 
+# Sections whose item names share one namespace: (kind, section) -> the other section. The
+# own properties and events of a component are refused by the compiler when a name repeats
+# across the two (a live probe: "Property name X is not unique" / "Event name X is not unique").
+_SHARED_NAME_SECTIONS: dict[tuple[str, str], str] = {
+    ("КомпонентИнтерфейса", "Свойства"): "События",
+    ("КомпонентИнтерфейса", "События"): "Свойства",
+}
+
 # Line sets that differ from the kind's common ones: for ХранимаяСтруктура fields and
 # КлючДоступа parameters the documentation describes an Ид - it keeps the data binding
 # across renames (a plain Структура and ПараметрыРаботыКлиента have no Ид in their sets).
@@ -2137,34 +2145,70 @@ def resolve_kind(kind: str) -> str:
     return _kind_by_english().get(kind.casefold(), kind)
 
 
-def _check_presentation(kind: str, value: str) -> None:
-    """The Presentation of the kind accepts this value - or a refusal saying what it holds.
+#: The caption written as the top-level property.
+_TOP_CAPTION: tuple[str, ...] = ("Представление",)
 
-    The property means two different things depending on the kind, and the metamodel says
-    which: a TEXT caption (a report, a command - type String/Localizable), or the NAME of a
-    string attribute whose value the platform shows for a record (a catalog, a document -
-    type AttributeName). Writing a caption into the second kind compiles into
-    "Field specified as a presentation field is not found: <текст>" - checked on the server,
-    so the tool refuses it here rather than handing over a file that will not deploy.
+
+def _block_props(record: dict | None) -> dict[str, dict]:
+    """The properties of the class a block property of the metamodel is typed with."""
+    cls = (record or {}).get("type")
+    return metamodel.properties_of_class(cls) if isinstance(cls, str) else {}
+
+
+def caption_path(kind: str) -> tuple[str, ...]:
+    """Where the caption of an element of `kind` is written: the keys from the root down.
+
+    The top-level Presentation means two different things, and the metamodel says which: a
+    TEXT caption (a report, a command, a constants set - type String/Localizable, or a kind
+    with no Attributes at all), or the NAME of a string attribute whose value the platform
+    shows for a record (a catalog, a document, an exchange plan - type AttributeName; "Field
+    specified as a presentation field is not found" answers a caption written there). Such a
+    kind carries its caption in the interface section: `Interface.List.Presentation` names
+    the list and the command that opens it, `Interface.Object.Presentation` the object (the
+    help topic on a catalog in the interface), and a live probe applied both with no
+    attribute declared - as it did the list caption of a document, an exchange plan, a
+    settings storage and an information register, and `Interface.Presentation` of a
+    processing, the kinds with no top-level Presentation at all.
+
+    Without the metamodel the top-level key is answered - what the tool wrote before it could
+    tell; a kind with no caption anywhere is refused.
     """
     if not metamodel.available():
-        return
-    prop = metamodel.properties(kind).get("Представление")
-    if prop is None:
-        raise ScaffoldError(f"У вида {kind} нет свойства Представление")
-    # A kind with no Attributes at all (ConstantsSet) carries a caption whatever the
-    # metamodel type says - see the yaml/presentation-field rule.
-    if prop.get("type") != "AttributeName" or "Реквизиты" not in metamodel.properties(kind):
-        return
-    if value.startswith(("$", "=")):
-        return  # a localized-string reference / a binding, not a name
-    if not _IDENTIFIER.match(value.strip()):
-        raise ScaffoldError(
-            f"У вида {kind} Представление – это ИМЯ строкового реквизита, значение которого "
-            f"платформа показывает вместо записи, а не заголовок: '{value}' именем быть не "
-            "может. Укажите имя реквизита (он должен быть объявлен в Реквизиты – даже "
-            "стандартное Наименование сервер не находит, пока оно не написано)"
-        )
+        return _TOP_CAPTION
+    props = metamodel.properties(kind)
+    top = props.get("Представление")
+    if top is not None and (top.get("type") != "AttributeName" or "Реквизиты" not in props):
+        return _TOP_CAPTION
+    ui = _block_props(props.get("Интерфейс"))
+    if "Представление" in _block_props(ui.get("Список")):
+        return ("Интерфейс", "Список", "Представление")
+    if "Представление" in ui:
+        return ("Интерфейс", "Представление")
+    raise ScaffoldError(f"У вида {kind} нет свойства Представление")
+
+
+def _caption_note(kind: str, path: tuple[str, ...]) -> str:
+    """What the caller learns when the caption did not go into the top-level property."""
+    note = f"Заголовок записан в {'.'.join(path)}"
+    if path[1:2] == ("Список",):
+        ui = _block_props(metamodel.properties(kind).get("Интерфейс"))
+        others = [key for key, record in ui.items()
+                  if key != "Список" and "Представление" in _block_props(record)]
+        note += " – так называются список и команда его открытия"
+        if others:
+            note += "; заголовок в единственном числе задается в " + " и ".join(
+                f"Интерфейс.{key}.Представление" for key in others
+            )
+    if metamodel.properties(kind).get("Представление") is not None:
+        note += (f". Представление верхнего уровня у вида {kind} – не заголовок, а имя "
+                 "строкового реквизита, которым платформа обозначает элемент")
+    return note
+
+
+def _caption_lines(path: tuple[str, ...], value: str) -> list[str]:
+    """The block that writes `value` under `path` (Russian keys; spelled_lines translates)."""
+    lines = [f"{'    ' * depth}{key}:" for depth, key in enumerate(path[:-1])]
+    return lines + [f"{'    ' * (len(path) - 1)}{path[-1]}: {_yaml_scalar(value)}"]
 
 
 def _presented(result: ScaffoldResult, yaml_path: Path, presentation: str | None) -> ScaffoldResult:
@@ -2214,8 +2258,11 @@ def op_new_object(
     (for HttpСервис written to Разрешения.Вызов, for data objects to
     Разрешения.ПоУмолчанию; individual rights are set by op_set_access); routes -
     the service's routes ("GET /, POST /, GET /{id}"); report - the report source and layout;
-    presentation - Presentation, the element's caption where the kind means a caption by
-    it, and the NAME of a string attribute where it means one (see _check_presentation).
+    presentation - the caption of the element, written where the kind keeps it: the top-level
+    Presentation of a report, a command, a constants set, and the interface section of a kind
+    whose top-level Presentation names an attribute (a catalog, a document) or is absent (a
+    register, a processing) - see caption_path. A caption the kind writes by default (a
+    command's own name) gives way to it.
 
     A folder that does not exist yet is created with the object, and inside a subsystem that
     is how a package is born - a package has no descriptor, and a folder without objects is
@@ -2246,8 +2293,7 @@ def op_new_object(
             f"Недопустимый способ контроля доступа '{access}'; доступны: " + ", ".join(ACCESS_METHODS)
         )
 
-    if presentation:
-        _check_presentation(kind, presentation)
+    caption = caption_path(kind) if presentation else None
 
     result = ScaffoldResult()
     if access in ("РазрешенияВычисляются", _PER_OBJECT):
@@ -2291,9 +2337,18 @@ def op_new_object(
         # documentation).
         extra += ["КонтрольДоступа:", f"    {_PERMISSIONS_KEY}:",
                   f"        {ACCESS_DEFAULT_RIGHT}: {access}"]
+    top_caption = presentation if caption == _TOP_CAPTION else None
+    if top_caption:
+        # A kind that writes a caption of its own (a command is born with its name) gives way
+        # to the caller's: two top-level keys would be a duplicate, and of two the reader
+        # takes whichever it likes.
+        extra = [line for line in extra if not line.startswith("Представление:")]
+    elif presentation and caption:
+        extra = _caption_lines(caption, presentation) + extra
+        result.notes.append(_caption_note(kind, caption))
     content = new_object_yaml(
         kind, new_uuid(), name, scope or spec.scope, extra, lang,
-        presentation=presentation,
+        presentation=top_caption,
     )
     result.changes.append(FileChange(yaml_path, content, created=True))
     if spec.module:
@@ -2514,7 +2569,7 @@ def op_add_field(
         # class - and with it the checked properties and the `Id`/`Type` lines - is the
         # built-in's own, not the regular attribute's.
         path = (("ТабличныеЧасти", tabular), ("Реквизиты", name))
-        extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
+        extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"), lang)
         resolved = _item_type(kind, path, name, type_, lang)
         if doc_lines:
             _check_doc_slot(kind, path)
@@ -2572,9 +2627,19 @@ def op_add_field(
     existing = {i.get("Имя") for i in section_items(text, spec["section"], top_level=True)}
     if name in existing:
         raise ScaffoldError(f"'{name}' уже есть в секции {spec['section']} файла {yaml_path.name}")
+    shared = _SHARED_NAME_SECTIONS.get((kind, spec["section"]))
+    if shared and name in {i.get("Имя") for i in section_items(text, shared, top_level=True)}:
+        # The own properties and events of a component are one namespace to the compiler:
+        # a probe was refused with "Property name X is not unique" and "Event name X is not
+        # unique" (see the yaml/component-member-unique rule).
+        raise ScaffoldError(
+            f"'{name}' уже есть в секции {shared} файла {yaml_path.name}: свойства и события "
+            f"компонента – одно пространство имен, и сборка откажет (\"name \"{name}\" is not "
+            "unique\"). Выберите другое имя"
+        )
     template = _KIND_SECTION_LINES.get((kind, field_kind), spec["lines"])
     path = ((spec["section"], name),)
-    extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
+    extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"), lang)
     resolved = _item_type(kind, path, name, type_, lang, spec.get("type", "Строка"))
     if doc_lines:
         _check_doc_slot(kind, path)
@@ -2858,6 +2923,7 @@ def _checked_props(
     kind: str,
     path: tuple[tuple[str, str | None], ...],
     written: tuple[str, ...],
+    lang: str = "ru",
 ) -> dict[str, object]:
     """Properties canonicalized to Russian names and checked against the metamodel.
 
@@ -2877,12 +2943,15 @@ def _checked_props(
     scalars (`NumberingSeries`). A block whose class the metamodel describes as opaque
     (`Presentation` is a Localizable with no members recorded) is refused with the class
     named - that block still goes into the yaml by hand.
+
+    `lang` is the language of the file the values go into: a boolean is written in its
+    spelling (_scalar_text).
     """
     if not props:
         return {}
     cls = metamodel.item_class(kind, path) if metamodel.available() else None
     written_forms = {form for name in written for form in key_forms(name)}
-    checked = _checked_block(_nested(props), cls, _item_label(cls, path), written_forms)
+    checked = _checked_block(_nested(props), cls, _item_label(cls, path), written_forms, lang)
     _check_standard_length(path, checked)
     return checked
 
@@ -2922,7 +2991,7 @@ def _check_standard_length(path: tuple[tuple[str, str | None], ...],
 
 def _checked_block(
     props: Mapping[str, object], cls: str | None, label: str,
-    written: frozenset[str] | set[str] = frozenset(),
+    written: frozenset[str] | set[str] = frozenset(), lang: str = "ru",
 ) -> dict[str, object]:
     """One level of _checked_props: the keys against the class, the values by their kind."""
     forms = _class_property_forms(cls) if cls else {}
@@ -2941,11 +3010,13 @@ def _checked_block(
                 + ", ".join(sorted(set(forms.values())))
             )
         name = forms.get(key, key)
-        out[name] = _checked_value(value, name, records.get(name), label)
+        out[name] = _checked_value(value, name, records.get(name), label, lang)
     return out
 
 
-def _checked_value(value: object, name: str, record: dict | None, label: str) -> object:
+def _checked_value(
+    value: object, name: str, record: dict | None, label: str, lang: str = "ru",
+) -> object:
     """A property value checked by the kind its class records for it, shaped for _prop_lines."""
     kind = (record or {}).get("kind")
     if isinstance(value, Mapping):
@@ -2954,7 +3025,7 @@ def _checked_value(value: object, name: str, record: dict | None, label: str) ->
         if record is None:
             # Nothing to judge by (no data, or a property the class lacks): written as given.
             return {
-                str(key).strip(): _checked_value(item, str(key), None, label)
+                str(key).strip(): _checked_value(item, str(key), None, label, lang)
                 for key, item in value.items()
             }
         inner = record.get("type") if kind == "block" else None
@@ -2968,7 +3039,7 @@ def _checked_value(value: object, name: str, record: dict | None, label: str) ->
                 f"Блок '{name}' у {label} имеет класс {inner}, состав которого метамодель "
                 "не описывает – известное ограничение: такой блок пишется в yaml вручную"
             )
-        return _checked_block(value, inner, f"блока {name} (класс {inner})")
+        return _checked_block(value, inner, f"блока {name} (класс {inner})", lang=lang)
     if isinstance(value, (list, tuple)):
         if not value:
             raise ScaffoldError(f"Список '{name}' у {label} пуст – в нём нечего записать")
@@ -2979,14 +3050,20 @@ def _checked_value(value: object, name: str, record: dict | None, label: str) ->
             )
         if any(isinstance(item, (Mapping, list, tuple)) for item in value):
             raise ScaffoldError(f"Список '{name}' у {label} принимает только скаляры")
-        return [_scalar_text(item, name) for item in value]
-    return _scalar_text(value, name)
+        return [_scalar_text(item, name, lang) for item in value]
+    return _scalar_text(value, name, lang)
 
 
-def _scalar_text(value: object, name: str) -> str:
-    """A scalar property value as text: a boolean the platform's way, anything else as is."""
+def _scalar_text(value: object, name: str, lang: str = "ru") -> str:
+    """A scalar property value as text: a boolean in the spelling of the file, anything else as is.
+
+    A boolean arrives as one through the MCP, which passes JSON. The sources of the
+    distribution write `True`/`False` in an English file and the Russian pair of the words in
+    a Russian one - the pair of the language keywords, which the translator writes as well. A
+    value given as text is the author's and stays as written.
+    """
     if isinstance(value, bool):
-        return "Истина" if value else "Ложь"
+        return _spelled("Истина" if value else "Ложь", lang)
     text = "" if value is None else str(value)
     if "\n" in text or "\r" in text:
         raise ScaffoldError(
@@ -3131,7 +3208,7 @@ def op_set_field_property(
 
     # Name is refused like in op_add_field: renaming is op_rename_object's business (it
     # updates the references), and a silent rename here would leave them dangling.
-    checked = _checked_props(props, kind, path, ("Имя",))
+    checked = _checked_props(props, kind, path, ("Имя",), lang)
     end, field_indent = _item_block_span(text, offset)
     block = text[offset:end]
     indent = " " * field_indent

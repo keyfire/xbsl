@@ -48,11 +48,11 @@ _TABLE = {
 
 
 def _reset() -> None:
-    """Both caches that read the lists: the module's own and the rule's words of module files.
+    """Both caches that read the lists: the module's own and the rule's.
 
-    The rule keeps what it derived from the lists (`_module_words`); an earlier test of the
-    same run that read the real data leaves it filled, and a table put in place here would not
-    be seen by the rule.
+    The words of module files derived from the lists (`modulehandlers.module_words`) are kept
+    with the lists; an earlier test of the same run that read the real data leaves them filled,
+    and a table put in place here would not be seen by the rule.
     """
     modulehandlers._reset()
     handler_annotation._reset()

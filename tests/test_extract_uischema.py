@@ -589,3 +589,68 @@ def test_end_to_end_writes_next_to_docs(tmp_path, monkeypatch):
     assert data["components"]["Компонент"]["abstract"] is True
     # the guide topic of the card reached the schema through docs.guide_pages
     assert "ВключатьВАвтоИнтерфейс" in data["components"]["КарточкаАкме"]["yaml_props"]
+
+
+def _version_with_docs(root: Path, ver: str, stdlib: dict | None) -> Path:
+    """A version directory with the docs of `_PAGES` and the tombstone, and a catalog if given."""
+    ver_dir = root / ver
+    ver_dir.mkdir()
+    con = sqlite3.connect(ver_dir / "docs.sqlite")
+    con.execute(
+        "CREATE TABLE pages (id TEXT PRIMARY KEY, kind TEXT, title TEXT, qualified TEXT,"
+        " availability TEXT, url TEXT, html TEXT)"
+    )
+    for p in _PAGES:
+        con.execute("INSERT INTO pages VALUES(?, 'type', ?, ?, '', '', ?)",
+                    (p["id"], p["title"], p["qualified"], p["html"]))
+    p = _RETIRED_GROUP_PAGE  # a tombstone is read as a guide page (kind <> 'type')
+    con.execute("INSERT INTO pages VALUES(?, 'member', ?, ?, '', '', ?)",
+                (p["id"], p["title"], p["qualified"], p["html"]))
+    con.commit()
+    con.close()
+    if stdlib is not None:
+        (ver_dir / "stdlib.json").write_text(json.dumps(stdlib, ensure_ascii=False),
+                                             encoding="utf-8")
+    return ver_dir
+
+
+def _run_main(monkeypatch, root: Path, *args: str) -> dict:
+    monkeypatch.setattr(sys, "argv", ["extract_uischema", "--data-dir", str(root), *args])
+    try:
+        assert ux.main() == 0
+    finally:
+        ux.dataset.set_data_root(None)
+        ux._distro.set_data_root(None)
+    ver = args[args.index("--element-version") + 1] if "--element-version" in args else None
+    ver = ver or json.loads((root / "index.json").read_text(encoding="utf-8"))["default"]
+    return json.loads((root / ver / "uischema.json").read_text(encoding="utf-8"))
+
+
+def test_the_retired_components_come_from_the_catalog_of_the_same_version(tmp_path, monkeypatch):
+    """A version that is not the default reads its own catalog: the retired component its
+    catalog names reaches the schema. The default version's catalog, which names none, is the
+    control - read instead, the component was lost."""
+    _version_with_docs(tmp_path, "9.9.9+0", {"retired_components": {}})
+    _version_with_docs(tmp_path, "9.8.0", {"retired_components": _RETIRED_COMPONENTS})
+    (tmp_path / "index.json").write_text(
+        json.dumps({"available": ["9.8.0", "9.9.9+0"], "default": "9.9.9+0"}), encoding="utf-8"
+    )
+
+    older = _run_main(monkeypatch, tmp_path, "--element-version", "9.8.0")
+    default = _run_main(monkeypatch, tmp_path)
+
+    assert older["components"]["УстаревшаяГруппа"]["retired"] is True
+    assert "УстаревшаяГруппа" not in default["components"]
+
+
+def test_a_root_without_the_catalog_warns_that_the_retired_components_are_left_out(
+        tmp_path, monkeypatch, capsys):
+    _version_with_docs(tmp_path, "9.9.9+0", None)
+    (tmp_path / "index.json").write_text(
+        json.dumps({"available": ["9.9.9+0"], "default": "9.9.9+0"}), encoding="utf-8"
+    )
+
+    data = _run_main(monkeypatch, tmp_path)
+
+    assert "УстаревшаяГруппа" not in data["components"]
+    assert "stdlib.json" in capsys.readouterr().err

@@ -508,6 +508,15 @@ def _mcplog_line(event: dict) -> str:
                       tool=event.get("tool", "?"), changes=changes)
         if error:
             text += "; " + i18n.t("mcplog.stale.error", error=error)
+    elif kind == "restart":
+        # Written by the supervisor (xbsl/mcp_supervisor.py): the worker it retires and why.
+        reason = event.get("reason")
+        if reason in ("version", "sources", "plugins", "exited"):
+            cause = i18n.t(f"mcplog.restart.{reason}", loaded=event.get("loaded", "?"),
+                           on_disk=event.get("on_disk", "?"), code=event.get("code", "?"))
+            text = i18n.t("mcplog.restart", target=event.get("target", "?"), cause=cause)
+        else:
+            text = i18n.t("mcplog.unknown", event=f"restart {reason}")
     else:
         text = i18n.t("mcplog.unknown", event=kind)
     return f"{event.get('time', '?')}  pid {event.get('pid', '?')}  {text}"
@@ -792,7 +801,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p = command("set-field-property")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
-                                                 "параметр", "поле", "константа")))
+                                                 "параметр", "поле", "константа", "свойство",
+                                                 "событие")))
     p.add_argument("name", help=i18n.t("cli.help.scaf.sfp-name"))
     p.add_argument("--prop", action="append", required=True, metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))
@@ -1334,7 +1344,11 @@ def _scaffold_main(argv: list[str]) -> int:
                     node = formmodel.get_node(form, args.node)
                     payload = {"root": as_dict(node)}
                 else:
-                    payload = {"root": as_dict(form.root)}
+                    # The whole form carries the records of its own `Properties` section, as
+                    # meta_component_tree and xbsl/formTree answer it: they belong to the
+                    # element, not to a node.
+                    payload = {"root": as_dict(form.root),
+                               "componentProperties": formmodel.component_properties_dicts(form)}
             print(json.dumps(payload, ensure_ascii=False))
             return 0
         elif args.command == "form-edit":

@@ -270,16 +270,17 @@ dataset.register_reset(_handler_annotations.cache_clear)
 def overrides_a_handler(toks: list, index: int) -> bool:
     """Whether the method declared at `index` overrides a handler the platform lists.
 
-    It has to carry the handler annotation AND be named like a handler of some component
-    module. The name alone is not enough - a project may call a method of its own after an
-    event - and the annotation alone is not either: the platform lists the handlers of the
-    component modules only, and an override of any other module stays the project's word.
+    It has to carry the handler annotation AND be named like a handler some module overrides:
+    a component module, or a module of another element (modulehandlers.handler_names). The
+    name alone is not enough - a project may call a method of its own after an event - and the
+    annotation alone is not either: a handler the data does not list - the operations of a
+    processing, named by the project - stays the project's word.
     """
     keyword = toks[index]
     if keyword.kind != "KEYWORD" or keyword.canonical != "METHOD":
         return False
     name = _next_name(toks, index)
-    if not name or name not in modulehandlers.all_names():
+    if not name or name not in modulehandlers.handler_names():
         return False
     return not _handler_annotations().isdisjoint(annotations_before(toks, index))
 
@@ -744,16 +745,19 @@ class ModuleHandlers:
 def module_handlers(path: Path, loader, bases: dict[str, str]) -> ModuleHandlers | None:
     """The handlers the module at `path` may override, or None.
 
-    Only the module of an interface component answers - `Имя.xbsl` beside the `Имя.yaml` of
-    the component - with the handlers of the platform type its chain of bases ends at; `bases`
-    are the components of the project (component_bases), read once for the whole pass. Any
-    other module, a chain that cannot be told and data without the lists answer None.
+    The module of an interface component - `Имя.xbsl` beside the `Имя.yaml` of the component -
+    answers with the handlers of the platform type its chain of bases ends at; `bases` are the
+    components of the project (component_bases), read once for the whole pass. A module of any
+    other element answers with the handlers the compiler declares for the kind and the module
+    (modulehandlers.element_rows): `Склады.xbsl` beside the `Склады.yaml` of a catalog is its
+    own module, `Склады.Объект.xbsl` its object module, and a scheduled job overrides `Handler`
+    in its own. The base the answer names is the kind, with the module after a dot. A module
+    without its element, a chain that cannot be told and data without the lists answer None.
     """
-    if not modulehandlers.available() or not path.name.endswith(".xbsl"):
+    components, elements = modulehandlers.available(), modulehandlers.element_available()
+    if not (components or elements) or not path.name.endswith(".xbsl"):
         return None
-    stem = path.name[: -len(".xbsl")]
-    if any(stem.endswith(tail) for tail in _OBJECT_MODULE_TAILS):
-        return None
+    stem, module = modulehandlers.element_module(path.name[: -len(".xbsl")])
     pair = path.with_name(f"{stem}.yaml")
     if not pair.is_file():
         return None
@@ -762,12 +766,20 @@ def module_handlers(path: Path, loader, bases: dict[str, str]) -> ModuleHandlers
     except OSError:
         return None
     kind = object_kind(data) if error is None else None
-    if kind != _COMPONENT_KIND:
+    if not kind:
         return None
-    base = modulehandlers.platform_base(_base_head(data, kind), bases.get)
-    if not base:
+    if kind == _COMPONENT_KIND:
+        if module or not components:
+            return None
+        base = modulehandlers.platform_base(_base_head(data, kind), bases.get)
+        if not base:
+            return None
+        return ModuleHandlers(base, {row["ru"]: row["en"] for row in modulehandlers.rows_of(base)})
+    rows = modulehandlers.element_rows(kind, module)
+    if not rows:
         return None
-    return ModuleHandlers(base, {row["ru"]: row["en"] for row in modulehandlers.rows_of(base)})
+    return ModuleHandlers(f"{kind}.{module}" if module else kind,
+                          {row["ru"]: row["en"] for row in rows})
 
 
 @_by_sources

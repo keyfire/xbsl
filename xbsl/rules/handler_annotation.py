@@ -67,7 +67,7 @@ from xbsl.engine import SourceFile, rule
 from xbsl.layout import PROJECT_FILES
 from xbsl.lexer import linemap
 from xbsl.rules.handlers import _IDENT_RE, _event_names, _handler_pair_stem
-from xbsl.rules.unused_methods import _PLATFORM_EVENTS
+from xbsl.rules.unused_methods import platform_handlers
 from xbsl.rules.yaml_schema import (
     _HAVE_YAML,
     _composed,
@@ -217,23 +217,9 @@ def _binding_keys() -> frozenset[str]:
     return frozenset({*_event_names(), *terms.key_forms(_HANDLER_KEY)})
 
 
-@lru_cache(maxsize=1)
-def _overridable() -> frozenset[str]:
-    """Names some base type overrides - both spellings; a bound one of them is not judged."""
-    names: set[str] = set()
-    for name in _PLATFORM_EVENTS:
-        names.add(name)
-        english = terms.common_english(name)
-        if english:
-            names.add(english)
-    return frozenset(names)
-
-
 def _reset() -> None:
     _annotations.cache_clear()
     _binding_keys.cache_clear()
-    _overridable.cache_clear()
-    _module_words.cache_clear()
 
 
 dataset.register_reset(_reset)
@@ -326,7 +312,8 @@ def bound_handler_annotation(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             continue
         for method in fact["annotated"]:
             name = method["name"]
-            if name not in bound or name in _overridable():
+            # A name some module overrides is left alone (see the module docstring).
+            if name not in bound or name in platform_handlers():
                 continue
             key, line = bound[name]
             yield Diagnostic(
@@ -402,26 +389,6 @@ def _override_mapper(source: SourceFile) -> dict | None:
             return _component_fact(source) if components else None
         return _element_fact(source) if elements else None
     return None
-
-
-@lru_cache(maxsize=1)
-def _module_words() -> dict[str, str]:
-    """{the word a module file adds, either spelling: the module as the data names it}."""
-    words: dict[str, str] = {}
-    for module in modulehandlers.element_modules():
-        words[module] = module
-        english = terms.facet_suffix_english(module)
-        if english:
-            words[english] = module
-    return words
-
-
-def _element_module(stem: str) -> tuple[str, str]:
-    """(the stem of the element's yaml, the module) of a module stem: `X.Object` -> (`X`, the Object module)."""
-    base, dot, word = stem.rpartition(".")
-    if dot and "/" not in word and word in _module_words():
-        return base, _module_words()[word]
-    return stem, ""
 
 
 def _mode_shown(mode: tuple[int, ...], assumed: bool) -> str:
@@ -521,7 +488,7 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
                        modes: dict) -> Iterable[Diagnostic]:
     """The findings of one module of an element other than a component (see the docstring)."""
-    stem, module = _element_module(fact["stem"])
+    stem, module = modulehandlers.element_module(fact["stem"])
     element = elements.get(stem)
     if element is None:
         return

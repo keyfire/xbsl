@@ -87,6 +87,41 @@ entry either - say what the behaviour was, not which class name was compared.
   integration process schema; the links other pages make to them no longer lead nowhere. A
   symbol lookup (`docs_symbol`, the hover, the documentation panel) keeps answering with the
   page of the type or the member. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`xbsl-mcp-supervisor`: the MCP session outlives an update of the engine.** The new command
+  runs the MCP server as a worker behind a supervisor that holds the client's stdio. When the
+  worker refuses a call because the engine on disk was replaced, the supervisor starts a new
+  worker, repeats the client's `initialize` handshake to it and sends it the same call: the agent
+  gets the answer of the new code instead of the refusal, and the client needs no restart. An
+  answer saying the tool ran is passed on as it is, and the next call goes to a new worker. A
+  worker that ended or was stopped by `self-update --stop-holders` is replaced at the next call,
+  and the call it was running gets an error. After a replacement the client gets
+  `notifications/tools/list_changed`. The supervisor loads no engine and does not hold the
+  package for `self-update`; `xbsl mcp-log` names every replaced process. It is opt-in:
+  `claude mcp add xbsl -- xbsl-mcp-supervisor`, and `xbsl-mcp` is unchanged. The `stale` record
+  of a refusal carries `ran`: `false` when the tool did not run. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The refusal of a stale server names the command of the `meta_*` readers too.**
+  `meta_project_info`, `meta_object_info`, `meta_localization_info`, `meta_component_tree`,
+  `meta_resource_references` and `meta_unused_resources` carry `cli` like the linter and the
+  dictionary tools, with the same filters and the paths resolved against the call's `root`.
+  `xbsl form-tree` of a whole form now carries `componentProperties`, as the MCP tool and the
+  editor already did. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`yaml/component-member-unique` (tier A, error): one name among the own properties and
+  events of an interface component.** The build refuses it ("Property name ... is not unique",
+  "Event name ... is not unique"), as a probe on a live server confirmed, and `add-field` no
+  longer writes such a name. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`yaml/auto-bare-value` (tier D, error): a bare `Auto` in a property typed Auto or String.**
+  A button caption, the presentation of a dynamic list filter or of a sort: probes on a live
+  server failed the apply with "the type of the value is not specified" in all four places,
+  the same way as a bare word in `UsedHierarchy`, which `yaml/hierarchy-bare-value` keeps. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The glossary of the help is a panel of the documentation index.** The 108 links of the
+  property references and 3 of the query language section now open their terms. A glossary
+  term never answers a symbol lookup (`docs_symbol`, the hover, the documentation panel): its
+  titles are ordinary words, like the names of variables and members. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The reserved words of the query language come from the help.** The `terms` step extracts
+  the table of the query syntax page into `terms.json` (`query_reserved`,
+  `query_reserved_english_only`), and `data-diff` reports them. The translator and
+  `comment/emphasis-caps` read them from the data and keep their own lists only for data
+  without these keys; the findings do not change. ([#157](https://github.com/keyfire/xbsl/pull/157))
 
 ### Changed
 
@@ -146,6 +181,24 @@ entry either - say what the behaviour was, not which class name was compared.
   that ran on the plugins loaded at start names in `stale.cli` the command that answers by the
   plugins on disk. The folders of refused calls older than a day are swept by the next server.
   ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/unused-method` takes the names of the handlers the platform calls from the data.** The
+  handler lists of the component modules and of the modules of other elements, in both
+  spellings, so an unannotated override written in English (`BeforeWrite`, `Handler`) is no
+  longer reported as dead. The record-level security handlers, which the build names after the
+  access settings, stay a short list in the code. The object form handlers ending in `Object`
+  (`BeforeWriteObject` and its kin) left the guard: they are the names of mode 5.0, renamed in
+  6.0, the oldest supported mode. Without the data the rule falls back on the former list. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The translator spells an override in the module of any element the platform's way.**
+  `BeforeWrite` and `OnCreateOnBasis` in the object module of a catalog, `Handler` in a
+  scheduled job, `CheckHasAccessKeys` in an access key, the record-level security handlers in
+  the module of an entity. A dictionary entry that spells one otherwise is reported as a
+  dictionary defect, as it already was for components. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`yaml/property-since-compat` reads the compatibility mode the way the platform does**, through
+  the helper the code rules share. A description that declares no supported mode (none, a value
+  that names no mode, one below the oldest supported such as 5.0) is judged in the newest mode,
+  and the message says the mode is assumed. A project in mode 5.0 used to get a finding for
+  every property newer than 5.0. The visibility of a resources folder without a descriptor
+  follows the same reading: in such a project the folder is private, as in the newest mode. ([#157](https://github.com/keyfire/xbsl/pull/157))
 
 ### Fixed
 
@@ -182,6 +235,35 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`structure/xbsl-pair` recognizes the module of a tabular section row** (`Goods.Items.xbsl`
   beside `Goods.yaml` that declares the section), and `code/undefined-name` no longer reports
   the attributes of the row there. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/undefined-name` judges the module of a tabular section row by the scope of the row.**
+  The module (`Goods.Items.xbsl` beside `Goods.yaml` that declares the section) used to be
+  skipped whole, so a misspelled name there reached the compiler. Its scope now is the
+  attributes of the section, the members every structure type has, the methods of the module
+  and the global names; a name of the owner or of its other sections is reported. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **On Python 3.10 the command of a refused MCP call no longer runs a folder named `xbsl` where
+  the shell stands.** That interpreter has no `-P`, so each run of the line now stands in a
+  subshell that first changes into the server's private temporary folder; the `PYTHONPATH` of an
+  editable checkout stays, and the agent's shell does not move. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **Scaffolding writes a boolean an MCP call passes as `true`/`false` in the words of the file:**
+  `True`/`False` in an English file, as the English sources of the distribution write it, not the
+  Russian words. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The query keyword table of the rules and the platform spellings of the translator read the
+  data as optional** and note their own miss: an editor or an MCP server started without the data
+  picks the tables up once the data is installed. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The help of `set-field-property` names the kinds `свойство` and `событие`**, and that of
+  `add-field` names `событие`. The command reference no longer tears a command name that the help
+  wraps at its hyphen (`set- localization`). ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`new-object --presentation` writes the caption where the kind keeps it.** The top-level
+  `Presentation` of a catalog, a document, an exchange plan, an integrable application and a
+  settings storage names an attribute, and a caption written there failed to compile; they now
+  get `Interface.List.Presentation`. A register and a processing take the option too, and a
+  command no longer gets two `Presentation` keys. `naming/presentation` no longer calls the
+  top-level `Presentation` of such a kind a caption: its message points at
+  `Interface.List.Presentation` and `Interface.Object.Presentation`, and a caption written
+  there satisfies the rule. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The ui schema extractor reads `stdlib.json` of the version it builds**, not of the default
+  one, and warns when the data root has none: the retired components used to be left out
+  without a word. ([#157](https://github.com/keyfire/xbsl/pull/157))
 
 ## 2026-09-27 – 0.120.0
 

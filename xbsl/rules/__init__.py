@@ -7,6 +7,7 @@ modules that need to be imported (and thereby activated).
 
 # Tier A - structure and YAML:
 from . import (  # noqa: F401
+    component_members,
     component_props,
     duplicate_subtree,
     hierarchy_value,

@@ -14,11 +14,15 @@ Guards, in the spirit of the neighbouring rules:
   for a platform one;
 - both spellings of the component and of the property are accepted (the platform reads a form
   written in English the same way);
-- a mode the rule cannot parse into numbers, or a source outside any project, is silence.
+- a source outside every project described in the run is silence: its mode is unknown.
 
 A project declaring an older mode than the properties it uses is a finding about the project,
-not a false positive: an outdated mode the server refuses outright
-(`Неподдерживаемый режим совместимости "5.0"`).
+not a false positive. The mode is the one the project description declares, read the way the
+platform reads it (`typeinfer.project_modes`, shared with the code rules that depend on the
+mode): a description that declares no mode, a value that names none or a mode the platform no
+longer supports (`Неподдерживаемый режим совместимости "5.0"`) is refused by the build for that
+reason alone, and the reader of the platform goes on in the newest mode - so does the rule, and
+the message says the mode is assumed.
 """
 
 from __future__ import annotations
@@ -26,10 +30,12 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from functools import lru_cache
+from pathlib import PurePosixPath
 
-from xbsl import dataset, i18n, terms, uischema
+from xbsl import dataset, i18n, terms, typeinfer, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.layout import PROJECT_FILES
 from xbsl.rules.yaml_schema import (
     _HAVE_YAML,
     _composed,
@@ -52,6 +58,10 @@ MESSAGES = {
         "en": "Property '{prop}' of component '{component}' appeared in {since} while the "
               "project compatibility mode ({n[РежимСовместимости]}) is {compat}: applying the build rejects it "
               "('Неизвестное свойство'). Raise {n[РежимСовместимости]} or drop the property.",
+    },
+    "yaml/property-since-compat.assumed": {
+        "ru": "{mode} (новейший: проект не указывает режим, который поддерживает платформа)",
+        "en": "{mode} (the newest: the project states no mode the platform supports)",
     },
 }
 i18n.register(MESSAGES)
@@ -111,29 +121,20 @@ def _since_table() -> tuple[dict[str, dict[str, tuple[int, ...]]], "re.Pattern |
 dataset.register_reset(_since_table.cache_clear)
 
 
-def _directory(rel: str) -> str:
-    """The directory of a source, with forward slashes and no trailing one."""
-    path = rel.replace("\\", "/")
-    return path.rsplit("/", 1)[0] if "/" in path else ""
-
-
 def _since_mapper(source: SourceFile) -> dict | None:
-    """The map phase: a project file contributes its compatibility mode, an element yaml its
-    properties that carry a `since`. Which mode governs which file is the reduce's call."""
+    """The map phase: a project description contributes its folder and the mode it declares
+    (the fact the project typing takes from it), an element yaml its properties that carry a
+    `since`. Which mode governs which file is the reduce's call."""
     if source.kind != "yaml" or not _HAVE_YAML:
         return None
     table, keys_re = _since_table()
     if keys_re is None:
         return None
+    if PurePosixPath(source.rel.replace("\\", "/")).name in PROJECT_FILES:
+        return typeinfer.project_fact(source)
     data, err = _parsed(source)
-    if err is not None or not isinstance(data, dict):
+    if err is not None or not isinstance(data, dict) or not _is_object(data):
         return None
-    if not _is_object(data):
-        # a project description carries no element kind; either spelling of the key
-        mode = _version(data.get("РежимСовместимости") or data.get("CompatibilityMode"))
-        if mode is None:
-            return None
-        return {"k": "p", "dir": _directory(source.rel), "compat": mode}
     if not keys_re.search(source.text):
         return None
     root = _composed(source)
@@ -159,7 +160,13 @@ def _since_mapper(source: SourceFile) -> dict | None:
             ))
     if not cands:
         return None
-    return {"k": "x", "dir": _directory(source.rel), "cands": cands}
+    return {"k": "x", "cands": cands}
+
+
+def _mode_shown(mode: tuple[int, ...], assumed: bool) -> str:
+    """The mode of the project as the message names it, with a word on where it comes from."""
+    written = ".".join(str(part) for part in mode)
+    return i18n.t("yaml/property-since-compat.assumed", mode=written) if assumed else written
 
 
 @rule(
@@ -168,26 +175,17 @@ def _since_mapper(source: SourceFile) -> dict | None:
 )
 def property_since_compat(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """A property newer than the project's compatibility mode - apply rejects it."""
-    modes = {fact["dir"]: fact["compat"] for fact in facts.values() if fact["k"] == "p"}
-    if not modes:
-        return  # no project description in the run - the mode is unknown, stay silent
+    # The project of a source is the nearest description up the tree, grouped the way the
+    # project typing groups it; a source of no described project has no mode and stays silent.
+    modes = typeinfer.project_modes(facts)
     for rel, fact in facts.items():
-        if fact["k"] != "x":
+        if fact.get("k") != "x":
             continue
-        # The project of a source is the nearest description UP the tree.
-        directory = fact["dir"]
-        compat = None
-        while True:
-            if directory in modes:
-                compat = modes[directory]
-                break
-            if not directory:
-                break
-            directory = directory.rsplit("/", 1)[0] if "/" in directory else ""
-        if compat is None:
+        mode, assumed = modes.get(rel, (None, False))
+        if mode is None:
             continue
         for line, col, component, prop, since in fact["cands"]:
-            if since <= compat:
+            if tuple(since) <= mode:
                 continue
             yield Diagnostic(
                 rel, line, col, "yaml/property-since-compat", Severity.ERROR,
@@ -195,6 +193,6 @@ def property_since_compat(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     "yaml/property-since-compat.newer",
                     prop=prop, component=component,
                     since=".".join(str(part) for part in since),
-                    compat=".".join(str(part) for part in compat),
+                    compat=_mode_shown(mode, assumed),
                 ),
             )

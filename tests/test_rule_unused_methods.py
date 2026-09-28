@@ -301,6 +301,95 @@ def test_platform_event_without_annotation_not_flagged(tmp_path):
     assert not _hits(d)
 
 
+#: Handler lists of the data's shape, with made-up handlers: a name only these tables know
+#: proves the guard reads them. A component base, and an element kind with two modules.
+_COMPONENTS = {"Панель": ({"ru": "ПослеПоказаПанели", "en": "AfterPanelShow"},)}
+_ELEMENTS = {
+    "Склад": {
+        "": {"handlers": ({"ru": "ПроверитьОстатки", "en": "CheckStock"},), "dynamic": ()},
+        "Объект": {"handlers": ({"ru": "ПослеПересчетаОстатков", "en": "AfterStockRecount"},),
+                   "dynamic": ()},
+    },
+}
+
+
+@pytest.fixture
+def lists(monkeypatch):
+    """Put handler lists in place of the data sections; the guard keeps what it read, so its
+    cache goes with them (an earlier test of the run leaves it filled from the real data)."""
+    from functools import lru_cache
+
+    from xbsl import modulehandlers
+    from xbsl.rules import unused_methods
+
+    def use(components: dict, elements: dict) -> None:
+        monkeypatch.setattr(modulehandlers, "_table", lru_cache(maxsize=1)(lambda: components))
+        monkeypatch.setattr(modulehandlers, "_elements", lru_cache(maxsize=1)(lambda: elements))
+        modulehandlers._reset()
+        unused_methods.platform_handlers.cache_clear()
+
+    yield use
+    monkeypatch.undo()
+    modulehandlers._reset()
+    unused_methods.platform_handlers.cache_clear()
+
+
+def _dead(tmp_path, *names: str) -> list[str]:
+    """The names among `names` the rule reports, each declared once in a module of its own."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    files = {f"М{index}__xbsl": f"метод {name}()\n;\n" for index, name in enumerate(names)}
+    return sorted(hit.message.split("'")[1] for hit in _hits(_lint_dir(tmp_path, **files)))
+
+
+def test_the_handlers_of_the_lists_are_not_flagged_in_either_spelling(tmp_path, lists):
+    lists(_COMPONENTS, _ELEMENTS)
+    assert _dead(tmp_path, "ПослеПоказаПанели", "AfterPanelShow", "ПроверитьОстатки",
+                 "CheckStock", "ПослеПересчетаОстатков", "AfterStockRecount",
+                 "ПослеПересчетаЦен") == ["ПослеПересчетаЦен"]
+
+
+def test_control_a_handler_taken_out_of_the_lists_is_flagged(tmp_path, lists):
+    """The negative control: the same declarations, the rows gone - and the old list with them."""
+    lists({"Панель": ()}, {"Склад": {"": {"handlers": (), "dynamic": ()}}})
+    assert _dead(tmp_path, "ПослеПоказаПанели", "AfterStockRecount", "ПередЗаписью") == [
+        "AfterStockRecount", "ПередЗаписью", "ПослеПоказаПанели"]
+
+
+def test_the_record_security_handlers_are_not_flagged_whatever_the_lists(tmp_path, lists):
+    """The build names them after the access settings: no section lists them."""
+    lists(_COMPONENTS, _ELEMENTS)
+    assert _dead(tmp_path, "ВычислитьРазрешенияДоступаДляОбъектов", "ComputeAccessKeysForRead",
+                 "ВычислитьКлючиДоступаДляИзменения") == []
+    lists({}, {})
+    assert _dead(tmp_path / "без", "ComputeAccessPermissionsForObjects",
+                 "ВычислитьКлючиДоступаДляЧтения", "ComputeAccessKeysForUpdate") == []
+
+
+def test_the_object_form_names_of_format_5_0_are_judged(tmp_path, lists):
+    """The converter of format 6.0 renames them, and no supported mode is older."""
+    lists(_COMPONENTS, _ELEMENTS)
+    assert _dead(tmp_path, "ПередЗаписьюОбъекта", "ПослеЗаписиОбъекта", "ПередУдалениемОбъекта",
+                 "ПослеУдаленияОбъекта") == [
+        "ПередЗаписьюОбъекта", "ПередУдалениемОбъекта", "ПослеЗаписиОбъекта",
+        "ПослеУдаленияОбъекта"]
+
+
+def test_without_the_sections_the_fallback_keeps_the_names_listed_by_hand(tmp_path, lists):
+    lists({}, {})
+    assert _dead(tmp_path, "ПослеСоздания", "ПриОткрытииПоСсылке", "ПриЗаполнении",
+                 "ВычислитьПараметрыРаботыКлиента", "ПроверитьНаличиеКлючейДоступа",
+                 "ПослеПересчетаОстатков") == ["ПослеПересчетаОстатков"]
+
+
+def test_a_section_the_data_lacks_falls_back_alone(tmp_path, lists):
+    """The component lists are there, the element ones are not: each part answers for itself."""
+    lists(_COMPONENTS, {})
+    # A name of the element fallback is kept, one of the component fallback is not: the
+    # component lists of the data answer for the components now, and they do not name it.
+    assert _dead(tmp_path, "ПослеПоказаПанели", "ПриЗаполнении", "ПриОбновлении") == [
+        "ПриОбновлении"]
+
+
 # --- Guard: special modules -------------------------------------------------------------
 
 def test_object_module_skipped(tmp_path):

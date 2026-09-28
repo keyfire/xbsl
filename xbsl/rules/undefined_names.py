@@ -12,8 +12,9 @@ Scope model (per the platform semantics):
   loop variables, поймать variables); a lambda opens a nested scope with its parameters;
 - the project contributes object and common-module names (from the yaml sources of the run),
   the stdlib contributes its global names - both via the helpers of rules/semantics.py.
-- the module of a tabular-section row type (`Товары.Позиции.xbsl`) is not judged: its scope
-  is the attributes of the row, which this model does not hold.
+- the module of a tabular-section row type (`Товары.Позиции.xbsl`) has the scope of the row:
+  the attributes the section declares in the yaml of its owner and what every structure type
+  has, never the attributes of the owner itself (see _row_owner).
 
 Only the ROOT of a member chain is checked (`Х` in `Х.Поле[0].Метод()`): member names need
 type inference (stage 3). Qualified roots (`Подсистема::Имя`) and method references are
@@ -46,7 +47,6 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import _IDENT_RE, _skip_interpolation, linemap
 from xbsl.rules._syntax import OBJECT_MODULE_SUFFIXES, element_pair_stem
 from xbsl.rules.semantics import _object_name_fast, _parsed, _stdlib_names
-from xbsl.rules.structure import tabular_row_owner
 from xbsl.rules.yaml_schema import element_own_names, object_kind, value_of
 
 MESSAGES = {
@@ -245,6 +245,75 @@ def _pair_key(rel: str) -> tuple[str, str, str]:
     return directory, element_pair_stem(parts[-1]) + ".yaml", parts[-1]
 
 
+#: The kind whose module a row module is scoped like, beyond the fields. The help page on
+#: tabular sections calls the row type of a section a structure type, and the module of a
+#: `Structure` element already gets the members every structure type has (`ToString`,
+#: `GetType`, `Presentation`) from the catalog.
+#:
+#: The standard fields the same page names - `Owner`, `Index`, `LineNumber`, and the
+#: container of the stored row - are not added: the page gives them to the TABLES of a section,
+#: the table of the query language and the one in the database, and the compiler dictionary
+#: files them under the view of that table, not under a type of the code. A row built by
+#: `new` is not in any section yet, so it has no number to answer with.
+_ROW_TYPE_KIND = "Структура"
+
+
+def _row_attributes(data) -> dict[str, list[str]]:
+    """The attributes of every tabular section of the element, by the name of the section.
+
+    A section generates the row type `<element>.<section>`, and the module of that type sees
+    the attributes of its section by bare name, the way an object module sees the attributes
+    of its element. The keys are read in either spelling (`TabularParts`, `Attributes`).
+    """
+    rows: dict[str, list[str]] = {}
+    sections = value_of(data, "ТабличныеЧасти")
+    if not isinstance(sections, list):
+        return rows
+    for section in sections:
+        name = value_of(section, "Имя")
+        if not isinstance(name, str):
+            continue
+        attributes = value_of(section, "Реквизиты")
+        rows[name] = sorted(
+            value_of(item, "Имя") for item in attributes
+            if isinstance(value_of(item, "Имя"), str)
+        ) if isinstance(attributes, list) else []
+    return rows
+
+
+def _row_candidate(fname: str) -> list[str] | None:
+    """[owner yaml file, tail] for a module named after an element and a tail, else None.
+
+    `Товары.Позиции.xbsl` is the module of the row type of the section `Позиции` of `Товары`
+    only when the yaml of `Товары` declares that section, and only the reduce sees that yaml.
+    The tail is not matched against the types an element generates: a catalog may well call a
+    section by a word that is a generated type of another kind, and the declaration decides.
+    """
+    owner, _, tail = fname[: -len(".xbsl")].rpartition(".")
+    return [owner + ".yaml", tail] if owner and tail else None
+
+
+def _row_owner(fact: dict, by_dir: dict[tuple[str, str], dict]) -> dict | None:
+    """The yaml fact of the element whose tabular-section row type the module extends.
+
+    The module of a row type is named after the element and the section, and it is one when
+    the yaml of the element declares that section. The help page on tabular sections says the
+    type may have a module, and a probe compiled one: the attributes of the row resolved by
+    bare name, the methods became members of the row type.
+
+    An owner that does not read answers for every module named after it: whether the tail is a
+    section or a type the element generates is unknown, so the module is left unjudged, the way
+    the modules of the element's own pair are, rather than judged as an orphan with no scope.
+    """
+    row = fact.get("row")
+    if not row:
+        return None
+    owner = by_dir.get((fact["dir"], row[0]))
+    if owner is None:
+        return None
+    return owner if owner["bad"] or row[1] in owner["rows"] else None
+
+
 def _base_type_root(data: dict) -> str | None:
     # Both keys are read through value_of: an English project spells the section `Inherits`,
     # and a raw `data["Наследует"]` simply found nothing there - the base type went
@@ -357,6 +426,8 @@ def _undef_mapper(source: SourceFile) -> dict | None:
             "name": name if isinstance(name, str) else None,
             "element_kind": kind if isinstance(kind, str) else None,
             "sections": sorted(element_own_names(data)),
+            # The scope of the row modules of the element: the attributes of each section.
+            "rows": _row_attributes(data),
             # Names of the kind that this element's own settings switch off, per module
             # scope - a catalog that is not hierarchical has no `Parent`. Read here, where
             # the parsed yaml is at hand, and subtracted where each scope is built.
@@ -366,11 +437,6 @@ def _undef_mapper(source: SourceFile) -> dict | None:
                    and any(isinstance(i, str) and "::" in i for i in imports),
         }
     if source.kind != "xbsl":
-        return None
-    if "." in fname[: -len(".xbsl")] and tabular_row_owner(source.path) is not None:
-        # The module of a tabular-section row type: its scope is the row's attributes, which
-        # the rule does not model - judged against the element's scope, every attribute of the
-        # row would read as undefined.
         return None
     static = _static_globals()
     if static is None:
@@ -390,11 +456,14 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         (*lm.linecol(offset), name, sign)
         for offset, name, sign in findings
     ]
+    obj = source.rel.endswith(OBJECT_MODULE_SUFFIXES)
     return {
         "k": "x",
         "dir": directory,
         "pair": pair_file,
-        "obj": source.rel.endswith(OBJECT_MODULE_SUFFIXES),
+        "obj": obj,
+        # A module that may extend the row type of a tabular section (see _row_owner).
+        "row": None if obj else _row_candidate(fname),
         "cands": cands,
         "pool": hint_pool,
     }
@@ -519,6 +588,11 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     object_members = catalog.get("object_members", {})
     manager_members = catalog.get("manager_members", {})
     generated_members = catalog.get("generated_members", {})
+    # What a row module sees beyond the attributes of its section (see _ROW_TYPE_KIND).
+    row_members = _both_spellings(
+        set(object_members.get(_ROW_TYPE_KIND, ()))
+        | set(dataset.manager_member_names(manager_members.get(_ROW_TYPE_KIND)))
+    )
 
     # The project model from the yaml facts: names, the (directory, file) map for the
     # module pairing, the by-name map for the Наследует chain of interface components.
@@ -538,8 +612,15 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["k"] != "x":
             continue
         pair = by_dir.get((fact["dir"], fact["pair"]))
+        owner = _row_owner(fact, by_dir) if pair is None else None
         extras: set[str] = set()
-        if pair is not None:
+        if owner is not None:
+            if owner["bad"] or owner["ext"]:
+                continue  # the blind spots of an element's own pair hold for its rows too
+            # The attributes of the section and the members of a structure type. The attributes
+            # of the owner stay out: the row is a type of its own, and they are not its fields.
+            extras = set(owner["rows"][fact["row"][1]]) | row_members
+        elif pair is not None:
             if pair["bad"]:
                 continue  # the pair is unreadable: its own yaml/valid is the finding to read
             if pair["ext"]:

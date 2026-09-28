@@ -49,6 +49,10 @@
 - **The `yaml/standard-field-length` finding links to the documentation again.** Its code in
   the Problems panel opens the length of a catalog's `Name` in the reference of project element
   properties. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The context menu of a tabular section opens and creates the module of its row.** A catalog
+  or a document offers **Create row module (Object.TabularSection.xbsl)**: an empty
+  `Name.Section.xbsl` beside the description, opened right away; once the file is there, the
+  item becomes **Open row module**. ([#157](https://github.com/keyfire/xbsl/pull/157))
 
 ### Changed
 

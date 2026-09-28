@@ -337,7 +337,7 @@ These commands create and edit sources: objects, fields, routes, methods, forms,
 
 ### `xbsl new-project`
 
-create a project: Project.yaml + Project.xbsl + a subsystem; see also add-subsystem and new- object, which fill the new project
+create a project: Project.yaml + Project.xbsl + a subsystem; see also add-subsystem and new-object, which fill the new project
 
 ```bash
 usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSION]
@@ -368,7 +368,7 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 
 ### `xbsl new-object`
 
-create a configuration object (yaml + a module by kind); see also add-field for its items and add- form for its forms
+create a configuration object (yaml + a module by kind); see also add-field for its items and add-form for its forms
 
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
@@ -395,13 +395,13 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | the access method: for HttpService it goes to Разрешения.Call, for data objects to Разрешения.Default (individual rights are set by set-access) |
 | `--routes ROUTES` | HttpService routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | Presentation – the element caption (without it the very first lint answers naming/presentation) |
+| `--presentation PRESENTATION` | the element caption: written where the kind keeps it - into Presentation or, for a catalog, a document, a register and a processing, into the Interface section (without it the very first lint answers naming/presentation) |
 | `--base BASE` | the base type of an interface component (Group, ObjectForm&lt;Goods.Object&gt;); the InterfaceComponent kind only |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-field`
 
-add an attribute/dimension/resource/value/property/tabular section; see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
+add an attribute/dimension/resource/value/property/event/tabular section; see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
 
 ```bash
 usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--doc DOC]
@@ -564,7 +564,7 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 
 ### `xbsl add-localization`
 
-add a translation file (the Localization section) to a LocalizedStrings element; see also set- localization, which writes the text of a string into every language
+add a translation file (the Localization section) to a LocalizedStrings element; see also set-localization, which writes the text of a string into every language
 
 ```bash
 usage: xbsl add-localization [-h] [--dry-run] yaml_path language
@@ -615,7 +615,7 @@ usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTI
 
 ### `xbsl set-field-property`
 
-set properties of an existing section item (a constant, an attribute ...); see also add-field to add one and rename-object to rename it
+set properties of an existing section item (a constant, an attribute, a property or an event of a component ...); see also add-field to add one and rename-object to rename it
 
 ```bash
 usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular TABULAR] [--dry-run]
@@ -627,7 +627,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object to add the field to |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие |
 | `name` | the name of the item in the section |
 
 **Options**
@@ -641,7 +641,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 
 ### `xbsl rename-object`
 
-rename an object (files, forms) and update references across the whole project; see also delete- object, which removes the same set of files
+rename an object (files, forms) and update references across the whole project; see also delete-object, which removes the same set of files
 
 ```bash
 usage: xbsl rename-object [-h] [--new-presentation NEW_PRESENTATION]
@@ -762,7 +762,7 @@ usage: xbsl move-resource [-h] [--dry-run] root resource_path target_dir
 
 ### `xbsl rename-resource-folder`
 
-rename a folder inside a Resources folder: the files move, the Resource{...} keys naming them are rewritten across the project, the lookups by a string are listed in the notes; see also move- resource, which moves a resource into a folder, and delete-resource-folder
+rename a folder inside a Resources folder: the files move, the Resource{...} keys naming them are rewritten across the project, the lookups by a string are listed in the notes; see also move-resource, which moves a resource into a folder, and delete-resource-folder
 
 ```bash
 usage: xbsl rename-resource-folder [-h] [--dry-run] root folder_dir new_name

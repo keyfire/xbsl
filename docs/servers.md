@@ -79,21 +79,30 @@ modules only when a tool needs them. After `self-update` or a `git pull` of an e
 those modules come from the new code while the rest in memory stay old, and the two halves do
 not fit together. Before every call the server reads the version from `__init__.py` on disk.
 When it differs from the loaded one, every tool but `version_info` answers with an `error` that
-names both versions and asks for a restart, plus a `stale` record, instead of running.
-`version_info` still answers and shows `engine_on_disk`. If the version is the same but a tool
-fails, the server compares its code files with the state at start and names a restart when they
-changed. A crashed rule says the same in its own report. The server does not restart or exit on
-its own, and `xbsl mcp-log` shows the first time it noticed each change.
+names both versions and asks for a restart, plus a `stale` record, instead of running; `ran:
+false` in the record says the tool did not run. `version_info` still answers and shows
+`engine_on_disk`. If the version is the same but a tool fails, the server compares its code
+files with the state at start and names a restart when they changed; the record then carries
+`ran: true`, since the tool may have written something before it failed. A crashed rule says
+the same in its own report. The server does not restart or exit on its own (the
+[supervisor](#a-supervisor-that-replaces-the-server) does that for it), and `xbsl mcp-log` shows
+the first time it noticed each change.
 
 Only the client can restart the server; an agent that calls the tools cannot. So the refusal of
 a tool the CLI can run carries `cli`, the command line of the same call for a POSIX shell (Git
 Bash on Windows). The command starts the server's own interpreter, which imports the engine
 from the same place and so runs the code that is on disk now. `lint_paths`, `lint_source`,
-`baseline_prune`, `list_rules`, `meta_fold_comments` and the `translate_*` tools have such a
-command. The text of a `lint_source` call and the inline edits of a `translate_set` call are
-saved to a temporary file that the command reads, and `cli_note` names that file; a folder of
-such files older than a day, left by an earlier server, is taken out by the next one. The other
-tools refuse as before.
+`baseline_prune`, `list_rules`, `meta_fold_comments`, the `translate_*` tools and the readers
+`meta_project_info`, `meta_object_info`, `meta_localization_info`, `meta_component_tree`,
+`meta_resource_references` and `meta_unused_resources` have such a command. A reader's command
+prints the same data as the tool, without the `root` and `file` the tool repeats, and the one of
+`meta_resource_references` lists every place whatever the `limit`. The text of a `lint_source`
+call and the inline edits of a `translate_set` call are saved to a temporary file that the
+command reads, and `cli_note` names that file; a folder of such files older than a day, left by
+an earlier server, is taken out by the next one. The interpreter starts with `-P`, so a folder
+named `xbsl` where the shell stands does not take the engine's place. Python 3.10 has no such
+flag, and there each run of the command first changes into that temporary folder, in a
+subshell: `(cd FOLDER && ...)`. The other tools refuse as before.
 
 The plugins are compared too. When the plugins installed differ from the ones the server loaded,
 the tools still run, on the rules loaded at start, and every answer that is an object starts with
@@ -202,6 +211,46 @@ an edit; a name stays. A repeated name is refused with the paths to choose from.
 
 The same operations are available through the CLI ([Commands](/CLI)) and, for an editor, through
 the `xbsl/meta*` LSP requests.
+
+### A supervisor that replaces the server
+
+`xbsl-mcp-supervisor`, from the same `[mcp]` extra, keeps the client's session through an update.
+It holds the stdio the client speaks over and runs the server as a worker process behind it:
+`python -m xbsl.mcp_server` on the same interpreter, with its stderr going to the client's log.
+It remembers the client's `initialize`, and when a worker has to go, it starts a new one and
+repeats that handshake to it. The client goes on talking to what looks like the same server and
+needs no restart.
+
+```sh
+claude mcp add xbsl -- xbsl-mcp-supervisor
+```
+
+Another client takes the same command in place of `xbsl-mcp`, with no arguments;
+`python -m xbsl.mcp_supervisor` works too. `xbsl-mcp` stays the plain server, and nothing
+changes for a client that keeps it. The supervisor is opt-in: it costs one more small process
+and one more hop per message, and the choice between the two is made where the client is
+configured.
+
+The worker decides when it has to go, and the supervisor reads that from its answers:
+
+- a refusal with `stale.ran: false` means the tool did not run. The supervisor sends the same
+  call to a new worker, and the agent gets the answer of the new code instead of the refusal.
+  `version_info` is asked again the same way, because it only reads;
+- an answer whose `stale` says the tool ran (it failed on a mix of the old and the new code, or
+  the plugins on disk changed) reaches the agent as it is, because the tool may have written
+  files. The next call goes to a new worker;
+- a worker that failed, or that `self-update --stop-holders` stopped, is replaced at the next
+  call rather than at once, so that a new worker does not load a package the update is still
+  unpacking. A call that worker was running comes back as an error: nobody knows what it had
+  written by then. A request that only reads goes to the new worker.
+
+The supervisor itself loads no engine and keeps no file of the package open. `self-update` does
+not count it as a holder and does not stop it, and it never runs old code of its own. An old
+worker is not killed in the middle of a call: it gets no new calls, finishes the ones it has and
+then ends. After a new worker takes over, the client is told that the tools list changed and asks
+for it again, so the tools and parameters an update brings are there without a restart. `xbsl
+mcp-log` names every replaced process and why it was replaced. When the client closes its end,
+the workers get the end of their input as well, and the supervisor ends once they have.
 
 ## Web interface
 

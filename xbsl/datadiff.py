@@ -120,11 +120,13 @@ MESSAGES = {
     "datadiff.term.properties": {"ru": "свойства", "en": "properties"},
     "datadiff.term.enums": {"ru": "значения перечислений", "en": "enumeration values"},
     "datadiff.term.query": {"ru": "язык запросов", "en": "query language"},
+    "datadiff.term.query-reserved": {"ru": "зарезервированные слова языка запросов",
+                                     "en": "reserved words of the query language"},
 }
 i18n.register(MESSAGES)
 
 #: Sections of terms.json worth diffing (russian -> english pairs).
-_TERM_SECTIONS = ("types", "facets", "properties", "enums", "query")
+_TERM_SECTIONS = ("types", "facets", "properties", "enums", "query", "query_reserved")
 #: uischema property attributes that make a "changed" entry (doc texts excluded - noise).
 _UISCHEMA_PROP_KEYS = ("types", "enum", "event", "slot", "readonly", "since", "default")
 #: uischema component attributes compared as flags.
@@ -666,7 +668,8 @@ def _section_lines(section: str, body: dict, limit: int | None) -> list:
     if section == "terms":
         for key in _TERM_SECTIONS:
             if key in body:
-                _emit_delta(out, 0, i18n.t("datadiff.term." + key), body[key], limit)
+                title = i18n.t("datadiff.term." + key.replace("_", "-"))
+                _emit_delta(out, 0, title, body[key], limit)
         return out
     for key, payload in body.items():
         title = _group_title(key)

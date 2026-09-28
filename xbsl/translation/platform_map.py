@@ -49,10 +49,7 @@ def keyword_english() -> dict[str, str]:
     the rest of the file.
     """
     pairs: dict[str, str] = {}
-    try:
-        table = (dataset.load_json("language.json") or {}).get("keywords") or {}
-    except Exception:  # noqa: BLE001 - no data, no substitution
-        table = {}
+    table = (dataset.load_optional("language.json") or {}).get("keywords") or {}
     for record in table.values():
         forms = record.get("forms") if isinstance(record, dict) else None
         if not forms:
@@ -76,10 +73,7 @@ def query_phrases() -> dict[tuple[str, ...], tuple[str, ...]]:
     word therefore produces a query the compiler refuses ("ORDER ON"), which is exactly what a
     real project turned into. Phrases are matched first, longest first.
     """
-    try:
-        section = (dataset.load_json("terms.json") or {}).get("query") or {}
-    except Exception:  # noqa: BLE001 - no data, no phrases
-        return {}
+    section = (dataset.load_optional("terms.json") or {}).get("query") or {}
     out: dict[tuple[str, ...], tuple[str, ...]] = {}
     for russian, english in section.items():
         words = tuple(russian.upper().split())
@@ -89,13 +83,15 @@ def query_phrases() -> dict[tuple[str, ...], tuple[str, ...]]:
     return out
 
 
-#: Query-language words the extracted table misses or spells wrong, taken from the platform
-#: documentation ("Синтаксис текста запросов"). The table is built out of the compiler data,
-#: and the LITERALS are not in it at all: without them `!= НЕОПРЕДЕЛЕНО` fell through to the flat
-#: dictionary, which answers `NULL` for it - a reserved word of its own that no Russian
-#: spelling maps to. The compiler accepts the result, so nothing fails at build time; at run
-#: time a condition against `NULL` is never true, and the query silently returns nothing.
-_VERIFIED_QUERY_SPELLINGS: dict[str, str] = {
+#: The reserved words of the query language when the data does not list them (a public
+#: checkout, data extracted before the list existed) - the table of the platform documentation
+#: ("Синтаксис текста запросов") as the data keeps it: `query_reserved` of terms.json. The
+#: keyword table is built out of the compiler data, and the LITERALS are not in it at all:
+#: without them `!= НЕОПРЕДЕЛЕНО` fell through to the flat dictionary, which answers `NULL` for
+#: it - a reserved word of its own that no Russian spelling maps to. The compiler accepts the
+#: result, so nothing fails at build time; at run time a condition against `NULL` is never true,
+#: and the query silently returns nothing.
+_RESERVED_FALLBACK: dict[str, str] = {
     "ИСТИНА": "TRUE",
     "ЛОЖЬ": "FALSE",
     "НЕОПРЕДЕЛЕНО": "UNDEFINED",
@@ -105,6 +101,19 @@ _VERIFIED_QUERY_SPELLINGS: dict[str, str] = {
     "СОЗДАТЬ": "CREATE",
     "ТАБЛИЦУ": "TABLE",
 }
+
+
+def _reserved_spellings(data: dict) -> dict[str, str]:
+    """{RUSSIAN reserved word: English} - single words, from the data or `_RESERVED_FALLBACK`."""
+    section = data.get("query_reserved")
+    if not isinstance(section, dict) or not section:
+        return dict(_RESERVED_FALLBACK)
+    return {
+        russian.upper(): english.upper() for russian, english in section.items()
+        if isinstance(russian, str) and isinstance(english, str)
+        and " " not in russian and " " not in english
+    }
+
 
 #: Words the extracted table pairs with something that is not an English keyword at all (a
 #: transliteration left by the extractor). Answering with one of these would produce a query
@@ -117,12 +126,11 @@ def _query_english() -> dict[str, str]:
     """{RUSSIAN query keyword, upper-cased: the English keyword} - SINGLE words only.
 
     A word that also appears inside a phrase is left to `query_phrases`: alone it may mean
-    something else entirely.
+    something else entirely. The reserved words of the documentation (`_reserved_spellings`)
+    are laid over the table last: they are what the platform itself calls these words.
     """
-    try:
-        section = (dataset.load_json("terms.json") or {}).get("query") or {}
-    except Exception:  # noqa: BLE001 - no data, no substitution
-        return dict(_VERIFIED_QUERY_SPELLINGS)
+    data = dataset.load_optional("terms.json") or {}
+    section = data.get("query") or {}
     out: dict[str, str] = {}
     dropped: set[str] = set()
 
@@ -144,7 +152,7 @@ def _query_english() -> dict[str, str]:
             put(key, english.upper())
     for key in _QUERY_SPELLINGS_TO_DROP:
         out.pop(key, None)
-    out.update(_VERIFIED_QUERY_SPELLINGS)
+    out.update(_reserved_spellings(data))
     return out
 
 
@@ -172,10 +180,7 @@ def facet_suffix_english(name: str) -> str | None:
 @lru_cache(maxsize=1)
 def _platform_facets() -> frozenset[str]:
     """`Owner.Facet` of every facet the type catalog declares (`Сущность.Право` and kin)."""
-    try:
-        std = dataset.load_json("stdlib.json") or {}
-    except Exception:  # noqa: BLE001 - no data, no facets
-        return frozenset()
+    std = dataset.load_optional("stdlib.json") or {}
     return frozenset(name for name in (std.get("facet_members") or {}) if "." in name)
 
 
@@ -269,10 +274,7 @@ def _library_pictures() -> tuple[dict[str, str], dict[str, dict[str, str]]]:
     dropped rather than guessed. The English keys answer themselves, so a reference already
     written in English keeps its name while the subsystem before it moves.
     """
-    try:
-        table = (dataset.load_json("uiterms.json") or {}).get("resource_paths") or {}
-    except Exception:  # noqa: BLE001 - no data, no pictures
-        return {}, {}
+    table = (dataset.load_optional("uiterms.json") or {}).get("resource_paths") or {}
     namespaces: dict[str, str] = {}
     keys: dict[str, dict[str, str]] = {}
     dropped: set[tuple[str, str]] = set()
@@ -375,10 +377,7 @@ def _member_names() -> frozenset[str]:
     type - so this is a name check, not a lookup: it answers whether the word after a dot is
     something the PLATFORM declares at all.
     """
-    try:
-        std = dataset.load_json("stdlib.json") or {}
-    except Exception:  # noqa: BLE001 - no data, no answer
-        return frozenset()
+    std = dataset.load_optional("stdlib.json") or {}
     out: set[str] = set()
     for table in ("type_members", "object_members", "manager_members", "facet_members"):
         for members in (std.get(table) or {}).values():
@@ -402,10 +401,7 @@ def reference_only_members() -> frozenset[str]:
     object) stays out: it tells a binary object from a record, not a reference from a
     hyperlink. The set is read off the type catalog, so it follows the platform version.
     """
-    try:
-        std = dataset.load_json("stdlib.json") or {}
-    except Exception:  # noqa: BLE001 - no data, no answer
-        return frozenset()
+    std = dataset.load_optional("stdlib.json") or {}
 
     def names(members: object) -> set[str]:
         out: set[str] = set()
@@ -673,10 +669,7 @@ def _ui_enum_tables() -> dict[str, dict[str, str]]:
     enumeration that spells the word otherwise, and a value of that enumeration would lose the
     only answer it had.
     """
-    try:
-        data = dataset.load_json("uiterms.json") or {}
-    except Exception:  # noqa: BLE001 - no data, no pairs
-        return {}
+    data = dataset.load_optional("uiterms.json") or {}
     return {
         name: dict(pairs)
         for name, pairs in (data.get("enum_values") or {}).items()

@@ -724,6 +724,27 @@ _CORE_MESSAGES = {
               "the tools answer with a warning until a restart",
     },
     "mcplog.stale.error": {"ru": "ошибка: {error}", "en": "error: {error}"},
+    # Written by the supervisor (xbsl/mcp_supervisor.py) when it retires a worker.
+    "mcplog.restart": {
+        "ru": "супервизор заменяет процесс сервера {target}: {cause}",
+        "en": "the supervisor replaces the server process {target}: {cause}",
+    },
+    "mcplog.restart.version": {
+        "ru": "движок на диске {loaded} -> {on_disk}",
+        "en": "the engine on disk {loaded} -> {on_disk}",
+    },
+    "mcplog.restart.sources": {
+        "ru": "исходники движка на диске изменились",
+        "en": "the engine sources on disk changed",
+    },
+    "mcplog.restart.plugins": {
+        "ru": "надстройки на диске сменились",
+        "en": "the plugins on disk changed",
+    },
+    "mcplog.restart.exited": {
+        "ru": "процесс завершился с кодом {code}",
+        "en": "the process ended with code {code}",
+    },
     "mcplog.unknown": {"ru": "событие {event}", "en": "event {event}"},
     "cli.help.commands.extract": {
         "ru": "сгенерировать данные о языке из дистрибутива Элемента (--dist)",
@@ -833,6 +854,36 @@ _CORE_MESSAGES = {
         "en": "No flags: the server starts without parameters and talks over stdio.\n"
               "The diagnostics language follows XBSL_LANG (then the system locale, then ru).\n"
               "Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp",
+    },
+    # -- the supervisor of the MCP server (mcp_supervisor.py) --
+    "cli.help.mcp-supervisor.description": {
+        "ru": "Супервизор сервера MCP xbsl (stdio): держит соединение клиента, запускает сервер "
+              "рабочим процессом и заменяет этот процесс, когда движок на диске сменился.",
+        "en": "The supervisor of the xbsl MCP server (stdio): it keeps the client's connection, "
+              "runs the server as a worker process and replaces that process when the engine "
+              "on disk changes.",
+    },
+    "cli.help.mcp-supervisor.epilog": {
+        "ru": "Рабочий процесс – сервер xbsl-mcp того же интерпретатора; другую команду можно "
+              "назвать после --.\n"
+              "Регистрация в Claude Code: claude mcp add xbsl -- xbsl-mcp-supervisor",
+        "en": "The worker process is the xbsl-mcp server of the same interpreter; another "
+              "command can be named after --.\n"
+              "Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp-supervisor",
+    },
+    "supervisor.worker-ended": {
+        "ru": "Процесс сервера MCP xbsl завершился во время вызова (код выхода {code}), "
+              "следующий вызов получит новый процесс. Успел ли вызов что-то изменить, "
+              "неизвестно: проверьте, прежде чем повторять его",
+        "en": "The xbsl MCP server process ended during the call (exit code {code}), and the "
+              "next call gets a new process. Whether the call changed anything before that is "
+              "unknown: check before repeating it",
+    },
+    "supervisor.start-failed": {
+        "ru": "Не удалось запустить процесс сервера MCP xbsl ({error}), следующий вызов "
+              "попробует снова",
+        "en": "The xbsl MCP server process could not be started ({error}), and the next call "
+              "tries again",
     },
     # -- help: self-update, templates and scaffolding sub-parsers (cli.py) --
     # These take no --lang; the language comes from XBSL_LANG / locale via current_lang().
@@ -1188,10 +1239,10 @@ _CORE_MESSAGES = {
         "en": "report description (JSON: source, rows, columns, measures)",
     },
     "cli.help.scaf.add-field": {
-        "ru": "добавить реквизит/измерение/ресурс/значение/свойство/ТЧ; см. также "
+        "ru": "добавить реквизит/измерение/ресурс/значение/свойство/событие/ТЧ; см. также "
               "set-field-property – свойства уже существующего элемента, set-localization – "
               "тексты строки ЛокализованныеСтроки по языкам",
-        "en": "add an attribute/dimension/resource/value/property/tabular section; see also "
+        "en": "add an attribute/dimension/resource/value/property/event/tabular section; see also "
               "set-field-property for an item that already exists and set-localization for the "
               "texts of a LocalizedStrings string per language",
     },
@@ -1214,20 +1265,24 @@ _CORE_MESSAGES = {
               "Autonumbering.Prefix=RQ",
     },
     "cli.help.scaf.set-field-property": {
-        "ru": "задать свойства существующего элемента секции (константы, реквизита ...); см. "
-              "также add-field – добавить элемент, rename-object – переименование",
-        "en": "set properties of an existing section item (a constant, an attribute ...); see "
-              "also add-field to add one and rename-object to rename it",
+        "ru": "задать свойства существующего элемента секции (константы, реквизита, свойства "
+              "или события компонента ...); см. также add-field – добавить элемент, "
+              "rename-object – переименование",
+        "en": "set properties of an existing section item (a constant, an attribute, a property "
+              "or an event of a component ...); see also add-field to add one and rename-object "
+              "to rename it",
     },
     "cli.help.scaf.sfp-name": {
         "ru": "имя элемента в секции",
         "en": "the name of the item in the section",
     },
     "cli.help.scaf.no-presentation": {
-        "ru": "Представление – заголовок элемента (без него первый же линт даёт "
-              "naming/presentation)",
-        "en": "Presentation – the element caption (without it the very first lint answers "
-              "naming/presentation)",
+        "ru": "заголовок элемента: пишется туда, где его держит вид – в Представление или, у "
+              "справочника, документа, регистра и обработки, в раздел Интерфейс (без него "
+              "первый же линт дает naming/presentation)",
+        "en": "the element caption: written where the kind keeps it - into Presentation or, "
+              "for a catalog, a document, a register and a processing, into the Interface "
+              "section (without it the very first lint answers naming/presentation)",
     },
     "cli.help.scaf.no-base": {
         "ru": "базовый тип компонента интерфейса (Группа, ФормаОбъекта<Товар.Объект>); "
