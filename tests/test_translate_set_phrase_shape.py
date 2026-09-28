@@ -177,8 +177,12 @@ def test_a_rewrite_that_changes_only_the_whitespace_is_named_so(folder: Path):
     assert [row.get("whitespace_only") for row in result["rewritten"]] == [True]
 
 
+@pytest.mark.needs_data
 def test_the_padding_of_a_literal_body_stays(folder: Path):
-    """A literal body is the text between the quotes: its spaces are part of the string."""
+    """A literal body is the text between the quotes: its spaces are part of the string.
+
+    The body is checked by the lexer of the language, which reads the Element data.
+    """
     result = entries.write_entries(
         folder, [{"key": " Итого: ", "value": " Total: ", "kind": "literal"}])
 
