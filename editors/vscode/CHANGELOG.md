@@ -23,6 +23,14 @@
   Problems panel opens the section about filtering on the dynamic list page. ([#151](https://github.com/keyfire/xbsl/pull/151))
 - **The `code/handler-overrides-nothing` finding links to the documentation.** Its code in the
   Problems panel opens the page of the annotation. ([#152](https://github.com/keyfire/xbsl/pull/152))
+- **The findings of `comment/doc-marker` and `comment/doc-tag-*` link to the documentation.**
+  Their code in the Problems panel opens the section about documentation comments of a module.
+  ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **Documentation comments in the editor.** The hover of a project method shows a section per
+  kind of tag; the signature help shows the text of the `@parameter` tag for the argument being
+  written; inside a `///` line `@` offers the tags, the parameters the block has not described
+  yet and, on an empty line above a declaration, the block the environment's template writes;
+  the tag word and the name after it are colored the way a JSDoc tag is. ([#153](https://github.com/keyfire/xbsl/pull/153))
 
 ## 0.77.0
 
