@@ -35,6 +35,17 @@
   the Problems panel opens the section about navigation on the page of the list component. ([#154](https://github.com/keyfire/xbsl/pull/154))
 - **The warning about the language server's code changed on disk has a Restart button.** It
   used to name the command to run; now a click on the button restarts the server. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **The context menu of an object creates the modules it lacks.** **Create module (xbsl)**,
+  **Create object module (.Object.xbsl)** and, for a register or a constants set, the modules
+  of a record, a record set and a record key. The items follow the kind, the way the **+** in
+  the project view of the environment does, and a kind without modules gets none; the
+  modules of the record types that exist open from the same menu. ([#155](https://github.com/keyfire/xbsl/pull/155))
+
+### Changed
+
+- **The documentation comment section of the properties panel folds.** It is folded while the
+  node has no comment and open when it has one, like the groups of properties below it: the
+  toolbar and the field took a good part of the panel even with nothing to show. ([#155](https://github.com/keyfire/xbsl/pull/155))
 
 ### Fixed
 
@@ -44,6 +55,8 @@
   deletion, enumerations and the event log and the reference of lists and table columns.
   `style/exception-prefix` and `yaml/standard-field-length` link nowhere: no page states their
   requirement. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **The object module of a project written in English opens from the tree.** The tree looked
+  for `Name.Объект.xbsl` only, so `Name.Object.xbsl` had no *Open object module*. ([#155](https://github.com/keyfire/xbsl/pull/155))
 
 ## 0.77.0
 

@@ -92,6 +92,10 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The language server's warning about code changed on disk has a Restart button.** The
   warning used to be text naming the command. Now it is a request with a button, and a click
   asks the editor to restart the server with the `xbsl/restartRequested` notification. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`lint_paths` with `compact` counts the info findings instead of listing them.** A project
+  keeps a few info findings on purpose, and every answer of a session repeated their lines -
+  about two and a half kilobytes for five of them. `info_hint` gives their number and rules,
+  they do not count towards the limit of ten, and `list_info` lists them with the rest. ([#155](https://github.com/keyfire/xbsl/pull/155))
 
 ### Fixed
 
@@ -120,6 +124,11 @@ entry either - say what the behaviour was, not which class name was compared.
 - **A refused `docs_search` no longer ends in a validation error of the MCP SDK.** Its declared
   answer admitted only a list, so the refusal of a stale server reached the agent as an error
   instead of text. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`translate --set` wrote the value of a phrase with its padding.** A continuation line of a
+  list came with its indent on both sides: the key was trimmed, the value was not, and the
+  padded value overwrote a pair the dictionary already had. The value loses its padding too,
+  and a rewrite that changes only the whitespace of a value is marked `whitespace_only` in
+  `rewritten` and named so in the text report. ([#155](https://github.com/keyfire/xbsl/pull/155))
 
 ## 2026-09-27 – 0.120.0
 
