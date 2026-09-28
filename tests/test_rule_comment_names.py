@@ -440,3 +440,31 @@ def test_the_cli_takes_the_other_systems_of_the_project(tmp_path, capsys):
         assert findings([]) == 1
     finally:
         comment_names.set_other_systems([])
+
+
+# --- the names a documentation tag points at ------------------------------------------------
+
+@pytest.mark.parametrize(("line", "end"), (
+    ("@см ПересчитатьОстатки", len("@см ПересчитатьОстатки")),
+    ("@см Партии.ПересчитатьПартии.", len("@см Партии.ПересчитатьПартии")),
+    ("@see RecountStock", len("@see RecountStock")),
+    ("@выбрасывает ИсключениеСклада - при закрытом складе", len("@выбрасывает ИсключениеСклада")),
+    ("@см Раздел о ценах и ПересчитатьОстатки", 0),
+    ("@параметр ПересчитатьОстатки - флаг", 0),
+    ("Пересчет - см. ПересчитатьОстатки", 0),
+))
+def test_unknown_name_leaves_the_target_of_a_tag_to_its_own_rule(line, end):
+    assert comment_names._target_end(line) == end
+
+
+@pytest.mark.needs_data
+def test_unknown_name_does_not_repeat_the_verdict_on_a_tag_target():
+    comments = (
+        "/// Пересчет остатков.\n///\n/// @см ПересчитатьОстатки\n"
+        "/// @выбрасывает ИсключениеСклада - при закрытом складе, как в ПересчитатьОстатки.\n"
+    )
+
+    diags = _module(comments)
+
+    assert _names(diags) == ["ПересчитатьОстатки"]
+    assert diags[0].line == 4  # from the prose of the exception tag, not from the `@см` line

@@ -71,7 +71,7 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from functools import lru_cache
 
-from xbsl import dataset, i18n, libs
+from xbsl import dataset, doctags, i18n, libs
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import tokens
@@ -163,6 +163,29 @@ _MEMBER_AFTER = re.compile(r"^\.([A-Za-zА-Яа-яЁё]\w*)")
 _ENDING = re.compile(r"^[аяуюоеёыиэйьмхвг]{0,3}$")
 #: The fleeting vowel of a genitive plural: `Настроек` of `Настройки`, `Сводок` of `Сводка`.
 _FLEETING = re.compile(r"[еоё]к$")
+
+
+#: The tags of a documentation comment whose target is a name of the code rather than prose:
+#: `@см`/`@see` and `@выбрасывает`/`@throws`. `comment/doc-tag-target` resolves those names
+#: strictly, and a second finding here would repeat its verdict in vaguer words.
+_TARGET_TAG = re.compile(
+    r"@(" + "|".join(doctags.TAGS["see"] + doctags.TAGS["throws"]) + r")\s+(\w+(?:\.\w+)*)"
+)
+_CODE_REFERENCE = re.compile(r"\w+(?:\.\w+)*\.?\s*$")
+
+
+def _target_end(prose: str) -> int:
+    """Where the name a documentation tag points at ends in the prose of a line, 0 if none.
+
+    An `@см` line counts only when all it says is a name or a chain of names; one written as
+    a phrase ("@см Раздел о ценах") is prose and stays judged here.
+    """
+    m = _TARGET_TAG.match(prose)
+    if m is None:
+        return 0
+    if doctags.KIND_OF.get(m.group(1)) == "see" and not _CODE_REFERENCE.match(prose, m.start(2)):
+        return 0
+    return m.end(2)
 
 
 def _is_candidate(word: str) -> bool:
@@ -314,11 +337,12 @@ def _candidates(source: SourceFile) -> list[tuple]:
         previous_line = cl.line
         if not prose.strip() or _is_code(prose):
             continue
+        target_end = _target_end(prose) if source.kind == "xbsl" else 0
         first = True
         for m in _WORD.finditer(prose):
             word = m.group(0)
             at_start, first = first, False
-            if not _is_candidate(word):
+            if not _is_candidate(word) or m.start() < target_end:
                 continue
             before, after = prose[:m.start()], prose[m.end():]
             if at_start and continues:

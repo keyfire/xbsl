@@ -324,3 +324,20 @@ def test_emphasis_caps_in_a_doc_comment_of_a_module(tmp_path):
     assert fixer.fix_source(engine.load(path), diags).text.startswith(
         "/*\n * Метод не доступен с клиента\n"
     )
+
+
+@pytest.mark.needs_data
+def test_emphasis_caps_leaves_the_start_of_a_doc_tag_text_alone():
+    # The text of a documentation tag opens a sentence of its own: a preposition in capitals
+    # right after "@параметр Имя - " is its first word, not a stress.
+    text = (
+        "/// Страница списка.\n///\n"
+        "/// @параметр Страница - С первой страницей список открывается сразу.\n"
+        "/// @параметр Размер - В строках, не больше ста.\n"
+        "/// @возвращает В порядке добавления.\n"
+        "метод Страница(Страница: Число, Размер: Число): Строка\n    возврат \"\"\n;\n"
+    )
+
+    assert _lint("Склады.xbsl", text, CAPS) == []
+    stressed = text.replace("не больше ста", "НЕ больше ста")
+    assert [d.line for d in _lint("Склады.xbsl", stressed, CAPS)] == [4]
