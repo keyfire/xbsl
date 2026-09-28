@@ -97,6 +97,23 @@ def declaration_comment_blocks(source: SourceFile) -> list[list[Token]]:
     token stands. Keeping that walk here lets project rules judge other shapes without a second
     approximation of the attachment rules.
     """
+    return [block for _decl, block in documented_declarations(source)]
+
+
+def documented_declarations(source: SourceFile) -> list[tuple[object, list[Token]]]:
+    """(declaration, its comment group) for every declaration a comment group stands right above.
+
+    The same walk as `declaration_comment_blocks`, with the parsed node kept: the rules of the
+    documentation tags compare a block with the signature below it. Cached on the source - the
+    tag rules ask for it per file.
+    """
+    key = "documented_declarations"
+    if key not in source.cache:
+        source.cache[key] = _documented_declarations(source)
+    return source.cache[key]
+
+
+def _documented_declarations(source: SourceFile) -> list[tuple[object, list[Token]]]:
     if source.kind != "xbsl" or "//" not in source.text and "/*" not in source.text:
         return []
     module, _errors = parse(source)
@@ -115,7 +132,7 @@ def declaration_comment_blocks(source: SourceFile) -> list[list[Token]]:
         by_last_line[tok.line + tok.value.count("\n")] = tok
     if not by_last_line:
         return []
-    out: list[list[Token]] = []
+    out: list[tuple[object, list[Token]]] = []
     seen: set[int] = set()
     for decl in _declarations(module):
         line, col = lm.linecol(decl.start)
@@ -133,7 +150,7 @@ def declaration_comment_blocks(source: SourceFile) -> list[list[Token]]:
         if block[0].start in seen:
             continue
         seen.add(block[0].start)
-        out.append(block)
+        out.append((decl, block))
     return out
 
 

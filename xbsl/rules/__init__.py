@@ -20,6 +20,7 @@ from . import (  # noqa: F401
 from . import (  # noqa: F401
     comment_conditions,
     comment_doc_marker,
+    comment_doc_tags,
     comment_prose,
     security,
     translation_values,
