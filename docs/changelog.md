@@ -25,6 +25,53 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **Five rules check the tags of a documentation comment against what the environment shows.**
+  The environment reads a `///` block with regular expressions and is stricter than it looks: a
+  tag on the first line becomes the description, a misspelled tag word loses its line, a name
+  ends at an underscore or a dot, a parameter the method no longer has is described all the
+  same. `comment/doc-tag-unknown` reports a line that starts with `@` and is no tag, and respells
+  `@param`, `@return`, `@throw`, `@exception` and a tag word in capitals.
+  `comment/doc-tag-layout` reports a tag on the first line, a paragraph after the tags, no blank
+  line before them (the fix inserts it), the kinds out of the order of the hover, a tag without
+  text and a dash other than a hyphen after a name (the fix puts a hyphen).
+  `comment/doc-tag-param` checks the names against the signature and asks for every parameter
+  or none. `comment/doc-tag-result` reports a result tag above a method with no result or twice,
+  and an exception type the environment cuts at a dot. `comment/doc-tag-target` reports an
+  `@see` reference or an `@throws` type that exists nowhere in the project or the platform. The
+  rules judge only a block that has tags and are on by default. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **The language server reads the tags of a documentation comment.** The hover of a project
+  method shows a section per kind of tag, as the environment's own card does; the new signature
+  help shows, for the argument being written, the text of its `@parameter` tag; inside a `///`
+  line the completion offers the tags, the parameters the block has not described yet and, on
+  an empty line above a declaration, the block the environment's template writes. ([#153](https://github.com/keyfire/xbsl/pull/153))
+
+### Changed
+
+- **The translator translates a documentation tag line by its parts.** Without a pair for the
+  whole line, the tag word becomes the English one, the name after `@parameter` or `@throws` is
+  translated the way the code translates it, and only the text after the name goes to the
+  dictionary. A parameter renamed in the tokens section now moves in the tag together with the
+  signature; a pair for the whole line still wins, so an existing dictionary translates as
+  before. `--unused` keeps a pair written for the text of a tag, and `--drift` checks the name
+  and the tag word of a pair written for a whole tag line. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`comment/unknown-name` leaves the names an `@see` or an `@throws` tag points at to
+  `comment/doc-tag-target`**, which resolves them strictly and says which one is missing. ([#153](https://github.com/keyfire/xbsl/pull/153))
+
+### Fixed
+
+- **The re-wrap of a translated paragraph glued a documentation tag to the line above.** A tag
+  now starts a paragraph of its own. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`comment/emphasis-caps` took the first word of a tag's text for a stress** - a preposition
+  in capitals after `@parameter Name - `. The text of a tag starts a sentence. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`translation/english-shape` and the English half of `comment/emphasis-caps` reported an
+  abbreviation of the project as a stress** when the re-wrap of a paragraph put it on another
+  line than its Russian half. An abbreviation the dictionary declares as a token (`SO`) is no
+  stress on any line. ([#153](https://github.com/keyfire/xbsl/pull/153))
+
 ## 2026-09-27 – 0.120.0
 
 ### Added

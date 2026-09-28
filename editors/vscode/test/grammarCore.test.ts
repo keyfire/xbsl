@@ -141,6 +141,43 @@ const PATTERN_THEN_METHOD = [
     assert.ok(!hasScope(keyword, "string.quoted.double.xbsl"));
   });
 
+  // The tags of a documentation comment are colored the way a JSDoc tag is: the tag word, and
+  // the name after a parameter or an exception tag. An unknown word after "@" stays plain text
+  // of the comment - the environment does not read it either.
+  const DOC_BLOCK = [
+    "/// Остаток на складе.",
+    "///",
+    "/// @параметр Код - Код товара.",
+    "/// @возвращает Остаток.",
+    "/// @выбрасывает Склады.ИсключениеСклада - при закрытом складе.",
+    "/// @see Stores.Reserve",
+    "/// @param Код - не тег.",
+    "/// @смотри - не тег.",
+    "метод Остаток(Код: Строка): Число",
+  ].join("\n");
+
+  test("the tag word and the name of a documentation tag have their scopes", () => {
+    const lines = tokenize(grammar, DOC_BLOCK);
+    const word = tokenOf(lines[2], "@параметр");
+    assert.ok(hasScope(word, "storage.type.class.xbsldoc"), `scopes: ${word.scopes.join(" ")}`);
+    assert.ok(hasScope(word, "comment.line.triple-slash.documentation.xbsl"));
+    assert.ok(hasScope(tokenOf(lines[2], "Код"), "variable.other.xbsldoc"));
+    assert.ok(hasScope(tokenOf(lines[3], "@возвращает"), "storage.type.class.xbsldoc"));
+    assert.ok(hasScope(tokenOf(lines[4], "Склады.ИсключениеСклада"), "variable.other.xbsldoc"));
+    assert.ok(hasScope(tokenOf(lines[5], "@see"), "storage.type.class.xbsldoc"));
+  });
+
+  test("an unknown tag and a plain comment keep the scope of the comment alone", () => {
+    const lines = tokenize(grammar, DOC_BLOCK);
+    for (const index of [0, 6, 7]) {
+      for (const token of lines[index]) {
+        assert.ok(!hasScope(token, "storage.type.class.xbsldoc"), `line ${index}: ${token.text}`);
+      }
+    }
+    const keyword = tokenOf(lines[8], "метод");
+    assert.ok(hasScope(keyword, "storage.type.xbsl"));
+  });
+
   console.log(`${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

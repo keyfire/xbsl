@@ -385,8 +385,13 @@ def _key_words(key: str) -> set[str]:
     return {part.lower() for run in _WORD_RE.findall(key) for part in _CAMEL_RE.findall(run)}
 
 
-def _caps_findings(section: str, key: str, value: str) -> Iterable[tuple[str, int]]:
-    """(the capitalized word as written, its offset in the value) for shape 3."""
+def _caps_findings(
+    section: str, key: str, value: str, abbreviations: frozenset[str] = frozenset(),
+) -> Iterable[tuple[str, int]]:
+    """(the capitalized word as written, its offset in the value) for shape 3.
+
+    `abbreviations` are the ones the project declares itself (`project_abbreviations`).
+    """
     if section == "tokens":
         candidates = [
             (m.group(0), m.start()) for m in _CAMEL_RE.finditer(value)
@@ -401,13 +406,50 @@ def _caps_findings(section: str, key: str, value: str) -> Iterable[tuple[str, in
         return
     known = _key_words(key)
     for word, start in candidates:
-        if word in _ABBREVIATIONS or word.lower() in known:
+        if word in _ABBREVIATIONS or word in abbreviations or word.lower() in known:
             continue
         # "И строка ..." may be a sentence or a stressed word carried over from the line above;
         # the word that opens the translation answers that letter either way.
         if opening and _opens_sentence(value, start):
             continue
         yield word, start
+
+
+#: A token of the dictionary that is an abbreviation on both sides: `ОО: SO`, `НДС: VAT`.
+_ABBREVIATION_KEY = re.compile(r"[А-ЯЁA-Z]{2,}")
+_ABBREVIATION_VALUE = re.compile(r"[A-Z]{2,}")
+#: The abbreviations of a loaded dictionary, kept with the dictionary they were read from.
+_PROJECT_ABBREVIATIONS: dict[str, tuple[object, frozenset[str]]] = {}
+
+
+def project_abbreviations(source: SourceFile) -> frozenset[str]:
+    """The English abbreviations the project's dictionary declares, for a file of that dictionary.
+
+    A project translates its own abbreviations as tokens (`ОО: SO`), and the English word may
+    well be an ordinary word in capitals ("SO"). The capitals of a comment line are compared
+    pair by pair, while a paragraph translated as a whole is wrapped anew: the English half of
+    the abbreviation lands on a line whose Russian key lacks the Russian half, and the word
+    reads as a stress there. What the dictionary declares an abbreviation is one on every line.
+    The tokens live in files of their own, so the whole dictionary is read - once per pass.
+    """
+    from xbsl.translation import dictionary
+
+    found = _dictionary_at(str(source.path.resolve().parent))
+    if found is None:
+        return frozenset()
+    try:
+        loaded = dictionary.load_for_pass(found)
+    except dictionary.DictionaryError:
+        return frozenset()
+    cached = _PROJECT_ABBREVIATIONS.get(str(found))
+    if cached is not None and cached[0] is loaded:
+        return cached[1]
+    words = frozenset(
+        english for russian, english in loaded.tokens.items()
+        if _ABBREVIATION_KEY.fullmatch(russian) and _ABBREVIATION_VALUE.fullmatch(english)
+    )
+    _PROJECT_ABBREVIATIONS[str(found)] = (loaded, words)
+    return words
 
 
 # --- the rule ---------------------------------------------------------------------------------
@@ -480,6 +522,7 @@ def english_shape(source: SourceFile) -> Iterable[Diagnostic]:
     root = _composed(source)
     if root is None:
         return
+    abbreviations = project_abbreviations(source)
     for section, key_node, value_node in _entries(root):
         key, value = key_node.value, value_node.value
         if not value:
@@ -499,7 +542,7 @@ def english_shape(source: SourceFile) -> Iterable[Diagnostic]:
                     source.rel, line, column, RULE_ID, Severity.WARNING,
                     i18n.t("translation/english-shape.passive", phrase=phrase, key=preview),
                 )
-        for word, start in _caps_findings(section, key, value):
+        for word, start in _caps_findings(section, key, value, abbreviations):
             line, column = _position(source, value_node, word, start, bounded)
             yield Diagnostic(
                 source.rel, line, column, RULE_ID, Severity.WARNING,

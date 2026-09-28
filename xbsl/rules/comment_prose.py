@@ -49,12 +49,12 @@ import re
 from bisect import bisect_left
 from collections.abc import Iterable
 
-from xbsl import i18n
+from xbsl import doctags, i18n
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.translation_values import (
     _ABBREVIATIONS, _caps_findings, _entries, _is_dictionary_file, _key_words, _occurrences,
-    _opens_sentence, _position,
+    _opens_sentence, _position, project_abbreviations,
 )
 from xbsl.rules.yaml_schema import _composed
 from xbsl.rules import _comments
@@ -601,6 +601,17 @@ _NEGATION_PREFIX = re.compile(r"(?<![\w-])(НЕ|НИ)([а-яё]{3,})(?![\w-])")
 #: A numbered point after the comment marker ("3.5 ", "1) ", "а) "): what follows opens a
 #: sentence of its own.
 _NUMBERING = re.compile(r"(?:\d+(?:\.\d+)*[.)]?|[а-яa-z]\))\s+")
+#: The head of a line of a documentation tag (`xbsl/doctags.py`): the keyword, and the name a
+#: naming tag takes, with the dash after it. The text of the tag opens a sentence of its own,
+#: whatever the line above ends with: "@параметр Страница - С первой страницей ..." starts
+#: with a preposition in capitals by right.
+_DOC_TAG_HEAD = re.compile(
+    r"@(?:" + "|".join(word for kind in doctags.NAMED for word in doctags.TAGS[kind]) + r")"
+    r"\s+\w+(?:(?:\.|::)\w+)*\s*(?:[-\u2013\u2014]\s*)?"
+    r"|@(?:" + "|".join(
+        word for kind in doctags.ORDER if kind not in doctags.NAMED for word in doctags.TAGS[kind]
+    ) + r")\s+"
+)
 
 #: What a comment cites rather than says: a quoted caption, a name in backticks, a placeholder
 #: of a markup template.
@@ -635,10 +646,19 @@ def _cited_blank(text: str, open_quote: bool) -> tuple[str, bool]:
 
 
 def _body_start(prose: str) -> int:
-    """Where the words of a comment line start: after the marker, a bullet and a number."""
+    """Where the words of a comment line start: after the marker, a bullet and a number - or
+    after the head of a documentation tag."""
     start = _comments.lead(prose)
+    tag = _DOC_TAG_HEAD.match(prose, start)
+    if tag:
+        return tag.end()
     numbered = _NUMBERING.match(prose, start)
     return numbered.end() if numbered else start
+
+
+def _opens_tag(prose: str) -> bool:
+    """Whether a comment line opens a documentation tag, whose text starts a sentence."""
+    return _DOC_TAG_HEAD.match(prose, _comments.lead(prose)) is not None
 
 
 def _cites_query(text: str) -> bool:
@@ -847,6 +867,8 @@ def emphasis_caps(source: SourceFile) -> Iterable[Diagnostic]:
         previous = before.text if adjacent else None
         before = cl
         text, open_quote = _cited_blank(cl.text, open_quote and adjacent)
+        if _opens_tag(text):
+            previous = None  # the text of a tag opens a sentence of its own
         body = _body_start(text)
         if _cites_query(text) or not re.search(r"[а-яё]", text[body:]):
             # A cited query, or a line written in capitals from end to end: a heading or a
@@ -1028,11 +1050,12 @@ def _english_emphasis(source: SourceFile) -> Iterable[Diagnostic]:
     root = _composed(source)
     if root is None:
         return
+    abbreviations = project_abbreviations(source)
     for section, key_node, value_node in _entries(root):
         if section != "phrases" or not value_node.value:
             continue
         key, value = key_node.value, value_node.value
-        for word, start, suggestion in _english_findings(key, value):
+        for word, start, suggestion in _english_findings(key, value, abbreviations):
             line, column = _position(source, value_node, word, start, True)
             offset = _value_offset(source, value_node, word, start)
             fix = None if offset is None else TextEdit(offset, offset + len(word), suggestion)
@@ -1057,14 +1080,19 @@ def _key_cites_query(key: str) -> bool:
     )
 
 
-def _english_findings(key: str, value: str) -> list[tuple[str, int, str]]:
-    """(the word as written, its offset in the value, the suggestion) for one pair."""
+def _english_findings(
+    key: str, value: str, abbreviations: frozenset[str] = frozenset(),
+) -> list[tuple[str, int, str]]:
+    """(the word as written, its offset in the value, the suggestion) for one pair.
+
+    `abbreviations` are the ones the project's dictionary declares (`project_abbreviations`).
+    """
     text = _CITED.sub(lambda m: " " * len(m.group(0)), value)
     if not re.search(r"[a-z]", text):
         return []  # a heading in capitals from end to end: no single word is stressed
     if any(word in _ENGLISH_QUERY_MARKERS for word in _ENGLISH_CAPS.findall(text)):
         return []
-    owned = {start for _word, start in _caps_findings("phrases", key, value)}
+    owned = {start for _word, start in _caps_findings("phrases", key, value, abbreviations)}
     key_latin = _key_words(key)
     key_caps = _KEY_CAPS.findall(key)
     key_names = [word for word in key_caps if _russian_name_shaped(word)]
@@ -1078,6 +1106,8 @@ def _english_findings(key: str, value: str) -> list[tuple[str, int, str]]:
             continue
         if word.lower() in key_latin or _MASK.fullmatch(word) or text[start - 1:start] == "#":
             continue
+        if word in abbreviations:
+            continue  # an abbreviation of the project, wherever the wrapping put it
         if any(_transliterates(name, word) for name in key_caps):
             continue
         following = re.match(r"\s*([A-Za-z]+)", text[m.end():])

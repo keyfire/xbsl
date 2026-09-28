@@ -14,7 +14,11 @@ byte-identical. What changes:
   pull in words that are not query keywords at all);
 - a COMMENT is translated line by line through the phrase plane of the dictionary, and the
   block it belongs to is then re-split by width (rewrap.py): the English text is longer, and
-  the line breaks it inherited from the Russian one no longer hold the width limit;
+  the line breaks it inherited from the Russian one no longer hold the width limit. A line of
+  a documentation comment that opens a tag (`@параметр Коды - ...`) and has no pair of its own
+  is translated by its parts: the tag word is the platform's, the name after it is translated
+  like the name in the code, and only the text after the name is a phrase - so a renamed
+  parameter moves in the tag together with the signature;
 - a STRING is data and stays, except a literal the dictionary's LITERALS plane names by its
   exact text - part of the data is names written as strings and messages meant for a person,
   and only the project can say which literal is which - except the CODE inside its
@@ -47,7 +51,7 @@ from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, lexer, terms, typeinfer
+from xbsl import dataset, doctags, lexer, terms, typeinfer
 from xbsl import parser as P
 from xbsl.engine import SourceFile
 from xbsl.restext import RESOURCE_DIRS
@@ -2061,6 +2065,23 @@ def comment_payloads(tok) -> list[tuple[int, int, str]]:
     return comment_lines(tok.value, _BLOCK_FIRST_RE, _BLOCK_LINE_RE)
 
 
+def comment_keys(tok) -> list[tuple[int, str]]:
+    """(line index, phrase key) for every key the translation of one comment token may ask.
+
+    Every payload is one. A tag line of a documentation comment adds the text of its tag: the
+    key the line is looked up by when it has no pair of its own (see `_tag_edits`). The orphan
+    pass of the dictionary reads this, so a pair written for the text of a tag stays live.
+    """
+    out: list[tuple[int, str]] = []
+    for _offset, index, payload in comment_payloads(tok):
+        out.append((index, payload))
+        if tok.value.startswith("///"):
+            text = tag_phrase(payload)
+            if text:
+                out.append((index, text))
+    return out
+
+
 def _comment_edits(tok, base, resolver, report, edits) -> None:
     if not has_cyrillic(tok.value):
         return
@@ -2073,8 +2094,138 @@ def _comment_edits(tok, base, resolver, report, edits) -> None:
             report.phrases_done += 1
             if translated != payload:
                 edits.append((start, start + len(payload), translated))
+            continue
+        parts = tag_parts(payload) if tok.value.startswith("///") else None
+        if parts is not None:
+            _tag_edits(payload, parts, start, tok.line + index, tok.col + offset, resolver,
+                       report, edits)
         else:
             report.note_phrase(payload, tok.line + index, tok.col if index == 0 else 1)
+
+
+# --- documentation tags -------------------------------------------------------------------
+
+#: A tag line of a documentation comment: `@` and the word after it (see xbsl/doctags.py).
+_TAG_WORD_RE = re.compile(r"@(\S+)")
+#: The name a naming tag takes: a parameter, or a type that may be qualified.
+_TAG_NAME_RE = re.compile(r"\s*(\w+(?:(?:\.|::)\w+)*)")
+#: What parts the name from the text: blanks and at most one dash.
+_TAG_DASH_RE = re.compile(r"\s*(?:[-\u2013\u2014]\s*)?")
+#: A reference written as a name or a chain of names (`@см Модуль.Метод`), a full stop allowed.
+_TAG_REFERENCE_RE = re.compile(r"(\w+(?:\.\w+)*)\.?")
+
+
+@dataclasses.dataclass(frozen=True)
+class TagParts:
+    """The parts of a comment line that opens a documentation tag, as spans of the line."""
+
+    kind: str
+    keyword: tuple[int, int]
+    name: tuple[int, int] | None
+    text: tuple[int, int]
+
+
+def tag_parts(payload: str) -> TagParts | None:
+    """The parts of a comment payload that opens a documentation tag, None for any other line.
+
+    Shared with the orphan pass of the dictionary (`tag_phrase`): the key a tag line is looked
+    up by is decided here once.
+    """
+    head = _TAG_WORD_RE.match(payload)
+    kind = doctags.KIND_OF.get(head.group(1)) if head else None
+    if head is None or kind is None:
+        return None
+    at = head.end()
+    name = None
+    if kind in doctags.NAMED:
+        written = _TAG_NAME_RE.match(payload, at)
+        if written:
+            name = (written.start(1), written.end(1))
+            at = _TAG_DASH_RE.match(payload, written.end(1)).end()
+    if name is None:
+        at += len(payload[at:]) - len(payload[at:].lstrip())
+    return TagParts(kind, (head.start(1), head.end(1)), name, (at, len(payload)))
+
+
+def tag_phrase(payload: str) -> str | None:
+    """The phrase a tag line without a pair of its own is translated by: the text of the tag.
+
+    None for a line that is no tag, and for a tag whose text needs no pair.
+    """
+    parts = tag_parts(payload)
+    if parts is None:
+        return None
+    text = payload[parts.text[0]:parts.text[1]]
+    return text if has_cyrillic(text) else None
+
+
+def _tag_edits(payload: str, parts: TagParts, start: int, line: int, col: int, resolver,
+               report, edits) -> None:
+    """Translate a tag line by its parts: the tag word, the name, then the text as a phrase."""
+    first, last = parts.keyword
+    english = doctags.keyword(parts.kind, "en")
+    if payload[first:last] != english:
+        edits.append((start + first, start + last, english))
+    if parts.name is not None:
+        first, last = parts.name
+        _tag_name_edit(payload[first:last], start + first, line, col + first, resolver, report,
+                       edits)
+    first, last = parts.text
+    text = payload[first:last]
+    if not has_cyrillic(text):
+        return
+    if parts.kind == "see":
+        reference = _TAG_REFERENCE_RE.fullmatch(text)
+        if reference and _tag_reference_edit(reference.group(1), start + first, resolver, edits):
+            return
+    translated = resolver.dictionary.phrase(text)
+    if translated is None:
+        report.note_phrase(text, line, col + first)
+        return
+    report.phrases_done += 1
+    if translated != text:
+        edits.append((start + first, start + last, translated))
+
+
+def _english_chain(chain: str, resolver) -> tuple[str | None, str, str]:
+    """(the English spelling of a name or a dotted chain, the first untranslated part, its
+    plane); the spelling is None when a part has none."""
+    out: list[str] = []
+    after_dot = False
+    for piece in re.split(r"(\.|::)", chain):
+        if piece in (".", "::"):
+            out.append(piece)
+            after_dot = True
+            continue
+        if not has_cyrillic(piece):
+            out.append(piece)
+            continue
+        replacement, plane = resolver.identifier(piece, after_dot=after_dot)
+        if not replacement:
+            return None, piece, plane
+        out.append(replacement)
+    return "".join(out), "", ""
+
+
+def _tag_name_edit(name: str, at: int, line: int, col: int, resolver, report, edits) -> None:
+    """The name after `@параметр` or `@выбрасывает`, spelled the way the code spells it."""
+    english, missing, plane = _english_chain(name, resolver)
+    if english is None:
+        if plane in ("missing", "platform-gap"):
+            report.note_missing(missing, line, col, plane)
+        return
+    if english != name:
+        edits.append((at, at + len(name), english))
+
+
+def _tag_reference_edit(chain: str, at: int, resolver, edits) -> bool:
+    """An `@см` reference written as names: translated as names, True when every part has one."""
+    english, _missing, _plane = _english_chain(chain, resolver)
+    if english is None:
+        return False
+    if english != chain:
+        edits.append((at, at + len(chain), english))
+    return True
 
 
 # --- strings ----------------------------------------------------------------------------

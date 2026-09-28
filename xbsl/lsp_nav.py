@@ -406,12 +406,15 @@ def _method_entry(m: dict) -> dict:
     """
     annotations = m.get("annotations") or []
     name = m.get("name", "")
-    return {
+    entry = {
         "label": name,
         "kind": "method",
         "detail": ", ".join(annotations) if annotations else "метод",
         "snippet": f"{name}($0)",
     }
+    if m.get("doc"):
+        entry["doc"] = str(m["doc"])
+    return entry
 
 
 def _enumeration_value_entries(lookup: IndexLookup, type_name: str) -> Optional[list[dict]]:
@@ -931,19 +934,22 @@ def resolve_completions(
         entries: list[dict] = _template_entries(templates, lookup, in_query)
         seen: set = set()
 
-        def add(label: str, kind: str, detail: str, snippet: Optional[str] = None) -> None:
+        def add(label: str, kind: str, detail: str, snippet: Optional[str] = None,
+                doc: str = "") -> None:
             if label and label not in seen:
                 seen.add(label)
                 e = {"label": label, "kind": kind, "detail": detail}
                 if snippet:
                     e["snippet"] = snippet
+                if doc:
+                    e["doc"] = doc
                 entries.append(e)
 
         for v, t in (local_vars or {}).items():
             add(v, "field", f"переменная: {t}")
         for m in lookup.methods_by_module(file_stem):
             name = m.get("name", "")
-            add(name, "method", "метод модуля", f"{name}($0)")
+            add(name, "method", "метод модуля", f"{name}($0)", str(m.get("doc") or ""))
         for o in lookup.objects():
             kind = o.get("kind", "")
             add(o.get("name", ""), "enum" if kind == "Перечисление" else "object", kind)
@@ -982,7 +988,10 @@ def _hover_method(m: dict) -> str:
         head += f" {annotations}"
     lines = [head]
     if m.get("doc"):
-        lines += ["", str(m["doc"])]
+        # The tags of the block go to sections, as in the environment's own card (lsp_doc).
+        from xbsl.lsp_doc import doc_markdown
+
+        lines += ["", doc_markdown(str(m["doc"]))]
     lines += ["", f"`{m.get('path', '')}:{m.get('line', 1)}`"]
     return "\n".join(lines)
 

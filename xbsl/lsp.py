@@ -44,8 +44,8 @@ except ImportError:  # pragma: no cover - the extra is not installed
 
 from xbsl import (
     __version__, baseline, bindingcomplete, cijob, dataset, doccomments, docs, engine, environment,
-    formedits, formhandlers, formmodel, formsearch, freshness, i18n, indexer, metamodel, scaffold,
-    templates, terms, uischema,
+    formedits, formhandlers, formmodel, formsearch, freshness, i18n, indexer, lsp_doc, metamodel,
+    scaffold, templates, terms, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -874,9 +874,34 @@ def _make_server() -> "LanguageServer":
             roots |= set(project)
         return members, returns, roots
 
+    def _doc_item(entry: dict, line: int) -> lsp.CompletionItem:
+        """A completion item of a documentation comment: it replaces its own range."""
+        start, end = entry["range"]
+        kinds = {"keyword": lsp.CompletionItemKind.Keyword, "field": lsp.CompletionItemKind.Field,
+                 "snippet": lsp.CompletionItemKind.Snippet}
+        return lsp.CompletionItem(
+            label=entry["label"],
+            kind=kinds.get(entry["kind"], lsp.CompletionItemKind.Text),
+            detail=entry["detail"] or None,
+            sort_text=entry["sort"],
+            filter_text=entry.get("filter") or entry["label"],
+            text_edit=lsp.TextEdit(
+                range=lsp.Range(start=lsp.Position(line=line, character=start),
+                                end=lsp.Position(line=line, character=end)),
+                new_text=entry["new_text"],
+            ),
+            insert_text_format=lsp.InsertTextFormat.Snippet if entry["snippet"] else None,
+        )
+
+    def _doc_markup(doc: Optional[str]) -> Optional[lsp.MarkupContent]:
+        """The documentation comment of a project method for its completion item."""
+        if not doc:
+            return None
+        return lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=lsp_doc.doc_markdown(doc))
+
     @server.feature(
         lsp.TEXT_DOCUMENT_COMPLETION,
-        lsp.CompletionOptions(trigger_characters=[".", ":"]),
+        lsp.CompletionOptions(trigger_characters=[".", ":", "@", "/"]),
     )
     def _completion(params: lsp.CompletionParams) -> Optional[lsp.CompletionList]:
         # Everything project-specific - the objects, their fields, the tables of a query -
@@ -892,6 +917,23 @@ def _make_server() -> "LanguageServer":
         doc = server.workspace.get_text_document(uri)
         lines = doc.source.split("\n")
         if params.position.line >= len(lines):
+            return None
+        # Inside a `///` line the documentation comment answers alone: the tag words, the
+        # parameters of the method below, the template of a block (lsp_doc). On an empty line
+        # above a declaration the template joins the items of the code. `@` and `/` open a
+        # tag or a block and nothing else: typed in the code, they ask for nothing.
+        doc_entries: list[dict] = []
+        if language_of(path) == "xbsl":
+            try:
+                doc_entries, exclusive = lsp_doc.doc_completions(
+                    doc.source, path.name, params.position.line, params.position.character)
+            except Exception:  # noqa: BLE001 - completion must not fail because of parsing
+                doc_entries, exclusive = [], False
+            if exclusive:
+                return lsp.CompletionList(is_incomplete=False, items=[
+                    _doc_item(e, params.position.line) for e in doc_entries])
+        trigger = getattr(getattr(params, "context", None), "trigger_character", None)
+        if trigger in ("@", "/"):
             return None
         prefix = lines[params.position.line][: params.position.character]
         # The cursor context is parsed by the lexer, not by text: keywords are bilingual.
@@ -973,18 +1015,19 @@ def _make_server() -> "LanguageServer":
             templates=STATE.templates,
             project_language=project_language,
         )
-        if entries is None:
+        if entries is None and not doc_entries:
             return None
-        items = [
+        items = [_doc_item(e, params.position.line) for e in doc_entries] + [
             lsp.CompletionItem(
                 label=e["label"],
                 kind=lsp.CompletionItemKind(_COMPLETION_KINDS.get(e["kind"], 1)),
                 detail=e.get("detail"),
+                documentation=_doc_markup(e.get("doc")),
                 insert_text=e.get("snippet"),
                 insert_text_format=lsp.InsertTextFormat.Snippet if e.get("snippet") else None,
                 sort_text=_sort_text(e, project_language),
             )
-            for e in entries
+            for e in entries or ()
         ]
         return lsp.CompletionList(is_incomplete=False, items=items)
 
@@ -1165,6 +1208,48 @@ def _make_server() -> "LanguageServer":
         if not text:
             return None
         return lsp.Hover(contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=text))
+
+    @server.feature(
+        lsp.TEXT_DOCUMENT_SIGNATURE_HELP,
+        lsp.SignatureHelpOptions(trigger_characters=["(", ","], retrigger_characters=[","]),
+    )
+    def _signature_help(params: lsp.SignatureHelpParams) -> Optional[lsp.SignatureHelp]:
+        # The call of a project method under the cursor: its signature, and for the argument
+        # being written the text of its `@параметр` tag (lsp_doc).
+        uri = params.text_document.uri
+        path = uri_to_path(uri)
+        if path is None or language_of(path) != "xbsl":
+            return None
+        lookup = ensure_lookup()
+        if lookup is None:
+            return None
+        doc = server.workspace.get_text_document(uri)
+        lines = doc.source.split("\n")
+        line = params.position.line
+        if line >= len(lines):
+            return None
+        prefix = "\n".join(lines[:line] + [lines[line][: params.position.character]])
+        try:
+            found = lsp_doc.signature_help(lookup, prefix, path.stem, rel_posix(path))
+        except Exception:  # noqa: BLE001 - the signature help must not fail because of parsing
+            return None
+        if not found:
+            return None
+
+        def markup(text: str) -> Optional[lsp.MarkupContent]:
+            return lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=text) if text else None
+
+        signature = lsp.SignatureInformation(
+            label=found["label"],
+            documentation=markup(found["documentation"]),
+            parameters=[
+                lsp.ParameterInformation(label=(p["label"][0], p["label"][1]),
+                                         documentation=markup(p["documentation"]))
+                for p in found["parameters"]
+            ],
+        )
+        return lsp.SignatureHelp(signatures=[signature], active_signature=0,
+                                 active_parameter=found["active"])
 
     @server.feature("xbsl/hoverDoc")
     def _hover_doc(params: object) -> dict:

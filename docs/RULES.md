@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 255 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 260 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -184,11 +184,13 @@ tier keep to the module and the element description; `translation/english-shape`
 | `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | The letter "ё" in the text a user reads: a label, an entry of the dictionary of localized strings, the text of an SVG or of an HTML page |
 | `typography/non-keyboard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A character that is not on the keyboard in a comment: an arrow, a comparison or a multiplication sign; the fix writes `->`, `>=`, `<>`, `x` and the like, a currency sign is data and is left alone |
 | `typography/en-dash-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | The en dash in a comment, for a project that writes a hyphen in its code comments; the fix writes the hyphen |
-| `comment/doc-marker` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `//` block right above a declaration (a method, a structure, a field, an enumeration item, a module constant): the development environment reads a documentation comment by its `///` marker alone and puts only that text into the hover, the signature help and the completion. The fix respells the block; a `/* ... */` block in that place is reported without one A slash frame `////` in the attached block is also reported: only three slashes are removed by the documentation reader; no automatic choice between a header and documentation is made. |
+| `comment/doc-marker` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `//` block right above a declaration (a method, a structure, a field, an enumeration item, a module constant): the development environment reads a documentation comment by its `///` marker alone and puts only that text into the hover, the signature help and the completion. The fix respells the block; a `/* ... */` block in that place is reported without one. A slash frame `////` in the attached block is also reported: only three slashes are removed by the documentation reader; no automatic choice between a header and documentation is made [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The subjunctive particle (would) in a comment; the finding asks for a word of condition, because dropping the particle turns a hypothesis into a statement. Concessive turns are left alone |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The author speaking as "we" in a comment: a pronoun or a first-person plural verb, and "we", "our" or "I" in the English line of a comment kept by the translation dictionary; a comment is impersonal |
 | `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A word in capitals for emphasis in a comment: "not", "only", a negation glued on. Emphasis is a matter of wording, not of case [details](#b-comment-emphasis-caps) |
 | `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A condition in a comment written with a dash ("the store is not set - the main one is taken") instead of a word of condition [details](#b-comment-dash-condition) |
+| `comment/doc-tag-unknown` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `///` line that starts with `@` and is none of the four tags (`@param`, `@Parameter`, an annotation copied into the text): the environment drops it from the hover together with its continuation. The fix respells a keyword in another case and the short forms `@param`, `@return`, `@throw`, `@exception` [details](#b-comment-doc-tags) [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
+| `comment/doc-tag-layout` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | The place of the tags in a `///` block: a tag on the first line (the environment takes it for the description), a paragraph after the last tag (glued to it), no blank line between the description and the tags, the kinds out of the order of the hover, a tag without text, a dash other than a hyphen after a name. The fix inserts the blank line and puts the hyphen [details](#b-comment-doc-tags) [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A trace of a mechanical replacement in an English value of the translation dictionary: an ending glued onto a word that takes none (`onlies`) [details](#b-translation-english-shape) |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Trailing whitespace |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Mixed newlines |
@@ -206,6 +208,17 @@ dictionary. Abbreviations, date masks and a cited query are left alone. The fix 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** The finding suggests the
 wording with a word of condition. The legend of a value is left alone: nothing is named there
 before the state, or no verb follows the dash.
+
+<a id="b-comment-doc-tags"></a>**The `comment/doc-tag-*` rules.** The environment reads a `///`
+block with regular expressions: the description runs to the first line that starts with `@`,
+then the `@parameter`, `@returns`, `@throws` and `@see` tags (and their Russian spellings) are
+cut out of the rest, each running to the next such line, and a name after `@parameter` or
+`@throws` ends at an underscore, a dot or a lowercase "yo". The rules report the places where that
+reading differs from the block as written. They judge only a block that has tags, so they are
+on by default, unlike the rest of the group. A structure, an exception and a constructor are
+not judged by `comment/doc-tag-param` and `comment/doc-tag-result`. `comment/doc-tag-target`
+leaves alone an `@see` written as a phrase, a single word in lowercase and a word in the other
+script of the project; `comment/unknown-name` does not judge the names these tags point at.
 
 <a id="b-translation-english-shape"></a>**`translation/english-shape`.** The rule also catches a
 passive followed straight by a noun phrase ("is shadowed the parameter") and capitals the Russian
@@ -284,6 +297,8 @@ is on by default, at `warning`.
 | `code/duplicate-catch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An exception type occurs more than once in the `catch` sections of one `try` statement. |
 | `code/duplicate-declaration` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name is declared twice where names are case insensitive, or an enumeration has more than one `default` item; exact method overloads and sibling local scopes remain legal. |
 | `code/captured-local-write` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A mutable local or parameter of a named method is assigned after a lambda captured it: the lambda sees a value other than the one at capture [details](#c-code-captured-local-write) [docs](https://1cmycloud.com/docs/help/topics/lambda-expression/) |
+| `comment/doc-tag-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `@parameter` tag against the signature below it: a name the method does not have or spells otherwise, a name described twice or out of order, a name the environment cuts (an underscore, a dot, a lowercase "ё"), a tag above a declaration without parameters. The parameters of a method are described all or none [details](#b-comment-doc-tags) [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
+| `comment/doc-tag-result` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `@returns` tag above a method without a result, or a second one (the hover glues the texts); an `@throws` type the environment cuts at its first dot; either tag above a declaration that is no method [details](#b-comment-doc-tags) [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 
 #### Tier C rules in detail
 
@@ -505,6 +520,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/redundant-undefined-guard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `??`, `!` or `?.` over a value whose type has no `Undefined`: the guard checks nothing and the default is never used [details](#d-code-redundant-undefined-guard) [docs](https://1cmycloud.com/docs/help/topics/undefined-type/) |
 | `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A check `X is Type` whose result the type of `X` decides: the check always passes and `is not` never does [details](#d-code-redundant-type-check) [docs](https://1cmycloud.com/docs/help/topics/is/) |
 | `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A name in a comment that neither the project nor the platform has: a renamed method, a replaced object, a typo [details](#d-comment-unknown-name) |
+| `comment/doc-tag-target` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `@see` reference written as a name or a chain of names that leads nowhere, and an `@throws` type neither the project nor the platform declares; the finding lists what the method body throws [details](#b-comment-doc-tags) [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A call that binds only to a deprecated form of a platform method, as the platform IDE warns [details](#d-code-deprecated-api) [docs](https://1cmycloud.com/docs/help/topics/update-app-data/) |
 | `code/deprecated-project` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A use bound to a project method, property, constructor, parameter or enumeration value marked deprecated, as the platform IDE warns [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru/) |
 
@@ -1079,11 +1095,13 @@ decides their severity and defaults for that project; see
   project too (`.css`, `.js`, `.svg`, `.html`);
 - `comment/` - the wording of a comment: the subjunctive particle, the first person, a function word
   in capitals for emphasis and a condition written with a dash; `comment/unknown-name` checks the
-  names a comment mentions against the project. The group reads the comments of modules, element
+  names a comment mentions against the project; `comment/doc-marker` and the `comment/doc-tag-*`
+  rules judge the documentation comment of a declaration against what the environment shows. The group reads the comments of modules, element
   descriptions and resource files (the name rule reads modules and element descriptions), and the
   first person and the capitals of emphasis are read in the English lines of the translation
   dictionary too; the group is off
-  by default; a project that keeps its comments impersonal turns it on with `--enable comment`;
+  by default, except the `comment/doc-tag-*` rules; a project that keeps its comments impersonal
+  turns it on with `--enable comment`;
 - `translation/` - the English of the translation dictionary: `translation/english-shape` reads the
   values of the `xbsl-translation` files, whose text `xbsl translate --strict` never judges;
 - `whitespace/` - trailing spaces and mixed newlines;

@@ -220,3 +220,17 @@ def test_the_rule_is_an_enabled_file_warning_of_tier_b():
     assert (info.tier, info.scope, info.severity.value, info.enabled_by_default) == (
         "B", "file", "warning", True,
     )
+
+
+def test_an_abbreviation_the_dictionary_declares_is_no_stress_on_any_line(tmp_path):
+    # A paragraph translated as a whole is wrapped anew, and the English half of an
+    # abbreviation lands on a line whose Russian key lacks the Russian half.
+    _dictionary(tmp_path, "tokens:\n    ОО: SO\n", name="010-tokens.yaml")
+    _dictionary(tmp_path, (
+        "phrases:\n"
+        '    "кодом абонента в сервисе вместе с позицией": "the subscriber code of the SO in the '
+        'service together with"\n'
+        '    "склад закрывается сразу": "the warehouse is closed RIGHT away"\n'
+    ), name="020-phrases.yaml")
+
+    assert _words(_lint(tmp_path)) == ["RIGHT"]

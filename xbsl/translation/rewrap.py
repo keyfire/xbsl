@@ -33,6 +33,11 @@ What is never re-flowed, because the shape carries the meaning:
 - a line that was ALREADY over the limit in the SOURCE - its author wrote it that way on
   purpose, and the pass has nothing to repair there.
 
+A line of a `///` block that starts with `@` opens a paragraph of its own: the development
+environment reads a documentation tag from the start of a line (xbsl/doctags.py), and a tag
+glued to the end of the line above would join the description or the tag before it. The tag
+and the lines that continue it are re-flowed together, with the tag word first.
+
 A paragraph that fits the limit after the translation is left alone as well: re-flowing it
 would be a diff without a reason, and a short block often carries a layout of its own.
 """
@@ -43,7 +48,7 @@ import re
 import textwrap
 from typing import NamedTuple
 
-from xbsl import lexer
+from xbsl import doctags, lexer
 from xbsl.rules import style_layout
 
 #: One physical line with its ending. The lexer breaks lines on \r\n, \r and \n alone, while
@@ -364,6 +369,11 @@ def _rewrap_paragraphs(
     out: list[str] = []
     paragraph: list[int] = []
     for index, part in enumerate(parts):
+        if _opens_tag(prefix, part.text):
+            # A documentation tag starts its own paragraph and ends a list above it.
+            out.extend(_wrap_paragraph(paragraph, lines, source, parts, prefix, limit, newline))
+            paragraph = []
+            inside_item = False
         # Where a list can BEGIN: no paragraph is running yet, or the line above announced
         # one with a colon. Only there does a dash open an item - see `_DASH_RE`.
         opens = not paragraph or parts[index - 1].text.rstrip().endswith(":")
@@ -379,6 +389,11 @@ def _rewrap_paragraphs(
         paragraph.append(index)
     out.extend(_wrap_paragraph(paragraph, lines, source, parts, prefix, limit, newline))
     return out, inside_item
+
+
+def _opens_tag(prefix: str, payload: str) -> bool:
+    """Whether a line of a `///` block opens a documentation tag (see the module docstring)."""
+    return prefix.lstrip().startswith("///") and doctags.is_tag_line(payload)
 
 
 def _protected(payload: str, source_line: str, limit: int, *, opens: bool) -> str:
