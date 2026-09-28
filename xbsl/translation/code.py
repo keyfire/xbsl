@@ -744,6 +744,7 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
                         chain_scopes=(owner_scopes(source, chains.owner(owner))
                                       if chains is not None else None),
                         handlers=handlers)
+    report.close_comment()  # the last comment of the module is judged like any other
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and English is the longer language: a line that
     # fitted the width limit in Russian stops fitting it here. The lines of code that the
@@ -2082,7 +2083,21 @@ def comment_keys(tok) -> list[tuple[int, str]]:
     return out
 
 
+#: A comment line of fewer words than this is short: its pair reads right only in the block it
+#: was written for (see `FileReport.short_neighbors`).
+_SHORT_PHRASE_WORDS = 3
+
+
+def short_phrase(text: str) -> bool:
+    """A comment line too short to carry its meaning outside its own block."""
+    return len(text.split()) < _SHORT_PHRASE_WORDS
+
+
 def _comment_edits(tok, base, resolver, report, edits) -> None:
+    # The lexer gives every `//` line a token of its own: the report joins the lines written
+    # one under another into one comment (see FileReport.comment_line).
+    marker = "/*" if tok.subkind != "line" else ("///" if tok.value.startswith("///") else "//")
+    report.comment_line(marker, tok.line, tok.line + tok.value.count("\n"))
     if not has_cyrillic(tok.value):
         return
     for offset, index, payload in comment_payloads(tok):
@@ -2094,6 +2109,9 @@ def _comment_edits(tok, base, resolver, report, edits) -> None:
             report.phrases_done += 1
             if translated != payload:
                 edits.append((start, start + len(payload), translated))
+                if short_phrase(payload):
+                    report.note_short_hit(tok.line + index, tok.col if index == 0 else 1,
+                                          payload, translated)
             continue
         parts = tag_parts(payload) if tok.value.startswith("///") else None
         if parts is not None:

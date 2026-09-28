@@ -34,7 +34,10 @@ REFERENCE_FACET = "Ссылка"
 OBJECT_FACET = "Объект"
 
 
+# Rebuilt when the data root or version changes, and when data missing at the first read has
+# been installed since - an editor or an MCP server outlives both.
 dataset.register_reset(_reset)
+dataset.register_recheck(_reset)
 
 
 @lru_cache(maxsize=1)

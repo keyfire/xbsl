@@ -28,7 +28,10 @@ stdlib pages with cleaned HTML: a type, its methods, properties and parameters. 
 full-text index (SQLite FTS5, from the standard library) and canonical links back to the primary
 source, `https://1cmycloud.com/docs/help/...`, taken from the distribution's `sitemap.xml`. Page
 images are stored alongside. The 1C reference is copyrighted, so the database does not ship in the
-package: you generate it from your own distribution, like the language data.
+package: you generate it from your own distribution, like the language data. Besides the type
+reference, the database takes the other sections of the site menu: the developer and administrator
+guides, the properties of project elements and interface components, the integration process
+schema and the query language.
 
 ```sh
 python tools/extract_docs.py --dist "$ELEMENT_DIST"

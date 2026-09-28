@@ -9,7 +9,7 @@ and members are the platform's own, so the receivers and the arguments are typed
 
 import pytest
 
-from xbsl import engine, i18n
+from xbsl import engine, i18n, typeinfer
 from xbsl.rules import deprecated_api as D
 
 RULE = "code/deprecated-api"
@@ -68,7 +68,9 @@ def _project(mode: str | None, body: str, params: str = "Текст: Строк�
         "Склады/Основное/Остатки.xbsl": f"метод Проверка({params})\n{body};\n",
     }
     if mode is not None:
-        files["Склады/Проект.yaml"] = f"Поставщик: Acme\nИмя: Склады\nРежимСовместимости: {mode}\n"
+        # "" writes a description that declares no mode at all.
+        declared = f"РежимСовместимости: {mode}\n" if mode else ""
+        files["Склады/Проект.yaml"] = f"Поставщик: Acme\nИмя: Склады\n{declared}"
     files.update(extra or {})
     sources = [engine.load_text(name, text) for name, text in files.items()]
     return [d for d in engine.run_sources(sources, select={RULE}) if d.rule_id == RULE]
@@ -123,11 +125,14 @@ def test_a_deprecation_applies_from_the_mode_it_names():
 
 
 @pytest.mark.needs_data
-def test_a_mode_the_platform_does_not_support_is_checked_as_the_newest():
-    """The build refuses such a project, and the editor checks its code in the newest mode."""
+@pytest.mark.parametrize("declared", ["5.0", "8.5", "", "новейший"],
+                         ids=["below-the-oldest", "between-two", "no-mode", "not-a-mode"])
+def test_a_description_without_a_supported_mode_is_checked_in_the_newest_mode(declared):
+    """The build refuses such a project, and the reader of the platform goes on in the newest
+    mode - a description that declares no mode at all included."""
     body = "    знч Чтение = новый ЧтениеJson(Текст)\n    знч Массив = Чтение.ПрочитатьСодержимоеКакМассив()\n"
 
-    assert [line for line, _col in _places(_project("5.0", body))] == [3]
+    assert [line for line, _col in _places(_project(declared, body))] == [3]
 
 
 @pytest.mark.needs_data
@@ -183,7 +188,8 @@ def test_an_unqualified_call_of_a_method_of_the_module_is_not_a_platform_call():
 
 
 @pytest.mark.needs_data
-def test_without_the_mode_of_the_project_a_limited_deprecation_decides_nothing():
+def test_without_the_project_description_a_limited_deprecation_decides_nothing():
+    """No description in the run: the mode is unknown, not assumed."""
     assert _project(None, "    знч Чтение = новый ЧтениеJson(Текст)\n    знч М = Чтение.ПрочитатьСодержимоеКакМассив()\n") == []
 
 
@@ -194,8 +200,8 @@ def test_a_deprecation_the_data_gives_no_modes_warns_only_in_the_newest_mode(mon
         {"signature": "ПрочитатьСодержимоеКакМассив(): Массив<Объект?>", "deprecated": True},
     ]}}
     monkeypatch.setattr(D, "_deprecated", lambda: (table, frozenset({"ПрочитатьСодержимоеКакМассив"})))
-    newest = max(D._supported_modes())
-    older = max(mode for mode in D._supported_modes() if mode < newest)
+    newest = max(typeinfer.supported_modes())
+    older = max(mode for mode in typeinfer.supported_modes() if mode < newest)
     body = "    знч Чтение = новый ЧтениеJson(Текст)\n    знч Массив = Чтение.ПрочитатьСодержимоеКакМассив()\n"
 
     assert [line for line, _col in _places(_project(".".join(map(str, newest)), body))] == [3]

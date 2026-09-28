@@ -1110,8 +1110,10 @@ _CORE_MESSAGES = {
         "en": "the field name",
     },
     "cli.help.scaf.af-type": {
-        "ru": "тип поля (по умолчанию Строка; у стандартного реквизита – тип его класса)",
-        "en": "the field type (default String; a standard attribute takes its class default)",
+        "ru": "тип поля (по умолчанию Строка, у события компонента СобытиеКомпонента; "
+              "у стандартного реквизита – тип его класса)",
+        "en": "the field type (default String, ComponentEvent for a component event; "
+              "a standard attribute takes its class default)",
     },
     "cli.help.scaf.af-doc": {
         "ru": "описание поля – документирующий комментарий: строки ## в начале элемента, "

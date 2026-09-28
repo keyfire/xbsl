@@ -61,6 +61,14 @@ def keyword_table(tmp_path_factory):
     dataset.set_data_root(None)
 
 
+@pytest.fixture()
+def no_data(tmp_path_factory):
+    """Pin a data root with nothing in it: a public checkout without the data."""
+    dataset.set_data_root(tmp_path_factory.mktemp("empty"))
+    yield
+    dataset.set_data_root(None)
+
+
 def _lint_yaml(comments: str, body: str = ""):
     text = comments + _HEAD + body
     return engine.run_sources([engine.load_text("Склады.yaml", text)], select={CAPS})
@@ -217,15 +225,24 @@ def test_a_negation_in_capitals_is_lowered(tmp_path):
     "# партии читаются порциями, начало порции задаёт СО СМЕЩЕНИЕМ",
     "# сортировка стоит перед ПОЛУЧИТЬ",
     "# ВЫБОР КОГДА Остаток > 0 ТОГДА 1 ИНАЧЕ 0 КОНЕЦ",
+    "# ВЫБОР Партии.Вид КОГДА 1 ТОГДА 2 ИНАЧЕ 0 КОНЕЦ",
     "#     Партии.Дата ВОЗР, Партии.Номер УБЫВ",
     "#     ГДЕ Партии.Склад = &Склад ДЛЯ ИЗМЕНЕНИЯ",
     "# таблица задаётся СОЗДАТЬ ВРЕМЕННУЮ ТАБЛИЦУ Остатки",
     "# остатки берутся ГДЕ Партии.Документ ССЫЛКА Поступления",
     "#     ЗНАЧЕНИЯ (&Код, &Имя)",
+    "# ВСТАВИТЬ В Остатки (Склад, Количество) ЗНАЧЕНИЯ (&Склад, 0)",
+    "# ИЗМЕНИТЬ Остатки УСТАНОВИТЬ Количество = 0",
+    "# УДАЛИТЬ ИЗ Остатки ГДЕ Количество = 0",
+    "# УДАЛИТЬ ИЗ ВТ_Остатки",
+    "# отбор ГДЕ Т.Активен = ИСТИНА И Т.Код В (&Коды)",
+    "# отбор ГДЕ Т.Удален <> ИСТИНА",
 ))
 def test_a_cited_query_is_syntax_not_stress(comment, keyword_table):
-    """A marker (the Russian spellings of CASE and DESC), a keyword of several words, and an
-    ordinary word of the table with code after it."""
+    """A marker (the Russian DESC), the head of a CASE expression in either form, the head of a
+    statement that changes a temporary table, a keyword of several words, and an ordinary word
+    of the table - or a literal it does not hold - with code after it; a literal is syntax
+    after a comparison sign as well."""
     assert _lint_yaml(comment + "\n") == []
 
 
@@ -240,11 +257,16 @@ def test_a_cited_query_is_syntax_not_stress(comment, keyword_table):
     ("# решает ССЫЛКА на склад, а не код", ["ССЫЛКА"]),
     ("# партии сравнивают ЗНАЧЕНИЯ, а не ссылки", ["ЗНАЧЕНИЯ"]),
     ("# склад закрыт ПО УМОЛЧАНИЮ", ["ПО", "УМОЛЧАНИЮ"]),
+    ("# отчет делает ВЫБОР склада по остатку", ["ВЫБОР"]),
+    ("# нельзя УДАЛИТЬ склад, пока на нем есть партии", ["УДАЛИТЬ"]),
+    ("# запись нельзя УДАЛИТЬ ИЗ Склады, пока идет загрузка", ["УДАЛИТЬ"]),
+    ("# DELETE /data/склады: пометка ТОЛЬКО удаления", ["ТОЛЬКО"]),
 ))
 def test_a_query_word_among_prose_is_a_stress(comment, words, keyword_table):
     """What follows the keyword decides: prose puts its own word there even after a name. A word
     of a keyword of several words is judged alone, and "ПО УМОЛЧАНИЮ" is the stock phrase of
-    prose rather than the keyword of the table."""
+    prose rather than the keyword of the table. CASE without WHEN after it, and a verb of a
+    statement without the shape of one, are words of prose too; so is the HTTP method."""
     assert _words(_lint_yaml(comment + "\n")) == words
 
 
@@ -268,13 +290,40 @@ def test_a_keyword_a_later_table_adds_is_an_ordinary_word(keyword_table):
     assert _words(_lint_yaml("# обход идёт РЕКУРСИВНО, а НЕ циклом\n")) == ["РЕКУРСИВНО", "НЕ"]
 
 
-def test_without_the_table_only_the_markers_written_by_hand_are_known(keyword_table):
-    """The table only ever spares a finding: without it a marker still marks a cited query, and
-    an ordinary word of the query language is judged like prose."""
+def test_without_the_table_the_words_kept_by_hand_stand_in_for_it(keyword_table):
+    """Data without the keyword table: a marker still marks a cited query, and the ordinary words
+    the rule kept by hand before it read the table are syntax in context again - a word only
+    the table knows is judged like prose."""
     keyword_table({})
 
     assert _lint_yaml("# ВЫБРАТЬ Склады.Код ИЗ Склады ГДЕ НЕ Склады.Удалён\n") == []
-    assert _words(_lint_yaml("# условие ГДЕ НЕ Удалён\n")) == ["ГДЕ", "НЕ"]
+    assert _lint_yaml("# условие ГДЕ НЕ Удалён\n") == []
+    assert _lint_yaml("#     ПОЛУЧИТЬ 10 СО СМЕЩЕНИЕМ 20\n") == []
+    assert _words(_lint_yaml("# остатки берутся ГДЕ Партии.Документ ССЫЛКА Поступления\n")) == [
+        "ССЫЛКА"]
+
+
+def test_a_checkout_without_data_judges_a_cited_query_as_before(no_data):
+    """No data at all: the words kept by hand, the shapes and the literals are there all the
+    same, and a stress stays a stress."""
+    assert _lint_yaml("# условие ГДЕ НЕ Удалён\n") == []
+    assert _lint_yaml("# ВЫБОР КОГДА Остаток > 0 ТОГДА 1 ИНАЧЕ 0 КОНЕЦ\n") == []
+    assert _lint_yaml("# ВСТАВИТЬ В Остатки (Склад) ЗНАЧЕНИЯ (&Склад)\n") == []
+    assert _lint_yaml("# отбор ГДЕ Т.Активен = ИСТИНА И Т.Код В (&Коды)\n") == []
+    assert _words(_lint_yaml("# на складе ТОЛЬКО один остаток\n")) == ["ТОЛЬКО"]
+    assert _words(_lint_yaml("# отчет делает ВЫБОР склада по остатку\n")) == ["ВЫБОР"]
+
+
+def test_the_literals_the_table_lacks_are_words_of_the_language(keyword_table):
+    """The Boolean literals, the empty value and `TEMP` are reserved words of the query language
+    the keyword table does not hold; they are ordinary words, not markers."""
+    words = comment_prose._query_words()
+
+    assert {"ИСТИНА", "ЛОЖЬ", "НЕОПРЕДЕЛЕНО", "TRUE", "FALSE", "UNDEFINED", "TEMP"} <= words
+    # An ordinary word does not hide a stress on its line the way a marker would, and out of
+    # context it is judged like any other word.
+    assert _words(_lint_yaml("# флаг Т.Активен = ИСТИНА, а склад ТОЛЬКО один\n")) == ["ТОЛЬКО"]
+    assert _words(_lint_yaml("# это ИСТИНА, а не догадка\n")) == ["ИСТИНА"]
 
 
 @pytest.mark.needs_data
@@ -309,6 +358,11 @@ def test_the_division_written_by_hand_names_words_of_the_platform_table():
     assert by_hand - words == set()
     assert comment_prose._MARKERS_OUTSIDE_THE_TABLE & words == set()
     assert comment_prose._PROSE_PHRASES <= set(table)
+    # The fallback knows no word the table does not; the literals are outside it - once a table
+    # holds them, the list written by hand has nothing left to add.
+    assert comment_prose._FALLBACK_WORDS - words == set()
+    assert {word for phrase in comment_prose._FALLBACK_PHRASES for word in phrase.split()} <= words
+    assert comment_prose._WORDS_OUTSIDE_THE_TABLE & words == set()
 
 
 # --- where the comments are ------------------------------------------------------------------
@@ -434,6 +488,22 @@ def test_an_english_line_citing_a_query_with_keywords_of_the_table(tmp_path, key
         ' "CASE WHEN Balance > 0 THEN 1 ELSE 0 END"\n'
         '    "СГРУППИРОВАТЬ ПО Партии.Склад": "GROUP BY Batches.Warehouse"\n'
         '    "отбор ГДЕ Код == %Код": "a filter WHERE Code == %Code"\n'
+    ))
+
+    assert _lint_dictionary(tmp_path) == []
+
+
+def test_an_english_line_citing_a_shape_or_a_literal(tmp_path, keyword_table):
+    """The head of a statement in an English line cites a query by its shape, and the literals
+    and `TEMP` are words of the language a key citing a query passes on."""
+    _dictionary(tmp_path, (
+        "phrases:\n"
+        '    "ВСТАВИТЬ В Остатки (Склад) ЗНАЧЕНИЯ (&Склад)":'
+        ' "INSERT INTO Balances (Warehouse) VALUES (&Warehouse)"\n'
+        '    "отбор ГДЕ Т.Активен = ИСТИНА И Т.Код В (&Коды)":'
+        ' "a filter WHERE T.Active = TRUE AND T.Code IN (&Codes)"\n'
+        '    "таблица задаётся СОЗДАТЬ ВРЕМЕННУЮ ТАБЛИЦУ Остатки":'
+        ' "the table is made by CREATE TEMP TABLE Balances"\n'
     ))
 
     assert _lint_dictionary(tmp_path) == []

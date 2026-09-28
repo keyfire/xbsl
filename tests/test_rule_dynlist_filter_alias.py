@@ -1,5 +1,6 @@
 """yaml/dynlist-filter-computed-alias: a filter item of a dynamic list named after the alias of
-a computed field of the list.
+a list field the filter cannot see - a computed field, a renamed column, a path through a
+reference.
 
 A filter looks its field up among the columns of the tables the list selects from, so such a
 filter either goes by a column of the same name or fails the apply. The Russian spellings need
@@ -69,6 +70,22 @@ def _form(filter_items: str, joined_filter_items: str = "") -> str:
         "                    Тип: ПолеДинамическогоСписка\n"
         "                    Выражение: Партии.Склад.Владелец\n"
         "                    Псевдоним: ВладелецСклада\n"
+        "                -\n"
+        "                    Тип: ПолеДинамическогоСписка\n"
+        "                    Выражение: Партии.Цена\n"
+        "                    Псевдоним: Цена\n"
+        "                -\n"
+        "                    Тип: ПолеДинамическогоСписка\n"
+        "                    Выражение: Срок\n"
+        "                    Псевдоним: Срок\n"
+        "                -\n"
+        "                    Тип: ПолеДинамическогоСписка\n"
+        "                    Выражение: Партия\n"
+        "                    Псевдоним: НомерПартии\n"
+        "                -\n"
+        "                    Тип: ПолеДинамическогоСписка\n"
+        "                    Выражение: Партии.Склад.Владелец\n"
+        "                    Псевдоним: Владелец\n"
         "            Фильтр:\n"
         "                Тип: ГруппаЭлементовФильтра\n"
         "                Элементы:\n"
@@ -133,11 +150,36 @@ def test_an_item_of_a_nested_group_is_judged():
     assert len(_lint(_form(nested))) == 1
 
 
+@pytest.mark.parametrize(("field", "path"), (
+    ("СкладПартии", "Партии.Склад"),
+    ("НомерПартии", "Партия"),
+    ("ВладелецСклада", "Партии.Склад.Владелец"),
+    ("Владелец", "Партии.Склад.Владелец"),
+))
+def test_a_filter_by_the_alias_of_a_renamed_column_or_a_path(field, path):
+    """A renamed column, qualified or bare, and a path through a reference - under another name
+    or under the name of its last part: a live apply refused the first three shapes and found
+    the table's own column for the fourth, so the message says both outcomes and names the path
+    as the cure."""
+    text = _form(_item(field))
+
+    diags = _lint(text)
+
+    assert len(diags) == 1
+    line = text.splitlines().index(f"                        Поле: {field}") + 1
+    assert (diags[0].line, diags[0].col) == (line, 31)
+    assert f"'{field}'" in diags[0].message
+    assert f"Поле: {path}." in diags[0].message
+    assert "Неизвестное, или неоднозначное поле" in diags[0].message
+    assert "ЭлементФильтраВыражение" not in diags[0].message
+
+
 @pytest.mark.parametrize("item", (
     _item("Остатки.Количество"),
+    _item("Партии.Склад.Владелец"),
     _item("=ПолеОтбора"),
-    _item("СкладПартии"),
-    _item("ВладелецСклада"),
+    _item("Цена"),
+    _item("Срок"),
     _item("Склад"),
     (
         "                    -\n"
@@ -147,9 +189,45 @@ def test_an_item_of_a_nested_group_is_judged():
     ),
 ))
 def test_what_the_filter_resolves_itself_is_left_alone(item):
-    """A qualified column, a binding, the alias of a column or of a path, a bare column and an
-    expression item; the sorting by the computed alias in the fixture is legal as well."""
+    """A qualified column and a path, a binding, the alias of a column under its own name
+    (qualified or bare), a bare column and an expression item; the sorting by the computed alias
+    in the fixture is legal as well."""
     assert _lint(_form(item)) == []
+
+
+def _implicit_table_form(expression: str, alias: str) -> str:
+    """A list whose main table goes by its written name (no alias), filtered by `alias`."""
+    return (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: СписокПартий\n"
+        "Содержимое:\n"
+        "    -\n"
+        "        Тип: Таблица<ДинамическийСписок>\n"
+        "        Имя: Список\n"
+        "        Источник:\n"
+        "            ОсновнаяТаблица:\n"
+        "                Таблица: Учет::Склады::Партии\n"
+        "            Поля:\n"
+        "                -\n"
+        "                    Тип: ПолеДинамическогоСписка\n"
+        f"                    Выражение: {expression}\n"
+        f"                    Псевдоним: {alias}\n"
+        "            Фильтр:\n"
+        "                Элементы:\n"
+        + _item(alias)
+    )
+
+
+@pytest.mark.parametrize(("expression", "alias", "found"), (
+    ("Партии.Склад", "Склад", 0),
+    ("Партии.Склад.Владелец", "Владелец", 1),
+    ("Партии.Склад", "СкладПартии", 1),
+))
+def test_a_table_going_by_its_written_name(expression, alias, found):
+    """The file does not show every spelling such a table is read by, so `Партии.Склад`
+    aliased `Склад` may be its column under its own name; a longer path and a renamed column
+    are judged all the same."""
+    assert len(_lint(_implicit_table_form(expression, alias))) == found
 
 
 def test_the_filter_of_a_joined_table_is_not_judged():
@@ -231,3 +309,36 @@ def test_english_spellings_are_judged_too():
 
     assert len(diags) == 1
     assert "Stock.Quantity" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_english_renamed_column_is_judged_too():
+    text = (
+        "ElementKind: ListForm\n"
+        "Name: BatchesListForm\n"
+        "Properties:\n"
+        "    -\n"
+        "        Name: List\n"
+        "        Type: DynamicList\n"
+        "        DefaultValue:\n"
+        "            MainTable:\n"
+        "                Table: Batches\n"
+        "                Alias: Batches\n"
+        "            Fields:\n"
+        "                -\n"
+        "                    Type: DynamicListField\n"
+        "                    Expression: Batches.Warehouse\n"
+        "                    Alias: BatchWarehouse\n"
+        "            Filter:\n"
+        "                Items:\n"
+        "                    -\n"
+        "                        Type: FilterItem\n"
+        "                        Field: BatchWarehouse\n"
+        "                        ComparisonType: Equal\n"
+        "                        Value: 0\n"
+    )
+
+    diags = _lint(text, "BatchesListForm.yaml")
+
+    assert len(diags) == 1
+    assert "Batches.Warehouse" in diags[0].message

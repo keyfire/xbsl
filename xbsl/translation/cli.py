@@ -307,9 +307,17 @@ MESSAGES = {
     },
     "translate.warnings-header": {
         "ru": "предупреждения (string-equals-token: литерал равен переименованному имени;"
-              " literal-data-value: литерал равен значению данных json-ресурса):",
+              " literal-data-value: литерал равен значению данных json-ресурса;"
+              " short-pair: короткую строку комментария перевела пара словаря, а остальные"
+              " строки комментария новые – сверьте, что перевод подходит к ним):",
         "en": "warnings (string-equals-token: a literal equals a renamed name;"
-              " literal-data-value: a literal equals a json resource data value):",
+              " literal-data-value: a literal equals a json resource data value;"
+              " short-pair: a pair of the dictionary translated a short comment line whose"
+              " other lines are new - check that it fits them):",
+    },
+    "translate.gap-neighbor": {
+        "ru": "в том же комментарии короткая строка уже переведена: \"{key}\" -> \"{value}\"",
+        "en": "the same comment has a short line translated already: \"{key}\" -> \"{value}\"",
     },
     "translate.problems": {
         "ru": "проблемы ({count}):",
@@ -1042,6 +1050,8 @@ def _render_gaps(page: list, total: int) -> None:
         place = f"{gap.places[0][0]}:{gap.places[0][1]}" if gap.places else ""
         hint = f"  ~ {gap.suggestion}" if gap.suggestion else ""
         print(f"  {gap.count:5}x {gap.kind:6} {gap.key}{hint}   {place}")
+        for key, value in gap.neighbors:
+            print("          " + i18n.t("translate.gap-neighbor", key=key, value=value))
 
 
 def _list_unused(args, root: Path, loaded) -> int:

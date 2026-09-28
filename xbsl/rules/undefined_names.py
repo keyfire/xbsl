@@ -12,6 +12,8 @@ Scope model (per the platform semantics):
   loop variables, поймать variables); a lambda opens a nested scope with its parameters;
 - the project contributes object and common-module names (from the yaml sources of the run),
   the stdlib contributes its global names - both via the helpers of rules/semantics.py.
+- the module of a tabular-section row type (`Товары.Позиции.xbsl`) is not judged: its scope
+  is the attributes of the row, which this model does not hold.
 
 Only the ROOT of a member chain is checked (`Х` in `Х.Поле[0].Метод()`): member names need
 type inference (stage 3). Qualified roots (`Подсистема::Имя`) and method references are
@@ -44,6 +46,7 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import _IDENT_RE, _skip_interpolation, linemap
 from xbsl.rules._syntax import OBJECT_MODULE_SUFFIXES, element_pair_stem
 from xbsl.rules.semantics import _object_name_fast, _parsed, _stdlib_names
+from xbsl.rules.structure import tabular_row_owner
 from xbsl.rules.yaml_schema import element_own_names, object_kind, value_of
 
 MESSAGES = {
@@ -363,6 +366,11 @@ def _undef_mapper(source: SourceFile) -> dict | None:
                    and any(isinstance(i, str) and "::" in i for i in imports),
         }
     if source.kind != "xbsl":
+        return None
+    if "." in fname[: -len(".xbsl")] and tabular_row_owner(source.path) is not None:
+        # The module of a tabular-section row type: its scope is the row's attributes, which
+        # the rule does not model - judged against the element's scope, every attribute of the
+        # row would read as undefined.
         return None
     static = _static_globals()
     if static is None:

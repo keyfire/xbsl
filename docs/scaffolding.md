@@ -88,11 +88,16 @@ placed the field beside the existing ones: a resource here, and the other way ro
 resource asked where only attributes exist.
 
 An interface component takes its own properties the same way. The property kind writes a name and
-a type into `Properties`, with no `Id`: the class of a component property has none. A component
-without the section gets it where the designer writes it, after `Inherits` and in front of
-`Events`. `--doc` gives an item a description, and the text becomes its documentation comment:
-the `##` lines at the head of the item, the only comment the development environment keeps when
-it writes the file out.
+a type into `Properties`, with no `Id`: the class of a component property has none. `--prop` adds
+the three keys the documentation lists for such a property: `DefaultValue`, `StoredData` and
+`Contextual` (`--prop DefaultValue=0`). A component without the section gets it where the designer
+writes it, after `Inherits` and in front of `Events`. The event kind fills the component's own
+`Events` the same way: a name and the type of the event object, `ComponentEvent` when `--type` is
+not given, or `EventWithData<String>` and the like for an event that carries a value. A missing
+`Events` section goes right after `Properties`, or at the end of the file when the component has
+no properties. `--doc` gives an item a description, and the text becomes its documentation
+comment: the `##` lines at the head of the item, the only comment the development environment
+keeps when it writes the file out.
 
 Forms are generated with real content: input fields per attribute, including the standard
 `Name`, `Number` and `Date` fields and hierarchy support, `DynamicList` columns, `TabularParts`

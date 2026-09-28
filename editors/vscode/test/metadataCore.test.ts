@@ -2,8 +2,14 @@
 // plain Node asserts, bundled by esbuild. Run with `npm test` from editors/vscode.
 
 import * as assert from "assert";
+import * as fs from "fs";
+import * as path from "path";
 import { parseDocument } from "yaml";
 import {
+  COMPONENT_MEMBER_SPECS,
+  componentMemberNames,
+  componentMemberRequest,
+  componentMemberTypeChoices,
   describeMetaNode,
   describeStandardAttr,
   existingModule,
@@ -448,6 +454,14 @@ test("module tails: an object kind has its own module and the object module", ()
   assert.deepStrictEqual([...moduleTailsOf("ПравоНаДействие")], ["", "Объект"]);
 });
 
+test("module tails: an entity contract has the object module, a client event its own one", () => {
+  // Both compiled on a live server: the contract's object module takes abstract methods, the
+  // event's module compiles in the client environment.
+  assert.deepStrictEqual([...moduleTailsOf("КонтрактСущности")], ["", "Объект"]);
+  assert.deepStrictEqual([...moduleTailsOf("ГлобальноеКлиентскоеСобытие")], [""]);
+  assert.deepStrictEqual(moduleMenuTokens("КонтрактСущности", { "": "/p/К.xbsl" }), ["xbsl", "newobjmod"]);
+});
+
 test("module tails: a register has the modules of its record types, a constants set two of them", () => {
   assert.deepStrictEqual([...moduleTailsOf("РегистрСведений")], ["", "Запись", "НаборЗаписей", "КлючЗаписи"]);
   assert.deepStrictEqual([...moduleTailsOf("НаборКонстант")], ["", "Запись", "КлючЗаписи"]);
@@ -504,6 +518,90 @@ test("existing module: either spelling of the tail, the Russian one first", () =
   assert.strictEqual(existingModule("/p/Цены.yaml", "НаборЗаписей", exists), "/p/Цены.НаборЗаписей.xbsl");
   assert.strictEqual(existingModule("/p/Цены.yaml", "Запись", exists), undefined);
   assert.strictEqual(existingModule("/p/Цены.yaml", "", exists), undefined);
+});
+
+// -- own members of an interface component ---------------------------------------------------
+
+const COMPONENT = `ВидЭлемента: КомпонентИнтерфейса
+Имя: КарточкаСклада
+Наследует:
+    Тип: Группа
+Свойства:
+    -
+        ## Название склада.
+        Имя: Название
+        Тип: Строка
+    -
+        Имя: Вместимость
+        Тип: Число
+        ЗначениеПоУмолчанию: 0
+События:
+    -
+        Имя: ПриВыбореСклада
+        Тип: СобытиеКомпонента
+`;
+
+test("component members: the names of the properties and of the events, each from its section", () => {
+  assert.deepStrictEqual(componentMemberNames(COMPONENT, "property"), ["Название", "Вместимость"]);
+  assert.deepStrictEqual(componentMemberNames(COMPONENT, "event"), ["ПриВыбореСклада"]);
+});
+
+test("component members: a missing section, a broken file and a nameless item give nothing", () => {
+  const noEvents = COMPONENT.slice(0, COMPONENT.indexOf("События:"));
+  assert.deepStrictEqual(componentMemberNames(noEvents, "event"), []);
+  assert.deepStrictEqual(componentMemberNames("Свойства: [\n", "property"), []);
+  assert.deepStrictEqual(componentMemberNames("Свойства:\n    -\n        Тип: Строка\n", "property"), []);
+});
+
+test("component members: an English component is read through the engine's key pairs", () => {
+  const english = "ElementKind: InterfaceComponent\nName: Card\nProperties:\n    -\n        Name: Title\n" +
+    "        Type: String\nEvents:\n    -\n        Name: OnChosen\n";
+  setMetaKeyAliases({ Properties: "Свойства", Events: "События" });
+  try {
+    assert.deepStrictEqual(componentMemberNames(english, "property"), ["Title"]);
+    assert.deepStrictEqual(componentMemberNames(english, "event"), ["OnChosen"]);
+  } finally {
+    setMetaKeyAliases({});
+  }
+});
+
+test("component members: an event offers the plain event first, a property the primitives, then the project", () => {
+  const events = componentMemberTypeChoices("event", ["Склады.Ссылка?"]);
+  assert.strictEqual(events[0], "СобытиеКомпонента"); // the platform's own default for an event
+  assert.ok(events.every((type) => type.startsWith("Событие")), "an event is not offered a property type");
+  const properties = componentMemberTypeChoices("property", ["Строка", "Склады.Ссылка?", "ВидСклада?"]);
+  assert.deepStrictEqual(properties.slice(0, 3), ["Строка", "Число", "Булево"]);
+  assert.deepStrictEqual(properties.slice(-2), ["Склады.Ссылка?", "ВидСклада?"]);
+  assert.strictEqual(properties.filter((type) => type === "Строка").length, 1); // no repeats
+});
+
+test("component members: the engine request and the CLI arguments name the same operation", () => {
+  const request = componentMemberRequest("/p/Карточка.yaml", "event", "ПриВыборе", "СобытиеСДанными<Строка>");
+  assert.deepStrictEqual(request.params, {
+    path: "/p/Карточка.yaml", fieldKind: "событие", name: "ПриВыборе", type: "СобытиеСДанными<Строка>",
+  });
+  assert.deepStrictEqual(request.cli, ["/p/Карточка.yaml", "событие", "ПриВыборе", "--type", "СобытиеСДанными<Строка>"]);
+  assert.strictEqual(componentMemberRequest("/p/К.yaml", "property", "Название", "Строка").params.fieldKind, "свойство");
+  assert.deepStrictEqual(
+    [COMPONENT_MEMBER_SPECS.property.section, COMPONENT_MEMBER_SPECS.event.section], ["Свойства", "События"]
+  );
+});
+
+test("component members: the tree menu offers both items on a form node and hides them from the palette", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
+  const menus = pkg.contributes.menus;
+  for (const [command, token] of [
+    ["xbsl.metadata.addComponentProperty", "addprop"],
+    ["xbsl.metadata.addComponentEvent", "addevent"],
+  ]) {
+    assert.ok(pkg.contributes.commands.some((c: { command: string }) => c.command === command), command);
+    const item = menus["view/item/context"].find((m: { command: string }) => m.command === command);
+    assert.ok(item && item.when.includes(`/\\b${token}\\b/`), `${command}: the menu is keyed by ${token}`);
+    assert.ok(
+      menus.commandPalette.some((m: { command: string; when: string }) => m.command === command && m.when === "false"),
+      `${command}: hidden from the palette`
+    );
+  }
 });
 
 console.log(`\nитого: ${passed} ok, ${failed} fail`);

@@ -67,32 +67,50 @@ baseline rather than in a gate.
 A filter item looks its field (`FilterItem.Field`) up among the COLUMNS of the tables
 the list selects from - the main table and the joined ones, with a table alias in front
 where the name is ambiguous, as the documentation of the property puts it - and not among
-the fields of the list. The alias of a computed field (a `DynamicListField` whose
-expression is not a column path) is therefore never what the filter reads. With a column of
-that name in one of the tables the filter silently goes by the column; without one the apply
-refuses the build as an unknown or ambiguous field. Both were seen live on one list: a role
-computed by a `CASE` over the main table and a joined one was aliased after the joined
-table's column, and the filter by that alias matched the column alone (two roles of three
-showed empty lists); the alias renamed away from the column broke the apply. A vendor
-library shows the same from the other side: it picks the rows without a joined record by
-comparing a field aliased over `....ЗаменитьNull(0)` with `Null` - a filter that works only
-because the column is what is read. Sorting is another matter: `SortingItem.Field`
-takes the alias of a computed field, and it is not judged.
+the fields of the list. The alias of a list field is therefore never what the filter reads,
+unless the field is a column under its own name. With a column of that name in one of the
+tables the filter silently goes by the column; without one the apply refuses the build as an
+unknown or ambiguous field. Both were seen live on one list: a role computed by a `CASE` over
+the main table and a joined one was aliased after the joined table's column, and the filter by
+that alias matched the column alone (two roles of three showed empty lists); the alias renamed
+away from the column broke the apply. A vendor library shows the same from the other side: it
+picks the rows without a joined record by comparing a field aliased over `....ЗаменитьNull(0)`
+with `Null` - a filter that works only because the column is what is read. Sorting is another
+matter: `SortingItem.Field` takes the alias of a computed field, and it is not judged.
+
+A column path under another name is no exception, and a probe on a live server settled it
+(the names below in their English spelling). Each list was filtered by the alias of its field,
+and the apply refused every one with the message a computed alias gets (`Unknown or ambiguous
+field`): `T.Article` aliased `ArticleT`, the bare `Article` aliased `ArticleNoTable`, the path
+`T.Group.Description` aliased `GroupTitle`. The computed control on the same probe was refused
+the same way. The other half of the mechanism applied cleanly, as the lookup predicts:
+`T.Article` aliased `Description` and `T.Group.Description` aliased `Description`, each filtered
+by `Description`, found the table's own column of that name - the filter goes by the product's
+name there, not by the article or the group's name the list shows. The cure applied as well:
+the filter may name the path itself (`Field: T.Article`, `Field: T.Group.Description`,
+`Field: Group.Description`).
 
 The slice keeps to what the evidence covers:
 - only the filter of the list itself (the `Filter` next to its `Fields`), through its groups;
   the filter of a joined table is a join condition and is left alone;
 - only a filter item with a plain field name: a qualified name (`Партии.Склад`) names a
   column by itself, and a binding is not known before runtime;
-- only the alias of a field whose expression is not a column path. A path (`Code`,
-  `Партии.Склад`, `Партии.Склад.Code`) is left alone: its alias is no column either, but the
-  live evidence covers computed fields only.
+- the alias of a computed field (an expression that is not a column path), of a renamed column
+  (`Партии.Склад` or `Склад` aliased `СкладПартии`) and of a path through a reference
+  (`Партии.Склад.Владелец`, whatever its alias). A column under its own name (`Склад` or
+  `Партии.Склад` aliased `Склад`) is what the filter finds, and is left alone. When one of the
+  tables goes by its written name (no `Alias`), a two-part path whose last part is the
+  alias is left alone as well: its first part may be that table, and then it is the column
+  under its own name again.
 
-The cure depends on what was meant, so there is no autofix. A filter by the computed value is
-a `FilterItemExpression` with the field's expression, switched on by a binding of
-`Use` (reactive: the list is read again when the property changes). When the column
-is what is meant, naming it with the table alias keeps the behaviour and says so - the
-message names that column when the expression of the field reads one of the same name.
+The cure depends on what was meant, so there is no autofix. For a column path the cure is to
+name the path in the filter (`Поле: Партии.Склад`), and the message says so; a list that
+applies today because a column of that name exists may rely on that column, so the edit is not
+made silently. A filter by a computed value is a `FilterItemExpression` with the field's
+expression, switched on by a binding of `Use` (reactive: the list is read again when the
+property changes). When the column is what is meant, naming it with the table alias keeps the
+behaviour and says so - the message names that column when the expression of the field reads
+one of the same name.
 """
 
 from __future__ import annotations
@@ -192,8 +210,22 @@ MESSAGES = {
               "and switch it off from code when it is really not needed.",
     },
     "yaml/dynlist-filter-computed-alias.title": {
-        "ru": "Фильтр динамического списка по псевдониму вычисляемого поля",
-        "en": "A dynamic-list filter by the alias of a computed field",
+        "ru": "Фильтр динамического списка по псевдониму поля списка",
+        "en": "A dynamic-list filter by the alias of a list field",
+    },
+    "yaml/dynlist-filter-computed-alias.path": {
+        "ru": "Поле фильтра '{field}' – псевдоним поля списка {expression}, а фильтр ищет поле "
+              "среди столбцов таблиц выборки, не среди полей списка: псевдоним "
+              "переименованного столбца или пути по ссылке он не видит. При одноименном "
+              "столбце отбор молча пойдет по нему, без такого столбца применение сборки упадет "
+              "(\"Неизвестное, или неоднозначное поле\"). Назовите в фильтре сам путь: "
+              "Поле: {expression}.",
+        "en": "The filter field '{field}' is the alias of the list field {expression}, while a "
+              "filter looks its field up among the columns of the selection's tables, not among "
+              "the fields of the list: the alias of a renamed column or of a path through a "
+              "reference is invisible to it. With a column of that name the filter silently "
+              "goes by the column, and without one the apply refuses the build as an unknown or "
+              "ambiguous field. Name the path itself in the filter: {n[Поле]}: {expression}.",
     },
     "yaml/dynlist-filter-computed-alias.found": {
         "ru": "Поле фильтра '{field}' – псевдоним вычисляемого поля списка, а фильтр ищет поле "
@@ -572,27 +604,45 @@ def _first(entries: dict, name: str):
     return next((entries[key] for key in _key_spellings(name) if key in entries), None)
 
 
-def _computed_aliases(fields_node, field_types: frozenset[str]) -> dict[str, str]:
-    """{alias: expression} of the list fields whose expression computes a value."""
-    found: dict[str, str] = {}
+def _hidden_aliases(
+    fields_node, field_types: frozenset[str], tables: set[str], implicit: bool,
+) -> dict[str, tuple[str, bool]]:
+    """{alias: (expression, computed)} of the list fields a filter cannot find by their alias:
+    a computed field, a renamed column or a path through a reference (the module docstring)."""
+    found: dict[str, tuple[str, bool]] = {}
     for item in fields_node.value:
         if not isinstance(item, yaml.MappingNode):
             continue
         entries = _entries(item)
         if _scalar_text(_first(entries, "Тип")) not in field_types:
             continue
-        expression = _scalar_text(_first(entries, "Выражение"))
-        alias = _scalar_text(_first(entries, "Псевдоним"))
+        expression = (_scalar_text(_first(entries, "Выражение")) or "").strip()
+        alias = (_scalar_text(_first(entries, "Псевдоним")) or "").strip()
         if not expression or not alias:
             continue
-        if _COLUMN_PATH_RE.fullmatch(expression.strip()) is None:
-            found[alias.strip()] = expression
+        if _COLUMN_PATH_RE.fullmatch(expression) is None:
+            found[alias] = (expression, True)
+        elif _alias_hides_column(expression, alias, tables, implicit):
+            found[alias] = (expression, False)
     return found
 
 
-def _table_aliases(entries: dict) -> set[str]:
-    """The names the tables of a list go by in its expressions: the alias of the main table and
-    of every joined one, or the table itself where it has no alias."""
+def _alias_hides_column(path: str, alias: str, tables: set[str], implicit: bool) -> bool:
+    """Whether the alias of a column path names no column the path reads: a renamed column
+    (`Склад` aliased `СкладПартии`) or a path through a reference (`Партии.Склад.Владелец`)."""
+    parts = path.split(".")
+    rest = parts[1:] if parts[0] in tables else parts
+    if not rest or rest == [alias]:
+        return False  # the table itself, or a column under its own name
+    # `X.Name` aliased `Name`, X unknown: with a table that goes by its written name, X may be
+    # that table under a spelling the file does not show - the column under its own name.
+    return not (implicit and len(parts) == 2 and parts[1] == alias)
+
+
+def _table_aliases(entries: dict) -> tuple[set[str], bool]:
+    """The names the tables of a list go by in its expressions - the alias of the main table and
+    of every joined one, or the table itself where it has no alias - and whether any table goes
+    by its written name (then the file may not show every spelling of it)."""
     tables = []
     main = _first(entries, "ОсновнаяТаблица")
     if isinstance(main, yaml.MappingNode):
@@ -601,14 +651,16 @@ def _table_aliases(entries: dict) -> set[str]:
     if isinstance(joined, yaml.SequenceNode):
         tables.extend(item for item in joined.value if isinstance(item, yaml.MappingNode))
     names: set[str] = set()
+    implicit = False
     for table in tables:
         table_entries = _entries(table)
-        name = _scalar_text(_first(table_entries, "Псевдоним")) or _scalar_text(
-            _first(table_entries, "Таблица")
-        )
+        alias = _scalar_text(_first(table_entries, "Псевдоним"))
+        name = alias or _scalar_text(_first(table_entries, "Таблица"))
+        if not alias:
+            implicit = True
         if name:
             names.add(name.strip())
-    return names
+    return names, implicit
 
 
 def _filter_fields(filter_node, item_types: frozenset[str]) -> Iterator:
@@ -641,7 +693,7 @@ def _column_named(expression: str, field: str, tables: set[str]) -> str | None:
     severity=Severity.WARNING,
 )
 def dynlist_filter_computed_alias(source: SourceFile) -> Iterable[Diagnostic]:
-    """A filter item names the alias of a computed list field - the filter reads a column."""
+    """A filter item names the alias of a list field it cannot see - the filter reads a column."""
     if not _HAVE_YAML or source.kind != "yaml":
         return
     item_types, field_types = _computed_alias_names()
@@ -656,17 +708,21 @@ def dynlist_filter_computed_alias(source: SourceFile) -> Iterable[Diagnostic]:
         filter_node = _first(entries, "Фильтр")
         if not isinstance(fields, yaml.SequenceNode) or filter_node is None:
             continue
-        computed = _computed_aliases(fields, field_types)
-        if not computed:
+        tables, implicit = _table_aliases(entries)
+        hidden = _hidden_aliases(fields, field_types, tables, implicit)
+        if not hidden:
             continue
-        tables = _table_aliases(entries)
         for node in _filter_fields(filter_node, item_types):
             field = node.value.strip()
-            expression = computed.get(field)
+            expression, computed = hidden.get(field, (None, False))
             if expression is None:
                 continue
-            column = _column_named(expression, field, tables)
-            if column is None:
+            column = _column_named(expression, field, tables) if computed else None
+            if not computed:
+                message = i18n.t(
+                    "yaml/dynlist-filter-computed-alias.path", field=field, expression=expression,
+                )
+            elif column is None:
                 message = i18n.t("yaml/dynlist-filter-computed-alias.found", field=field)
             else:
                 message = i18n.t(

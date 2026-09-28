@@ -184,6 +184,15 @@ class ProjectReport:
                     entry["sample"] = f"{rel}:{places[0][0]}"
         return out
 
+    def merged_short_neighbors(self) -> dict[str, list[tuple[str, str]]]:
+        """{phrase gap: [(short line, translation)]} over the project, each pair once."""
+        out: dict[str, list[tuple[str, str]]] = {}
+        for _rel, report in sorted(self.files.items()):
+            for text, pairs in report.short_neighbors.items():
+                known = out.setdefault(text, [])
+                known.extend(pair for pair in pairs if pair not in known)
+        return out
+
     def merged_named_literals(self) -> dict[str, int]:
         """{literal text: occurrences} the literals plane named across the project.
 

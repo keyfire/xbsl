@@ -523,7 +523,7 @@ def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "
 
     If the section is missing, it is appended at the end of the file - or, when `before`
     names top-level sections the new one precedes, in front of the first of them the file
-    has (see _SECTION_PRECEDES). top_level=True - only an unindented section (otherwise an
+    has (see _new_section_before). top_level=True - only an unindented section (otherwise an
     object attribute would land in a nested tabular part section). A port of insertItemEdit
     from the VS Code extension (metadataCore.ts) with one difference: the newline is passed
     as a parameter so the edit does not mix styles in CRLF files.
@@ -572,6 +572,27 @@ def _top_level_key_line(text: str, keys: tuple[str, ...]) -> int | None:
             break
         start = previous
     return start
+
+
+#: An unindented key at the start of a line - not a comment, not a list dash.
+_TOP_LEVEL_KEY = re.compile(r"^([^\s#-][^:\r\n]*):(?:[ \t]|\r?$)", re.M)
+
+
+def _new_section_before(text: str, kind: str, section: str) -> tuple[str, ...]:
+    """The top-level keys a new `section` goes in front of; empty - the end of the file.
+
+    A section that follows another one (_SECTION_FOLLOWS) is put in front of whatever key
+    comes after that one in the file, as the file spells it, and at the end of the file when
+    that one closes it. Without such a neighbour the section takes the keys it precedes
+    (_SECTION_PRECEDES), if any.
+    """
+    for followed in _SECTION_FOLLOWS.get((kind, section), ()):
+        bounds = _section_bounds(text, followed, top_level=True)
+        if bounds is None:
+            continue
+        following = _TOP_LEVEL_KEY.search(text, bounds[2])
+        return (following.group(1),) if following else ()
+    return _SECTION_PRECEDES.get((kind, section), ())
 
 
 def insert_nested_item_edit(
@@ -1161,6 +1182,11 @@ _SECTION_SPECS: dict[str, dict] = {
     "поле": {"section": "Поля", "lines": ("Имя: {name}", "Тип: {type}")},
     "константа": {"section": "Константы", "lines": _WITH_TYPE},
     "свойство": {"section": "Свойства", "lines": ("Имя: {name}", "Тип: {type}")},
+    # An event of an interface component: a name and the type of its event object. An event
+    # declared without a type is a `ComponentEvent` for the platform, and that default is
+    # written out, the way the live sources write it, rather than left implied.
+    "событие": {"section": "События", "lines": ("Имя: {name}", "Тип: {type}"),
+                "type": "СобытиеКомпонента"},
     # Data processor operation: the name goes into yaml, and a same-named @Обработчик
     # method is appended to the module (without it the platform raises "Обязательный
     # обработчик не определен" - see op_add_field).
@@ -1227,9 +1253,11 @@ KIND_SECTIONS: dict[str, tuple[str, ...]] = {
     "КонтрактСущности": ("свойство", "табличная-часть"),
     "СобытиеЖурналаСобытий": ("свойство",),
     # The component's own properties - what its module reads as `этот.<Name>` and a form
-    # using the component fills in. The item class (PropertyModel) declares a name and a
-    # type and nothing else, no Id among them.
-    "КомпонентИнтерфейса": ("свойство",),
+    # using the component fills in - and its own events, which a form using the component
+    # assigns handlers to. The item classes carry no Id; a property also takes
+    # `DefaultValue`, `StoredData` and `Contextual` (see metamodel._ITEM_ROOT_CLASSES), an
+    # event a name and a type alone.
+    "КомпонентИнтерфейса": ("свойство", "событие"),
 }
 
 # Where a section the file lacks goes when the end of the file is not its place:
@@ -1239,6 +1267,16 @@ KIND_SECTIONS: dict[str, tuple[str, ...]] = {
 # `Events`. So a new `Properties` joins the end of the file unless `Events` is there.
 _SECTION_PRECEDES: dict[tuple[str, str], tuple[str, ...]] = {
     ("КомпонентИнтерфейса", "Свойства"): ("События",),
+}
+
+# The other half of the same order: (kind, section) -> the top-level sections a new one comes
+# right after, when the file has one. A component's `Events` follow its `Properties` wherever
+# the pair stands - after `Inherits` on the live projects, before it in the documentation's
+# example and in 88 of the 184 components the distribution ships with both. A file without
+# `Properties` takes new `Events` at its end, where a later `Properties` goes in front of them:
+# `Inherits, Properties, Events` whichever of the two is added first.
+_SECTION_FOLLOWS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("КомпонентИнтерфейса", "События"): ("Свойства",),
 }
 
 # Line sets that differ from the kind's common ones: for ХранимаяСтруктура fields and
@@ -2433,12 +2471,13 @@ def op_add_field(
 ) -> ScaffoldResult:
     """Add a section item to an object: an attribute, dimension, resource, enumeration
     value, parameter, structure field, property (of a contract, an event-log event or an
-    interface component) or tabular part; tabular - the tabular part name when adding an
-    attribute into it.
+    interface component), event (of an interface component) or tabular part; tabular - the
+    tabular part name when adding an attribute into it.
 
-    type_ - the item's type; None is the default: `String` for a regular item, and for a
-    BUILT-IN one (the `Number` and `Date` of a document, the `Code` of a catalog) whatever
-    its own metamodel class settles - see _item_type.
+    type_ - the item's type; None is the default: `String` for a regular item,
+    `ComponentEvent` for an event, and for a BUILT-IN one (the `Number` and `Date` of a
+    document, the `Code` of a catalog) whatever its own metamodel class settles - see
+    _item_type.
 
     props - the item's other properties (DefaultValue, Presentation, MaxLength...), checked
     against the metamodel class of THAT item - a built-in `Number` takes its `Length`,
@@ -2450,9 +2489,9 @@ def op_add_field(
     item (after its `-`, before the first key) - see _doc_lines and _check_doc_slot.
 
     The item joins the end of the section of its kind. A section the file lacks is created at
-    the end of the file - or in front of the sections it precedes, see _SECTION_PRECEDES;
-    for a register, which keeps its fields in several sections, notes say so and point at
-    the sibling section that already exists - see _new_section_notes.
+    the end of the file - or next to the sections it keeps company with, see
+    _new_section_before; for a register, which keeps its fields in several sections, notes say
+    so and point at the sibling section that already exists - see _new_section_notes.
     """
     yaml_path = Path(yaml_path)
     name = _check_identifier(name, "элемента")
@@ -2536,7 +2575,7 @@ def op_add_field(
     template = _KIND_SECTION_LINES.get((kind, field_kind), spec["lines"])
     path = ((spec["section"], name),)
     extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
-    resolved = _item_type(kind, path, name, type_, lang)
+    resolved = _item_type(kind, path, name, type_, lang, spec.get("type", "Строка"))
     if doc_lines:
         _check_doc_slot(kind, path)
     lines = doc_lines + spelled_lines(_reconciled_id(_reconciled_type([
@@ -2553,7 +2592,7 @@ def op_add_field(
             notes.extend(_new_section_notes(text, kind, field_kind, name, yaml_path.name, lang))
         edit = insert_item_edit(
             text, spec["section"], lines, nl, top_level=True, lang=lang,
-            before=_SECTION_PRECEDES.get((kind, spec["section"]), ()),
+            before=_new_section_before(text, kind, spec["section"]),
         )
     else:
         start, end, indent = starter
@@ -2726,10 +2765,13 @@ def _russian_type(value: str) -> str:
 
 def _item_type(
     kind: str, path: tuple[tuple[str, str | None], ...], name: str, type_: str | None, lang: str,
+    default: str = "Строка",
 ) -> str | None:
     """The `Type` of a new item, or None when the item carries no `Type` line at all.
 
-    A regular item takes the caller's type, `String` when none was given. A BUILT-IN item of
+    A regular item takes the caller's type, and the default of its kind when none was given:
+    `String`, or `ComponentEvent` for an event of an interface component. The default is
+    written in the language of the file, the way a type the caller passes is. A BUILT-IN item of
     a collection dispatched by name (the `Number` and `Date` of a document, the `Code`,
     `Name` and `Owner` of a catalog) is judged by its own class instead - the class
     metadata_schema answers with for that name:
@@ -2751,7 +2793,7 @@ def _item_type(
         type_ = typed_in(_type_expression(type_, "типа элемента", _FIELD_TYPE_EXPRESSION), lang)
     cls = metamodel.item_class(kind, path) if metamodel.available() else None
     if not cls or not metamodel.dispatch_name(cls):
-        return type_ or "Строка"
+        return type_ or spelled_type(default, lang)
     label = _item_label(cls, path)
     record = metamodel.properties_of_class(cls).get("Тип")
     if record is None:

@@ -81,25 +81,23 @@ def test_the_modes_of_a_row_are_a_half_open_range(bounds, mode, declared):
     assert modulehandlers.declared_in(row, mode) is declared
 
 
-def test_both_spellings_answer_the_english_one(data):
-    names = modulehandlers.of_type("Форма")
-    assert names["ПередЗакрытием"] == names["BeforeClose"] == "BeforeClose"
-    assert names["ПослеСоздания"] == "AfterCreate"
-    assert "ПередЗаписью" not in names  # the object form's own handler is not a form's
+def test_a_row_carries_both_spellings_of_the_handler(data):
+    rows = {row["ru"]: row["en"] for row in modulehandlers.rows_of("Форма")}
+    assert rows["ПередЗакрытием"] == "BeforeClose"
+    assert rows["ПослеСоздания"] == "AfterCreate"
+    assert "ПередЗаписью" not in rows  # the object form's own handler is not a form's
 
 
 def test_an_english_type_name_reads_the_same_lists(data):
-    assert modulehandlers.of_type("ObjectForm") == modulehandlers.of_type("ФормаОбъекта")
+    assert modulehandlers.rows_of("ObjectForm") == modulehandlers.rows_of("ФормаОбъекта")
 
 
 def test_a_component_without_handlers_of_its_own_inherits_the_base_ones(data):
-    assert modulehandlers.of_type("Надпись") == {
-        "ПослеСоздания": "AfterCreate", "AfterCreate": "AfterCreate"}
+    assert modulehandlers.rows_of("Надпись") == ({"ru": "ПослеСоздания", "en": "AfterCreate"},)
 
 
 def test_an_unknown_type_has_no_handlers(data):
     assert modulehandlers.rows_of("ПридуманныйТип") == ()
-    assert modulehandlers.of_type("ПридуманныйТип") == {}
 
 
 def test_every_spelling_of_every_list(data):
@@ -114,7 +112,7 @@ def test_data_without_the_section_answers_nothing(tmp_path):
     dataset.set_data_root(tmp_path)
     try:
         assert not modulehandlers.available()
-        assert modulehandlers.of_type("Форма") == {}
+        assert modulehandlers.rows_of("Форма") == ()
         assert modulehandlers.platform_base("Форма", lambda _name: None) == ""
     finally:
         dataset.set_data_root(None)
@@ -142,3 +140,56 @@ def test_the_chain_of_project_components_ends_at_the_platform_type(data):
 ])
 def test_a_chain_that_cannot_be_told_gives_no_base(data, project):
     assert modulehandlers.platform_base("Первая", project.get) == ""
+
+
+# --- the modules of the other elements ----------------------------------------------------
+
+_ELEMENTS = {
+    "Справочник": {
+        "": {"handlers": [{"ru": "ПолучитьЗначенияВыбора", "en": "GetChoiceValues"}],
+             "dynamic": ["computeHandlerTerm"]},
+        "Объект": {"handlers": [{"ru": "ПередЗаписью", "en": "BeforeWrite"},
+                                {"ru": "ПриЗаполнении", "en": "OnFill"}]},
+    },
+    "ЗапланированноеЗадание": {"": {"handlers": [{"ru": "Обработчик", "en": "Handler"}]}},
+}
+
+
+@pytest.fixture
+def elements(tmp_path):
+    _root(tmp_path, {**_STDLIB, "element_module_handlers": _ELEMENTS})
+    dataset.set_data_root(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_an_element_module_answers_its_rows(elements):
+    assert modulehandlers.element_available()
+    rows = modulehandlers.element_slot("Справочник", "Объект")
+    assert [row["en"] for row in rows] == ["BeforeWrite", "OnFill"]
+    assert [row["ru"] for row in modulehandlers.element_slot("ЗапланированноеЗадание", "")] == [
+        "Обработчик"]
+
+
+def test_a_module_with_names_taken_at_build_time_is_not_answered(elements):
+    """The own module of the catalog takes access handler names from its settings."""
+    assert modulehandlers.element_slot("Справочник", "") is None
+
+
+def test_a_module_the_data_does_not_list_is_not_answered(elements):
+    assert modulehandlers.element_slot("Справочник", "НаборЗаписей") is None
+    assert modulehandlers.element_slot("HttpСервис", "") is None
+
+
+def test_the_module_words_and_the_names_of_the_element_lists(elements):
+    assert modulehandlers.element_modules() == {"Объект"}
+    assert modulehandlers.element_names() == {
+        "ПолучитьЗначенияВыбора", "GetChoiceValues", "ПередЗаписью", "BeforeWrite",
+        "ПриЗаполнении", "OnFill", "Обработчик", "Handler"}
+
+
+def test_data_without_the_element_section_answers_nothing(data):
+    assert not modulehandlers.element_available()
+    assert modulehandlers.element_slot("Справочник", "Объект") is None

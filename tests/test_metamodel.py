@@ -251,6 +251,48 @@ def test_item_class_of_an_unknown_path_is_none(mm_root):
     assert metamodel.item_class("НетТакогоВида", (("Реквизиты", "X"),)) is None
 
 
+#: An interface component the way the platform declares it: the kind maps to the light model
+#: read first (a property of it is a name and a type), the component itself is read by the
+#: descriptor whose property also carries a default value.
+_COMPONENT_CLASSES = {
+    "ComponentModel": {"props": {"Свойства": {"kind": "list", "item": "PropertyModel"}},
+                       "ext": []},
+    "PropertyModel": {"props": {"Тип": {"kind": "string"}}, "ext": []},
+    "UserUiComponentDescriptor": {
+        "props": {"Свойства": {"kind": "list", "item": "PropertyDescriptor"}}, "ext": [],
+    },
+    "PropertyDescriptor": {
+        "props": {"Тип": {"kind": "type"}, "ЗначениеПоУмолчанию": {"kind": "block"}},
+        "ext": [],
+    },
+}
+
+
+def _component_root(tmp_path, classes):
+    data = {**_MM, "classes": {**_MM["classes"], **classes},
+            "vid2class": {**_MM["vid2class"], "КомпонентИнтерфейса": "ComponentModel"}}
+    return _root(tmp_path, data)
+
+
+def test_the_items_of_a_component_are_read_by_its_descriptor(tmp_path):
+    _component_root(tmp_path, _COMPONENT_CLASSES)
+    try:
+        assert metamodel.item_class("КомпонентИнтерфейса", (("Свойства", "X"),)) == "PropertyDescriptor"
+        # The top level stays with the kind's own class.
+        assert metamodel.item_class("КомпонентИнтерфейса", ()) == "ComponentModel"
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_data_without_the_descriptor_keeps_the_kind_s_own_class(tmp_path):
+    classes = {k: v for k, v in _COMPONENT_CLASSES.items() if k != "UserUiComponentDescriptor"}
+    _component_root(tmp_path, classes)
+    try:
+        assert metamodel.item_class("КомпонентИнтерфейса", (("Свойства", "X"),)) == "PropertyModel"
+    finally:
+        dataset.set_data_root(None)
+
+
 def test_legacy_data_reads_as_untyped_properties(legacy_root):
     props = metamodel.properties("Справочник")
     assert props["Иерархический"] == {}  # names only - the panel falls back to text editors

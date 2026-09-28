@@ -9,10 +9,11 @@ value, an expression, a page size the author chose and a tree source (it always 
 scroll).
 
 A hierarchical dynamic list always loads on scroll too, and whether it is hierarchical is
-said by its `UsedHierarchy`: the typed `Disabled` settles it in the file, `Auto` (or nothing
-written) leaves it to the main table - the project half reads the catalog yaml for that. The
-tests below build small projects: a catalog with and without a hierarchy, and a list with
-each spelling of the property.
+said by its `UsedHierarchy`: the typed `Disabled` settles it in the file, nothing written
+leaves it to the main table - the project half reads the catalog yaml for that - and a plain
+scalar is never judged (a bare word of the union fails the apply, any other one names a
+hierarchy). The tests below build small projects: a catalog with and without a hierarchy, and
+a list with each spelling of the property.
 
 The rule reads which components are list-like from the ui schema, so the whole module needs
 the data bundle (listed in conftest._DATA_DEPENDENT).
@@ -400,23 +401,22 @@ def test_file_alone_leaves_the_automatic_hierarchy_to_the_table(tmp_path):
     """Without the catalog the hierarchy is unknown: the file half no longer reports a scrolled
     dynamic list whose `UsedHierarchy` is left to the main table (it used to, whatever the
     table), and the project half does not guess either."""
-    for declaration in ("", _hierarchy("Авто")):
-        assert _run(tmp_path, {"ФормаПробы.yaml": _bound_form(declaration=declaration)}) == []
+    assert _run(tmp_path, {"ФормаПробы.yaml": _bound_form()}) == []
 
 
-@pytest.mark.parametrize("value", ["Авто", "Выключено", "РежимИерархии.Выключено"])
-def test_automatic_or_bare_value_is_left_to_the_table(tmp_path, value):
-    """A bare word falls under the String member of the union and may be read as a hierarchy
-    name; over a table without a hierarchy the list is flat whichever way it is read."""
-    flat = _run(tmp_path, {
-        "Склады.yaml": _catalog(), "ФормаПробы.yaml": _bound_form(declaration=_hierarchy(value)),
-    })
-    assert [d.rule_id for d in flat] == [TABLE_RULE]
-    hierarchical = _run(tmp_path, {
-        "Склады.yaml": _catalog(_HIERARCHICAL),
-        "ФормаПробы.yaml": _bound_form(declaration=_hierarchy(value)),
-    })
-    assert hierarchical == []
+@pytest.mark.parametrize("value", [
+    "Авто", "Выключено", "ПоУмолчанию", "РежимИерархии.Выключено", "НетТакогоТипа.Выключено",
+])
+def test_plain_scalar_is_never_judged(tmp_path, value):
+    """A live apply refused the bare words of the union (`Не указан тип значения`) and read a
+    qualified word as a string, since `РежимИерархии.НетТакогоЗначения` applied just as well:
+    neither is a flat list the file or the table can vouch for."""
+    for extra in ("", _HIERARCHICAL):
+        diags = _run(tmp_path, {
+            "Склады.yaml": _catalog(extra),
+            "ФормаПробы.yaml": _bound_form(declaration=_hierarchy(value)),
+        })
+        assert diags == [], (value, extra)
 
 
 def test_typed_disabled_hierarchy_is_judged_by_the_file(tmp_path):
@@ -553,8 +553,13 @@ def test_english_spelling_of_the_table_half(tmp_path):
         assert diags == [], extra
     assert [d.rule_id for d in _run(tmp_path, {
         "Склады.yaml": _ENGLISH_CATALOG.format(extra="Hierarchical: False\n"),
-        "ФормаПробы.yaml": _ENGLISH_FORM.format(declaration="            UsedHierarchy: Auto\n"),
+        "ФормаПробы.yaml": _ENGLISH_FORM.format(declaration=""),
     })] == [TABLE_RULE]
+    # A bare `Auto` fails the apply, so it is no list the table can vouch for.
+    assert _run(tmp_path, {
+        "Склады.yaml": _ENGLISH_CATALOG.format(extra="Hierarchical: False\n"),
+        "ФормаПробы.yaml": _ENGLISH_FORM.format(declaration="            UsedHierarchy: Auto\n"),
+    }) == []
 
 
 def test_english_typed_disabled_hierarchy_is_judged_by_the_file(tmp_path):

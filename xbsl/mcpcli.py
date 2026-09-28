@@ -19,6 +19,11 @@ not share the environment the client gave the server. The rest of that environme
 A call whose input is data rather than a path - the text of `lint_source`, the inline edits of
 `translate_set` - has that data written into a temporary folder of this process, and the command
 reads it from there: `--stdin` without a redirection checks an empty text and calls it clean.
+The folder outlives its server, since the command may run after the restart; a folder older
+than a day is taken out by the next server that stages anything (`sweep_old_folders`).
+
+A tool that runs with the plugins loaded at start while others are on disk answers anyway, and
+its `stale` record carries the same command: the answer by the plugins on disk.
 
 A call the CLI cannot make the same way - several filters where the CLI takes one, a batch that
 is half a file and half inline - gets no command rather than a different one, and so does a tool
@@ -36,10 +41,12 @@ import json
 import os
 import re
 import shlex
+import shutil
 import site
 import sys
 import sysconfig
 import tempfile
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -51,6 +58,10 @@ MESSAGES = {
               "интерпретатора загрузит код движка, который сейчас на диске",
         "en": "The same call without a restart is the command in `cli`: a new process of the "
               "same interpreter loads the engine code that is on disk now",
+    },
+    "mcpcli.same-call-plugins": {
+        "ru": "Ответ по надстройкам с диска без перезапуска – команда из поля cli",
+        "en": "The answer by the plugins on disk, without a restart, is the command in `cli`",
     },
     "mcpcli.stdin-staged": {
         "ru": "Команда читает текст со stdin (--stdin): текст этого вызова записан в {path}, и "
@@ -202,7 +213,8 @@ def _stage(data: bytes, suffix: str) -> str:
     global _staged_in
     try:
         if _staged_in is None or not os.path.isdir(_staged_in):
-            _staged_in = tempfile.mkdtemp(prefix="xbsl-mcp-")
+            sweep_old_folders()
+            _staged_in = tempfile.mkdtemp(prefix=_FOLDER_PREFIX)
         name = hashlib.sha256(data).hexdigest()[:16]
         path = os.path.join(_staged_in, name + (suffix if _SUFFIX.fullmatch(suffix) else ""))
         with open(path, "wb") as target:
@@ -210,6 +222,43 @@ def _stage(data: bytes, suffix: str) -> str:
     except OSError:
         return ""
     return path
+
+
+#: The folder prefix of the staged data; a folder of it older than _OLD_FOLDER_SECONDS was left by
+#: a server process long gone, and its commands were answered or dropped long ago.
+_FOLDER_PREFIX = "xbsl-mcp-"
+_OLD_FOLDER_SECONDS = 24 * 3600
+
+
+def sweep_old_folders(root: str | None = None, now: float | None = None) -> int:
+    """Take out the staged folders earlier servers left; the count of the folders taken out.
+
+    A folder is not cleaned when its server exits: the agent may run the command only after
+    the client restarted the server, and the data would be gone by then. So the next server
+    that stages anything clears what is older than a day. Only this module's own folders go:
+    the prefix, a real folder (not a link, not a junction), past the age.
+    """
+    base = root or tempfile.gettempdir()
+    moment = time.time() if now is None else now
+    is_junction = getattr(os.path, "isjunction", lambda _path: False)
+    removed = 0
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return 0
+    for name in names:
+        if not name.startswith(_FOLDER_PREFIX):
+            continue
+        path = os.path.join(base, name)
+        try:
+            if (os.path.islink(path) or is_junction(path) or not os.path.isdir(path)
+                    or moment - os.path.getmtime(path) < _OLD_FOLDER_SECONDS):
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+        removed += not os.path.exists(path)
+    return removed
 
 
 # --- the arguments ------------------------------------------------------------------------------

@@ -64,11 +64,18 @@ A list built in code declares nothing in the file and is not judged. Of the valu
 
 - the typed node `UsedHierarchy: {Type: HierarchyMode, Value: Disabled}` - the spelling of
   the platform's own examples - makes the list flat, and the file rule judges it like any list;
-- the property not written, `Auto`, or a bare `Disabled` leaves the answer to the main table.
-  A bare word falls under the `String` member of the union and may be read as the name of a
-  hierarchy; whichever way the platform reads it, over a table without a hierarchy the list is
-  flat - so such a list goes to the project half;
-- `Default`, a hierarchy by name, a quoted string or an expression is never judged.
+- the property not written leaves the answer to the main table, and such a list goes to the
+  project half;
+- a plain scalar is never judged, and a probe on a live server showed why. A bare word that is
+  a value of a member of the union - `Disabled`, `Auto`, `Default` - fails the apply with "the
+  value type is not specified" (`Не указан тип значения`), over a catalog with a hierarchy and
+  without one: the word fits the enumeration and the string at once. Any other word applies,
+  and so does a qualified one - `HierarchyMode.Disabled`, but also `HierarchyMode.NoSuchValue`
+  and `NoSuchType.Disabled`, which no enumeration knows. So a qualified word is not read as a
+  value of the enumeration either: it is a string, the name of a hierarchy, just like a quoted
+  one. What the list shows for a hierarchy name its table does not have is a matter of the
+  runtime, not of the file;
+- the typed node with `Default` and an expression are never judged either.
 
 The yaml/dynlist-scroll-without-loading rule is that project half. It is split off rather than
 the whole check promoted to the project: the editor runs a file rule on every keystroke and a
@@ -203,15 +210,14 @@ _LOADING_VALUE = "ПодгрузкаПриПрокрутке"
 _PAGE_SIZE_KEYS = ("РазмерСтраницы", "PageSize")
 _AUTO_PAGE_SIZES = frozenset({"Авто", "Auto", "0"})
 
-#: The enumeration a dynamic list's hierarchy is chosen from, its flat value and the automatic
-#: value of the property - the other spelling of each comes from the data.
+#: The enumeration a dynamic list's hierarchy is chosen from and its flat value - the other
+#: spelling of each comes from the data.
 _HIERARCHY_ENUM = "РежимИерархии"
 _FLAT_HIERARCHY = "Выключено"
-_AUTO_VALUE = "Авто"
 #: What the declaration of a dynamic list says about its hierarchy (module docstring).
 _DECLARED_FLAT = "flat"  # the typed Disabled: the file rule judges the list
-_BY_TABLE = "table"  # not written, Auto or a bare Disabled: the main table decides
-_UNSETTLED = "unsettled"  # a hierarchy asked for, or a value a file cannot read
+_BY_TABLE = "table"  # not written: the main table decides
+_UNSETTLED = "unsettled"  # a hierarchy asked for, a scalar, or a value a file cannot read
 #: The element kinds the documentation of the dynamic list names as main tables and the
 #: platform gives no hierarchy to, the one kind that may carry hierarchies, and the keys a
 #: catalog declares them with (the other spelling of each key comes from the metamodel).
@@ -252,8 +258,8 @@ dataset.register_reset(_source_names.cache_clear)
 
 
 @lru_cache(maxsize=1)
-def _hierarchy_words() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
-    """(the hierarchy mode enumeration, its flat value, the automatic value) - both spellings.
+def _hierarchy_words() -> tuple[frozenset[str], frozenset[str]]:
+    """(the hierarchy mode enumeration, its flat value) - both spellings.
 
     The English value is taken per enumeration: the same Russian word answers to other English
     names in other enumerations.
@@ -265,7 +271,6 @@ def _hierarchy_words() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
     return (
         pair(_HIERARCHY_ENUM, terms.common_english(_HIERARCHY_ENUM)),
         pair(_FLAT_HIERARCHY, values.get(_FLAT_HIERARCHY)),
-        pair(_AUTO_VALUE, terms.common_english(_AUTO_VALUE)),
     )
 
 
@@ -429,22 +434,18 @@ def _hierarchy_mode(declaration: dict) -> str:
     node = _first(declaration, "ИспользуемаяИерархия")
     if node is None:
         return _BY_TABLE  # not written: Auto
-    enums, flat, auto = _hierarchy_words()
-    if isinstance(node, yaml.MappingNode):
-        # The typed node of the platform's own examples - {Type: HierarchyMode, Value: Disabled}.
-        typed = _raw_entries(node)
-        kind = _plain_value(_first(typed, "Тип"))
-        value = _plain_value(_first(typed, "Значение"))
-        if kind and value and _QUALIFIER.sub("", kind) in enums:
-            return _DECLARED_FLAT if _mode_value(value, enums) in flat else _UNSETTLED
+    if not isinstance(node, yaml.MappingNode):
+        # A bare Disabled, Auto or Default fails the apply; any other scalar is the name of a
+        # hierarchy, a qualified word included; an expression is unknown to a file.
         return _UNSETTLED
-    written = _plain_value(node)
-    if written is None or node.style in ("'", '"') or written[0] in "=%":
-        return _UNSETTLED  # a string of the author's, an expression or an unreadable value
-    value = _mode_value(written, enums)
-    if value in flat or (value in auto and value == written):
-        return _BY_TABLE
-    return _UNSETTLED  # Default, or a hierarchy by name
+    enums, flat = _hierarchy_words()
+    # The typed node of the platform's own examples - {Type: HierarchyMode, Value: Disabled}.
+    typed = _raw_entries(node)
+    kind = _plain_value(_first(typed, "Тип"))
+    value = _plain_value(_first(typed, "Значение"))
+    if kind and value and _QUALIFIER.sub("", kind) in enums:
+        return _DECLARED_FLAT if _mode_value(value, enums) in flat else _UNSETTLED
+    return _UNSETTLED
 
 
 def _main_table(declaration: dict) -> str | None:

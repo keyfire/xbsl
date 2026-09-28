@@ -62,6 +62,31 @@ entry either - say what the behaviour was, not which class name was compared.
   `list_rules`, `meta_fold_comments` and the `translate_*` tools carries `cli`: the same call as
   a shell command the server's interpreter runs on the new code. The text of `lint_source` and
   inline `translate_set` edits go to a temporary file the command reads (`cli_note`). ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`yaml/hierarchy-bare-value` catches a bare mode word in the hierarchy of a dynamic list.**
+  A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` fails the apply - a probe on a live
+  server answered that the type of the value is not specified. The fix writes the typed node
+  `{Type: HierarchyMode, Value: Disabled}` in the language of the file, and takes `Auto` out.
+  ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The translator warns about a short pair in a comment with new lines.** A phrase pair is
+  keyed by one comment line, and a line of one or two words means what its comment makes of it.
+  When a comment has gaps and a short line of it was translated by a pair of the dictionary, the
+  plain report warns `short-pair` at that line, and the gaps of the comment carry `neighbors`
+  under `--gaps` and in `translate_gaps`. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/handler-overrides-nothing` judges the modules of other elements.** The object module
+  of a catalog, a document, an exchange plan or a settings storage, the record set and record
+  modules of registers, and the modules of a scheduled job, an access key, client work
+  parameters and commands. The compiler declares their handlers in code, and the stdlib
+  extractor now reads that code into a new `element_module_handlers` section. A module that
+  takes handler names from the element's own description at build time is not judged. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`add-field` writes an event of an interface component.** The `событие` kind writes a name
+  and the event type (`ComponentEvent` when omitted) into the component's own `Events`, with
+  `--doc` and a refusal of a taken name; a missing section goes right after `Properties`. CLI,
+  MCP `meta_add_field` and LSP `xbsl/metaAddField` take it. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The documentation index takes the property references of the help.** The extractor
+  collects the panels of project element properties, interface component properties and the
+  integration process schema; the links other pages make to them no longer lead nowhere. A
+  symbol lookup (`docs_symbol`, the hover, the documentation panel) keeps answering with the
+  page of the type or the member. ([#156](https://github.com/keyfire/xbsl/pull/156))
 
 ### Changed
 
@@ -96,6 +121,31 @@ entry either - say what the behaviour was, not which class name was compared.
   keeps a few info findings on purpose, and every answer of a session repeated their lines -
   about two and a half kilobytes for five of them. `info_hint` gives their number and rules,
   they do not count towards the limit of ten, and `list_info` lists them with the rest. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **`yaml/dynlist-filter-computed-alias` also catches a filter by the alias of a renamed column
+  or of a path.** A probe showed the apply refuses both as an unknown field, and takes a column
+  of the same name silently instead. The message names the cure - the path itself in `Field`.
+  ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The two list scroll rules leave a scalar in `UsedHierarchy` alone.** A probe showed a
+  qualified word such as `HierarchyMode.Disabled` is read as the name of a hierarchy, and a bare
+  mode word fails the apply (now `yaml/hierarchy-bare-value`); only the typed node declares a
+  list flat. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/deprecated-api` and `code/contract-parameter-name` read a project without a
+  compatibility mode the way the platform does.** A description with no mode, an unknown one or
+  one below the oldest supported is read in the newest mode, as `code/handler-overrides-nothing`
+  already did; one reading of the mode serves the three rules. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`comment/emphasis-caps`: CASE with WHEN marks a cited query, not CASE alone.** The head of a
+  statement that changes a temporary table (`INSERT INTO Table (`, `UPDATE Table SET`, `DELETE
+  FROM Table WHERE`) is a cited query by its shape; TRUE, FALSE, UNDEFINED and TEMP are words of
+  a query, a literal after a comparison sign is syntax, and without the keyword table the rule
+  falls back on its former list of words. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **A component property takes its default value and the rest of its keys.** `DefaultValue`,
+  `StoredData` and `Contextual` were refused by `add-field` and `set-field-property`: the items
+  of a component are now resolved against its descriptor, the set the documentation lists. The
+  default type is written in the language of the file. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The warning of a stale MCP server about its plugins carries the CLI command too.** A tool
+  that ran on the plugins loaded at start names in `stale.cli` the command that answers by the
+  plugins on disk. The folders of refused calls older than a day are swept by the next server.
+  ([#156](https://github.com/keyfire/xbsl/pull/156))
 
 ### Fixed
 
@@ -129,6 +179,9 @@ entry either - say what the behaviour was, not which class name was compared.
   padded value overwrote a pair the dictionary already had. The value loses its padding too,
   and a rewrite that changes only the whitespace of a value is marked `whitespace_only` in
   `rewritten` and named so in the text report. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **`structure/xbsl-pair` recognizes the module of a tabular section row** (`Goods.Items.xbsl`
+  beside `Goods.yaml` that declares the section), and `code/undefined-name` no longer reports
+  the attributes of the row there. ([#156](https://github.com/keyfire/xbsl/pull/156))
 
 ## 2026-09-27 – 0.120.0
 

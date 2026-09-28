@@ -432,6 +432,34 @@ def test_a_module_without_a_descriptor_is_still_reported_in_both_spellings(tmp_p
     assert len(english) == 1, [d.message for d in english]
 
 
+_CATALOG_WITH_ROWS_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-0000000000d2
+Name: Goods
+VisibilityScope: InProject
+TabularParts:
+    -
+        Id: 1d1f5c60-0000-4000-8000-0000000000d3
+        Name: Items
+        Attributes:
+            -
+                Id: 1d1f5c60-0000-4000-8000-0000000000d4
+                Name: Quantity
+                Type: Number
+"""
+
+
+@pytest.mark.needs_data
+def test_module_of_a_tabular_row_type_pairs_in_an_english_project(tmp_path):
+    """`Goods.Items.xbsl` extends the row type of the section `Items`; the English key of the
+    section list comes from the metamodel, hence the data. A section the yaml does not declare
+    stays a finding."""
+    files = {"Goods.yaml": _CATALOG_WITH_ROWS_EN, "Goods.Items.xbsl": _BODY_EN}
+    assert _lint_on_disk(tmp_path / "rows", files, _RULE_PAIR) == []
+    files = {"Goods.yaml": _CATALOG_WITH_ROWS_EN, "Goods.Lines.xbsl": _BODY_EN}
+    assert len(_lint_on_disk(tmp_path / "lines", files, _RULE_PAIR)) == 1
+
+
 def test_a_tail_that_is_no_generated_type_is_still_reported(tmp_path):
     """And a tail of neither spelling stays a finding - the set is a vocabulary, not a wildcard."""
     files = {"Prices.yaml": _REGISTER_EN, "Prices.Nonsense.xbsl": _BODY_EN}

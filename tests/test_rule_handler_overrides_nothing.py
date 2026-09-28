@@ -190,7 +190,9 @@ def test_a_base_outside_the_project_and_the_catalog_is_not_judged(handlers):
 
 @pytest.mark.needs_data
 def test_a_module_of_another_kind_is_not_judged(handlers):
-    """The handlers of an object module are declared by the compiler, not by a description."""
+    """Not by the component lists: the object module overrides `BeforeWrite` by the lists of
+    the compiler (see test_rule_handler_overrides_nothing_elements), and the own module of a
+    catalog takes access handler names from its settings at build time."""
     catalog = "ВидЭлемента: Справочник\nИд: 4d2f7c60-8e3b-4b5c-9a0f-9c3d4e5f6a71\nИмя: Склады\n"
     assert _lint({"Склады/Склады.yaml": catalog,
                   "Склады/Склады.Объект.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n",
@@ -301,10 +303,12 @@ def test_the_handlers_a_message_lists_follow_the_mode(handlers):
 
 
 @pytest.mark.needs_data
-@pytest.mark.parametrize("declared", ["", "8.5"], ids=["no-mode", "unsupported-mode"])
+@pytest.mark.parametrize("declared", ["", "8.5", "5.0", "новейший"],
+                         ids=["no-mode", "unsupported-mode", "below-the-oldest", "not-a-mode"])
 def test_a_project_without_a_supported_mode_is_read_in_the_newest_one(handlers, declared):
     """The build refuses such a description, and the reader of the platform goes on in the
-    newest mode - where the handler of the older modes is gone."""
+    newest mode - where the handler of the older modes is gone. A mode below the oldest
+    supported one is no exception: the reader does not fall back to the oldest mode."""
     diags = _app(WEB_CHAT, mode=declared)
     assert [d.rule_id for d in diags] == [RULE]
     assert "(новейший: проект не указывает режим, который поддерживает платформа)" in (

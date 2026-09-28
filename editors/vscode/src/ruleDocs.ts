@@ -300,8 +300,13 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "yaml/unknown-component-property",
     page: "topics/system-and-interface-components",
   },
-  // yaml/standard-field-length links nowhere: the length limit of a standard field is stated only
-  // in the reference of project element properties, a section docs.sqlite does not carry.
+  // The length limit of a standard field stands in the reference of project element properties;
+  // the Name of a catalog is the example, and its Code has a Length section of its own.
+  {
+    match: (r) => r === "yaml/standard-field-length",
+    page: "stdlib/element/ProjectElements/Std/ProjectElements/Catalog/Attributes/Name_ru",
+    anchor: "длина",
+  },
   { match: (r) => r === "code/unused-import", page: "topics/modular-development" },
   {
     match: (r) => r === "code/missing-import",
@@ -370,17 +375,17 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
     anchor: "приредактированиистроки",
   },
-  // The recommendations advise keeping the importance in the description of the event.
+  // The default importance of an event, FromConstructor, leaves the value to every constructor.
   {
     match: (r) => r === "yaml/event-needs-importance",
-    page: "topics/event-log-event",
-    anchor: "рекомендации-по-работе-с-событиями-журнала-событий",
+    page: "stdlib/element/ProjectElements/Std/Enums/EventImportance_ru",
+    anchor: "изконструктора",
   },
-  // The closed list of property types is the value type of the Properties map of an event.
+  // The closed list of property types is the type of the Type key of an event property.
   {
     match: (r) => r === "yaml/event-property-type",
-    page: "stdlib/element/xbsl/Std/EventLog/EventLogEvent_ru",
-    anchor: "свойства-1",
+    page: "stdlib/element/ProjectElements/Std/ProjectElements/EventLogEvent/Properties/EventLogEventProperty_ru",
+    anchor: "тип",
   },
   {
     match: (r) => r === "yaml/slot-needs-list",

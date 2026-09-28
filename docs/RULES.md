@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 261 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 262 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -90,7 +90,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | The object has no Id |
 | `yaml/name-matches-file` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Name does not match the file name |
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Duplicate Id in the project |
-| `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object |
+| `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object [docs](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/Catalog/Attributes/Name_ru/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A reference type in a type position without `?`: a reference has no default value, so the compilation fails [details](#a-yaml-ref-needs-nullable) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `=...` expression inside a literal-typed node (`Font: {Type: AbsoluteFont, Size: =...}`) - the platform accepts only a literal there, compute the whole object instead [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
 | `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key declared twice in a `LocalizedStrings` dictionary: the apply rejects the whole project [details](#a-yaml-localization-key-unique) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
@@ -104,7 +104,8 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does: the apply rejects the node as an unknown property [details](#a-yaml-unknown-component-property) [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A list with `Navigation: None` never loads the tail: a vertical scroll moves through one portion, and a list over an array without a scroll of its own keeps the automatic portion of ten rows [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru/) |
-| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written or `Auto`): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` of a dynamic list: the apply refuses the value as one whose type is not specified. The fix writes the typed node, or takes `Auto` out [details](#a-yaml-hierarchy-bare-value) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
 
@@ -153,26 +154,41 @@ element of its own.
 
 <a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** `PageSize`
 sets the portion and the scrolling moves through that portion alone: the list search still finds a
-row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list over an array
-without a scroll of its own is judged too while `PageSize` is automatic (ten rows): the page
-scrolls around one portion, and the cure is a page size by the limit of the data or loading with a
-scroll of the list's own. A tree source and a hierarchical dynamic list load on scroll whatever is
-written and are not judged, nor is an expression in `Navigation`. A dynamic list is judged here
-when its source declares it flat - `UsedHierarchy` as the typed node `{Type: HierarchyMode, Value:
-Disabled}`, the spelling of the platform's own examples; one whose hierarchy is left to the main
-table is judged by `yaml/dynlist-scroll-without-loading`, and one built in code is not judged.
+row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list over an array without
+a scroll of its own is judged too while `PageSize` is automatic (ten rows): the page scrolls around
+one portion, and the cure is a page size by the limit of the data or loading with a scroll of the
+list's own. A tree source and a hierarchical dynamic list load on scroll whatever is written and are
+not judged, nor is an expression in `Navigation`. A dynamic list is judged here when its source
+declares it flat - `UsedHierarchy` as the typed node `{Type: HierarchyMode, Value: Disabled}`, the
+spelling of the platform's own examples; one whose hierarchy is left to the main table is judged by
+`yaml/dynlist-scroll-without-loading`, and one built in code is not judged. A plain scalar in
+`UsedHierarchy` is not judged at all: on a live server a bare `Disabled`, `Auto` or `Default` failed
+the apply ("the value type is not specified" - the word fits the enumeration and the string at
+once), while a qualified word applied even with a value no enumeration has
+(`HierarchyMode.NoSuchValue`), so `HierarchyMode.Disabled` is read as the name of a hierarchy, not
+as the flat mode.
 
 <a id="a-yaml-dynlist-scroll-without-loading"></a>**`yaml/dynlist-scroll-without-loading`.** The
-project half of the rule above: `UsedHierarchy` not written, `Auto` or a bare `Disabled` leaves the
-hierarchy to the main table ("Auto interprets the query of the dynamic list depending on whether it
-supports hierarchy"), and the table is read from the project. Judged is a list over a catalog that
-declares none of `Hierarchical`, `Hierarchy`, `AdditionalHierarchies` and `DefaultHierarchy`, or
-over a document, a register, an exchange plan, a settings storage or an integrable application - the
-platform gives hierarchies to catalogs alone. A table outside the project, a data journal, a
-virtual table, a table derived from a catalog (its groups) and a name shared by elements that do
-not all agree are left alone. The findings and the fix are those of the file rule; the rule is
-split off so that the editor keeps checking the file on every keystroke and reads the project on
-save.
+project half of the rule above: `UsedHierarchy` not written leaves the hierarchy to the main table
+("Auto interprets the query of the dynamic list depending on whether it supports hierarchy"), and
+the table is read from the project. Judged is a list over a catalog that declares none of
+`Hierarchical`, `Hierarchy`, `AdditionalHierarchies` and `DefaultHierarchy`, or over a document, a
+register, an exchange plan, a settings storage or an integrable application - the platform gives
+hierarchies to catalogs alone. A table outside the project, a data journal, a virtual table, a table
+derived from a catalog (its groups) and a name shared by elements that do not all agree are left
+alone. The findings and the fix are those of the file rule; the rule is split off so that the editor
+keeps checking the file on every keystroke and reads the project on save.
+
+<a id="a-yaml-hierarchy-bare-value"></a>**`yaml/hierarchy-bare-value`.** `UsedHierarchy` of a
+dynamic list takes `Auto`, a `HierarchyMode` or a string, the name of a hierarchy of the main table.
+A mode written as a bare word - `Disabled`, `Default`, `Auto` - is none of the three to the server:
+a probe on a live server showed that the apply stops with "the type of the value is not specified"
+at the line of the property, over a catalog with a hierarchy and over one without. A quoted word or
+any other word is read as the name of a hierarchy and applies, and so does the typed node
+`{Type: HierarchyMode, Value: Disabled}` of the platform's own examples; a word qualified with the
+enumeration (`HierarchyMode.Disabled`) is read as a name too, so it is no cure. The fix writes the
+typed node in the language of the file, and takes the line out for `Auto`, which is what an
+unwritten property means; a property inside a flow mapping keeps the finding without a fix.
 
 ### Tier B - text and conventions
 
@@ -221,9 +237,12 @@ any other word the same file also writes in small letters, a one-letter word ins
 negation glued on, and the capitals of the English line of a comment in the translation
 dictionary. Abbreviations, date masks and a cited query are left alone. A cited query is told by
 the keyword table of the query language in the platform data (the `query` section of
-`terms.json`): a keyword prose does not shout (SELECT, DESC) or a keyword of several words
-(ORDER BY) marks the whole line, and any other keyword counts as syntax only when code follows
-it. The fix restores the case.
+`terms.json`): a keyword prose does not shout (SELECT, DESC), a keyword of several words
+(ORDER BY) or the head of a CASE expression or of a statement changing a temporary table
+(CASE WHEN, `INSERT INTO Table (`) marks the whole line, and any other keyword counts as syntax
+only when code follows it. The literals TRUE, FALSE, UNDEFINED and the word TEMP, which the
+table does not hold, count the same way, and a literal after a comparison sign is syntax too.
+Without the table the rule falls back on a short list of its own. The fix restores the case.
 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** The finding suggests the
 wording with a word of condition. The legend of a value is left alone: nothing is named there
@@ -416,7 +435,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `OnRowEdit` handler on a list over a flat dynamic source: the platform never calls it at all [details](#d-yaml-dynlist-row-editing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A parameter (`&Name`) or a binding (`=...`) in the arguments or the filter of a joined table of a dynamic list: it is never evaluated and the list fails at runtime [details](#d-yaml-dynlist-joined-table-param) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A dynamic-list filter declared with `Use: False` while the paired module enables it by assignment: the first frame shows the whole table [details](#d-yaml-dynlist-filter-disabled) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `FilterItem` of a dynamic list is named after the alias of a computed field: a filter reads the columns of the tables, so it silently goes by a column of that name or fails the apply [details](#d-yaml-dynlist-filter-computed-alias) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `FilterItem` of a dynamic list is named after the alias of a list field that is not a column under its own name - a computed field, a renamed column, a path through a reference: a filter reads the columns of the tables, so it silently goes by a column of that name or fails the apply [details](#d-yaml-dynlist-filter-computed-alias) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A form inherits `ListForm` while the table in its content comes from an `ArrayDataSource`: the navigation item silently disappears [details](#d-yaml-list-form-needs-dynlist) [docs](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A reference `Edit` with no `Commands` of its own: the platform draws its own button next to it, opening the value in a separate window [details](#d-yaml-ref-input-auto-commands) [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Two adjacent `UsualCommand` nodes with mirrored `Visible` (`=X` against `=not X`) emulate one command with two states, which the platform already has [details](#d-yaml-toggle-command-pair) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -431,7 +450,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Form handler not found in the module [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Handler signature does not match the event [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/bound-handler-annotation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `@Handler` annotation on a method the paired yaml binds to an event, a command or a route: the annotation marks an override, and the compiler refuses it on a bound method [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
-| `code/handler-overrides-nothing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `@Handler` annotation on a method of an interface component module that the yaml does not bind and that no handler of the component's base is named after in the project's compatibility mode: the compiler refuses it. The handler lists and the modes a handler is limited to come from the component descriptions the distribution ships; the other modules are not judged [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
+| `code/handler-overrides-nothing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `@Handler` annotation on a method that the paired yaml does not bind and that overrides no handler the module's base declares in the project's compatibility mode: the compiler refuses it. For an interface component the lists come from the component descriptions the distribution ships, for the other modules (an object, a record set, a record, a scheduled job, a command) from the handler providers of the compiler; a module that takes handler names from the element's own description at build time is not judged [details](#d-code-handler-overrides-nothing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
 | `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Access to a component the form markup does not declare [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Server method is unavailable to a client handler [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | project | A platform component's `Image` property reaches the server directly or through client methods [details](#d-code-image-binding-server-call) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
@@ -515,8 +534,8 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A call of the Url method `WithRequestParameters`: it encodes a parameter value only partially, and a value that is itself an address arrives cut at its first "&" [details](#d-code-url-params-partial-encoding) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/url-data-scheme` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `data:` address passed as a literal to the Url constructor: the constructor parses it as a path, and a picture fed the result draws nothing [details](#d-code-url-data-scheme) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A property computed by an expression in the paired markup is assigned from code: the platform refuses such an assignment [details](#d-code-bound-property-assign) |
-| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `EventLogEvent` description that does not set `Importance`: its default demands the value in every constructor, and one omission fails the apply [details](#d-yaml-event-needs-importance) [docs](https://1cmycloud.com/docs/help/topics/event-log-event/) |
-| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `EventLogEvent` property type outside the platform's closed list: the refusal comes only from the server-side compilation and costs the deploy [details](#d-yaml-event-property-type) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/EventLog/EventLogEvent_ru/) |
+| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `EventLogEvent` description that does not set `Importance`: its default demands the value in every constructor, and one omission fails the apply [details](#d-yaml-event-needs-importance) [docs](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/Enums/EventImportance_ru/) |
+| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `EventLogEvent` property type outside the platform's closed list: the refusal comes only from the server-side compilation and costs the deploy [details](#d-yaml-event-property-type) [docs](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/EventLogEvent/Properties/EventLogEventProperty_ru/) |
 | `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A structure field has a known platform type without a default value and no `req`, nullable marker or initializer [details](#d-code-collection-field-needs-req) [docs](https://1cmycloud.com/docs/help/topics/structure/) |
 | `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable declared by type alone where the type has no constructor and no default value (`var Response: HttpResponse`) [details](#d-code-var-needs-init) [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 | `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A member access on a tabular section's row collection that the array type does not have: the collection is `Array<Entity.Section>` [details](#d-code-unknown-tabular-member) |
@@ -590,9 +609,16 @@ literal in the yaml and assign the live value from code: `Source.JoinedTables[i]
 first-render race: the platform draws the list without waiting for the code. Declare the filter
 enabled, with an empty value.
 
-<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** A
-filter looks its `Field` up among the columns of the main and the joined tables, not among the
-fields of the list, while sorting does take an alias. To filter by the computed value, use a
+<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** A filter
+looks its `Field` up among the columns of the main and the joined tables, not among the fields of
+the list, while sorting does take an alias. A column path under another name is no exception: on a
+live server a filter by the alias of the field `T.Article` (`ArticleT`) and of the path
+`T.Group.Description` (`GroupName`) failed the apply exactly like a computed alias, while the same
+path aliased after an existing column applied: the lookup found the table's own column of that name.
+A column under its own name (`T.Article` aliased `Article`) is what the filter finds and is not
+judged; neither is a two-part path whose last part is the alias when one of the tables has no
+`Alias` - its first part may be that table. For a column path, name the path in the filter (`Field:
+T.Article`, `Field: T.Group.Description` - both applied). To filter by the computed value, use a
 `FilterItemExpression` with the expression of the field and switch it on with a binding of `Use`;
 when the column is meant, name it with the table alias.
 
@@ -823,6 +849,8 @@ the documentation.
 <a id="d-code-access-context-read-noop"></a>**`code/access-context-read-noop`.** Everyone may read
 such a type already. With that privilege alone the whole line goes; among others, only it does.
 
+<a id="d-code-handler-overrides-nothing"></a>**`code/handler-overrides-nothing`.** The handlers of an interface component module are listed by the description of each component in the distribution, and a component inherits those of its bases. The other modules have no such description: the compiler declares their handlers in code, one provider class per kind of element, and the extractor reads that code to the terms the names are built from. So the object module of a catalog overrides `BeforeWrite`, `AfterWrite`, `BeforeDelete`, `AfterDelete`, `OnFill`, `OnCreateCopy` and `OnCreateOnBasis`, the record set of a register `BeforeWrite` and `AfterWrite`, the module of a scheduled job `Handler`, and the own module of an element may override `ComputeAccessPermissions`. A module is matched to its element by the file name: `Stock.yaml` pairs with `Stock.xbsl` (the element's own module) and with `Stock.Object.xbsl`, `Stock.RecordSet.xbsl`, `Stock.Record.xbsl`. Some modules take handler names from the element's own description while the project is built: the operations of a processing, the operations of a SOAP client from its WSDL, the record-level security handlers of an entity (`ComputeAccessPermissionsForObjects`, `ComputeAccessKeysForRead`) from its access settings. Any name may be a handler there, and such a module is not judged; nor is a kind the data does not list, and without the lists the rule is silent.
+
 <a id="d-code-permission-handlers-need-recalc"></a>**`code/permission-handlers-need-recalc`.** The
 handlers are `ComputeAccessPermissions` and kin. A recompute with a non-entity receiver, the
 documented loop form, stands the rule down. Kinds with no recompute method, that is rights
@@ -971,7 +999,8 @@ when it is not there.
 <a id="d-code-deprecated-api"></a>**`code/deprecated-api`.** `ObjectStorage.UploadFromBytes(...)`
 and `ObjectStorage.Upload(Stream, Size)` next to the current `Upload("file", Bytes)` look like
 that. The overloads are picked by the compatibility mode of the project, the arguments and their
-known types. The message names the replacement when the documentation does.
+known types. A project description that declares no supported mode is read in the newest mode, as
+the platform reads it. The message names the replacement when the documentation does.
 
 ## Group details
 
@@ -1146,7 +1175,7 @@ Checks local and cross-module project calls in value expressions. Unknown target
 
 <a id="d-code-contract-parameter-name"></a>**`code/contract-parameter-name`.**
 
-Compares parameter names only for an unambiguous project service contract and matching signatures. Reports an error in compatibility mode 8.0 or later, a warning in earlier modes, and skips an unknown compatibility mode. No automatic fix is offered.
+Compares parameter names only for an unambiguous project service contract and matching signatures. Reports an error in compatibility mode 8.0 or later, a warning in earlier modes. A project description that declares no supported mode (none at all, a value that names no mode, a mode below the oldest one) is read in the newest mode, as the platform reads it; a run without the project description is not judged. No automatic fix is offered.
 
 <a id="d-conventions-platform-translation-shadow"></a>**`conventions/platform-translation-shadow`.**
 

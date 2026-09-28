@@ -1,9 +1,10 @@
 """Tier D: contracts of an event log event that only the server-side compilation enforces.
 
 The `yaml/event-needs-importance` rule. `Importance` of an `EventLogEvent` has the metamodel
-default `FromConstructor`, and the documentation of the kind states what that default means:
-the importance of the event is then set in the constructor (topics/event-properties, the
-`Importance` section, which spells the constructor call out as the example). A description that
+default `FromConstructor`, and the documentation states what that default means: the
+importance of the event is then set in the constructor (the `FromConstructor` value of the
+`EventImportance` enumeration in the reference of project element properties,
+stdlib/element/ProjectElements/Std/Enums/EventImportance_ru). A description that
 never mentions the property is therefore in that mode, and the compiler then demands the value
 at EVERY construction site. A single write that omits it fails the apply of the whole project
 on the constructor line - the parameter has no default value - and nothing in the description
@@ -21,8 +22,9 @@ Deliberate narrowing, so that the rule keeps the zero-false-positive bar:
   property, so a platform release that changes the default turns the rule off through the data
   rather than through a code edit;
 - the sibling property `ErrorNature` carries the same default and, for an event of kind
-  `Error`, the same obligation (topics/event-properties). It is not covered here: it is a check
-  of its own, with its own corpus run, and one rule states one thing.
+  `Error`, the same obligation (the `FromConstructor` value of the `ErrorNature` enumeration in
+  the same reference). It is not covered here: it is a check of its own, with its own corpus
+  run, and one rule states one thing.
 
 Both facts live in the same file - the element kind and the presence of the property - so this
 is a file rule and the editor highlights it while typing. The finding is anchored on the line
@@ -45,11 +47,12 @@ The normalization and the narrowings, each a measured decision:
 - the nullable marker `?` and a namespace qualification (`Стд::` / `Std::`, any depth) are
   stripped and TOLERATED: whether the compiler refuses `Строка?` or `Стд::Момент` here is not
   proven, and a false cut on a legal type matters more than an unproven refusal;
-- an explicit `Undefined` is tolerated for the same reason: the documentation of the kind
-  (topics/event-properties) spells the type union with a `| Неопределено` tail, so flagging it
-  as a guaranteed refusal would overstate what is known. `EventLogEventKind` is the
-  mirror case - present in the metamodel constraint, absent from the documentation page - and
-  the metamodel, extracted from the compiler's own distribution, wins: it is allowed;
+- an explicit `Undefined` is tolerated for the same reason: the guide page of the kind in
+  earlier documentation spelled the type union with a `| Неопределено` tail, so flagging it
+  as a guaranteed refusal would overstate what is known. The reference of project element
+  properties that replaced that page gives the `Type` key of an event property the list of the
+  metamodel constraint itself - `EventLogEventKind`, which the guide page left out, is in it and
+  is allowed, and `Undefined` is not;
 - a property without `Type` (or with a non-scalar value) is a concern of its own and is skipped;
 - a union (`Строка|Число`) normalizes to itself, falls outside the list and is flagged: the
   constraint enumerates single types only.

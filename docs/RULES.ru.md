@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 261.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 262.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -87,7 +87,7 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `yaml/id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | У объекта нет Ид |
 | `yaml/name-matches-file` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Имя не совпадает с именем файла |
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Дубли Ид в проекте |
-| `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта |
+| `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта [доки](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/Catalog/Attributes/Name_ru/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ссылочный тип в позиции `Тип` без `?`: у ссылки нет значения по умолчанию, и компиляция падает [подробнее](#a-yaml-ref-needs-nullable) [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Выражение `=...` внутри узла литерального типа (`Шрифт: {Тип: АбсолютныйШрифт, Размер: =...}`) – платформа принимает здесь только литерал, вычислять нужно весь объект [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
 | `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ объявлен в словаре `ЛокализованныеСтроки` дважды: применение отвергает проект целиком [подробнее](#a-yaml-localization-key-unique) [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
@@ -101,7 +101,8 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у другого компонента ui-схемы есть: применение отвечает `Неизвестное свойство` [подробнее](#a-yaml-unknown-component-property) [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке: применение отвергает узел и откатывает проект [подробнее](#a-yaml-inline-command-name) [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с `Навигация: Отсутствует` не догружает хвост: прокрутка по вертикали крутит одну порцию, а список над массивом без своей прокрутки оставляет автоматическую порцию в десять строк [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru/) |
-| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | То же для динамического списка, чью иерархию решает основная таблица (`ИспользуемаяИерархия` не задана или `Авто`): над справочником без иерархии, документом или регистром список плоский, и `Навигация: Отсутствует` теряет хвост [подробнее](#a-yaml-dynlist-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | То же для динамического списка, чью иерархию решает основная таблица (`ИспользуемаяИерархия` не задана): над справочником без иерархии, документом или регистром список плоский, и `Навигация: Отсутствует` теряет хвост [подробнее](#a-yaml-dynlist-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Голое `Выключено`, `ПоУмолчанию` или `Авто` в `ИспользуемаяИерархия` динамического списка: применение отвергает значение, у которого не указан тип. Исправление пишет узел с типом, а `Авто` убирает [подробнее](#a-yaml-hierarchy-bare-value) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Комментарий `#` в описании элемента: визуальный редактор пишет файл заново из модели и сохраняет только документирующий комментарий `##` в первых строках узла, у которого он есть (элемент, компонент, объявленное свойство, табличная часть и подобные). Автоисправление меняет маркер у блока, который уже стоит на таком месте, и переносит внутрь узла блок, стоящий перед `-` элемента списка (кроме экземпляра компонента проекта в списке: на нём комментарий ломает сборку); остальное называется вместе с ближайшим узлом, у которого комментарий есть |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `##` стоит там, где среда разработки его не читает: перед `-` элемента списка, над отдельным свойством, у узла без документирующего комментария (стандартный реквизит вроде `Код` и `Наименование`, команда, поле динамического списка). Он пропадёт так же, как комментарий `#`. Отдельный случай – экземпляр компонента проекта или библиотеки в списке: с блоком `##` на таком узле сервер не применяет проект, и правило называет эту причину |
 
@@ -147,29 +148,44 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 задавать только в элементах проекта типа фрагмент командного интерфейса". К команде обращаются
 через параметр обработчика, а имя ей даёт только фрагмент, вынесенный отдельным элементом проекта.
 
-<a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** Порцию
-задаёт `РазмерСтраницы`, и прокрутка крутит только её: запись находится поиском списка, но не
-прокруткой. Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список над массивом без своей прокрутки
-правило судит, пока `РазмерСтраницы` автоматический (десять строк): страница прокручивает одну
-порцию, и лечит размер страницы по пределу данных либо подгрузка со своей прокруткой списка.
-Источник-дерево и иерархический динамический список подгружаются при прокрутке при любом значении
-и не судятся, как и выражение в `Навигации`. Динамический список правило судит, когда источник сам
-объявляет его плоским: `ИспользуемаяИерархия` записана типизированным узлом `{Тип: РежимИерархии,
-Значение: Выключено}`, как в примерах самой платформы. Список, чью иерархию решает основная
-таблица, судит `yaml/dynlist-scroll-without-loading`, а список, собранный в коде, не судится.
+<a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** Порцию задаёт
+`РазмерСтраницы`, и прокрутка крутит только её: запись находится поиском списка, но не прокруткой.
+Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список над массивом без своей прокрутки правило судит,
+пока `РазмерСтраницы` автоматический (десять строк): страница прокручивает одну порцию, и лечит
+размер страницы по пределу данных либо подгрузка со своей прокруткой списка. Источник-дерево и
+иерархический динамический список подгружаются при прокрутке при любом значении и не судятся, как и
+выражение в `Навигации`. Динамический список правило судит, когда источник сам объявляет его
+плоским: `ИспользуемаяИерархия` записана типизированным узлом `{Тип: РежимИерархии, Значение:
+Выключено}`, как в примерах самой платформы. Список, чью иерархию решает основная таблица, судит
+`yaml/dynlist-scroll-without-loading`, а список, собранный в коде, не судится. Скаляр в
+`ИспользуемаяИерархия` не судится вовсе: на живом сервере голые `Выключено`, `Авто` и `ПоУмолчанию`
+уронили применение ("Не указан тип значения" – слово подходит и перечислению, и строке), а
+квалифицированное слово применилось даже со значением, которого нет ни в одном перечислении
+(`РежимИерархии.НетТакогоЗначения`), поэтому `РежимИерархии.Выключено` читается именем иерархии, а
+не плоским режимом.
 
 <a id="a-yaml-dynlist-scroll-without-loading"></a>**`yaml/dynlist-scroll-without-loading`.**
-Проектная половина правила выше. Если `ИспользуемаяИерархия` не задана, задана как `Авто` или голым
-словом `Выключено`, иерархию решает основная таблица ("Авто интерпретирует запрос к динамическому
-списку в зависимости от того – поддерживается в нем иерархичность или нет"), и правило читает ее
-описание в проекте. Судится список над справочником, у которого нет ни `Иерархический`, ни
-`Иерархия`, ни `ДополнительныеИерархии`, ни `ИерархияПоУмолчанию`, и над документом, регистром,
-планом обмена, хранилищем настроек или интегрируемым приложением: иерархии платформа дает только
-справочникам. Не судятся таблица вне проекта, журнал данных, виртуальная таблица, производная
-таблица справочника (его группы) и имя, под которым в проекте несколько элементов с разными
-ответами. Находки и исправление те же, что у файлового правила; отдельным правилом эта половина
-вынесена, чтобы редактор по-прежнему проверял файл на каждое нажатие клавиши, а проект читал при
-сохранении.
+Проектная половина правила выше. Если `ИспользуемаяИерархия` не задана, иерархию решает основная
+таблица ("Авто интерпретирует запрос к динамическому списку в зависимости от того – поддерживается в
+нем иерархичность или нет"), и правило читает ее описание в проекте. Судится список над
+справочником, у которого нет ни `Иерархический`, ни `Иерархия`, ни `ДополнительныеИерархии`, ни
+`ИерархияПоУмолчанию`, и над документом, регистром, планом обмена, хранилищем настроек или
+интегрируемым приложением: иерархии платформа дает только справочникам. Не судятся таблица вне
+проекта, журнал данных, виртуальная таблица, производная таблица справочника (его группы) и имя, под
+которым в проекте несколько элементов с разными ответами. Находки и исправление те же, что у
+файлового правила; отдельным правилом эта половина вынесена, чтобы редактор по-прежнему проверял
+файл на каждое нажатие клавиши, а проект читал при сохранении.
+
+<a id="a-yaml-hierarchy-bare-value"></a>**`yaml/hierarchy-bare-value`.** `ИспользуемаяИерархия`
+динамического списка принимает `Авто`, `РежимИерархии` или строку – имя иерархии основной таблицы.
+Режим, записанный голым словом (`Выключено`, `ПоУмолчанию`, `Авто`), для сервера ни то, ни другое, ни
+третье: пробник на живом сервере показал, что применение останавливается с "Не указан тип значения"
+на строке свойства – и над справочником с иерархией, и без нее. Слово в кавычках и любое другое слово
+читаются именем иерархии и применяются, как и узел с типом `{Тип: РежимИерархии, Значение:
+Выключено}` из примеров самой платформы; слово с именем перечисления (`РежимИерархии.Выключено`)
+тоже читается именем, поэтому не лечит. Исправление пишет узел с типом на языке файла, а для `Авто`
+убирает строку – незаданное свойство и значит `Авто`; свойство внутри однострочного словаря
+остается находкой без исправления.
 
 ### Тир B – текст и соглашения
 
@@ -216,9 +232,12 @@ HTML-страницы. Код не трогаем – селекторы, иде
 котором"), приклеенную приставку и прописные английской строки комментария в словаре перевода.
 Аббревиатуры, маски дат и цитату запроса правило не судит. Цитату запроса оно узнает по таблице
 ключевых слов языка запросов из данных платформы (раздел `query` файла `terms.json`): ключевое
-слово, которое проза прописными не выделяет ("ВЫБРАТЬ", "УБЫВ"), или составное ("УПОРЯДОЧИТЬ ПО")
-делает цитатой всю строку, а остальные ключевые слова считаются синтаксисом, только когда за ними
-идет код. Исправление возвращает регистр.
+слово, которое проза прописными не выделяет ("ВЫБРАТЬ", "УБЫВ"), составное ("УПОРЯДОЧИТЬ ПО")
+или начало выражения ВЫБОР либо оператора, меняющего временную таблицу ("ВЫБОР КОГДА",
+"ВСТАВИТЬ В Таблица ("), делает цитатой всю строку, а остальные ключевые слова считаются
+синтаксисом, только когда за ними идет код. Так же считаются литералы ИСТИНА, ЛОЖЬ, НЕОПРЕДЕЛЕНО
+и слово TEMP, которых в таблице нет, а литерал после знака сравнения – синтаксис и без кода за
+ним. Без таблицы правило берет короткий собственный список. Исправление возвращает регистр.
 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** Замечание предлагает
 формулировку со словом условия. Пояснение к значению правило не судит: там перед состоянием ничего
@@ -412,7 +431,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик `ПриРедактированииСтроки` у списка с плоским динамическим источником: платформа его не вызывает вовсе [подробнее](#d-yaml-dynlist-row-editing) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр (`&Имя`) или биндинг (`=...`) в аргументах либо фильтре присоединённой таблицы динамического списка: он не вычисляется, и список отказывает уже при работе [подробнее](#d-yaml-dynlist-joined-table-param) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Отбор динамического списка объявлен с `Использовать: Ложь`, а парный модуль включает его присваиванием: первый кадр покажет всю таблицу [подробнее](#d-yaml-dynlist-filter-disabled) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `ЭлементФильтра` динамического списка назван псевдонимом вычисляемого поля: фильтр ищет поле среди столбцов таблиц, поэтому молча отбирает по одноименному столбцу или роняет применение сборки [подробнее](#d-yaml-dynlist-filter-computed-alias) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `ЭлементФильтра` динамического списка назван псевдонимом поля списка, которое не столбец под своим именем, – вычисляемого поля, переименованного столбца, пути по ссылке: фильтр ищет поле среди столбцов таблиц, поэтому молча отбирает по одноименному столбцу или роняет применение сборки [подробнее](#d-yaml-dynlist-filter-computed-alias) [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Форма наследует `ФормаСписка`, а таблица в её содержимом взята по `ИсточникДанныхМассив`: пункт навигации молча исчезает [подробнее](#d-yaml-list-form-needs-dynlist) [доки](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ссылочное `ПолеВвода` без своего узла `Команды`: платформа рисует рядом собственную кнопку, которая открывает значение в отдельном окне [подробнее](#d-yaml-ref-input-auto-commands) [доки](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Две соседние `ОбычныеКоманды` с зеркальной `Видимость` (`=X` и `=не X`) изображают одну команду с двумя состояниями, которая у платформы уже есть [подробнее](#d-yaml-toggle-command-pair) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -427,7 +446,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик формы не найден в модуле [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Сигнатура обработчика не совпадает с событием [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/bound-handler-annotation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Аннотация `@Обработчик` у метода, который парный yaml привязывает к событию, команде или маршруту: аннотация помечает переопределение, и компилятор отвергает её у привязанного метода [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
-| `code/handler-overrides-nothing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Аннотация `@Обработчик` у метода модуля компонента интерфейса, который yaml не привязывает и которого база компонента не объявляет обработчиком в режиме совместимости проекта: компилятор такой метод отвергает. Списки обработчиков и режимы, которыми обработчик ограничен, берутся из описаний компонентов в поставке, модули других видов не судятся [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
+| `code/handler-overrides-nothing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Аннотация `@Обработчик` у метода, который парный yaml не привязывает и который не переопределяет ни одного обработчика, объявленного базой модуля в режиме совместимости проекта: компилятор такой метод отвергает. Для компонента интерфейса списки берутся из описаний компонентов в поставке, для остальных модулей (объект, набор записей, запись, запланированное задание, команда) – из провайдеров обработчиков компилятора; модуль, который берет имена обработчиков при сборке из описания самого элемента, не судится [подробнее](#d-code-handler-overrides-nothing) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
 | `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Обращение к компоненту, которого нет в разметке формы [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Серверный метод недоступен клиентскому обработчику [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | проект | Свойство `Изображение` компонента платформы обращается к серверу напрямую или через клиентские методы [подробнее](#d-code-image-binding-server-call) [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
@@ -511,8 +530,8 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Вызов метода Url `СПараметрамиЗапроса`: значение параметра кодируется частично, и значение-адрес приходит обрезанным по первому "&" [подробнее](#d-code-url-params-partial-encoding) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/url-data-scheme` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Адрес `data:` литералом в конструкторе Url: конструктор разбирает его как путь, и картинка с таким адресом не рисуется [подробнее](#d-code-url-data-scheme) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Свойство, вычисляемое выражением в парной разметке, присваивается из кода: платформа такое присваивание отвергает [подробнее](#d-code-bound-property-assign) |
-| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: ее умолчание требует значение в каждом конструкторе, и пропуск роняет применение [подробнее](#d-yaml-event-needs-importance) [доки](https://1cmycloud.com/docs/help/topics/event-log-event/) |
-| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип свойства `СобытиеЖурналаСобытий` вне закрытого списка платформы: отказ приходит только серверной компиляцией и стоит деплоя [подробнее](#d-yaml-event-property-type) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/EventLog/EventLogEvent_ru/) |
+| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: ее умолчание требует значение в каждом конструкторе, и пропуск роняет применение [подробнее](#d-yaml-event-needs-importance) [доки](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/Enums/EventImportance_ru/) |
+| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип свойства `СобытиеЖурналаСобытий` вне закрытого списка платформы: отказ приходит только серверной компиляцией и стоит деплоя [подробнее](#d-yaml-event-property-type) [доки](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/EventLogEvent/Properties/EventLogEventProperty_ru/) |
 | `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле структуры имеет известный платформенный тип без значения по умолчанию и не имеет ни `обз`, ни допуска `Неопределено`, ни инициализатора [подробнее](#d-code-collection-field-needs-req) [доки](https://1cmycloud.com/docs/help/topics/structure/) |
 | `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная объявлена одним типом, у которого нет ни конструктора, ни значения по умолчанию (`пер Ответ: ОтветHttp`) [подробнее](#d-code-var-needs-init) [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 | `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к члену, которого у коллекции строк табличной части нет: коллекция это `Массив<Сущность.Секция>` [подробнее](#d-code-unknown-tabular-member) |
@@ -588,9 +607,16 @@ HTML-страницы. Код не трогаем – селекторы, иде
 
 <a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** Поле
 фильтра ищется среди столбцов основной и присоединенных таблиц, а не среди полей списка, хотя
-сортировка псевдоним принимает. Для отбора по вычисленному значению нужен
-`ЭлементФильтраВыражение` с выражением поля и привязкой `Использовать`; если нужен столбец, его
-называют с псевдонимом таблицы.
+сортировка псевдоним принимает. Путь столбца под другим именем не исключение: на живом сервере
+фильтр по псевдониму поля `Т.Артикул` (`АртикулТ`) и пути `Т.Группа.Наименование` (`ИмяГруппы`)
+уронил применение так же, как псевдоним вычисляемого поля, а тот же путь с псевдонимом по имени
+существующего столбца применился: поиск нашел собственный столбец таблицы с этим именем. Столбец под
+своим именем (`Т.Артикул` с псевдонимом `Артикул`) фильтр находит, и правило его не судит; не
+судится и путь из двух частей с псевдонимом по последней части, когда у одной из таблиц нет
+`Псевдоним`, – первой частью может быть эта таблица. Для пути столбца в фильтре называют сам путь
+(`Поле: Т.Артикул`, `Поле: Т.Группа.Наименование` – оба применились). Для отбора по вычисленному
+значению нужен `ЭлементФильтраВыражение` с выражением поля и привязкой `Использовать`; если нужен
+столбец, его называют с псевдонимом таблицы.
 
 <a id="d-yaml-list-form-needs-dynlist"></a>**`yaml/list-form-needs-dynlist`.** Каркас формы списка
 заточен под таблицу динамического списка, а в содержимом нет ни одного типа с
@@ -816,6 +842,8 @@ cannot apply to object with a "DeletionMark"` говорит компилято�
 и так разрешено всем. Если право в списке одно, снимается вся строка, а если есть другие, то
 только Чтение.
 
+<a id="d-code-handler-overrides-nothing"></a>**`code/handler-overrides-nothing`.** Обработчики модуля компонента интерфейса перечисляет описание каждого компонента в поставке, и компонент наследует обработчики своих баз. У остальных модулей такого описания нет: их обработчики объявляет код компилятора, по классу-провайдеру на вид элемента, и экстрактор читает этот код до термов, из которых собраны имена. Так, модуль объекта справочника переопределяет `ПередЗаписью`, `ПослеЗаписи`, `ПередУдалением`, `ПослеУдаления`, `ПриЗаполнении`, `ПриСозданииКопии` и `ПриСозданииНаОсновании`, набор записей регистра – `ПередЗаписью` и `ПослеЗаписи`, модуль запланированного задания – `Обработчик`, а модуль самого элемента может переопределить `ВычислитьРазрешенияДоступа`. Модуль сопоставляется элементу по имени файла: `Склады.yaml` составляет пару со `Склады.xbsl` (модуль самого элемента) и со `Склады.Объект.xbsl`, `Склады.НаборЗаписей.xbsl`, `Склады.Запись.xbsl`. Некоторые модули берут имена обработчиков из описания самого элемента при сборке проекта: операции обработки, операции клиента SOAP из его WSDL, обработчики RLS сущности (`ВычислитьРазрешенияДоступаДляОбъектов`, `ВычислитьКлючиДоступаДляЧтения`) из настроек доступа. Обработчиком там может быть любое имя, и такой модуль не судится; не судится и вид, которого нет в данных, а без списков правило молчит.
+
 <a id="d-code-permission-handlers-need-recalc"></a>**`code/permission-handlers-need-recalc`.**
 Обработчики это `ВычислитьРазрешенияДоступа` и родня. Пересчёт с получателем не-сущностью,
 документированный цикл, глушит правило. Виды без метода пересчёта, то есть право-элементы, не
@@ -961,7 +989,8 @@ HTTP-сервиса проекта или ресурсом. Адрес data в �
 <a id="d-code-deprecated-api"></a>**`code/deprecated-api`.** Так выглядят
 `ОбъектноеХранилище.ЗагрузитьИзБайт(...)` и `ОбъектноеХранилище.Загрузить(Поток, Размер)` рядом с
 текущей `Загрузить("файл", Байты)`. Перегрузки выбираются по режиму совместимости проекта, по
-аргументам и по их известным типам. Сообщение называет замену, если её называет документация.
+аргументам и по их известным типам. Описание проекта без поддерживаемого режима правило, как и
+платформа, читает в новейшем режиме. Сообщение называет замену, если ее называет документация.
 
 ## Подробнее о группах
 
@@ -1121,7 +1150,7 @@ entry-points `xbsl.severity`); `XBSL_NO_PLUGINS=1` отключает плаги
 
 <a id="d-code-contract-parameter-name"></a>**`code/contract-parameter-name`.**
 
-Сравнивает имена только для однозначного контракта сервиса проекта и согласованных сигнатур. В режиме совместимости от 8.0 сообщает об ошибке, в более раннем режиме предупреждает; неизвестный режим пропускает. Автоматического исправления нет.
+Сравнивает имена только для однозначного контракта сервиса проекта и согласованных сигнатур. В режиме совместимости от 8.0 сообщает об ошибке, в более раннем режиме предупреждает. Описание проекта без поддерживаемого режима (режим не указан, значение не называет режим, режим ниже самого старого поддерживаемого) правило, как и платформа, читает в новейшем режиме; без описания проекта в проверке не судит. Автоматического исправления нет.
 
 <a id="d-conventions-platform-translation-shadow"></a>**`conventions/platform-translation-shadow`.**
 

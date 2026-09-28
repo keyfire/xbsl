@@ -1210,6 +1210,9 @@ def _comment_edits(source: SourceFile, root, resolver, report, edits: list[Edit]
             trailing = hash_pos > 0 and body[hash_pos - 1] in " \t"
             inside_scalar = any(start <= absolute < end for start, end in spans)
             if (standalone or trailing) and not inside_scalar:
+                # Whole comment lines one under another are one comment, the way the
+                # description of a node is written; a comment after a value stands alone.
+                report.comment_line("#" if standalone else "#-" + str(number), number)
                 match = _COMMENT_TEXT_RE.match(body[hash_pos:])
                 if match and has_cyrillic(match.group(2)):
                     payload = match.group(2)
@@ -1219,8 +1222,11 @@ def _comment_edits(source: SourceFile, root, resolver, report, edits: list[Edit]
                         report.phrases_done += 1
                         if translated != payload:
                             edits.append((start, start + len(payload), translated))
+                            if code_module.short_phrase(payload):
+                                report.note_short_hit(number, hash_pos + 1, payload, translated)
                     else:
                         report.note_phrase(payload, number, hash_pos + 1)
                 break
             hash_pos = body.find("#", hash_pos + 1)
         offset += len(line)
+    report.close_comment()

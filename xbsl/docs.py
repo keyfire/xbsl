@@ -97,6 +97,22 @@ _TOPIC_MEMBER_SECTION_RE = re.compile(r"^Тип\s*<[^>]+>$")
 # Any heading down to h3: the member index and the member block both walk the same boundaries
 # (h1/h2 open a section, h3 opens a member), while h4 stays inside its member.
 _HEADING_RE = re.compile(r"<h([123])\b[^>]*>(.*?)</h\1>", re.S)
+#: The property references (the root page of each section): the keys a yaml description of a
+#: project element, an interface component or an integration process schema writes. Their
+#: titles repeat the names of the language types and members (`Button`, `Catalog`, the `Date`
+#: of a document, the `Code` of a catalog), while a symbol names a type or a member - so such a
+#: page never answers a symbol; search, the tree and the page id reach it.
+PROPERTY_REFERENCES = (
+    "stdlib/element/ProjectElements",
+    "stdlib/element/InterfaceComponents",
+    "stdlib/element/IntegrationProcessSchema",
+)
+_IN_PROPERTY_REFERENCES = (
+    "(" + " OR ".join(["id = ? OR id LIKE ?"] * len(PROPERTY_REFERENCES)) + ")"
+)
+_PROPERTY_REFERENCE_PATTERNS = tuple(
+    value for root in PROPERTY_REFERENCES for value in (root, root + "/%")
+)
 # Query token: letters (incl. Cyrillic), digits, underscore - everything else is dropped for FTS5.
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 # Images live as files next to the database (`<version>/assets/...`), mime is derived from the extension.
@@ -282,6 +298,9 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
     no exact page, and a guide topic guessed by the word is confusing - candidates are
     picked by the caller via search().
 
+    A property reference (PROPERTY_REFERENCES) never answers: a name its title repeats is a
+    type's or a member's, and the callers look a member up when this answers nothing.
+
     The qualifier match is REFERENCE pages only: a topic's `qualified` is whatever `Std::...`
     its text happened to mention first (the topic about breakpoints quotes `Std::Array::Add`),
     so matching topics that way documents a name with an unrelated article.
@@ -307,18 +326,22 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
 
 
 def _page_of(con: sqlite3.Connection, name: str) -> str | None:
-    """The page id for one exact spelling: an exact title, then a reference qualifier."""
+    """The page id for one exact spelling: an exact title, then a reference qualifier.
+
+    A property reference is left out: it carries no qualified name, and ranked with the rest
+    it took `Button` and `Date` away from the pages of the types.
+    """
     exact = con.execute(
-        "SELECT id FROM pages WHERE title = ? "
+        f"SELECT id FROM pages WHERE title = ? AND NOT {_IN_PROPERTY_REFERENCES} "
         "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
-        (name,),
+        (name, *_PROPERTY_REFERENCE_PATTERNS),
     ).fetchone()
     if exact:
         return exact["id"]
     byq = con.execute(
         "SELECT id FROM pages WHERE qualified LIKE ? AND id LIKE 'stdlib/%' "
-        "ORDER BY length(qualified) LIMIT 1",
-        (f"%::{name}",),
+        f"AND NOT {_IN_PROPERTY_REFERENCES} ORDER BY length(qualified) LIMIT 1",
+        (f"%::{name}", *_PROPERTY_REFERENCE_PATTERNS),
     ).fetchone()
     return byq["id"] if byq else None
 

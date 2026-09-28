@@ -9,12 +9,14 @@ one ('...cannot be initialized with a default value'; the fix is `ВидОпла
 
 Legal non-nullable forms (per the platform docs) are skipped:
 - an enumeration where one of `Элементы` carries `ПоУмолчанию: Истина` has a default value
-  of its own (topics/enumeration-properties), so its bare uses are never flagged;
+  of its own (the item of an enumeration in the reference of project element properties,
+  stdlib/element/ProjectElements/Std/ProjectElements/Enumeration/Items/EnumerationItem_ru), so
+  its bare uses are never flagged;
 - a node that sets `ЗначениеПоУмолчанию` next to `Тип` provides the default explicitly
-  (topics/catalog-properties, topics/component-example) and is skipped; positions are found
-  by a text search, so when the same value string occurs in one file both with and without
-  the guard, the whole value is skipped in that file (a false negative, never a false
-  positive);
+  (the attribute keys of the same reference, topics/component-example) and is skipped;
+  positions are found by a text search, so when the same value string occurs in one file both
+  with and without the guard, the whole value is skipped in that file (a false negative, never
+  a false positive);
 - a TYPED VALUE - a `Значение` node holding `Тип` plus its own `Значение` - names the type of
   a literal, not an attribute declaration, and the compiler rejects a nullable spelling there
   ('Недопустимый синтаксис типа СтатусЗаказа?'). The shape is the platform's own: filter

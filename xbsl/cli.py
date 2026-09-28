@@ -780,7 +780,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
     # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose.
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
-                                                 "параметр", "поле", "свойство",
+                                                 "параметр", "поле", "свойство", "событие",
                                                  "табличная-часть")))
     p.add_argument("name", help=i18n.t("cli.help.scaf.af-name"))
     p.add_argument("--type", help=i18n.t("cli.help.scaf.af-type"))

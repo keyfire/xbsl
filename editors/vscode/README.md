@@ -80,8 +80,8 @@ channel and nowhere else. There are no popups on every save.
   editable properties panel, creation of objects, fields and subsystems, and filtering by subsystems
   and packages. See [Metadata explorer](#metadata-explorer).
 - **Documentation** – a view in the secondary side bar that shows the 1C:Element reference the
-  way the docs site does: a "Contents" tree (the developer and administrator guides, the type and
-  query-language references), full-text search, and a page view with images and a link to the
+  way the docs site does: a "Contents" tree (the developer and administrator guides, the type,
+  property and query-language references), full-text search, and a page view with images and a link to the
   primary source. Right-click a type or variable to open its documentation.
   See [Documentation](#documentation).
 
@@ -646,6 +646,14 @@ field / tabular section (and an attribute of a tabular section). A catalog or do
 **Add object form**: the engine generates a form populated from the object's `Attributes`,
 optionally a list form with columns too, and registers it in the owner's `Interface`.
 
+A form, owned or common, and any other interface component has **Add property...** and **Add
+event...** in its context menu. The first asks a name and a type: a primitive, a reference or an
+enumeration of the project, or a type typed in by hand. The second asks a name and the type of the
+event object – the plain component event or an event with data. The engine writes the item into
+the component's `Properties` or `Events` and puts a missing section where the designer keeps it:
+`Properties` in front of `Events`, `Events` right after `Properties`. The yaml then opens on the
+new item.
+
 The templates and yaml edits are computed by the engine (`xbsl` 0.16+). The same operations are
 available to agents through its `meta_*` MCP tools and to any editor through the `xbsl/meta*` LSP
 requests or the CLI subcommands. The tree only gathers parameters and applies the returned
@@ -755,7 +763,8 @@ platform version you use and works offline.
 > The reference shipped with the platform distribution exists in Russian only, so the pages and the contents tree stay Russian whatever the editor language is.
 
 **The tree.** A curated "Contents" that mirrors the site: the developer and administrator guides,
-the type reference (`Std::Collections` → `Array` → ...) and the query language. It is built from the
+the type reference (`Std::Collections` → `Array` → ...), the properties of project elements and
+interface components, the integration process schema and the query language. It is built from the
 distribution's own sidebar, so the structure matches the site. Clicking a node opens the page.
 
 **Search.** The search button in the view title (command *XBSL: search the documentation*) runs a
@@ -990,6 +999,8 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Add field | `xbsl.metadata.addStructField` | Command Palette |
 | Add tabular section | `xbsl.metadata.addTabular` | Command Palette |
 | Add attribute to tabular section | `xbsl.metadata.addTabularAttr` | Command Palette |
+| Add property... | `xbsl.metadata.addComponentProperty` | panel / context menu |
+| Add event... | `xbsl.metadata.addComponentEvent` | panel / context menu |
 | Add a URL template | `xbsl.metadata.addRoute` | Command Palette |
 | Add an HTTP method | `xbsl.metadata.addRouteMethod` | Command Palette |
 | Add form | `xbsl.metadata.addObjectForm` | Command Palette |

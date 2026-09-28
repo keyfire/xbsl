@@ -2133,6 +2133,19 @@ Inherits:
     Type: Form
 """
 _OVERRIDE_TOKENS = {"ПанельСкладов": "StockPanel", "Пересчитать": "Recalculate"}
+#: A catalog: the compiler declares the handlers of its object module in code.
+_OVERRIDE_CATALOG_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f32
+Имя: Склады
+ОбластьВидимости: ВПроекте
+"""
+_OVERRIDE_CATALOG_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f32
+Name: Stock
+VisibilityScope: InProject
+"""
 #: A client application: its module overrides the web chat handler, which is there below
 #: compatibility mode 8.0 only.
 _WEB_CHAT_APP_RU = """\
@@ -2179,6 +2192,10 @@ _COMPUTED_ALIAS_LIST_RU = (
     "                        ВидСравнения: Равно\n"
     "                        Значение: 1\n"
 )
+#: The same list with the column renamed instead of computed: `Заявки.Код` aliased `КодЗаявки`.
+_RENAMED_ALIAS_LIST_RU = _COMPUTED_ALIAS_LIST_RU.replace(
+    "Выражение: Заявки.Код * 2", "Выражение: Заявки.Код"
+).replace("Псевдоним: Код\n", "Псевдоним: КодЗаявки\n")
 _NO_SCROLL_LIST_RU = (
     "    Содержимое:\n"
     "        Тип: ПроизвольныйСписок<ИсточникДанныхМассив<Строка>>\n"
@@ -5694,6 +5711,30 @@ SEEDS: list[Seed] = [
         needs_section="module_handlers",
     ),
     Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the handler annotation on a method of the object module of a catalog that "
+             "overrides none of the handlers the compiler declares there",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU,
+               "Склады.Объект.xbsl": "@Обработчик\nметод Пересчитать()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN,
+                 "Stock.Object.xbsl": "@Handler\nmethod Recalculate()\n;\n"},
+        tokens={"Склады": "Stock", "Пересчитать": "Recalculate"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the object module of a catalog overrides the before-write handler - the "
+             "translated tree spells it the platform's way",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU,
+               "Склады.Объект.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN,
+                 "Stock.Object.xbsl": "@Handler\nmethod BeforeWrite()\n;\n"},
+        tokens={"Склады": "Stock"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
         rule="code/local-method-cross-component",
         expect=FINDING,
         note="a component method at the default visibility called through an instance from another component",
@@ -7249,6 +7290,34 @@ SEEDS: list[Seed] = [
         note="the same filter naming the column with the table alias",
         files={
             "СписокЗаявок.yaml": _LIST_FORM_RU + _COMPUTED_ALIAS_LIST_RU.format(field="Заявки.Код"),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-filter-computed-alias",
+        expect=FINDING,
+        note="a filter item named after the alias of a renamed column finds no column of that name",
+        files={"СписокЗаявок.yaml": _LIST_FORM_RU + _RENAMED_ALIAS_LIST_RU.format(field="КодЗаявки")},
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/hierarchy-bare-value",
+        expect=FINDING,
+        note="a bare mode word in the hierarchy of a dynamic list fails the apply",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy="            ИспользуемаяИерархия: Выключено\n",
+                navigation="ПодгрузкаПриПрокрутке"),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/hierarchy-bare-value",
+        expect=CLEAN,
+        note="the same mode written as the typed node of the platform's examples",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy=_FLAT_HIERARCHY_RU, navigation="ПодгрузкаПриПрокрутке"),
         },
         tokens=_LIST_FORM_TOKENS,
     ),

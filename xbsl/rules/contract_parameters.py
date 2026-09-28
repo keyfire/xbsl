@@ -7,9 +7,12 @@ The compiler compares parameter names positionally with the contract's abstract 
 mismatch is a warning below compatibility 8.0 and an error from 8.0 onward.
 
 Only a uniquely matched project contract method with the same resolved signature is judged.
-Platform-only contracts, incomplete projects, ambiguous methods and missing compatibility stay
-silent. Trees and method declarations come from the shared project typing; the mapper adds only
-the service-contract names which the generic element fact does not retain.
+Platform-only contracts, incomplete projects, ambiguous methods and a run without the project
+description stay silent. The mode is read the way the platform reads it (`typeinfer.project_modes`):
+a description that declares no mode, a value that names none or a mode the platform does not
+support is refused by the build, and the code is compiled in the newest mode - where a mismatch
+is an error. Trees and method declarations come from the shared project typing; the mapper adds
+only the service-contract names which the generic element fact does not retain.
 """
 
 from __future__ import annotations
@@ -144,17 +147,6 @@ def _same_signature(
     return True
 
 
-def _compatibilities(facts: dict[str, dict]) -> dict[str, tuple[int, ...] | None]:
-    out: dict[str, tuple[int, ...] | None] = {}
-    for root, group in typeinfer._projects(facts).items():
-        declared = next((fact.get("compat") for fact in group.values()
-                         if fact.get("k") == "project" and fact.get("root") in (root, ".")
-                         and fact.get("compat")), None)
-        mode = tuple(declared) if declared else None
-        out.update({rel: mode for rel in group})
-    return out
-
-
 def _severity(mode: tuple[int, ...]) -> Severity:
     normalized = (*mode, 0, 0)
     return Severity.WARNING if normalized[:2] < (8, 0) else Severity.ERROR
@@ -227,7 +219,7 @@ def _project_findings(
 def contract_parameter_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """Parameter names of a uniquely matched project contract implementation."""
     typings = typeinfer.project_typings(facts)
-    modes = _compatibilities(facts)
+    modes = {rel: mode for rel, (mode, _assumed) in typeinfer.project_modes(facts).items()}
     for _root, group in typeinfer._projects(facts).items():
         rels = set(group)
         subset = {rel: typing for rel, typing in typings.items() if rel in rels}

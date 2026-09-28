@@ -121,14 +121,21 @@ def _stale_answer(found: dict, message: str, same: dict | None = None) -> dict:
     return {"error": f"{message}. {i18n.t('mcpcli.same-call')}", **same, "stale": stale}
 
 
-def _warned(answer, found: dict):
+def _warned(answer, found: dict, same: dict | None = None):
     """The answer of a tool that ran with the plugins loaded at start, the plugins on disk
     being others: `stale` goes first in a dict answer. Another answer (a list) is left as it
-    is - the journal still hears it, and version_info names the state."""
+    is - the journal still hears it, and version_info names the state.
+
+    `same` is the CLI command of the call (see mcpcli.same_call): the record carries it, so
+    the answer by the plugins on disk is one command away, as it is on a refusal.
+    """
     if not isinstance(answer, dict) or "stale" in answer:
         return answer
     message = i18n.t("freshness.plugins-warning", state=freshness.describe(found))
-    return {"stale": {**found, "location": environment.location(), "message": message}, **answer}
+    if same:
+        message = f"{message}. {i18n.t('mcpcli.same-call-plugins')}"
+    stale = {**found, "location": environment.location(), "message": message, **(same or {})}
+    return {"stale": stale, **answer}
 
 
 def _stale_guard(fn):
@@ -172,7 +179,7 @@ def _stale_guard(fn):
         found = freshness.plugins_state()
         if found is not None:
             _journal_stale(found, fn.__name__)
-            answer = _warned(answer, found)
+            answer = _warned(answer, found, same_call(args, kwargs))
         return answer
 
     return call
@@ -1184,7 +1191,9 @@ def meta_add_field(
     """Add a section item to an object, the field_kind naming which one:
     "реквизит", "измерение", "ресурс", "значение" (enum), "параметр", "поле" (structure),
     "константа", "свойство" (a contract, an event-log event or an InterfaceComponent - the
-    component's `Properties`: a name and a type, no Id), "табличная-часть", "операция"
+    component's `Properties`: a name and a type, no Id; props take DefaultValue, StoredData
+    and Contextual), "событие" (an InterfaceComponent's `Events`: a name and the type of the
+    event object, "СобытиеКомпонента" when omitted), "табличная-часть", "операция"
     (Processing: also writes the @Handler method into the module), "индекс" (Name + Fields
     with a stub field to replace), "параметр-запроса" (Report) or "строка" / "шаблон"
     (LocalizedStrings: key-value mapping sections, `type` carries the VALUE, defaulting to
@@ -1195,7 +1204,8 @@ def meta_add_field(
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected. The item joins the end of the section of its kind; a
     section the file lacks is created at the end of the file (a component's `Properties` in
-    front of its `Events` when it has them - the designer's order), and for a register
+    front of its `Events` when it has them, its `Events` right after its `Properties` - the
+    designer's order), and for a register
     `notes` say so - naming, when the sibling data section already exists (`Resources` while
     a "реквизит" is asked, and the other way round), the field_kind that would have placed
     the item beside the existing fields.
@@ -1206,7 +1216,8 @@ def meta_add_field(
     becomes several lines. Refused for an item that holds no such comment (a built-in
     attribute, a "строка" / "шаблон" mapping entry) and for a batch of several `names`.
 
-    type - the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
+    type - the item's type, "Строка" when omitted ("СобытиеКомпонента" for a "событие"),
+    written in the language of the file either way. A BUILT-IN attribute is added by its
     name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
     and is judged by its own metamodel class - the one metadata_schema answers with for that
     name: no "Ид", a "Тип" only where the class declares one ("Наименование" has none), the
@@ -2495,6 +2506,10 @@ def translate_gaps(
     platform's own spelling where it has one. A suggestion is a HINT, not an answer: a name
     the project declared may need a different word; a literal never carries one, because
     between the quotes stands as often a sentence as a name.
+    A phrase row, compact or not, carries `neighbors` when a short line of the same comment
+    (two words or fewer, like `нет.`) was translated by a pair of the dictionary: [{key, value}].
+    Such a pair is keyed by the line alone and may have been written for another sentence, so
+    the new line and its neighbor are to be read together.
     The key of a literal row is the text between the quotes exactly as the source writes it,
     escaping included (an inner quote reads \\"), and that is the spelling to send back to
     translate_set - on both sides of the entry.
@@ -2516,7 +2531,11 @@ def translate_gaps(
     page, paging = entries_module.page_of(rows, limit, offset, gaps=True)
     out = {**paging, "dictionary": str(translate_cli.dictionary_path_for(project))}
     if compact:
-        out["gaps"] = [{"key": gap.key, "kind": gap.kind, "count": gap.count} for gap in page]
+        out["gaps"] = [
+            {"key": gap.key, "kind": gap.kind, "count": gap.count,
+             **({"neighbors": gap.as_dict()["neighbors"]} if gap.neighbors else {})}
+            for gap in page
+        ]
         return out
     out["gaps"] = [
         {**gap.as_dict(), "places": [f"{f}:{ln}" for f, ln in gap.places[:3]]}

@@ -1,4 +1,4 @@
-"""The properties of an interface component go in through add-field like any other item.
+"""The properties and events of an interface component go in through add-field like any other item.
 
 The `Properties` section of a component - the values its module reads through `этот` and a
 form using the component fills in - was the one section add-field refused: the kind was left
@@ -10,6 +10,12 @@ A property is a name and a type; its class declares no `Id`. A missing section g
 the designer writes it - after `Inherits`, before `Events` - and the description of an item
 becomes its documentation comment: the `##` lines at its head, the only comment the
 development environment keeps when it writes the file out again.
+
+A property also takes the default value the documentation describes for it, together with
+`StoredData` and `Contextual`: the class the metamodel resolved the item to was the light
+model the platform reads a component with first, which knows the name and the type alone, so
+the value every list form carries was refused. An event is a name and the type of its event
+object - a `ComponentEvent` when none is given; its section follows `Properties`.
 """
 
 from __future__ import annotations
@@ -84,6 +90,11 @@ def _added(path: Path, name: str, **kw) -> str:
     return scaffold.op_add_field(path, "свойство", name, **kw).changes[0].content
 
 
+def _event_added(path: Path, name: str, **kw) -> str:
+    """The same for an event of the component."""
+    return scaffold.op_add_field(path, "событие", name, **kw).changes[0].content
+
+
 def _top_keys(text: str) -> list[str]:
     return list(yaml.safe_load(text))
 
@@ -144,12 +155,12 @@ def test_a_taken_name_is_refused(tmp_path):
         _added(path, "Название")
 
 
-def test_the_component_lists_its_properties_among_the_sections(tmp_path):
-    path = _component(tmp_path, _HEAD + _PROPERTIES)
+def test_the_component_lists_its_properties_and_events_among_the_sections(tmp_path):
+    path = _component(tmp_path, _HEAD + _PROPERTIES + _EVENTS)
 
     info = scaffold.object_info(tmp_path, yaml_path=path)
 
-    assert info["sections"] == {"свойство": ["Название"]}
+    assert info["sections"] == {"свойство": ["Название"], "событие": ["ПриВыбореСклада"]}
 
 
 # --- the description -----------------------------------------------------------------------
@@ -232,6 +243,159 @@ def test_a_description_with_a_control_character_is_refused(tmp_path):
         _added(path, "Название", doc="Название\x00склада")
 
 
+# --- the default value and the other keys of a property --------------------------------------
+
+
+@pytest.mark.needs_data  # the keys a property takes are its metamodel class's own
+def test_a_property_takes_its_default_value_and_the_other_keys_of_its_class(tmp_path):
+    path = _component(tmp_path, _HEAD + _PROPERTIES)
+
+    text = _added(path, "Показывать", type_="Булево", props={
+        "ЗначениеПоУмолчанию": False, "СохраняемыеДанные": True, "Контекстное": "Истина",
+    })
+
+    assert text.endswith(
+        "    -\n"
+        "        Имя: Показывать\n"
+        "        Тип: Булево\n"
+        "        ЗначениеПоУмолчанию: Ложь\n"
+        "        СохраняемыеДанные: Истина\n"
+        "        Контекстное: Истина\n"
+    )
+
+
+@pytest.mark.needs_data  # both spellings of a key come from the metamodel
+def test_a_property_key_is_accepted_in_english_and_written_in_the_file_language(tmp_path):
+    path = _component(tmp_path, _HEAD)
+
+    text = _added(path, "Вместимость", type_="Число", props={"DefaultValue": 0})
+
+    assert yaml.safe_load(text)["Свойства"] == [
+        {"Имя": "Вместимость", "Тип": "Число", "ЗначениеПоУмолчанию": 0},
+    ]
+
+
+@pytest.mark.needs_data  # the list of the keys comes from the metamodel
+def test_a_key_the_property_does_not_declare_is_refused_with_the_ones_it_does(tmp_path):
+    path = _component(tmp_path, _HEAD)
+
+    with pytest.raises(ScaffoldError, match="нет свойства 'Представление'") as refused:
+        _added(path, "Название", props={"Представление": "Склад"})
+    assert "ЗначениеПоУмолчанию" in str(refused.value)
+    assert "Контекстное" in str(refused.value)
+
+
+@pytest.mark.needs_data  # the keys a property takes are its metamodel class's own
+def test_the_default_of_an_existing_property_is_set_in_place(tmp_path):
+    path = _component(tmp_path, _HEAD + _PROPERTIES)
+
+    text = scaffold.op_set_field_property(
+        path, "свойство", "Название", {"ЗначениеПоУмолчанию": "Главный склад"},
+    ).changes[0].content
+
+    assert yaml.safe_load(text)["Свойства"] == [
+        {"Имя": "Название", "Тип": "Строка", "ЗначениеПоУмолчанию": "Главный склад"},
+    ]
+
+
+@pytest.mark.needs_data  # the schema answers from the metamodel
+def test_the_schema_of_a_component_item_matches_what_add_field_takes(mcp_module):
+    """metadata_schema is where a caller learns the keys before passing them: it has to
+    name the default value add-field now takes, and an event holds a name and a type."""
+    prop = mcp_module.metadata_schema("КомпонентИнтерфейса", sections=["Свойства"],
+                                      names=["Название"])
+    event = mcp_module.metadata_schema("КомпонентИнтерфейса", sections=["События"],
+                                       names=["ПриВыборе"])
+
+    assert {"ЗначениеПоУмолчанию", "СохраняемыеДанные", "Контекстное"} <= set(prop["props"])
+    assert prop["props"]["Контекстное"]["en"] == "Contextual"
+    assert set(event["props"]) == {"Имя", "Тип"}
+
+
+# --- the events --------------------------------------------------------------------------------
+
+
+def test_an_event_joins_the_existing_events_section(tmp_path):
+    path = _component(tmp_path, _HEAD + _PROPERTIES + _EVENTS)
+
+    text = _event_added(path, "ПриОчисткеСклада", type_="СобытиеСДанными<Строка>")
+
+    assert text == _HEAD + _PROPERTIES + _EVENTS + (
+        "    -\n        Имя: ПриОчисткеСклада\n        Тип: СобытиеСДанными<Строка>\n"
+    )
+
+
+def test_an_event_without_a_type_is_a_component_event(tmp_path):
+    # The platform's own default, written out: an event with no type is a `ComponentEvent`.
+    path = _component(tmp_path, _HEAD + _PROPERTIES)
+
+    text = _event_added(path, "ПриВыбореСклада")
+
+    assert text == _HEAD + _PROPERTIES + _EVENTS
+
+
+def test_a_missing_events_section_follows_the_properties(tmp_path):
+    # The properties stand before Inherits here: the events join them, the note written over
+    # Inherits stays over it.
+    inherits = "# the base\nНаследует:\n    Тип: Группа\n"
+    head = "ВидЭлемента: КомпонентИнтерфейса\nИмя: КарточкаСклада\n"
+    path = _component(tmp_path, head + _PROPERTIES + inherits)
+
+    text = _event_added(path, "ПриВыбореСклада")
+
+    assert text == head + _PROPERTIES + _EVENTS + inherits
+    assert _top_keys(text)[-3:] == ["Свойства", "События", "Наследует"]
+
+
+def test_the_events_and_the_properties_land_the_same_whichever_comes_first(tmp_path):
+    events_first = _component(tmp_path, _HEAD, "Первая.yaml")
+    properties_first = _component(tmp_path, _HEAD, "Вторая.yaml")
+
+    scaffold.apply_result(scaffold.op_add_field(events_first, "событие", "ПриВыбореСклада"))
+    scaffold.apply_result(scaffold.op_add_field(events_first, "свойство", "Название"))
+    scaffold.apply_result(scaffold.op_add_field(properties_first, "свойство", "Название"))
+    scaffold.apply_result(scaffold.op_add_field(properties_first, "событие", "ПриВыбореСклада"))
+
+    expected = _HEAD + "Свойства:\n    -\n        Имя: Название\n        Тип: Строка\n" + _EVENTS
+    assert events_first.read_text(encoding="utf-8") == expected
+    assert properties_first.read_text(encoding="utf-8") == expected
+
+
+def test_a_taken_event_name_is_refused(tmp_path):
+    path = _component(tmp_path, _HEAD + _EVENTS)
+
+    with pytest.raises(ScaffoldError, match="'ПриВыбореСклада' уже есть в секции События"):
+        _event_added(path, "ПриВыбореСклада")
+
+
+def test_an_event_takes_a_description(tmp_path):
+    path = _component(tmp_path, _HEAD)
+
+    text = _event_added(path, "ПриВыбореСклада", doc="Склад выбран в списке.")
+
+    assert text.endswith("События:\n    -\n        ## Склад выбран в списке.\n"
+                         "        Имя: ПриВыбореСклада\n        Тип: СобытиеКомпонента\n")
+
+
+@pytest.mark.needs_data  # the class of an event comes from the metamodel
+def test_an_event_takes_no_default_value(tmp_path):
+    path = _component(tmp_path, _HEAD)
+
+    with pytest.raises(ScaffoldError, match="нет свойства 'ЗначениеПоУмолчанию'"):
+        _event_added(path, "ПриВыбореСклада", props={"ЗначениеПоУмолчанию": "Истина"})
+
+
+def test_an_event_is_the_component_s_own_kind(tmp_path):
+    path = _component(tmp_path, (
+        "ВидЭлемента: Структура\n"
+        "Ид: 6f0b6a44-0000-4000-8000-0000000000c8\n"
+        "Имя: ДанныеСклада\n"
+    ), "ДанныеСклада.yaml")
+
+    with pytest.raises(ScaffoldError, match="нет секции для 'событие'"):
+        scaffold.op_add_field(path, "событие", "ПриИзменении")
+
+
 # --- the language of the file and the linter -------------------------------------------------
 
 
@@ -261,13 +425,32 @@ def test_an_english_component_extends_its_properties_and_refuses_a_taken_name(tm
         _added(path, "Title")
 
 
+@pytest.mark.needs_data  # the English keys and type names are the platform's own
+def test_an_english_component_gets_its_events_and_defaults_in_english(tmp_path):
+    path = _component(tmp_path, _HEAD_EN, "WarehouseCard.yaml")
+    scaffold.apply_result(scaffold.op_add_field(path, "событие", "OnWarehouseChosen"))
+    scaffold.apply_result(scaffold.op_add_field(path, "свойство", "Title",
+                                                props={"ЗначениеПоУмолчанию": "Main"}))
+
+    # The default types are written the way the file writes its types, as a type the caller
+    # passes already was - not a Russian name in the middle of an English file.
+    assert path.read_text(encoding="utf-8") == (
+        _HEAD_EN + "Properties:\n    -\n        Name: Title\n        Type: String\n"
+        "        DefaultValue: Main\n" + _EVENTS_EN
+    )
+
+
 @pytest.mark.needs_data  # the documentation slots and the rules come from the metamodel
 def test_the_written_component_passes_the_yaml_rules(tmp_path):
     path = _component(tmp_path, _HEAD + _EVENTS)
     scaffold.apply_result(scaffold.op_add_field(path, "свойство", "Название",
                                                 doc="Название склада."))
     scaffold.apply_result(scaffold.op_add_field(path, "свойство", "Вместимость", type_="Число",
+                                                props={"ЗначениеПоУмолчанию": 0},
                                                 doc="Сколько партий помещается."))
+    scaffold.apply_result(scaffold.op_add_field(path, "событие", "ПриОчисткеСклада",
+                                                type_="СобытиеСДанными<Строка>",
+                                                doc="Склад очищен."))
 
     # The group selected whole: the two comment rules are off by default and come with it.
     assert engine.run([path], select={"yaml"}) == []
@@ -350,4 +533,38 @@ def test_the_lsp_request_passes_the_description(tmp_path):
     assert result["files"][0]["content"].endswith(
         "Свойства:\n    -\n        ## Название склада.\n        Имя: Название\n"
         "        Тип: Строка\n"
+    )
+
+
+def test_every_surface_adds_an_event(tmp_path, capsys, mcp_module):
+    pytest.importorskip("pygls", reason="LSP-методы проверяются при установленном extra [lsp]")
+    from pygls import uris
+    from pygls.workspace import Workspace
+
+    from xbsl import lsp as lsp_module
+
+    expected = "События:\n    -\n        ## Склад выбран.\n        Имя: ПриВыбореСклада\n"
+    path = _component(tmp_path, _HEAD)
+
+    code = cli.main(["add-field", str(path), "событие", "ПриВыбореСклада",
+                     "--doc", "Склад выбран.", "--dry-run"])
+    assert code == 0
+    assert expected in json.loads(capsys.readouterr().out)["files"][0]["content"]
+
+    server = lsp_module._make_server()
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    features = getattr(fm, "features", fm)
+    server.lsp._workspace = Workspace(uris.from_fs_path(str(tmp_path)))
+    result = features["xbsl/metaAddField"]({
+        "path": str(path), "fieldKind": "событие", "name": "ПриВыбореСклада",
+        "doc": "Склад выбран.",
+    })
+    assert expected in result["files"][0]["content"]
+    assert path.read_text(encoding="utf-8") == _HEAD  # neither of the two wrote the file
+
+    res = mcp_module.meta_add_field(str(path), "событие", "ПриВыбореСклада",
+                                    type="СобытиеСДанными<Строка>", doc="Склад выбран.")
+    assert "error" not in res, res
+    assert path.read_text(encoding="utf-8-sig").endswith(
+        expected + "        Тип: СобытиеСДанными<Строка>\n"
     )
