@@ -1103,6 +1103,12 @@ _CORE_MESSAGES = {
         "ru": "тип поля (по умолчанию Строка; у стандартного реквизита – тип его класса)",
         "en": "the field type (default String; a standard attribute takes its class default)",
     },
+    "cli.help.scaf.af-doc": {
+        "ru": "описание поля – документирующий комментарий: строки ## в начале элемента, "
+              "которые среда разработки показывает и сохраняет",
+        "en": "the field description – its documentation comment: the ## lines at the head of "
+              "the item, which the development environment shows and keeps",
+    },
     "cli.help.scaf.ar-yaml": {
         "ru": "yaml HttpСервис, в который добавить маршруты",
         "en": "the yaml of the HttpService to add the routes to",
@@ -1170,10 +1176,10 @@ _CORE_MESSAGES = {
         "en": "report description (JSON: source, rows, columns, measures)",
     },
     "cli.help.scaf.add-field": {
-        "ru": "добавить реквизит/измерение/ресурс/значение/ТЧ; см. также set-field-property – "
-              "свойства уже существующего элемента, set-localization – тексты строки "
-              "ЛокализованныеСтроки по языкам",
-        "en": "add an attribute/dimension/resource/value/tabular section; see also "
+        "ru": "добавить реквизит/измерение/ресурс/значение/свойство/ТЧ; см. также "
+              "set-field-property – свойства уже существующего элемента, set-localization – "
+              "тексты строки ЛокализованныеСтроки по языкам",
+        "en": "add an attribute/dimension/resource/value/property/tabular section; see also "
               "set-field-property for an item that already exists and set-localization for the "
               "texts of a LocalizedStrings string per language",
     },

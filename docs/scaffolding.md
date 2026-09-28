@@ -87,6 +87,13 @@ section at the end of the file. The `notes` field says so and names the kind tha
 placed the field beside the existing ones: a resource here, and the other way round for a
 resource asked where only attributes exist.
 
+An interface component takes its own properties the same way. The property kind writes a name and
+a type into `Properties`, with no `Id`: the class of a component property has none. A component
+without the section gets it where the designer writes it, after `Inherits` and in front of
+`Events`. `--doc` gives an item a description, and the text becomes its documentation comment:
+the `##` lines at the head of the item, the only comment the development environment keeps when
+it writes the file out.
+
 Forms are generated with real content: input fields per attribute, including the standard
 `Name`, `Number` and `Date` fields and hierarchy support, `DynamicList` columns, `TabularParts`
 tables and a report form with parameters. The form is registered in the `Interface` section of

@@ -1134,21 +1134,32 @@ def meta_add_field(
     props: dict[str, Any] | None = None,
     root: str | None = None,
     names: list[str] | None = None,
+    doc: str | None = None,
 ) -> dict:
-    """Add a section item to an object: реквизит, измерение, ресурс, значение (enum),
-    параметр, поле (structure), константа, свойство (contract), табличная-часть, операция
-    (Обработка: also writes the @Обработчик method into the module), индекс (Имя + Поля with
-    a stub field to replace), параметр-запроса (Отчет) or строка / шаблон (ЛокализованныеСтроки:
-    key-value mapping sections, `type` carries the VALUE, defaulting to the key itself; the
-    key is echoed into the translations the element already has, with the DEFAULT-language
-    text - the text of a translation is written by meta_set_localization, which takes the
-    values by language, and a call aimed at a translation file itself is refused naming it).
+    """Add a section item to an object, the field_kind naming which one:
+    "реквизит", "измерение", "ресурс", "значение" (enum), "параметр", "поле" (structure),
+    "константа", "свойство" (a contract, an event-log event or an InterfaceComponent - the
+    component's `Properties`: a name and a type, no Id), "табличная-часть", "операция"
+    (Processing: also writes the @Handler method into the module), "индекс" (Name + Fields
+    with a stub field to replace), "параметр-запроса" (Report) or "строка" / "шаблон"
+    (LocalizedStrings: key-value mapping sections, `type` carries the VALUE, defaulting to
+    the key itself; the key is echoed into the translations the element already has, with the
+    DEFAULT-language text - the text of a translation is written by meta_set_localization,
+    which takes the values by language, and a call aimed at a translation file itself is
+    refused naming it).
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected. The item joins the end of the section of its kind; a
-    section the file lacks is created at the end of the file, and for a register `notes` say
-    so - naming, when the sibling data section already exists (`Resources` while a "реквизит"
-    is asked, and the other way round), the field_kind that would have placed the item beside
-    the existing fields.
+    section the file lacks is created at the end of the file (a component's `Properties` in
+    front of its `Events` when it has them - the designer's order), and for a register
+    `notes` say so - naming, when the sibling data section already exists (`Resources` while
+    a "реквизит" is asked, and the other way round), the field_kind that would have placed
+    the item beside the existing fields.
+
+    doc - the item's description, written as its documentation comment: the `##` lines at the
+    head of the item, after its `-` and before the first key - the place the development
+    environment reads the comment from and keeps it when it writes the file. A multi-line text
+    becomes several lines. Refused for an item that holds no such comment (a built-in
+    attribute, a "строка" / "шаблон" mapping entry) and for a batch of several `names`.
 
     type - the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
     name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
@@ -1189,14 +1200,14 @@ def meta_add_field(
         batch = ([name] if name else []) + list(names)
         return _meta(
             base, scaffold.op_add_fields, _under(base, yaml_path), field_kind, batch,
-            type_=type, tabular=tabular, props=props,
+            type_=type, tabular=tabular, props=props, doc=doc,
         )
     if not name:
         return _failed(scaffold.ScaffoldError(
             "Нужно имя: name для одного элемента или names для нескольких"), base)
     return _meta(
         base, scaffold.op_add_field, _under(base, yaml_path), field_kind, name, type_=type,
-        tabular=tabular, props=props,
+        tabular=tabular, props=props, doc=doc,
     )
 
 
