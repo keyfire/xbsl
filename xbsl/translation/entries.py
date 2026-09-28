@@ -730,6 +730,12 @@ def _dictionary_side(root: Path, toplevel: Path, spec: str, since: str,
     costs nothing.
 
     A dictionary outside the repository has no diff to read and adds nothing.
+
+    A dictionary FILE the change created and has not added to the index is part of the change
+    as well, and `git diff` does not list it: a new `267-...yaml` answered with no dictionary
+    file and no added entry, though every pair in it was written by the change. When the diff
+    runs to the working tree, such a file counts whole. A range `A..B` examines commits, where
+    a file outside the index has no place.
     """
     dictionary_path = dictionary_path.resolve()
     try:
@@ -742,6 +748,14 @@ def _dictionary_side(root: Path, toplevel: Path, spec: str, since: str,
     )
     if code != 0:
         raise ValueError(i18n.t("translate.since.diff-failed", rev=since, error=error.strip()))
+
+    def added(line: str) -> None:
+        found = _EXPLICIT_KEY_RE.match(line) or _ENTRY_RE.match(line)
+        key = _key_of(found) if found else ""
+        if key:
+            removal.dictionary_added += 1
+            removal.added_keys.add(key)
+
     in_hunk = False
     for raw in diff.splitlines():
         if raw.startswith("diff --git "):
@@ -750,12 +764,25 @@ def _dictionary_side(root: Path, toplevel: Path, spec: str, since: str,
         elif raw.startswith("@@"):
             in_hunk = True
         elif in_hunk and raw.startswith("+"):
-            line = raw[1:]
-            found = _EXPLICIT_KEY_RE.match(line) or _ENTRY_RE.match(line)
-            key = _key_of(found) if found else ""
-            if key:
-                removal.dictionary_added += 1
-                removal.added_keys.add(key)
+            added(raw[1:])
+    if ".." in since:
+        return
+    code, listing, _error = _git(
+        root, "ls-files", "--others", "--exclude-standard", "-z", "--", str(dictionary_path),
+    )
+    if code != 0:
+        return
+    for name in filter(None, listing.split("\0")):
+        path = Path(name) if Path(name).is_absolute() else Path(root) / name
+        if path.suffix.lower() not in (".yaml", ".yml"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            continue
+        removal.dictionary_files += 1
+        for line in text.splitlines():
+            added(line)
 
 
 #: How long one git call may take before the mode gives up on it and says so. Generous for
