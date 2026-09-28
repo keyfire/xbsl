@@ -78,6 +78,17 @@ class FileReport:
     #: translation carries)] - a named literal whose substitutions do not match its key's.
     placeholder_mismatches: list[tuple[str, int, int, list[str], list[str]]] = field(
         default_factory=list)
+    #: {phrase gap: [(short comment line, its translation)]} - the short lines of the SAME
+    #: comment that a pair of the dictionary translated. A pair is keyed by one line, and a line
+    #: of one or two words ("нет.") means what its block makes of it: a new block whose other
+    #: lines are gaps takes such a pair from a text it was written for, and nothing says so.
+    short_neighbors: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
+    #: The comment at hand: its phrase gaps, its short lines a pair translated as (line, col,
+    #: the line, its translation), and (its marker, its last line) - see `comment_line()`.
+    block_gaps: list[str] = field(default_factory=list, repr=False, compare=False)
+    block_hits: list[tuple[int, int, str, str]] = field(default_factory=list, repr=False,
+                                                        compare=False)
+    block_end: tuple[str, int] | None = field(default=None, repr=False, compare=False)
 
     def note_name(self, namespace: str, source: str, translated: str,
                   line: int = 0, col: int = 0) -> None:
@@ -134,6 +145,40 @@ class FileReport:
     def note_phrase(self, text: str, line: int, col: int) -> None:
         self.phrases_missing += 1
         self.missing_phrases.setdefault(text, []).append((line, col))
+        self.block_gaps.append(text)
+
+    def comment_line(self, marker: str, line: int, last_line: int | None = None) -> None:
+        """A comment of `marker` spanning `line`..`last_line` comes next.
+
+        Written right under the previous one with the same marker, it continues that comment -
+        a lexer gives every `//` line a token of its own, and a yaml comment is read line by
+        line. Anything else closes the comment at hand and opens a new one.
+        """
+        if self.block_end != (marker, line - 1):
+            self.close_comment()
+        self.block_end = (marker, line if last_line is None else last_line)
+
+    def note_short_hit(self, line: int, col: int, text: str, translated: str) -> None:
+        """A short line of the comment at hand that a pair translated (see short_neighbors)."""
+        self.block_hits.append((line, col, text, translated))
+
+    def close_comment(self) -> None:
+        """The comment at hand is over: its short lines are judged against its gaps.
+
+        Each short line a pair translated in a comment that also has gaps goes to the warnings
+        - a person reads the plain report - and to every gap of the same comment, which is the
+        row a translator fills in next to it.
+        """
+        if self.block_hits and self.block_gaps:
+            for line, col, key, value in self.block_hits:
+                self.warnings.append(("short-pair", line, col, f"{key} -> {value}"))
+            pairs = [(key, value) for _line, _col, key, value in self.block_hits]
+            for gap in self.block_gaps:
+                known = self.short_neighbors.setdefault(gap, [])
+                known.extend(pair for pair in pairs if pair not in known)
+        self.block_gaps.clear()
+        self.block_hits = []
+        self.block_end = None
 
     def note_literal_named(self, text: str) -> None:
         """A string literal the literals plane named and the pass replaced whole."""

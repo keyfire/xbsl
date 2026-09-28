@@ -285,6 +285,15 @@ move the comparison silently stops matching. When the literal really is data, ma
 with an entry whose value equals its key: the coverage is counted, the text does not move, and no
 warning is drawn. The report prints the warnings as a list: file, line, kind and text.
 
+The third one, `short-pair`, is about comments. A phrase pair is keyed by one comment line, and a
+line of one or two words means what its comment makes of it: the pair of `нет.` may have been
+written as `timer.` for the tail of a sentence about a timer. When a comment has new lines, and a
+short line of the same comment was translated by such a pair, the report warns at that line, and
+every gap of the comment carries `neighbors` under `--gaps` (and in `translate_gaps`): the short
+lines with their translations, to read together with the new one. Lines written one under another
+with the same marker are one comment; in a yaml file, a run of whole comment lines. A comment
+whose lines are all covered says nothing.
+
 There are two exceptions, and both are a name written a second time, outside the code.
 
 **The keys of the project's own json resources that name a field of its structures.** A structure

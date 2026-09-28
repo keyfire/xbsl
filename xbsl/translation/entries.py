@@ -332,13 +332,20 @@ class Gap:
     suggestion: str = ""
     #: True when the name is a resource FILE (the stem of an icon and the like).
     resource: bool = False
+    #: A phrase gap: the short lines of the same comment a pair already translated, as
+    #: (line, translation) - the context the new line is to agree with (see
+    #: `FileReport.short_neighbors`).
+    neighbors: list[tuple[str, str]] = field(default_factory=list)
 
     def as_dict(self) -> dict:
-        return {
+        out = {
             "key": self.key, "kind": self.kind, "count": self.count,
             "places": [{"file": f, "line": ln} for f, ln in self.places],
             "suggestion": self.suggestion, "resource": self.resource,
         }
+        if self.neighbors:
+            out["neighbors"] = [{"key": key, "value": value} for key, value in self.neighbors]
+        return out
 
 
 def page_of(rows: list, limit: int, offset: int = 0, *, gaps: bool = False
@@ -1218,10 +1225,12 @@ def gaps_of_report(report) -> list[Gap]:
             suggestion=_suggestion(name),
             resource=bool(info.get("resource")),
         ))
+    neighbors = report.merged_short_neighbors()
     for text, info in report.merged_missing_phrases().items():
         out.append(Gap(
             key=text, kind="phrase", count=int(info.get("count") or 0),
             places=_places(report, text, "phrase"),
+            neighbors=neighbors.get(text, []),
         ))
     # A literal carries no suggestion: the platform tables spell NAMES, and what stands
     # between the quotes is as often a sentence, where a table answer would be a guess.

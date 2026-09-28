@@ -2495,6 +2495,10 @@ def translate_gaps(
     platform's own spelling where it has one. A suggestion is a HINT, not an answer: a name
     the project declared may need a different word; a literal never carries one, because
     between the quotes stands as often a sentence as a name.
+    A phrase row, compact or not, carries `neighbors` when a short line of the same comment
+    (two words or fewer, like `нет.`) was translated by a pair of the dictionary: [{key, value}].
+    Such a pair is keyed by the line alone and may have been written for another sentence, so
+    the new line and its neighbor are to be read together.
     The key of a literal row is the text between the quotes exactly as the source writes it,
     escaping included (an inner quote reads \\"), and that is the spelling to send back to
     translate_set - on both sides of the entry.
@@ -2516,7 +2520,11 @@ def translate_gaps(
     page, paging = entries_module.page_of(rows, limit, offset, gaps=True)
     out = {**paging, "dictionary": str(translate_cli.dictionary_path_for(project))}
     if compact:
-        out["gaps"] = [{"key": gap.key, "kind": gap.kind, "count": gap.count} for gap in page]
+        out["gaps"] = [
+            {"key": gap.key, "kind": gap.kind, "count": gap.count,
+             **({"neighbors": gap.as_dict()["neighbors"]} if gap.neighbors else {})}
+            for gap in page
+        ]
         return out
     out["gaps"] = [
         {**gap.as_dict(), "places": [f"{f}:{ln}" for f, ln in gap.places[:3]]}
