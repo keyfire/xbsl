@@ -26,6 +26,7 @@ const ADDRESSING = "topics/addressing-module";
 const STATIC = "topics/static-methods";
 const ENUM = "topics/enumeration-properties";
 const IMAGES = "topics/image-library";
+const DOC_COMMENTS = "topics/documentation-comments";
 
 // Mapping rule/group -> documentation page + section anchor (heading id on the page).
 // Specific rules go before group ones. Anchors are heading ids in docs.sqlite
@@ -36,6 +37,18 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "code/resource-read-without-cache", page: "stdlib/element/xbsl/Std/Annotations/Environments/AvailableFromClient_ru" },
   { match: (r) => r === "code/deprecated-api", page: "topics/update-app-data" },
   { match: (r) => r === "code/deprecated-project", page: "stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru" },
+  // --- documentation comments of a module: the `///` marker and its tags ---
+  {
+    match: (r) =>
+      r === "comment/doc-marker" ||
+      r === "comment/doc-tag-unknown" ||
+      r === "comment/doc-tag-layout" ||
+      r === "comment/doc-tag-param" ||
+      r === "comment/doc-tag-result" ||
+      r === "comment/doc-tag-target",
+    page: DOC_COMMENTS,
+    anchor: "документирование-кода-в-модулях",
+  },
   // --- project element names (standard) ---
   { match: (r) => r === "naming/presentation", page: NAMES, anchor: "2-представления-элементов-проекта" },
   // Environment postfix, number in a name and per-kind prefix live in section 3, not in general 1.

@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 255.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 260.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -178,11 +178,13 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Буква "ё" в тексте, который читает пользователь: подпись, запись словаря локализованных строк, текст SVG или HTML-страницы |
 | `typography/non-keyboard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Знак не с клавиатуры в комментарии: стрелка, знак сравнения или умножения; исправление пишет `->`, `>=`, `<>`, `x` и подобное, валютный знак – данные и не судится |
 | `typography/en-dash-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Среднее тире в комментарии – для проекта, который пишет в комментариях кода дефис; исправление ставит дефис |
-| `comment/doc-marker` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `//` прямо над объявлением (метод, структура, поле, элемент перечисления, константа модуля): среда разработки узнает документирующий комментарий только по маркеру `///` и только такой текст показывает в подсказке при наведении, в подсказке сигнатуры и в автодополнении. Автоисправление меняет маркер; о блоке `/* ... */` на этом месте правило сообщает без исправления Рамка `////` в прикрепленном блоке тоже вызывает замечание: среда снимает только три слеша. Автоматически выбирать между шапкой и описанием правило не может. |
+| `comment/doc-marker` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `//` прямо над объявлением (метод, структура, поле, элемент перечисления, константа модуля): среда разработки узнает документирующий комментарий только по маркеру `///` и только такой текст показывает в подсказке при наведении, в подсказке сигнатуры и в автодополнении. Автоисправление меняет маркер; о блоке `/* ... */` на этом месте правило сообщает без исправления. Рамка `////` в прикрепленном блоке тоже вызывает замечание: среда снимает только три слеша. Автоматически выбирать между шапкой и описанием правило не может [доки](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Частица "бы" в комментарии; замечание просит слово условия, потому что без частицы предположение читается утверждением. Уступительные обороты не судятся |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Первое лицо в комментарии: местоимение "мы", "наш" или глагол вроде "проверяем", а в английской строке комментария из словаря перевода – "we", "our", "I"; комментарий безличен |
 | `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Слово прописными ради ударения в комментарии: "НЕ", "ТОЛЬКО", приставка "НЕзаполненным". Ударение набирают словами, а не регистром [подробнее](#b-comment-emphasis-caps) |
 | `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Условие в комментарии написано через тире ("склад не задан - берется основной") вместо слова "если" [подробнее](#b-comment-dash-condition) |
+| `comment/doc-tag-unknown` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Строка блока `///`, которая начинается с `@`, но не тег (`@param`, `@Параметр`, аннотация в тексте): среда разработки не покажет ее в подсказке вместе с продолжением. Исправление пишет ключевое слово строчными и заменяет краткие формы `@param`, `@return`, `@throw`, `@exception` [подробнее](#b-comment-doc-tags) [доки](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
+| `comment/doc-tag-layout` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Теги блока `///` не на своем месте: тег в первой строке (среда берет его за описание), абзац после последнего тега (приклеится к нему), нет пустой строки между описанием и тегами, порядок тегов не как в разделах подсказки, тег без текста, после имени не дефис. Исправление вставляет пустую строку и ставит дефис [подробнее](#b-comment-doc-tags) [доки](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | След механической замены в английском значении словаря перевода: окончание, приклеенное к слову, которое его не принимает (`onlies`) [подробнее](#b-translation-english-shape) |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Хвостовые пробелы |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Смешанные переводы строк |
@@ -200,6 +202,17 @@ HTML-страницы. Код не трогаем – селекторы, иде
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** Замечание предлагает
 формулировку со словом условия. Пояснение к значению правило не судит: там перед состоянием ничего
 не названо либо после тире нет глагола.
+
+<a id="b-comment-doc-tags"></a>**Правила `comment/doc-tag-*`.** Среда разработки читает блок `///`
+регулярными выражениями: описание – все до первой строки, начатой с `@`, затем из остатка
+вырезаются теги `@параметр`, `@возвращает`, `@выбрасывает` и `@см` (и их английские
+написания), каждый до следующей такой строки, а имя после `@параметр` и `@выбрасывает`
+читается классом `[A-Za-zА-Яа-я0-9еЁ]`. Правила называют места, где такое чтение расходится с
+написанным. Они судят только блок с тегами, поэтому включены по умолчанию, в отличие от
+остальной группы. Структуру, исключение и конструктор `comment/doc-tag-param` и
+`comment/doc-tag-result` не судят. `comment/doc-tag-target` не трогает `@см`, записанный
+фразой, одно слово строчными и слово другого алфавита проекта; `comment/unknown-name` не
+судит имена, на которые указывают эти теги.
 
 <a id="b-translation-english-shape"></a>**`translation/english-shape`.** Правило ловит ещё
 страдательный залог с именной группой сразу за ним ("is shadowed the parameter") и прописные,
@@ -278,6 +291,8 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/duplicate-catch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Один тип исключения повторяется в секциях `поймать` одного оператора `попытка`. |
 | `code/duplicate-declaration` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Имя объявлено повторно там, где регистр не учитывается, либо у перечисления несколько элементов `умолчание`; перегрузки с одинаковым написанием и локальные имена соседних областей допустимы. |
 | `code/captured-local-write` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Изменяемая локальная переменная или параметр именованного метода получает присваивание после захвата лямбдой: лямбда увидит уже не то значение [подробнее](#c-code-captured-local-write) [доки](https://1cmycloud.com/docs/help/topics/lambda-expression/) |
+| `comment/doc-tag-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Тег `@параметр` против сигнатуры метода: имени нет среди параметров или оно написано иначе, параметр описан дважды или не по порядку, имя обрезает сама среда (подчеркивание, точка, строчная "ё"), тег над объявлением без параметров. Параметры метода описываются все или ни одного [подробнее](#b-comment-doc-tags) [доки](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
+| `comment/doc-tag-result` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Тег `@возвращает` у метода без результата или второй такой тег (подсказка склеит тексты); тип в `@выбрасывает`, который среда обрежет на первой точке; оба тега над объявлением, которое не метод [подробнее](#b-comment-doc-tags) [доки](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 
 #### Подробнее о правилах тира C
 
@@ -500,6 +515,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/redundant-undefined-guard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `??`, `!` или `?.` над значением, в типе которого нет `Неопределено`: защита ничего не проверяет, а значение по умолчанию не используется [подробнее](#d-code-redundant-undefined-guard) [доки](https://1cmycloud.com/docs/help/topics/undefined-type/) |
 | `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Проверка `Х это Тип`, результат которой решает тип `Х`: проверка проходит всегда, а `это не` никогда [подробнее](#d-code-redundant-type-check) [доки](https://1cmycloud.com/docs/help/topics/is/) |
 | `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Имя в комментарии, которого нет ни в проекте, ни у платформы: метод переименован, объект заменён, опечатка [подробнее](#d-comment-unknown-name) |
+| `comment/doc-tag-target` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Ссылка `@см`, записанная именем или цепочкой имен, которая никуда не ведет, и тип `@выбрасывает`, которого нет ни в проекте, ни у технологии; замечание называет, что выбрасывает тело метода [подробнее](#b-comment-doc-tags) [доки](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Вызов, который привязывается только к устаревшей форме метода платформы: IDE платформы о нём предупреждает [подробнее](#d-code-deprecated-api) [доки](https://1cmycloud.com/docs/help/topics/update-app-data/) |
 | `code/deprecated-project` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Использование метода, свойства, конструктора, параметра или значения перечисления проекта, помеченного устаревшим: IDE платформы о нем предупреждает [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru/) |
 
@@ -1055,10 +1071,11 @@ xbsl путь/к/исходникам --ignore style     # всё, кроме н
   `.svg`, `.html`);
 - `comment/` – слог комментария: частица "бы", первое лицо, служебное слово прописными ради ударения
   и условие через тире; `comment/unknown-name` сверяет с проектом имена, которые называет
-  комментарий. Группа читает комментарии модулей, описаний элементов и файлов ресурсов (правило
+  комментарий; `comment/doc-marker` и правила `comment/doc-tag-*` сверяют документирующий
+  комментарий объявления с тем, что покажет среда разработки. Группа читает комментарии модулей, описаний элементов и файлов ресурсов (правило
   имён – модулей и описаний элементов), а первое лицо и капс ударения – и в английских строках
-  словаря перевода; по умолчанию группа выключена; проект, у которого комментарии
-  безличны, включает её ключом `--enable comment`;
+  словаря перевода; по умолчанию группа выключена, кроме правил `comment/doc-tag-*`; проект, у
+  которого комментарии безличны, включает её ключом `--enable comment`;
 - `translation/` – английский текст словаря перевода: `translation/english-shape` читает значения
   файлов `xbsl-translation`, текст которых `xbsl translate --strict` не судит;
 - `whitespace/` – хвостовые пробелы и смешанные переводы строк;
