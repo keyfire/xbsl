@@ -139,6 +139,17 @@ and to a `/* ... */` comment alike. Such a comment keeps `/*` at the head of its
 `*/` at the end of its last one. Frames and separators, lists, tables and code samples stay as
 they were, and so do lines that were long in the source already.
 
+A line of a documentation comment that opens a tag - `@параметр Коды - Коды для проверки.` - is
+looked up whole first, and a pair written for the whole line still wins. Without one the line is
+translated by its parts: the tag word becomes the English one (`@parameter`, `@returns`,
+`@throws`, `@see`), the name after `@параметр` or `@выбрасывает` is translated the way the code
+translates it, a reference written as names (`@см Модуль.Метод`) is translated as names, and only
+the text after the name is a phrase, keyed by that text alone. A parameter renamed in the tokens
+section then moves in the tag together with the signature, and a name without a pair is a gap
+like the same name in the code. The re-wrap never glues a tag to the line above: the environment
+reads a tag from the start of a line, so a tag and the lines that continue it are re-flowed as a
+paragraph of their own.
+
 A line of code that the English names pushed past the limit is wrapped the way the style guide
 wraps an expression: after a comma between arguments, parameters or collection items, after the
 opening bracket of such a list, or before an operator, which then opens the next line. The places
@@ -647,6 +658,9 @@ of a phrase key that has a pair, a token of the project or the platform's Englis
 the translation carries none of the pair's spellings and names something unknown in its place:
 `ОбщееСклада -> StockCommon, while the translation names WarehouseCommon`, with the file and line
 of the entry. A translation that renders the name in plain words names nothing and is not listed.
+A pair written for a whole tag line is judged by the name after the tag as well, whatever its
+shape - a parameter named with one plain word is still the name of the signature - and by the tag
+word: `@возвращает -> @returns, while the translation names @return`.
 The mode reads the dictionary alone, answers in seconds and stays out of `--strict`: the tree
 builds either way, and the gate answers whether it builds. The plain report counts such phrases
 in one line that points at `--drift` when there are any (`dictionary_drift` in json); the exit

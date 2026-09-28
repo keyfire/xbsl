@@ -17,6 +17,12 @@ AND names something instead - a Latin name written the same way that is neither 
 of the dictionary nor a word of the platform data. A translation that paraphrases the name in
 plain words names nothing and is left alone: the English comment then reads as prose, and
 there is nothing to rename.
+
+A line that opens a documentation tag (`@параметр Коды - ...`) is judged by the name after the
+tag as well, whatever its shape: a parameter named with one plain word is still the name the
+signature carries, and a pair written for the whole line spells it by hand. The name of the
+translation must be a spelling of the name of the key, and the tag word must be the English
+word of the same tag.
 """
 
 from __future__ import annotations
@@ -95,6 +101,31 @@ def _spellings(dictionary, name: str, scoped: dict[str, list[str]]) -> tuple[str
     return tuple(out)
 
 
+def _tag_drift(dictionary, key: str, value: str,
+               scoped: dict[str, list[str]]) -> NameDrift | None:
+    """The tag word or the name of a tag line spelled otherwise by its translation, or None."""
+    from xbsl import doctags
+    from xbsl.translation.code import tag_parts
+
+    ours = tag_parts(key)
+    if ours is None:
+        return None
+    word = key[ours.keyword[0]:ours.keyword[1]]
+    english = doctags.keyword(ours.kind, "en")
+    theirs = tag_parts(value)
+    if theirs is None or theirs.kind != ours.kind:
+        found = value.split(None, 1)[0] if value.split() else ""
+        return NameDrift("@" + word, ("@" + english,), (found,), key, value)
+    if ours.name is None or theirs.name is None:
+        return None
+    name = key[ours.name[0]:ours.name[1]]
+    spelled = value[theirs.name[0]:theirs.name[1]]
+    expected = _spellings(dictionary, name, scoped)
+    if not expected or spelled in expected:
+        return None
+    return NameDrift(name, expected, (spelled,), key, value)
+
+
 def phrase_drift(dictionary) -> list[NameDrift]:
     """Every name of every phrase whose translation spells it otherwise (see the module note)."""
     token_values = set(dictionary.tokens.values())
@@ -102,6 +133,10 @@ def phrase_drift(dictionary) -> list[NameDrift]:
     platform = comment_names._platform_names()
     out: list[NameDrift] = []
     for key, value in dictionary.phrases.items():
+        tagged = _tag_drift(dictionary, key, value, scoped)
+        if tagged is not None:
+            out.append(tagged)
+            continue
         said = set(_WORD.findall(value))
         unknown = None
         for name in dict.fromkeys(_WORD.findall(key)):

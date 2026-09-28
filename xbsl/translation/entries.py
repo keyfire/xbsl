@@ -448,8 +448,8 @@ def _readings(path: Path, text: str) -> tuple[set[str], set[str]]:
 
     The two readings have to agree character for character or a LIVE pair reads as an orphan -
     the one mistake `--prune` would act on. So this is not an imitation: a module is taken
-    through the lexer and its comment tokens through `code.comment_payloads`, the very
-    function the translating pass calls, block comments and `///` decoration included. A
+    through the lexer and its comment tokens through `code.comment_keys`, the very reading
+    the translating pass makes, block comments, `///` decoration and tag texts included. A
     private regex of this module did neither, and answered a doc comment with a slash glued
     to the text.
 
@@ -485,7 +485,7 @@ def _readings(path: Path, text: str) -> tuple[set[str], set[str]]:
     lines = {
         payload
         for token in tokens if token.kind == "COMMENT"
-        for _offset, _index, payload in code_module.comment_payloads(token)
+        for _index, payload in code_module.comment_keys(token)
     }
     return lines, code_module.literal_keys(tokens)
 
@@ -539,7 +539,7 @@ def _comment_bodies_of(suffix: str, text: str) -> set[str]:
     return {
         payload
         for token in tokens if token.kind == "COMMENT"
-        for _offset, _index, payload in code_module.comment_payloads(token)
+        for _index, payload in code_module.comment_keys(token)
     }
 
 
@@ -1049,7 +1049,7 @@ def _removed_comment_bodies(suffix: str, text: str, lines: set[int]) -> set[str]
                              if number in lines)
         return _marked_bodies(fragment, "//", code_module._LINE_COMMENT_RE)
     return {payload for token in tokens if token.kind == "COMMENT"
-            for _offset, index, payload in code_module.comment_payloads(token)
+            for index, payload in code_module.comment_keys(token)
             if token.line + index in lines and payload}
 
 
