@@ -233,8 +233,8 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
   .note { opacity: .6; font-size: .85em; margin: 4px 0 8px; }
   .legend { opacity: .55; font-size: .85em; margin-top: 10px; }
   details.sec { margin-bottom: 6px; }
-  details.sec > summary { cursor: pointer; font-weight: 600; font-size: .9em; text-transform: uppercase;
-    letter-spacing: .04em; opacity: .8; padding: 3px 0; user-select: none; }
+  details.sec > summary, details.doc > summary { cursor: pointer; font-weight: 600; font-size: .9em;
+    text-transform: uppercase; letter-spacing: .04em; opacity: .8; padding: 3px 0; user-select: none; }
   .row { margin: 0 0 9px; padding: 2px 4px; border-radius: 4px; border-left: 2px solid transparent; }
   .row.sel { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.12));
     border-left-color: var(--vscode-focusBorder, #2f81f7); }
@@ -292,7 +292,8 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
   .withreset > :first-child { flex: 1; min-width: 0; }
   .withreset > .rbtn { flex: none; margin-top: 2px; }
   .doc { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
-  .doc-title { font-weight: 600; margin: 3px 0 6px; }
+  .doc:not([open]) { padding-bottom: 4px; }
+  .doc-title { margin: 3px 0 6px; }
   .doc-tools { display: flex; flex-wrap: wrap; gap: 2px; margin: 5px 0; }
   .doc-tools button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px;
     padding: 0; background: transparent; color: var(--vscode-foreground); border: 1px solid transparent;
@@ -376,12 +377,21 @@ ${cspMeta(nonce, { style: cspSource, font: cspSource })}
     } else if (docDraft === docOriginal) {
       docDraft = info.text; docOriginal = info.text;
     }
-    const box = el("section", "doc");
+    // A group like "Set" and "All properties": the toolbar and the field take a good part of the
+    // panel, so the group is folded while the element has no comment and open while it has one.
+    // A fold or an unfold by hand is kept for that element. Not a "sec": the filter counts the
+    // rows of those groups, and this one has none.
+    const box = el("details", "doc");
+    const openKey = "doc:" + info.id;
+    box.open = state.open[openKey] !== undefined ? state.open[openKey] : docOriginal.trim() !== "";
+    box.addEventListener("toggle", () => { state.open[openKey] = box.open; vsapi.setState(state); });
     // How the comment is written is told by an info icon next to the title: a tooltip on the
     // field itself would cover the text being typed.
-    const title = el("div", "doc-title", L.docComment);
+    const title = el("summary", "doc-title", L.docComment);
     const hint = el("i", "codicon codicon-info doc-hint");
     hint.title = L.docHint;
+    // The icon is read by hovering; a click on it should not fold the group.
+    hint.addEventListener("click", (e) => e.preventDefault());
     title.appendChild(hint);
     box.appendChild(title);
     const tools = el("div", "doc-tools");

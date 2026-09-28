@@ -6,8 +6,15 @@ import { parseDocument } from "yaml";
 import {
   describeMetaNode,
   describeStandardAttr,
+  existingModule,
   hintName,
   insertItemEdit,
+  MODULE_TAIL_ENGLISH,
+  MODULE_TAILS,
+  moduleMenuTokens,
+  ModuleTail,
+  modulePathFor,
+  moduleTailsOf,
   parseInternals,
   SERIALIZER_KIND_SPELLINGS,
   setMetaKeyAliases,
@@ -431,6 +438,72 @@ test("serializer kind spellings: one Russian kind per English name and back", ()
   // duplicate Russian kind would silently pick whichever pair came first.
   const russians = [...SERIALIZER_KIND_SPELLINGS.values()];
   assert.strictEqual(new Set(russians).size, russians.length);
+});
+
+// --- the modules of an element ------------------------------------------------------------
+
+test("module tails: an object kind has its own module and the object module", () => {
+  assert.deepStrictEqual([...moduleTailsOf("Справочник")], ["", "Объект"]);
+  assert.deepStrictEqual([...moduleTailsOf("Обработка")], ["", "Объект"]);
+  assert.deepStrictEqual([...moduleTailsOf("ПравоНаДействие")], ["", "Объект"]);
+});
+
+test("module tails: a register has the modules of its record types, a constants set two of them", () => {
+  assert.deepStrictEqual([...moduleTailsOf("РегистрСведений")], ["", "Запись", "НаборЗаписей", "КлючЗаписи"]);
+  assert.deepStrictEqual([...moduleTailsOf("НаборКонстант")], ["", "Запись", "КлючЗаписи"]);
+});
+
+test("module tails: a kind without modules offers none", () => {
+  for (const kind of ["ВиртуальнаяТаблица", "СобытиеЖурналаСобытий", "ЛокализованныеСтроки",
+    "НавигационнаяКоманда", "ПравоНаЭлемент", "Отчет", "НеизвестныйВид"]) {
+    assert.deepStrictEqual([...moduleTailsOf(kind)], [], kind);
+  }
+  assert.deepStrictEqual([...moduleTailsOf("Перечисление")], [""]);
+});
+
+test("module path: beside the description, spelled the way the description is", () => {
+  const yaml = "/p/Каталог/Товары.yaml";
+  assert.strictEqual(modulePathFor(yaml, "", false), "/p/Каталог/Товары.xbsl");
+  assert.strictEqual(modulePathFor(yaml, "Объект", false), "/p/Каталог/Товары.Объект.xbsl");
+  assert.strictEqual(modulePathFor("/p/Prices.yaml", "НаборЗаписей", true), "/p/Prices.RecordSet.xbsl");
+  assert.strictEqual(modulePathFor("/p/Prices.yaml", "", true), "/p/Prices.xbsl");
+});
+
+test("module tails: every tail a kind offers has an English spelling", () => {
+  for (const tails of Object.values(MODULE_TAILS)) {
+    for (const tail of tails.filter((t: ModuleTail) => t !== "")) {
+      assert.ok(MODULE_TAIL_ENGLISH[tail], tail);
+    }
+  }
+});
+
+test("module menu: a catalog without modules offers to create both of them", () => {
+  assert.deepStrictEqual(moduleMenuTokens("Справочник", {}), ["newmod", "newobjmod"]);
+  assert.deepStrictEqual(moduleMenuTokens("Справочник", { "": "/p/Т.xbsl" }), ["xbsl", "newobjmod"]);
+  assert.deepStrictEqual(
+    moduleMenuTokens("Справочник", { "": "/p/Т.xbsl", Объект: "/p/Т.Объект.xbsl" }), ["xbsl", "objmod"]
+  );
+});
+
+test("module menu: a register opens the record modules it has and creates the rest", () => {
+  assert.deepStrictEqual(
+    moduleMenuTokens("РегистрСведений", { НаборЗаписей: "/p/Ц.НаборЗаписей.xbsl" }),
+    ["recsetmod", "newmod", "newrecmod", "newreckeymod"],
+  );
+});
+
+test("module menu: a kind without modules offers nothing, a module that is there still opens", () => {
+  assert.deepStrictEqual(moduleMenuTokens("ВиртуальнаяТаблица", {}), []);
+  assert.deepStrictEqual(moduleMenuTokens("НеизвестныйВид", { "": "/p/Н.xbsl" }), ["xbsl"]);
+});
+
+test("existing module: either spelling of the tail, the Russian one first", () => {
+  const files = new Set(["/p/Prices.Object.xbsl", "/p/Цены.НаборЗаписей.xbsl", "/p/Цены.RecordSet.xbsl"]);
+  const exists = (candidate: string): boolean => files.has(candidate);
+  assert.strictEqual(existingModule("/p/Prices.yaml", "Объект", exists), "/p/Prices.Object.xbsl");
+  assert.strictEqual(existingModule("/p/Цены.yaml", "НаборЗаписей", exists), "/p/Цены.НаборЗаписей.xbsl");
+  assert.strictEqual(existingModule("/p/Цены.yaml", "Запись", exists), undefined);
+  assert.strictEqual(existingModule("/p/Цены.yaml", "", exists), undefined);
 });
 
 console.log(`\nитого: ${passed} ok, ${failed} fail`);

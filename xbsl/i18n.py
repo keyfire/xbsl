@@ -88,6 +88,16 @@ _CORE_MESSAGES = {
         "en": "{count} findings, over the {limit} a short answer lists - lint_paths on the "
               "written files gives them all",
     },
+    "report.info-hint": {
+        "ru": "находки уровня info сосчитаны, но не перечислены: {count} ({rules}) – список даст "
+              "list_info=true или вызов без compact",
+        "en": "info findings are counted, not listed: {count} ({rules}) - list_info=true or a "
+              "call without compact lists them",
+    },
+    "report.more-rules": {
+        "ru": "ещё правил: {count}",
+        "en": "{count} more rules",
+    },
     "code/unused-method.off": {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",

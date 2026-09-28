@@ -61,8 +61,11 @@ phrases:
 A phrase is keyed by one comment line as it stands: the marker and the padding taken off,
 no escaping at all. The `literals` plane below is spelled the opposite way, and an escaped
 quote is what travels between the two by mistake. `--set` and `translate_set` write such a
-key by the spelling that fires and name the correction in `normalized`. A key on two lines
-they refuse: the translator looks up each line of a comment on its own.
+key by the spelling that fires and name the correction in `normalized`. The value loses its
+padding the same way, since the translator puts the indent of the line back itself; a
+rewrite that changes nothing but the whitespace of a value is marked `whitespace_only` in
+`rewritten`. A key on two lines they refuse: the translator looks up each line of a comment
+on its own.
 
 The indent is four spaces, the way the tool itself writes. Your own indent survives too: the
 writer copies it from the entries already in the section, so a file started with two spaces stays

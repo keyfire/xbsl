@@ -124,6 +124,72 @@ def test_padding_around_a_phrase_key_is_taken_off(folder: Path):
     ]
 
 
+def test_padding_around_a_phrase_value_is_taken_off(folder: Path):
+    """The pass puts the indent of the line back itself; the padding would go on top of it."""
+    result = entries.write_entries(folder, _phrase("Задача готова.", "  The task is done. "))
+
+    assert dict_module.load(folder).phrases == {"Задача готова.": "The task is done."}
+    assert [(row["was"], row["now"]) for row in result["normalized"]] == [
+        ("  The task is done. ", "The task is done."),
+    ]
+    assert all(row["reason"] for row in result["normalized"])
+
+
+def _with_pair(folder: Path, key: str, value: str) -> None:
+    (folder / "010-base.yaml").write_text(
+        "version: 1\nlanguage: en\nphrases:\n"
+        f"    {json.dumps(key, ensure_ascii=False)}: {json.dumps(value, ensure_ascii=False)}\n",
+        encoding="utf-8",
+    )
+
+
+def test_a_continuation_line_with_its_indent_leaves_the_pair_it_names_alone(folder: Path):
+    """A list line of a `///` block came with its indent on both sides and rewrote the pair."""
+    _with_pair(folder, "приложения тогда", "of the application then")
+
+    result = entries.write_entries(
+        folder, _phrase("  приложения тогда", "  of the application then"))
+
+    assert result["rewritten"] == []
+    assert dict_module.load(folder).phrases == {"приложения тогда": "of the application then"}
+    assert [row["now"] for row in result["normalized"]] == [
+        "приложения тогда", "of the application then",
+    ]
+
+
+def test_the_value_of_a_key_that_is_there_is_trimmed_as_well(folder: Path):
+    _with_pair(folder, "Задача готова.", "The task is done.")
+
+    result = entries.write_entries(folder, _phrase("Задача готова.", "The task is ready. "))
+
+    assert dict_module.load(folder).phrases == {"Задача готова.": "The task is ready."}
+    assert [(row["was"], row["now"]) for row in result["rewritten"]] == [
+        ("The task is done.", "The task is ready."),
+    ]
+    assert "whitespace_only" not in result["rewritten"][0]
+
+
+def test_a_rewrite_that_changes_only_the_whitespace_is_named_so(folder: Path):
+    _with_pair(folder, "Задача готова.", "The task is done.")
+
+    result = entries.write_entries(folder, _phrase("Задача готова.", "The task  is done."))
+
+    assert [row.get("whitespace_only") for row in result["rewritten"]] == [True]
+
+
+@pytest.mark.needs_data
+def test_the_padding_of_a_literal_body_stays(folder: Path):
+    """A literal body is the text between the quotes: its spaces are part of the string.
+
+    The body is checked by the lexer of the language, which reads the Element data.
+    """
+    result = entries.write_entries(
+        folder, [{"key": " Итого: ", "value": " Total: ", "kind": "literal"}])
+
+    assert result["normalized"] == []
+    assert dict_module.load(folder).literals == {" Итого: ": " Total: "}
+
+
 # --- what cannot be repaired ------------------------------------------------------------
 
 
@@ -196,6 +262,22 @@ def test_the_cli_prints_what_it_corrected(folder: Path, tmp_path: Path, capsys):
     assert [(row["was"], row["now"]) for row in payload["normalized"]] == [
         (_ESCAPED_KEY, _PLAIN_KEY),
     ]
+
+
+@pytest.mark.needs_data
+def test_the_cli_text_names_a_rewrite_of_the_whitespace_alone(folder: Path, tmp_path: Path,
+                                                              capsys):
+    _with_pair(folder, "Задача готова.", "The task is done.")
+    batch = tmp_path / "edits.json"
+    batch.write_text(json.dumps(_phrase("Задача готова.", "The task  is done."),
+                                ensure_ascii=False), encoding="utf-8")
+
+    code = cli.cli_main([str(tmp_path), "--set", str(batch)])
+
+    # The command speaks the language of the environment; either spelling of the note will do.
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "only the whitespace differs" in out or "отличаются только пробелы" in out
 
 
 def test_the_mcp_tool_answers_the_same_way(mcp_module, folder: Path, tmp_path: Path):

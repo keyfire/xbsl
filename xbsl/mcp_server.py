@@ -414,6 +414,7 @@ def lint_paths(
     fix: bool = False,
     as_ci_full: bool = False,
     compare: str | None = None,
+    list_info: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -459,8 +460,12 @@ def lint_paths(
                   the flags with a long list counted ("--enable ×10"), the jobs not taken and
                   the includes left unread. A call with `select` asks about a few rules, and
                   it gets the same line without `compact`: the record of a long pipeline ran
-                  to two kilobytes over an answer of two findings;
+                  to two kilobytes over an answer of two findings. The info-level findings
+                  are counted, not listed: `info_hint` gives their number and rules, and they
+                  do not count towards the limit - a project keeps a few of them on purpose,
+                  and every answer of a session repeated them;
     as_ci_full  - with `compact` or `select`, keep the whole `as_ci` record instead of the line;
+    list_info   - with `compact`, list the info-level findings with the rest;
     compare     - a file that keeps the run for the next call; the CLI `--compare` reads and
                   writes the same file. The first call saves the run and answers
                   `compare: {file, compared: false}`. Every next call compares with the saved
@@ -480,7 +485,8 @@ def lint_paths(
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
     Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors, findings}
-    or {summary, errors, findings_hint} past the limit; with `compare`: {summary, compare},
+    or {summary, errors, findings_hint} past the limit, and `info_hint` when info findings
+    were left out; with `compare`: {summary, compare},
     the summary shaped by `compact` as usual). The summary counts the findings by
     rule (`by_rule`), by file (`by_file`, the same absolute paths the diagnostics carry) and
     by severity (`by_severity`, all three levels named).
@@ -571,7 +577,9 @@ def lint_paths(
     if state is not None:
         return _compared(payload, diags, paths, base, state, saved, active, chosen,
                          compact=compact, as_ci_full=as_ci_full)
-    return report.compact(payload, as_ci_full=as_ci_full) if compact else payload
+    if compact:
+        return report.compact(payload, as_ci_full=as_ci_full, list_info=list_info)
+    return payload
 
 
 def _compared(

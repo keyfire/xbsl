@@ -214,6 +214,7 @@ _BASE_CALLS = {
 #: The arguments that shape only the ANSWER of a tool, which the CLI prints its own way.
 _SHAPE_ONLY = {
     ("lint_paths", "as_ci_full"),            # the whole CI-job record instead of its one line
+    ("lint_paths", "list_info"),             # the info findings listed, not counted
     ("translate_status", "full"),            # every duplicate the ref has, instead of a count
     ("translate_unused", "budget_seconds"),  # the CLI walks every file, with no clock
 }

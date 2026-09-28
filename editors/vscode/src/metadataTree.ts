@@ -68,9 +68,13 @@ import { METADATA_DRAG_MIME, MetadataDragTickets } from "./metadataDragCore";
 import { carriesWsdl, wsdlFiles } from "./wsdlCore";
 import { docsCommandUri } from "./hoverDocs";
 import {
+  existingModule,
   groupResources,
   MetaField,
   MetaInternals,
+  moduleMenuTokens,
+  ModuleTail,
+  modulePathFor,
   parseInternals,
   ResourceFile,
   ResourceScope,
@@ -414,6 +418,8 @@ interface Element {
   yamlPath: string;
   modulePath?: string;
   objectModulePath?: string;
+  // The modules of the record types (`Record`, `RecordSet`, `RecordKey`) that exist, by tail.
+  recordModules?: Partial<Record<ModuleTail, string>>;
   queryPath?: string; // VirtualTable: the paired `.xbql` query
   ownerType?: string;
   text: string;
@@ -582,16 +588,24 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
     const englishKind = kind !== declared;
     const name = RE_NAME.exec(text)?.[1] ?? path.basename(yamlPath, ".yaml");
     const base = yamlPath.slice(0, -".yaml".length);
-    const modulePath = base + ".xbsl";
-    const objectModulePath = base + ".Объект.xbsl";
     const queryPath = base + ".xbql";
+    const onDisk = (candidate: string): boolean => xbslSet.has(candidate.toLowerCase());
+    const recordModules: Partial<Record<ModuleTail, string>> = {};
+    for (const tail of ["Запись", "НаборЗаписей", "КлючЗаписи"] as const) {
+      const found = existingModule(yamlPath, tail, onDisk);
+      if (found) {
+        recordModules[tail] = found;
+      }
+    }
     elements.push({
       kind,
       englishKind,
       name,
       yamlPath,
-      modulePath: xbslSet.has(modulePath.toLowerCase()) ? modulePath : undefined,
-      objectModulePath: xbslSet.has(objectModulePath.toLowerCase()) ? objectModulePath : undefined,
+      modulePath: existingModule(yamlPath, "", onDisk),
+      // Either spelling: a project written in English names it `Name.Object.xbsl`.
+      objectModulePath: existingModule(yamlPath, "Объект", onDisk),
+      recordModules,
       queryPath: xbqlSet.has(queryPath.toLowerCase()) ? queryPath : undefined,
       ownerType: kind === FORM_KIND ? RE_OWNER_TYPE.exec(text)?.[1]?.split(".")[0] : undefined,
       text,
@@ -695,6 +709,8 @@ class XbslNode extends vscode.TreeItem {
   yamlPath?: string;
   modulePath?: string;
   objectModulePath?: string;
+  recordModules?: Partial<Record<ModuleTail, string>>; // modules of the record types, by tail
+  englishKind?: boolean; // the description is written in English: a new module is named so too
   queryPath?: string;
   appModulePath?: string;
   offset?: number; // node offset in the yaml - for navigation
@@ -1431,13 +1447,19 @@ function wsdlFileNode(filePath: string): XbslNode {
   return node;
 }
 
+// The menu tokens of the modules of an element (see moduleMenuTokens).
+function moduleTokens(el: Element): string[] {
+  return moduleMenuTokens(el.kind, { ...el.recordModules, "": el.modulePath, Объект: el.objectModulePath });
+}
+
 function formNode(el: Element): XbslNode {
   const node = new XbslNode(el.name, vscode.TreeItemCollapsibleState.None);
   node.iconPath = new vscode.ThemeIcon(formIcon(el.name));
   node.yamlPath = el.yamlPath;
   node.resourceUri = vscode.Uri.file(el.yamlPath); // git statuses
   node.modulePath = el.modulePath;
-  node.contextValue = ["member", "form", "yaml", el.modulePath ? "xbsl" : ""].filter(Boolean).join(" ");
+  node.englishKind = el.englishKind;
+  node.contextValue = ["member", "form", "yaml", ...moduleTokens(el)].filter(Boolean).join(" ");
   node.command = { command: "xbsl.metadata.previewForm", title: "", arguments: [node] };
   node.tooltip = FORM_KIND;
   return node;
@@ -1535,6 +1557,8 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
   node.resourceUri = vscode.Uri.file(el.yamlPath); // git statuses (color/badge), keeping our own icon
   node.modulePath = el.modulePath;
   node.objectModulePath = el.objectModulePath;
+  node.recordModules = el.recordModules;
+  node.englishKind = el.englishKind;
   node.queryPath = el.queryPath;
   node.wsdlPaths = el.wsdlPaths;
   node.linkedForms = boundForms.map((form) => form.yamlPath);
@@ -1544,8 +1568,7 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
   node.contextValue = [
     "element", "yaml", "props", "deletable",
     lone?.addKind ? ADD_SPECS[lone.addKind].token : "",
-    el.modulePath ? "xbsl" : "",
-    el.objectModulePath ? "objmod" : "",
+    ...moduleTokens(el),
     el.queryPath ? "xbql" : "",
     el.wsdlPaths?.length ? "wsdl" : "",
     // Localized strings get translations right on the element - the "+" mirrors the cloud IDE.
@@ -2527,6 +2550,21 @@ async function openFile(fsPath?: string, preserveFocus = false): Promise<vscode.
   const uri = vscode.Uri.file(fsPath);
   const doc = await vscode.workspace.openTextDocument(uri);
   return vscode.window.showTextDocument(doc, { viewColumn: sourceColumn(uri), preview: false, preserveFocus });
+}
+
+// Creates a module of an element beside its description, empty, and opens it. The name follows the
+// spelling of the description (`Name.Object.xbsl` in a project written in English); a file that
+// turned up in the meantime is opened as it is. The tree follows by itself: its watcher sees the
+// new file and the menu offers to open the module from then on.
+async function createModule(node: XbslNode | undefined, tail: ModuleTail): Promise<void> {
+  if (!node?.yamlPath) {
+    return;
+  }
+  const target = modulePathFor(node.yamlPath, tail, !!node.englishKind);
+  if (!fs.existsSync(target)) {
+    await vscode.workspace.fs.writeFile(vscode.Uri.file(target), new Uint8Array());
+  }
+  await openFile(target);
 }
 
 // One preview panel for all resources: a click swaps its content, closing drops the handle.
@@ -3548,6 +3586,22 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.openQuery", (n?: XbslNode) => openFile(n?.queryPath)),
     vscode.commands.registerCommand("xbsl.metadata.openWsdl", (n?: XbslNode) => openWsdl(n)),
     vscode.commands.registerCommand("xbsl.metadata.openObjectModule", (n?: XbslNode) => openFile(n?.objectModulePath)),
+    vscode.commands.registerCommand("xbsl.metadata.openRecordModule", (n?: XbslNode) => openFile(n?.recordModules?.["Запись"])),
+    vscode.commands.registerCommand(
+      "xbsl.metadata.openRecordSetModule", (n?: XbslNode) => openFile(n?.recordModules?.["НаборЗаписей"])
+    ),
+    vscode.commands.registerCommand(
+      "xbsl.metadata.openRecordKeyModule", (n?: XbslNode) => openFile(n?.recordModules?.["КлючЗаписи"])
+    ),
+    vscode.commands.registerCommand("xbsl.metadata.createModule", (n?: XbslNode) => createModule(n, "")),
+    vscode.commands.registerCommand("xbsl.metadata.createObjectModule", (n?: XbslNode) => createModule(n, "Объект")),
+    vscode.commands.registerCommand("xbsl.metadata.createRecordModule", (n?: XbslNode) => createModule(n, "Запись")),
+    vscode.commands.registerCommand(
+      "xbsl.metadata.createRecordSetModule", (n?: XbslNode) => createModule(n, "НаборЗаписей")
+    ),
+    vscode.commands.registerCommand(
+      "xbsl.metadata.createRecordKeyModule", (n?: XbslNode) => createModule(n, "КлючЗаписи")
+    ),
     vscode.commands.registerCommand("xbsl.metadata.openAppModule", (n?: XbslNode) => openFile(n?.appModulePath)),
     vscode.commands.registerCommand("xbsl.metadata.reveal", (n?: XbslNode) => reveal(n)),
     vscode.commands.registerCommand("xbsl.metadata.previewForm", (n?: XbslNode) => previewForm(n)),

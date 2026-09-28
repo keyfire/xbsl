@@ -396,6 +396,64 @@ def test_compact_findings_hint_speaks_the_language_the_caller_chose():
     assert not any("а" <= c <= "я" for c in en["findings_hint"].casefold())
 
 
+def _infos(n: int, rule: str = "conventions/kept-on-purpose") -> list[Diagnostic]:
+    return [_diag(f"I{i}.xbsl", i + 1, rule, Severity.INFO) for i in range(n)]
+
+
+def test_compact_counts_the_info_findings_instead_of_listing_them():
+    """A project keeps a few info findings on purpose; every answer repeated their lines."""
+    answer = report.compact(report.report(_diags(2) + _infos(5), 7))
+    assert answer["findings"] == [
+        "F0.xbsl:1 whitespace/trailing – m", "F1.xbsl:2 whitespace/trailing – m",
+    ]
+    assert "5" in answer["info_hint"] and "conventions/kept-on-purpose ×5" in answer["info_hint"]
+    assert answer["summary"]["by_severity"]["info"] == 5  # the counts stay whole
+
+
+def test_compact_info_findings_do_not_count_towards_the_limit():
+    limit = report.COMPACT_FINDINGS_LIMIT
+    answer = report.compact(report.report(_diags(limit) + _infos(limit), 2 * limit))
+    assert len(answer["findings"]) == limit
+    assert "findings_hint" not in answer
+
+
+def test_compact_lists_the_info_findings_on_request():
+    answer = report.compact(report.report(_diags(1) + _infos(2), 3), list_info=True)
+    assert len(answer["findings"]) == 3
+    assert "info_hint" not in answer
+
+
+def test_compact_without_info_findings_has_no_info_hint():
+    assert "info_hint" not in report.compact(report.report(_diags(3), 3))
+
+
+def test_compact_info_hint_names_the_largest_rules_and_counts_the_rest():
+    diags = (_infos(4, "info/a") + _infos(1, "info/b") + _infos(2, "info/c")
+             + _infos(1, "info/d") + _infos(1, "info/e"))
+    from xbsl import i18n
+
+    try:
+        i18n.set_lang("en")
+        hint = report.compact(report.report(diags, 9))["info_hint"]
+    finally:
+        i18n.set_lang(None)
+    assert "info/a ×4, info/c ×2, info/b ×1, 2 more rules" in hint
+
+
+def test_compact_answer_passes_the_request_for_info_findings_on(server, tmp_path, monkeypatch):
+    seen = {}
+    real = report.compact
+
+    def spy(payload, **options):
+        seen.update(options)
+        return real(payload, **options)
+
+    monkeypatch.setattr(report, "compact", spy)
+    monkeypatch.setattr(server, "run", lambda *args, **kwargs: [])
+    server.lint_paths([str(tmp_path)], compact=True, list_info=True)
+    assert seen["list_info"] is True
+
+
 def test_full_report_is_unaffected_by_the_compact_changes():
     """Regression: report()/summary()/breakdown() keep their shape - only compact() changed."""
     diags = _diags(15) + [_diag("E.xbsl", 1, "code/brackets", Severity.ERROR)]
