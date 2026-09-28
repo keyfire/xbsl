@@ -565,6 +565,68 @@ export function stringAttributeNames(text: string): string[] {
   return attrs.filter((a) => !a.type || /^Строка\s*\??$/.test(a.type)).map((a) => a.name);
 }
 
+// -- own members of an interface component ---------------------------------------------------
+
+// The members an interface component declares for itself: the properties its module reads as
+// `этот.<Имя>` and the events a form using the component assigns handlers to. The engine writes
+// them (xbsl/metaAddField with the field kind below: the section, its place in the file, the
+// description); the tree asks for the name and the type and hands both over.
+export type ComponentMember = "property" | "event";
+
+export interface ComponentMemberSpec {
+  fieldKind: string; // the field kind of the engine operation
+  section: string; // the yaml section, by its Russian key
+  defaultName: string;
+}
+
+export const COMPONENT_MEMBER_SPECS: Readonly<Record<ComponentMember, ComponentMemberSpec>> = {
+  property: { fieldKind: "свойство", section: "Свойства", defaultName: "НовоеСвойство" },
+  event: { fieldKind: "событие", section: "События", defaultName: "НовоеСобытие" },
+};
+
+// The ready-made choices of the type picker. A property offers the primitives and then the types
+// of the project (references, enumerations) the caller collected. An event offers the plain
+// event first - the type an event without one gets from the platform - and then an event that
+// carries a value of a primitive type; anything else is typed in by hand.
+const EVENT_TYPE_CHOICES = [
+  "СобытиеКомпонента",
+  "СобытиеСДанными<Строка>",
+  "СобытиеСДанными<Число>",
+  "СобытиеСДанными<Булево>",
+];
+const PROPERTY_TYPE_CHOICES = ["Строка", "Число", "Булево", "Дата", "ДатаВремя"];
+
+export function componentMemberTypeChoices(member: ComponentMember, projectTypes: readonly string[]): string[] {
+  const choices = member === "event" ? EVENT_TYPE_CHOICES : [...PROPERTY_TYPE_CHOICES, ...projectTypes];
+  return [...new Set(choices)];
+}
+
+// The names the component already declares in the section of the member, in either spelling
+// of the keys - the name prompt refuses a taken one before the engine is asked.
+export function componentMemberNames(text: string, member: ComponentMember): string[] {
+  let root: unknown;
+  try {
+    root = parseDocument(text, { uniqueKeys: false }).contents ?? undefined;
+  } catch {
+    return [];
+  }
+  return fieldsOf(section(root, COMPONENT_MEMBER_SPECS[member].section))
+    .map((field) => field.name)
+    .filter((name) => name !== "?");
+}
+
+// The engine request that adds the member, and the same operation as CLI arguments for the mode
+// without the language server.
+export function componentMemberRequest(
+  yamlPath: string, member: ComponentMember, name: string, type: string
+): { params: Record<string, string>; cli: string[] } {
+  const { fieldKind } = COMPONENT_MEMBER_SPECS[member];
+  return {
+    params: { path: yamlPath, fieldKind, name, type },
+    cli: [yamlPath, fieldKind, name, "--type", type],
+  };
+}
+
 // Standard attribute description for the panel: materialized (present in Реквизиты) - like a
 // regular node; otherwise synthetic rows from the spec (empty values; editing materializes it).
 export function describeStandardAttr(text: string, kind: string, name: string): MetaNodeDescription | undefined {

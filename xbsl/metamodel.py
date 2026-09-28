@@ -403,16 +403,34 @@ def inherits(cls: str, base: str) -> bool:
     return base in _bases(cls)
 
 
+#: The class the ITEMS of a kind's collections are read by, where it is not the kind's root
+#: class. An interface component maps to `ComponentModel`: the light model the platform reads a
+#: component description with first, to learn the names and types of the component's own
+#: properties and events, so its property item declares a name and a type and nothing else.
+#: The component itself is read by `UserUiComponentDescriptor`, the base of every user component
+#: descriptor, and its property item (`PropertyDescriptor`) declares `DefaultValue`,
+#: `StoredData` and `Contextual` as well - the very set the documentation lists for a
+#: developer's property, and the only keys the sources write: the components the distribution
+#: ships (4202 properties) and two live projects (1323 more) use no other. Its event item
+#: (`EventDescriptor`) keeps a name and a type. The top level stays with the kind's own class.
+_ITEM_ROOT_CLASSES: dict[str, str] = {"КомпонентИнтерфейса": "UserUiComponentDescriptor"}
+
+
 def item_class(kind: str, path: tuple[tuple[str, str | None], ...]) -> str | None:
     """The class of a nested element: a collection item, possibly nested several levels deep.
 
     `path` is the way from the element's root down to the node, one `(section, name)` pair per
     level - the yaml key of the collection and the `Имя` of the item inside it (the name matters
     only where the metamodel dispatches by it). Returns None when the path leads nowhere.
+
+    The walk starts from the kind's root class, or from the class its items are read by where
+    the two differ (see _ITEM_ROOT_CLASSES) and the data knows that class.
     """
     current = class_for_kind(kind)
     if not current:
         return None
+    if path and has_class(_ITEM_ROOT_CLASSES.get(kind, "")):
+        current = _ITEM_ROOT_CLASSES[kind]
     for section, name in path:
         current = collection_item_class(current, section, name)
         if not current:

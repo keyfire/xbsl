@@ -305,6 +305,16 @@
         "icon": "$(add)"
       },
       {
+        "command": "xbsl.metadata.addComponentProperty",
+        "title": "%cmd.metadata.addComponentProperty%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.addComponentEvent",
+        "title": "%cmd.metadata.addComponentEvent%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.metadata.addRoute",
         "title": "%cmd.metadata.addRoute%",
         "category": "XBSL",
@@ -1012,6 +1022,14 @@
         {
           "command": "xbsl.metadata.createRecordKeyModule",
           "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.addComponentProperty",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.addComponentEvent",
+          "when": "false"
         }
       ],
       "editor/context": [
@@ -1285,6 +1303,16 @@
           "command": "xbsl.metadata.addTabularAttr",
           "when": "view == xbslMetadata && viewItem =~ /\\baddtcattr\\b/",
           "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addComponentProperty",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddprop\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addComponentEvent",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddevent\\b/",
+          "group": "1_add@2"
         },
         {
           "command": "xbsl.metadata.addObjectForm",

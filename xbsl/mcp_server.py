@@ -1191,7 +1191,9 @@ def meta_add_field(
     """Add a section item to an object, the field_kind naming which one:
     "реквизит", "измерение", "ресурс", "значение" (enum), "параметр", "поле" (structure),
     "константа", "свойство" (a contract, an event-log event or an InterfaceComponent - the
-    component's `Properties`: a name and a type, no Id), "табличная-часть", "операция"
+    component's `Properties`: a name and a type, no Id; props take DefaultValue, StoredData
+    and Contextual), "событие" (an InterfaceComponent's `Events`: a name and the type of the
+    event object, "СобытиеКомпонента" when omitted), "табличная-часть", "операция"
     (Processing: also writes the @Handler method into the module), "индекс" (Name + Fields
     with a stub field to replace), "параметр-запроса" (Report) or "строка" / "шаблон"
     (LocalizedStrings: key-value mapping sections, `type` carries the VALUE, defaulting to
@@ -1202,7 +1204,8 @@ def meta_add_field(
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected. The item joins the end of the section of its kind; a
     section the file lacks is created at the end of the file (a component's `Properties` in
-    front of its `Events` when it has them - the designer's order), and for a register
+    front of its `Events` when it has them, its `Events` right after its `Properties` - the
+    designer's order), and for a register
     `notes` say so - naming, when the sibling data section already exists (`Resources` while
     a "реквизит" is asked, and the other way round), the field_kind that would have placed
     the item beside the existing fields.
@@ -1213,7 +1216,8 @@ def meta_add_field(
     becomes several lines. Refused for an item that holds no such comment (a built-in
     attribute, a "строка" / "шаблон" mapping entry) and for a batch of several `names`.
 
-    type - the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
+    type - the item's type, "Строка" when omitted ("СобытиеКомпонента" for a "событие"),
+    written in the language of the file either way. A BUILT-IN attribute is added by its
     name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
     and is judged by its own metamodel class - the one metadata_schema answers with for that
     name: no "Ид", a "Тип" only where the class declares one ("Наименование" has none), the

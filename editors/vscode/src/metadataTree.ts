@@ -68,6 +68,11 @@ import { METADATA_DRAG_MIME, MetadataDragTickets } from "./metadataDragCore";
 import { carriesWsdl, wsdlFiles } from "./wsdlCore";
 import { docsCommandUri } from "./hoverDocs";
 import {
+  COMPONENT_MEMBER_SPECS,
+  ComponentMember,
+  componentMemberNames,
+  componentMemberRequest,
+  componentMemberTypeChoices,
   existingModule,
   groupResources,
   MetaField,
@@ -82,6 +87,7 @@ import {
   standardAttrNames,
   translationRef,
 } from "./metadataCore";
+import { propertyNameError } from "./formDataCore";
 import { formPathOfModule } from "./formDesignerCore";
 import { resourcePreviewHtml } from "./resourcePreviewCore";
 import { dropResources, registerResourceFolderCommands, ResourceTreeAccess } from "./resourceFolders";
@@ -1459,7 +1465,10 @@ function formNode(el: Element): XbslNode {
   node.resourceUri = vscode.Uri.file(el.yamlPath); // git statuses
   node.modulePath = el.modulePath;
   node.englishKind = el.englishKind;
-  node.contextValue = ["member", "form", "yaml", ...moduleTokens(el)].filter(Boolean).join(" ");
+  // addprop / addevent: the component's own properties and events are added from the node.
+  node.contextValue = ["member", "form", "yaml", "addprop", "addevent", ...moduleTokens(el)]
+    .filter(Boolean)
+    .join(" ");
   node.command = { command: "xbsl.metadata.previewForm", title: "", arguments: [node] };
   node.tooltip = FORM_KIND;
   return node;
@@ -2766,6 +2775,86 @@ async function addTabularAttr(provider: XbslMetadataProvider, node?: XbslNode): 
   );
 }
 
+// The type of a new property or event: the ready-made choices (componentMemberTypeChoices), then
+// free entry. The engine checks the spelling and writes the type the way the file writes types.
+async function pickMemberType(provider: XbslMetadataProvider, member: ComponentMember): Promise<string | undefined> {
+  const manualLabel = vscode.l10n.t("Enter the type manually...");
+  interface TypeItem extends vscode.QuickPickItem {
+    manual?: boolean;
+  }
+  const projectTypes = member === "property" ? await provider.typeCandidates() : [];
+  const items: TypeItem[] = componentMemberTypeChoices(member, projectTypes).map((label) => ({ label }));
+  items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
+  items.push({ label: manualLabel, manual: true, alwaysShow: true });
+  const pick = await vscode.window.showQuickPick(items, {
+    placeHolder: member === "event" ? vscode.l10n.t("Event type") : vscode.l10n.t("Property type"),
+  });
+  if (!pick?.manual) {
+    return pick?.label;
+  }
+  const manual = await vscode.window.showInputBox({
+    prompt: member === "event" ? vscode.l10n.t("Event type") : vscode.l10n.t("Property type"),
+    validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("A type is required.")),
+  });
+  return manual?.trim() || undefined;
+}
+
+// "Add property..." / "Add event..." on a form or another interface component: the name (a taken
+// one is refused right in the prompt) and the type go to the engine, which writes the item into
+// its section - creating the section in its place - and the yaml opens on the new item.
+async function addComponentMember(
+  provider: XbslMetadataProvider, node: XbslNode | undefined, member: ComponentMember
+): Promise<void> {
+  if (!node?.yamlPath) {
+    return;
+  }
+  const yamlPath = node.yamlPath;
+  const spec = COMPONENT_MEMBER_SPECS[member];
+  let existing: string[] = [];
+  try {
+    existing = componentMemberNames((await vscode.workspace.openTextDocument(yamlPath)).getText(), member);
+  } catch {
+    // An unreadable file: the engine refuses a taken name anyway.
+  }
+  const input = await vscode.window.showInputBox({
+    prompt: member === "event"
+      ? vscode.l10n.t("Name of the new event (an identifier, without the letter ё)")
+      : vscode.l10n.t("Name of the new property (an identifier, without the letter ё)"),
+    value: spec.defaultName,
+    validateInput: (v) => {
+      switch (propertyNameError(v.trim(), existing)) {
+        case "yo":
+          return vscode.l10n.t("The letter ё is not used in names (the 1C:Element naming standard).");
+        case "duplicate":
+          return member === "event"
+            ? vscode.l10n.t("An event with this name already exists.")
+            : vscode.l10n.t("A property with this name already exists.");
+        case "empty":
+        case "identifier":
+          return vscode.l10n.t("A valid identifier is required (letters, digits, _).");
+        default:
+          return undefined;
+      }
+    },
+  });
+  const name = input?.trim();
+  if (!name) {
+    return;
+  }
+  const type = await pickMemberType(provider, member);
+  if (!type || !(await ensureSavedForCli([yamlPath]))) {
+    return;
+  }
+  const request = componentMemberRequest(yamlPath, member, name, type);
+  const result = await callMeta("xbsl/metaAddField", request.params, "add-field", request.cli);
+  if (!result) {
+    return;
+  }
+  await applyAndReveal(
+    provider, result, (n) => n.yamlPath === yamlPath && /\bform\b/.test(n.contextValue ?? "")
+  );
+}
+
 // The verbs come from the ENGINE (xbsl/httpMethods): it owns the list a route may declare, and
 // a copy here would drift from it. Asked once per session; an engine that does not answer (an
 // older one, the CLI mode) leaves the pick empty and the caller falls back to free text -
@@ -3614,6 +3703,12 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.addStructField", (n?: XbslNode) => addItem(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addTabular", (n?: XbslNode) => addItem(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addTabularAttr", (n?: XbslNode) => addTabularAttr(provider, n)),
+    vscode.commands.registerCommand("xbsl.metadata.addComponentProperty", (n?: XbslNode) =>
+      addComponentMember(provider, n, "property")
+    ),
+    vscode.commands.registerCommand("xbsl.metadata.addComponentEvent", (n?: XbslNode) =>
+      addComponentMember(provider, n, "event")
+    ),
     vscode.commands.registerCommand("xbsl.metadata.addRoute", (n?: XbslNode) => addRoute(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addRouteMethod", (n?: XbslNode) => addRouteMethod(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addObjectForm", (n?: XbslNode) => addObjectForm(provider, n)),

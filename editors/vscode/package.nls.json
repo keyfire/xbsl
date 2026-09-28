@@ -83,6 +83,8 @@
   "cmd.metadata.addStructField": "Add field",
   "cmd.metadata.addTabular": "Add tabular section",
   "cmd.metadata.addTabularAttr": "Add attribute to tabular section",
+  "cmd.metadata.addComponentProperty": "Add property...",
+  "cmd.metadata.addComponentEvent": "Add event...",
   "cmd.metadata.addObjectForm": "Add form",
   "cmd.metadata.deleteObject": "Delete object",
   "cmd.metadata.addSubsystem": "Add subsystem",

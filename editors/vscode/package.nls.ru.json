@@ -83,6 +83,8 @@
   "cmd.metadata.addStructField": "Добавить поле",
   "cmd.metadata.addTabular": "Добавить табличную часть",
   "cmd.metadata.addTabularAttr": "Добавить реквизит табличной части",
+  "cmd.metadata.addComponentProperty": "Добавить свойство...",
+  "cmd.metadata.addComponentEvent": "Добавить событие...",
   "cmd.metadata.addObjectForm": "Добавить форму",
   "cmd.metadata.deleteObject": "Удалить объект",
   "cmd.metadata.addSubsystem": "Добавить подсистему",

@@ -414,7 +414,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object to add the field to |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, свойство, табличная-часть |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, свойство, событие, табличная-часть |
 | `name` | the field name |
 
 **Options**
@@ -422,7 +422,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--type TYPE` | the field type (default String; a standard attribute takes its class default) |
+| `--type TYPE` | the field type (default String, ComponentEvent for a component event; a standard attribute takes its class default) |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
 | `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address; a nested block by a dotted key: Autonumbering.Prefix=RQ |
 | `--doc DOC` | the field description – its documentation comment: the ## lines at the head of the item, which the development environment shows and keeps |
