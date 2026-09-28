@@ -190,7 +190,9 @@ def test_a_base_outside_the_project_and_the_catalog_is_not_judged(handlers):
 
 @pytest.mark.needs_data
 def test_a_module_of_another_kind_is_not_judged(handlers):
-    """The handlers of an object module are declared by the compiler, not by a description."""
+    """Not by the component lists: the object module overrides `BeforeWrite` by the lists of
+    the compiler (see test_rule_handler_overrides_nothing_elements), and the own module of a
+    catalog takes access handler names from its settings at build time."""
     catalog = "ВидЭлемента: Справочник\nИд: 4d2f7c60-8e3b-4b5c-9a0f-9c3d4e5f6a71\nИмя: Склады\n"
     assert _lint({"Склады/Склады.yaml": catalog,
                   "Склады/Склады.Объект.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n",

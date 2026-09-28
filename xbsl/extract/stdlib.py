@@ -68,7 +68,7 @@ from pathlib import Path
 import yaml
 
 from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER, generic_args, nearest_last
-from xbsl.extract import _distro, classcode
+from xbsl.extract import _distro, classcode, elementhandlers
 from xbsl.extract.terms import scan_kind_table
 
 STD_BASE = "data/docs/help/ru/stdlib/element/xbsl/Std/"
@@ -1386,6 +1386,11 @@ def extract(dist: Path) -> tuple:
         filled = []
         descriptions = component_descriptions(z)
         retired = retired_components(z, names, set(types), descriptions)
+        # The handlers the compiler declares for the modules of the other elements (an object,
+        # a record set, a scheduled job): read from its code, see elementhandlers.
+        element_handlers, handler_notes = elementhandlers.element_handlers(z, scan_kind_table(z))
+        for note in handler_notes:
+            print("  обработчики модулей элементов: " + note)
         for russian, record in retired.items():
             own = record["members"]
             base = record["base"]
@@ -1410,7 +1415,8 @@ def extract(dist: Path) -> tuple:
             facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
             type_variance, method_params,
             deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired,
-            component_floors(descriptions), component_handlers(descriptions, names))
+            component_floors(descriptions), component_handlers(descriptions, names),
+            element_handlers)
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1969,7 +1975,7 @@ def main(argv=None) -> int:
      facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
      type_variance, method_params,
      deprecated, folds, checked_methods, retired, component_from,
-     module_handlers) = extract(dist)
+     module_handlers, element_handlers) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -2002,7 +2008,9 @@ def main(argv=None) -> int:
                     " + члены самих порождаемых типов, разделом generated_members"
                     " (Вид.Объект, Вид.Данные, Вид.ПараметрыЗаписи)"
                     " + переопределяемые обработчики модулей компонентов, разделом"
-                    " module_handlers (moduleHandlers описаний компонентов в поставке)",
+                    " module_handlers (moduleHandlers описаний компонентов в поставке)"
+                    " + обработчики модулей прочих элементов по виду и модулю, разделом"
+                    " element_module_handlers (провайдеры обработчиков компилятора)",
         },
         "names": sorted(names),
         "object_members": {k: sorted(v) for k, v in sorted(members.items())},
@@ -2018,6 +2026,12 @@ def main(argv=None) -> int:
         # (see component_handlers); the reader adds those of the bases. Older datasets omit it,
         # and a consumer then judges no override at all.
         **({"module_handlers": module_handlers} if module_handlers else {}),
+        # The handlers the compiler declares for a module of any other element, by the kind of
+        # the element and the module ("" - the element's own, "Объект", "НаборЗаписей",
+        # "Запись"): {kind: {module: {"handlers": rows, "dynamic": sources}}}. A module with
+        # `dynamic` takes some handler names from the element's own description at build time
+        # and is not to be judged (see elementhandlers). Older datasets omit the section.
+        **({"element_module_handlers": element_handlers} if element_handlers else {}),
         "type_members": {k: _members_json(v) for k, v in sorted(own_types.items())},
         # Global context: members of Стд and its first-level packages, available by bare name.
         "globals": sorted(globals_),

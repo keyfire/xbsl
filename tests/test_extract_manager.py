@@ -20,8 +20,9 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGE = REPO / "xbsl" / "extract"
 TOOLS = REPO / "tools"
 # Modules of the package that are not steps but helpers the steps share: the distribution
-# walker and the class-file reader that states the bilingual pairs of a type.
-_NOT_STEPS = {"__init__", "__main__", "_distro", "classcode"}
+# walker, the class-file reader that states the bilingual pairs of a type, and the reader of
+# the handler providers the stdlib step runs.
+_NOT_STEPS = {"__init__", "__main__", "_distro", "classcode", "elementhandlers"}
 
 
 def test_every_extractor_module_is_a_step():

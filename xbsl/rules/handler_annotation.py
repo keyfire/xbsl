@@ -23,11 +23,15 @@ code/handler-overrides-nothing - a method of an interface component module, unde
 annotation, bound by nothing and named like no handler the component's base declares. The
 handlers of a component module are listed by the distribution itself - the description of
 each component names the handlers of a module built on it, both spellings included (see
-xbsl/modulehandlers.py) - and a component inherits those of its bases. The other modules (an
-object module, the module of a register or of a scheduled job) are not judged: the compiler
-declares their handlers in code, some of them after the element's own yaml (the operations of a
-processing), and no description lists them. A chain of components ending outside the project
-and the catalog, and data without the lists, are not judged either.
+xbsl/modulehandlers.py) - and a component inherits those of its bases. The other modules (the
+object module of a catalog, the record set of a register, the module of a scheduled job) have
+no such description: the compiler declares their handlers in code, and the extractor reads that
+code into the `element_module_handlers` section, by the kind of the element and the module its
+file names (`Stock.Object.xbsl` is the Object module of the element `Stock.yaml`,
+`Stock.xbsl` its own). A module whose handler names come from the element's own description at
+build time - the operations of a processing, the record-level security handlers of an entity -
+is not judged: any name may be a handler there. Nor is a kind the data does not list, a chain of
+components ending outside the project and the catalog, or data without the lists.
 
 A handler may be there in some compatibility modes only (`from` and `to` of its row, a
 half-open range - see modulehandlers.declared_in): the web chat handler of a client
@@ -136,6 +140,45 @@ MESSAGES = {
               "method \"{name}\" is not found\". Removing the annotation is not enough: in this "
               "mode the platform does not call such a method.",
     },
+    f"{OVERRIDE_RULE}.element-found": {
+        "ru": "Метод '{name}' помечен @{annotation}, но переопределять ему нечего: {module} "
+              "переопределяет только {handlers}, а парный yaml этот метод не привязывает. "
+              "Сборка откажет: \"A handler associated with method \"{name}\" is not found\". "
+              "Если метод вызывается из модуля, снимите аннотацию.",
+        "en": "Method '{name}' carries @{annotation}, yet it has nothing to override: {module} "
+              "overrides only {handlers}, and the paired yaml does not bind the method. The "
+              "build refuses it: \"A handler associated with method \"{name}\" is not "
+              "found\". If the method is called from the module, remove the annotation.",
+    },
+    f"{OVERRIDE_RULE}.element-misspelled": {
+        "ru": "Метод '{name}' помечен @{annotation}, но {module} такого обработчика не "
+              "переопределяет. Похоже на опечатку в {similar}: сборка откажет (\"A handler "
+              "associated with method \"{name}\" is not found\"), а переименованный метод "
+              "платформа будет вызывать как обработчик.",
+        "en": "Method '{name}' carries @{annotation}, but {module} overrides no such handler. "
+              "It looks like a misspelled {similar}: the build refuses it (\"A handler "
+              "associated with method \"{name}\" is not found\"), and once renamed the "
+              "platform will call the method as the handler.",
+    },
+    f"{OVERRIDE_RULE}.element-mode": {
+        "ru": "Метод '{name}' помечен @{annotation}, но переопределять ему нечего: {module} "
+              "переопределяет {handler} {modes}, а режим совместимости проекта – {mode}. "
+              "Сборка откажет: \"A handler associated with method \"{name}\" is not "
+              "found\". Снять аннотацию мало: в этом режиме платформа такой метод не вызывает.",
+        "en": "Method '{name}' carries @{annotation}, yet it has nothing to override: {module} "
+              "overrides {handler} {modes}, and the project compatibility mode is {mode}. The "
+              "build refuses it: \"A handler associated with method \"{name}\" is not "
+              "found\". Removing the annotation is not enough: in this mode the platform does "
+              "not call such a method.",
+    },
+    f"{OVERRIDE_RULE}.own-module": {
+        "ru": "модуль элемента вида {kind}",
+        "en": "the module of an element of kind {kind}",
+    },
+    f"{OVERRIDE_RULE}.facet-module": {
+        "ru": "модуль {kind}.{module}",
+        "en": "the {kind}.{module} module",
+    },
     f"{OVERRIDE_RULE}.until": {
         "ru": "только в режимах ниже {until}",
         "en": "only in modes below {until}",
@@ -190,6 +233,7 @@ def _reset() -> None:
     _annotations.cache_clear()
     _binding_keys.cache_clear()
     _overridable.cache_clear()
+    _module_words.cache_clear()
 
 
 dataset.register_reset(_reset)
@@ -327,8 +371,25 @@ def _component_fact(source: SourceFile) -> dict | None:
     }
 
 
+def _element_fact(source: SourceFile) -> dict | None:
+    """What the reduce needs of the description of any other element: its kind and bound names."""
+    if not _HAVE_YAML:
+        return None
+    kind = object_kind_fast(source)
+    if not kind or kind == _COMPONENT_KIND:
+        return None
+    bound = _yaml_fact(source)
+    return {
+        "k": "e",
+        "stem": _handler_pair_stem(source.rel),
+        "kind": kind,
+        "bound": sorted(bound["bound"]) if bound else [],
+    }
+
+
 def _override_mapper(source: SourceFile) -> dict | None:
-    if not modulehandlers.available():
+    components, elements = modulehandlers.available(), modulehandlers.element_available()
+    if not components and not elements:
         return None
     if source.kind == "xbsl":
         return _module_fact(source)
@@ -337,8 +398,30 @@ def _override_mapper(source: SourceFile) -> dict | None:
             # The folder of the project and the mode it declares: the fact the project typing
             # takes from the description, read once per source for every rule that asks.
             return typeinfer.project_fact(source)
-        return _component_fact(source)
+        if object_kind_fast(source) == _COMPONENT_KIND:
+            return _component_fact(source) if components else None
+        return _element_fact(source) if elements else None
     return None
+
+
+@lru_cache(maxsize=1)
+def _module_words() -> dict[str, str]:
+    """{the word a module file adds, either spelling: the module as the data names it}."""
+    words: dict[str, str] = {}
+    for module in modulehandlers.element_modules():
+        words[module] = module
+        english = terms.facet_suffix_english(module)
+        if english:
+            words[english] = module
+    return words
+
+
+def _element_module(stem: str) -> tuple[str, str]:
+    """(the stem of the element's yaml, the module) of a module stem: `X.Object` -> (`X`, the Object module)."""
+    base, dot, word = stem.rpartition(".")
+    if dot and "/" not in word and word in _module_words():
+        return base, _module_words()[word]
+    return stem, ""
 
 
 def _mode_shown(mode: tuple[int, ...], assumed: bool) -> str:
@@ -381,12 +464,14 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         # Two components under one name: which one a base means cannot be told from here.
         return heads[0] if len(heads) == 1 else ""
 
+    elements = {fact["stem"]: fact for fact in facts.values() if fact["k"] == "e"}
     modes = typeinfer.project_modes(facts)
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
         component = by_stem.get(fact["stem"])
         if component is None:
+            yield from _element_overrides(rel, fact, elements, modes)
             continue
         base = modulehandlers.platform_base(component["head"], project_base)
         rows = modulehandlers.rows_of(base) if base else ()
@@ -431,3 +516,56 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                        handlers=", ".join(row[_language()] for row in shown), **fields),
                 fix=TextEdit(method["start"], method["end"], ""),
             )
+
+
+def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
+                       modes: dict) -> Iterable[Diagnostic]:
+    """The findings of one module of an element other than a component (see the docstring)."""
+    stem, module = _element_module(fact["stem"])
+    element = elements.get(stem)
+    if element is None:
+        return
+    rows = modulehandlers.element_slot(element["kind"], module)
+    if not rows:
+        return  # nothing known of the module, or names taken at build time: not judged
+    mode, assumed = modes.get(rel, (None, False))
+    present: dict[str, dict] = {}
+    elsewhere: dict[str, dict] = {}
+    shown: list[dict] = []
+    for row in rows:
+        if modulehandlers.declared_in(row, mode):
+            shown.append(row)
+            present.update(dict.fromkeys((row["ru"], row["en"]), row))
+        else:
+            elsewhere.update(dict.fromkeys((row["ru"], row["en"]), row))
+    where = (i18n.t(f"{OVERRIDE_RULE}.facet-module", kind=element["kind"], module=module)
+             if module else i18n.t(f"{OVERRIDE_RULE}.own-module", kind=element["kind"]))
+    # The yaml binds the methods of the element's own module, not those of its other modules.
+    bound = set() if module else set(element["bound"])
+    for method in fact["annotated"]:
+        name = method["name"]
+        if name in bound or name in present:
+            continue
+        fields = {"name": name, "annotation": method["annotation"], "module": where}
+        other = elsewhere.get(name)
+        if other is not None and mode is not None:
+            yield Diagnostic(
+                rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                i18n.t(f"{OVERRIDE_RULE}.element-mode", handler=other[_language()],
+                       modes=_modes_shown(other), mode=_mode_shown(mode, assumed), **fields),
+            )
+            continue
+        near = difflib.get_close_matches(name, list(present), n=1, cutoff=_NEAR_MISS)
+        if near:
+            yield Diagnostic(
+                rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                i18n.t(f"{OVERRIDE_RULE}.element-misspelled",
+                       similar=present[near[0]][_language()], **fields),
+            )
+            continue
+        yield Diagnostic(
+            rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+            i18n.t(f"{OVERRIDE_RULE}.element-found",
+                   handlers=", ".join(row[_language()] for row in shown), **fields),
+            fix=TextEdit(method["start"], method["end"], ""),
+        )

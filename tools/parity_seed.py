@@ -2133,6 +2133,19 @@ Inherits:
     Type: Form
 """
 _OVERRIDE_TOKENS = {"ПанельСкладов": "StockPanel", "Пересчитать": "Recalculate"}
+#: A catalog: the compiler declares the handlers of its object module in code.
+_OVERRIDE_CATALOG_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f32
+Имя: Склады
+ОбластьВидимости: ВПроекте
+"""
+_OVERRIDE_CATALOG_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f32
+Name: Stock
+VisibilityScope: InProject
+"""
 #: A client application: its module overrides the web chat handler, which is there below
 #: compatibility mode 8.0 only.
 _WEB_CHAT_APP_RU = """\
@@ -5696,6 +5709,30 @@ SEEDS: list[Seed] = [
                  "StockApplication.yaml": _WEB_CHAT_APP_EN, "StockApplication.xbsl": _WEB_CHAT_EN},
         tokens=_WEB_CHAT_TOKENS,
         needs_section="module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the handler annotation on a method of the object module of a catalog that "
+             "overrides none of the handlers the compiler declares there",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU,
+               "Склады.Объект.xbsl": "@Обработчик\nметод Пересчитать()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN,
+                 "Stock.Object.xbsl": "@Handler\nmethod Recalculate()\n;\n"},
+        tokens={"Склады": "Stock", "Пересчитать": "Recalculate"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the object module of a catalog overrides the before-write handler - the "
+             "translated tree spells it the platform's way",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU,
+               "Склады.Объект.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN,
+                 "Stock.Object.xbsl": "@Handler\nmethod BeforeWrite()\n;\n"},
+        tokens={"Склады": "Stock"},
+        needs_section="element_module_handlers",
     ),
     Seed(
         rule="code/local-method-cross-component",

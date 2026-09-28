@@ -14,10 +14,16 @@ with its OWN handlers. A component inherits the handlers of its bases, so the lo
 `bases`, the way the member sets are expanded. A handler may be there in some compatibility
 modes only - the description says which (see `declared_in`).
 
-Only interface components are covered: the handlers of the other modules (an object module,
-the module of a register, of a scheduled job) are declared by the compiler in code, not in a
-description, and nothing here speaks for them. Without the section - a public checkout, or data
-extracted before it existed - every answer is empty, and a caller judges nothing.
+The handlers of the other modules (an object module, the record set of a register, the module
+of a scheduled job) are declared by the compiler in code, not in a description; the extractor
+reads that code (xbsl/extract/elementhandlers.py) and keeps the result in the
+`element_module_handlers` section, by the kind of the element and its module: "" for the
+element's own module, the Russian `Object`, `RecordSet`, `Record` for the others. Some of those modules
+take handler names from the element's own description at build time - the operations of a
+processing, the operations of a SOAP client, the record-level security handlers of an entity -
+and their slot says `dynamic`: any name may be a handler there, and element_slot answers None.
+Without the sections - a public checkout, or data extracted before they existed - every answer
+is empty, and a caller judges nothing.
 """
 
 from __future__ import annotations
@@ -28,6 +34,8 @@ from xbsl import dataset
 
 #: The section of stdlib.json this module reads.
 SECTION = "module_handlers"
+#: The section with the handlers of the modules of the other elements.
+ELEMENT_SECTION = "element_module_handlers"
 
 
 def _catalog() -> dict:
@@ -141,10 +149,66 @@ def platform_base(head: str, project_base, limit: int = 32) -> str:
     return ""
 
 
+@lru_cache(maxsize=1)
+def _elements() -> dict[str, dict[str, dict]]:
+    """{kind: {module: {"handlers": rows, "dynamic": sources}}} - the rows checked like above."""
+    section = _catalog().get(ELEMENT_SECTION)
+    if not isinstance(section, dict):
+        return {}
+    found: dict[str, dict[str, dict]] = {}
+    for kind, modules in section.items():
+        if not isinstance(modules, dict):
+            continue
+        for module, slot in modules.items():
+            if not isinstance(slot, dict):
+                continue
+            rows = tuple(row for row in slot.get("handlers") or () if isinstance(row, dict)
+                         and isinstance(row.get("ru"), str) and isinstance(row.get("en"), str))
+            dynamic = tuple(str(item) for item in slot.get("dynamic") or ())
+            found.setdefault(str(kind), {})[str(module)] = {"handlers": rows, "dynamic": dynamic}
+    return found
+
+
+def element_available() -> bool:
+    """Whether the data carries the handlers of the modules of the other elements."""
+    return bool(_elements())
+
+
+def element_slot(kind: str, module: str) -> tuple[dict, ...] | None:
+    """The handler rows of the module `module` of an element of `kind`, None when not to judge.
+
+    `module` is "" for the element's own module, else the word its file adds (the Russian `Object`). None
+    answers both "the data knows nothing of this module" and "its handler names are taken at
+    build time" - in either case no name can be called wrong.
+    """
+    slot = _elements().get(kind, {}).get(module)
+    if slot is None or slot["dynamic"]:
+        return None
+    return slot["handlers"]
+
+
+@lru_cache(maxsize=1)
+def element_modules() -> frozenset[str]:
+    """The module words the section names (the Russian `Object`, `RecordSet`), own module aside."""
+    return frozenset(module for modules in _elements().values() for module in modules if module)
+
+
+@lru_cache(maxsize=1)
+def element_names() -> frozenset[str]:
+    """Both spellings of every handler a module of any other element may override."""
+    return frozenset(
+        name for modules in _elements().values() for slot in modules.values()
+        for row in slot["handlers"] for name in (row["ru"], row["en"])
+    )
+
+
 def _reset() -> None:
     _table.cache_clear()
     rows_of.cache_clear()
     all_names.cache_clear()
+    _elements.cache_clear()
+    element_modules.cache_clear()
+    element_names.cache_clear()
 
 
 dataset.register_reset(_reset)
