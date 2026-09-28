@@ -161,10 +161,10 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 <a id="a-yaml-dynlist-scroll-without-loading"></a>**`yaml/dynlist-scroll-without-loading`.**
 Проектная половина правила выше. Если `ИспользуемаяИерархия` не задана, задана как `Авто` или голым
 словом `Выключено`, иерархию решает основная таблица ("Авто интерпретирует запрос к динамическому
-списку в зависимости от того – поддерживается в нем иерархичность или нет"), и правило читает её
+списку в зависимости от того – поддерживается в нем иерархичность или нет"), и правило читает ее
 описание в проекте. Судится список над справочником, у которого нет ни `Иерархический`, ни
 `Иерархия`, ни `ДополнительныеИерархии`, ни `ИерархияПоУмолчанию`, и над документом, регистром,
-планом обмена, хранилищем настроек или интегрируемым приложением: иерархии платформа даёт только
+планом обмена, хранилищем настроек или интегрируемым приложением: иерархии платформа дает только
 справочникам. Не судятся таблица вне проекта, журнал данных, виртуальная таблица, производная
 таблица справочника (его группы) и имя, под которым в проекте несколько элементов с разными
 ответами. Находки и исправление те же, что у файлового правила; отдельным правилом эта половина
@@ -214,11 +214,11 @@ HTML-страницы. Код не трогаем – селекторы, иде
 <a id="b-comment-emphasis-caps"></a>**`comment/emphasis-caps`.** Правило судит служебное слово,
 любое другое слово, которое тот же файл пишет и строчными, однобуквенное слово посреди фразы ("В
 котором"), приклеенную приставку и прописные английской строки комментария в словаре перевода.
-Аббревиатуры, маски дат и цитату запроса правило не судит. Цитату запроса оно узнаёт по таблице
+Аббревиатуры, маски дат и цитату запроса правило не судит. Цитату запроса оно узнает по таблице
 ключевых слов языка запросов из данных платформы (раздел `query` файла `terms.json`): ключевое
 слово, которое проза прописными не выделяет ("ВЫБРАТЬ", "УБЫВ"), или составное ("УПОРЯДОЧИТЬ ПО")
 делает цитатой всю строку, а остальные ключевые слова считаются синтаксисом, только когда за ними
-идёт код. Исправление возвращает регистр.
+идет код. Исправление возвращает регистр.
 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** Замечание предлагает
 формулировку со словом условия. Пояснение к значению правило не судит: там перед состоянием ничего
@@ -301,10 +301,10 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/close-in-before-close` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `Закрыть()` внутри `ПередЗакрытием` – платформа игнорирует вызов, и форму не закрывает уже ничто |
 | `query/no-isnull` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `ЕСТЬNULL(` внутри литерала запроса – такой функции в языке запросов нет |
 | `style/abstract-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Абстрактное имя переменной (`Данные`, `Элемент`, `Значение`) не говорит о ней ничего [подробнее](#c-style-abstract-name) [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
-| `style/single-letter-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Однобуквенное имя переменной, параметра или переменной цикла – по стандарту имён односимвольными бывают только параметры коротких лямбда-выражений (`(А, Б) -> А + Б`) [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
+| `style/single-letter-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Однобуквенное имя переменной, параметра или переменной цикла – по стандарту имен односимвольными бывают только параметры коротких лямбда-выражений (`(А, Б) -> А + Б`) [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
 | `style/negated-boolean-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Булева переменная названа от отрицания (`НеПодключен`, `НетОшибок`): имя образуют от истинного значения признака [подробнее](#c-style-negated-boolean-name) [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
 | `style/type-in-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Имя переменной начинается с типа-контейнера (`МассивСтруктурИмен`, `СтруктураОтвета`) – тип виден по объявлению и подсказке редактора, в имя его не включают [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
-| `style/numeral-in-const-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Числительное в имени константы (`ТАЙМАУТ_ОДНА_МИНУТА`) описывает её значение – константу называют абстрактно (`ТАЙМАУТ`), чтобы смена значения не ломала имя [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
+| `style/numeral-in-const-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Числительное в имени константы (`ТАЙМАУТ_ОДНА_МИНУТА`) описывает ее значение – константу называют абстрактно (`ТАЙМАУТ`), чтобы смена значения не ломала имя [доки](https://1cmycloud.com/docs/help/topics/variable-and-constant-names-standard/) |
 | `code/required-field-default` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле структуры или исключения с `обз` имеет значение по умолчанию, которое компилятор отвергает. Исправление удаляет инициализатор, только если остаётся явно указанный тип. |
 | `code/declaration-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Локальная переменная или необязательное поле составного типа без пустого варианта не имеет инициализатора; константа модуля (`конст`) или переменная `исп` объявлена без значения. |
 | `code/return-use-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Оператор `возврат` передаёт ресурс `исп`, который закрывается при выходе из области видимости, в том числе через приведение типа, выбор непустого значения и условное выражение. |
@@ -511,7 +511,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Вызов метода Url `СПараметрамиЗапроса`: значение параметра кодируется частично, и значение-адрес приходит обрезанным по первому "&" [подробнее](#d-code-url-params-partial-encoding) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/url-data-scheme` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Адрес `data:` литералом в конструкторе Url: конструктор разбирает его как путь, и картинка с таким адресом не рисуется [подробнее](#d-code-url-data-scheme) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
 | `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Свойство, вычисляемое выражением в парной разметке, присваивается из кода: платформа такое присваивание отвергает [подробнее](#d-code-bound-property-assign) |
-| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: её умолчание требует значение в каждом конструкторе, и пропуск роняет применение [подробнее](#d-yaml-event-needs-importance) [доки](https://1cmycloud.com/docs/help/topics/event-log-event/) |
+| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: ее умолчание требует значение в каждом конструкторе, и пропуск роняет применение [подробнее](#d-yaml-event-needs-importance) [доки](https://1cmycloud.com/docs/help/topics/event-log-event/) |
 | `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип свойства `СобытиеЖурналаСобытий` вне закрытого списка платформы: отказ приходит только серверной компиляцией и стоит деплоя [подробнее](#d-yaml-event-property-type) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/EventLog/EventLogEvent_ru/) |
 | `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле структуры имеет известный платформенный тип без значения по умолчанию и не имеет ни `обз`, ни допуска `Неопределено`, ни инициализатора [подробнее](#d-code-collection-field-needs-req) [доки](https://1cmycloud.com/docs/help/topics/structure/) |
 | `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная объявлена одним типом, у которого нет ни конструктора, ни значения по умолчанию (`пер Ответ: ОтветHttp`) [подробнее](#d-code-var-needs-init) [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
@@ -1096,7 +1096,7 @@ xbsl путь/к/исходникам --ignore style     # всё, кроме н
   комментарий объявления с тем, что покажет среда разработки. Группа читает комментарии модулей, описаний элементов и файлов ресурсов (правило
   имён – модулей и описаний элементов), а первое лицо и капс ударения – и в английских строках
   словаря перевода; по умолчанию группа выключена, кроме правил `comment/doc-tag-*`; проект, у
-  которого комментарии безличны, включает её ключом `--enable comment`;
+  которого комментарии безличны, включает ее ключом `--enable comment`;
 - `translation/` – английский текст словаря перевода: `translation/english-shape` читает значения
   файлов `xbsl-translation`, текст которых `xbsl translate --strict` не судит;
 - `whitespace/` – хвостовые пробелы и смешанные переводы строк;

@@ -41,6 +41,20 @@ entry either - say what the behaviour was, not which class name was compared.
   help shows, for the argument being written, the text of its `@parameter` tag; inside a `///`
   line the completion offers the tags, the parameters the block has not described yet and, on
   an empty line above a declaration, the block the environment's template writes. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`add-field` and `meta_add_field` add a property to an interface component.** A component's
+  `Properties` used to be refused as "no extendable sections"; the property kind now writes a
+  name and a type there, without `Id`, and a missing section goes after `Inherits`, in front of
+  `Events`. The new `doc` parameter (`--doc`) writes the description of an item as its
+  documentation comment – the `##` lines at its head. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`xbsl fold-comments --compact` prints a short report.** A dry run over a whole tree printed
+  every move and the diff of every file. With `--compact` the text counts the moves per file and
+  lists the ambiguous ones, and `--format json` gives the short report `meta_fold_comments`
+  gives with `compact`. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **A stale MCP server names the CLI command of the refused call.** When the engine on disk
+  changes under a running server, the refusal of `lint_paths`, `lint_source`, `baseline_prune`,
+  `list_rules`, `meta_fold_comments` and the `translate_*` tools carries `cli`: the same call as
+  a shell command the server's interpreter runs on the new code. The text of `lint_source` and
+  inline `translate_set` edits go to a temporary file the command reads (`cli_note`). ([#154](https://github.com/keyfire/xbsl/pull/154))
 
 ### Changed
 
@@ -53,6 +67,24 @@ entry either - say what the behaviour was, not which class name was compared.
   and the tag word of a pair written for a whole tag line. ([#153](https://github.com/keyfire/xbsl/pull/153))
 - **`comment/unknown-name` leaves the names an `@see` or an `@throws` tag points at to
   `comment/doc-tag-target`**, which resolves them strictly and says which one is missing. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`yaml/list-scroll-without-loading` takes the hierarchy of a dynamic list into account.** A
+  hierarchical dynamic list always loads on scroll, so the rule judges a dynamic list only when
+  it is flat: declared `UsedHierarchy: {Type: HierarchyMode, Value: Disabled}` in the file or –
+  through the new project rule `yaml/dynlist-scroll-without-loading` – left to a main table
+  without a hierarchy: a catalog that declares none, a document, a register. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`code/handler-overrides-nothing` judges a handler in the project's compatibility mode.** A
+  handler the component description limits to some modes counts only where the mode admits it:
+  the web chat handler of a client application (`GetWebChatUserData`) is gone from mode 8.0 on,
+  and an override of it in a project of that mode or newer is now reported, the message naming
+  both modes. A project description without a mode is read in the newest mode, as the platform
+  reads it. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`lint_paths` with `select` gives the CI record in one line.** A question about a couple of
+  rules got, on top of its findings, the whole `as_ci` block of about two kilobytes. With
+  `select` the block shrinks to a line, as with `compact`, and `as_ci_full` still gives it
+  whole. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **The language server's warning about code changed on disk has a Restart button.** The
+  warning used to be text naming the command. Now it is a request with a button, and a click
+  asks the editor to restart the server with the `xbsl/restartRequested` notification. ([#154](https://github.com/keyfire/xbsl/pull/154))
 
 ### Fixed
 
@@ -64,6 +96,23 @@ entry either - say what the behaviour was, not which class name was compared.
   abbreviation of the project as a stress** when the re-wrap of a paragraph put it on another
   line than its Russian half. An abbreviation the dictionary declares as a token (`SO`) is no
   stress on any line. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`--as-ci` with a source file instead of a pipeline file failed as a pipeline that does not
+  parse.** A project source is never a pipeline file: the refusal says so and gives the command
+  that works, as it already did for a folder. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`translate --unused --since` missed a new dictionary file outside the git index.** Such a
+  file is not in `git diff`, and the answer said `dictionary_files: 0`. Compared with the working
+  tree, the file now counts whole – every pair in it was written by the change; a range `A..B`
+  does not take such files. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`comment/emphasis-caps` takes the words of a cited query from the platform's keyword
+  table.** Its own lists lacked 35 Russian and 44 English keywords (CASE, ORDER BY, DESC,
+  INSERT...), so a query cited without a marker word, and its English line in the dictionary,
+  read as stress. Only the split into markers and ordinary words is kept by hand; the same
+  words stressed in prose are still reported. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`yaml/list-scroll-without-loading` no longer fails on a list whose row type is written with
+  a namespace.** ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **A refused `docs_search` no longer ends in a validation error of the MCP SDK.** Its declared
+  answer admitted only a list, so the refusal of a stale server reached the agent as an error
+  instead of text. ([#154](https://github.com/keyfire/xbsl/pull/154))
 
 ## 2026-09-27 – 0.120.0
 
