@@ -17,6 +17,7 @@ import pytest
 
 from xbsl import engine, i18n, modulehandlers
 from xbsl.fixer import fix_source
+from xbsl.rules import handler_annotation
 
 RULE = "code/handler-overrides-nothing"
 
@@ -46,9 +47,20 @@ _TABLE = {
 }
 
 
+def _reset() -> None:
+    """Both caches that read the lists: the module's own and the rule's words of module files.
+
+    The rule keeps what it derived from the lists (`_module_words`); an earlier test of the
+    same run that read the real data leaves it filled, and a table put in place here would not
+    be seen by the rule.
+    """
+    modulehandlers._reset()
+    handler_annotation._reset()
+
+
 def _use(monkeypatch, table):
     monkeypatch.setattr(modulehandlers, "_elements", lru_cache(maxsize=1)(lambda: table))
-    modulehandlers._reset()
+    _reset()
 
 
 @pytest.fixture
@@ -57,7 +69,7 @@ def handlers(monkeypatch):
     _use(monkeypatch, _TABLE)
     yield
     monkeypatch.undo()
-    modulehandlers._reset()
+    _reset()
 
 
 CATALOG_YAML = "ВидЭлемента: Справочник\nИд: 4d2f7c60-8e3b-4b5c-9a0f-9c3d4e5f6a71\nИмя: Склады\n"
