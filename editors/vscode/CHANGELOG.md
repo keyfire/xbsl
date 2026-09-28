@@ -40,12 +40,24 @@
   of a record, a record set and a record key. The items follow the kind, the way the **+** in
   the project view of the environment does, and a kind without modules gets none; the
   modules of the record types that exist open from the same menu. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **Add property... and Add event... on a form in the metadata tree.** The context menu of a
+  form, owned or common, and of any other interface component adds the component's own property
+  or event: a name (a taken one is refused in the prompt) and a type from a pick or typed in;
+  the yaml opens on the new item. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The object module of an entity contract in the metadata tree.** A probe confirmed the
+  module, abstract methods alone, together with the module of a global client event. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The `yaml/standard-field-length` finding links to the documentation again.** Its code in
+  the Problems panel opens the length of a catalog's `Name` in the reference of project element
+  properties. ([#156](https://github.com/keyfire/xbsl/pull/156))
 
 ### Changed
 
 - **The documentation comment section of the properties panel folds.** It is folded while the
   node has no comment and open when it has one, like the groups of properties below it: the
   toolbar and the field took a good part of the panel even with nothing to show. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **Two findings open the exact key in the property references.** `yaml/event-needs-importance`
+  opens the `FromConstructor` value of the event importance, and `yaml/event-property-type` the
+  `Type` of an event property. ([#156](https://github.com/keyfire/xbsl/pull/156))
 
 ### Fixed
 
