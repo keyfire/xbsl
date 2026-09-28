@@ -11,7 +11,9 @@ claimed 3 errors against 4.
     descriptions shown in the VS Code settings UI;
   * `editors/vscode/package.json` - a `xbsl.groups.<group>` setting per rule group, plus the
     published version, which both CHANGELOGs must describe;
-  * `editors/vscode/src/ruleDocs.ts` - which rules link to a documentation page.
+  * `editors/vscode/src/ruleDocs.ts` - which rules link to a documentation page, and where to:
+    with the Element data at hand, every page and section it opens must exist in the
+    documentation of the default data version.
 
 The registry is read in a SUBPROCESS with XBSL_NO_PLUGINS=1 on purpose. An installed plugin
 adds its own rules and rewrites the severity of built-in ones at import time, so an in-process
@@ -33,6 +35,7 @@ import sys
 from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -308,35 +311,93 @@ def test_extension_version_is_described_in_changelog(name: str):
 
 # The predicates are a closed set of two shapes; anything else must break the guard loudly
 # rather than be counted as "no coverage".
-_MATCH_BODY = re.compile(r"match:\s*\(r\)\s*=>(.*?),\s*\n?\s*page:", re.S)
 _EXACT = re.compile(r'r\s*===\s*"([^"]+)"')
 _PREFIX = re.compile(r'r\.startsWith\("([^"]+)"\)')
 _DOCS_ORIGIN = "https://1cmycloud.com/docs/help/"
+#: A double-quoted TypeScript string. The file uses no escape JSON lacks (`\uFFFD` in an
+#: anchor is the one there is), so json.loads reads the literal the way the compiler does.
+_TS_STRING = r'"(?:[^"\\]|\\.)*"'
+#: The page or the anchor of an entry: a string, or a constant declared as one at the top.
+_TS_VALUE = rf"[A-Z_]+|{_TS_STRING}"
+_TS_CONST = re.compile(rf"^const ([A-Z_]+) = ({_TS_STRING});", re.M)
+_MATCH_HEAD = re.compile(r"match:\s*\(r\)\s*=>")
+_ENTRY = re.compile(
+    rf"match:\s*\(r\)\s*=>(?P<body>.*?),\s*page:\s*(?P<page>{_TS_VALUE})"
+    rf"(?:,\s*anchor:\s*(?P<anchor>{_TS_VALUE}))?\s*,?\s*\}}",
+    re.S,
+)
+
+
+class _RuleDoc(NamedTuple):
+    """An entry of RULE_DOCS: the rules its predicate names and the place it opens."""
+
+    exact: frozenset[str]
+    prefixes: tuple[str, ...]
+    page: str
+    anchor: str | None
+
+    def covers(self, rule_id: str) -> bool:
+        return rule_id in self.exact or any(rule_id.startswith(p) for p in self.prefixes)
+
+    def rules(self) -> str:
+        return ", ".join(sorted(self.exact) + [f"{prefix}*" for prefix in self.prefixes])
+
+
+@lru_cache(maxsize=1)
+def _rule_doc_entries() -> tuple[_RuleDoc, ...]:
+    """The entries of RULE_DOCS in file order - the extension takes the first that matches."""
+    text = (VSCODE / "src" / "ruleDocs.ts").read_text(encoding="utf-8")
+    constants = {name: json.loads(literal) for name, literal in _TS_CONST.findall(text)}
+
+    def value(token: str | None) -> str | None:
+        if token is None:
+            return None
+        if token.startswith('"'):
+            return json.loads(token)
+        assert token in constants, f"ruleDocs.ts: константа {token} не объявлена строкой в начале файла"
+        return constants[token]
+
+    entries, leftovers = [], []
+    for match in _ENTRY.finditer(text):
+        body = match.group("body")
+        rest = _PREFIX.sub("", _EXACT.sub("", body)).replace("||", "").strip()
+        if rest:
+            leftovers.append(rest)
+        entries.append(_RuleDoc(
+            frozenset(_EXACT.findall(body)), tuple(_PREFIX.findall(body)),
+            value(match.group("page")), value(match.group("anchor")),
+        ))
+    assert entries, "ruleDocs.ts: не найдено ни одного предиката match – формат файла изменился"
+    assert not leftovers, (
+        "ruleDocs.ts: предикаты неизвестной формы " + repr(leftovers) + " – сторож умеет "
+        'только r === "id" и r.startsWith("группа/"); научите его или верните прежнюю форму'
+    )
+    declared = len(_MATCH_HEAD.findall(text))
+    assert len(entries) == declared, (
+        f"ruleDocs.ts: записей {declared}, разобрано {len(entries)} – у записи page или anchor "
+        "не строка и не константа, или порядок полей другой; сторож не должен её пропускать"
+    )
+    return tuple(entries)
 
 
 @lru_cache(maxsize=1)
 def _rule_docs() -> tuple[frozenset[str], frozenset[str]]:
     """(exact rule ids, group prefixes) linked to a documentation page."""
-    text = (VSCODE / "src" / "ruleDocs.ts").read_text(encoding="utf-8")
-    bodies = _MATCH_BODY.findall(text)
-    assert bodies, "ruleDocs.ts: не найдено ни одного предиката match – формат файла изменился"
-    exact, prefixes, leftovers = set(), set(), []
-    for body in bodies:
-        exact.update(_EXACT.findall(body))
-        prefixes.update(_PREFIX.findall(body))
-        rest = _PREFIX.sub("", _EXACT.sub("", body)).replace("||", "").strip()
-        if rest:
-            leftovers.append(rest)
-    assert not leftovers, (
-        "ruleDocs.ts: предикаты неизвестной формы " + repr(leftovers) + " – сторож умеет "
-        'только r === "id" и r.startsWith("группа/"); научите его или верните прежнюю форму'
-    )
+    exact: set[str] = set()
+    prefixes: set[str] = set()
+    for entry in _rule_doc_entries():
+        exact.update(entry.exact)
+        prefixes.update(entry.prefixes)
     return frozenset(exact), frozenset(prefixes)
 
 
+def _rule_doc(rule_id: str) -> _RuleDoc | None:
+    """The entry the extension opens for the rule: the first one that covers it, as `find` does."""
+    return next((entry for entry in _rule_doc_entries() if entry.covers(rule_id)), None)
+
+
 def _has_doc_link(rule_id: str) -> bool:
-    exact, prefixes = _rule_docs()
-    return rule_id in exact or any(rule_id.startswith(p) for p in prefixes)
+    return _rule_doc(rule_id) is not None
 
 
 def test_rule_docs_entries_are_known_rules():
@@ -359,14 +420,19 @@ def test_docs_table_links_agree_with_extension(name: str):
     over the catalog); what must not happen is the two sources disagreeing on which rules
     those are. The failure message lists the current no-link set, so adding a rule forces a
     decision instead of a silent omission.
+
+    Where both link, they link to the same page. The table only restated the address, and when
+    pages moved it kept the old ones as readily as ruleDocs.ts did; held equal here, the table
+    rides on the check of every ruleDocs.ts page against the documentation data below.
     """
     rows = _parse_table(name)
     problems = []
     for rule_id, row in sorted(rows.items()):
         if rule_id not in _by_id():
             continue
+        entry = _rule_doc(rule_id)
         in_table = row["link"] is not None
-        in_extension = _has_doc_link(rule_id)
+        in_extension = entry is not None
         if in_table != in_extension:
             problems.append(
                 f"{name}:{row['line']} {rule_id}: в таблице "
@@ -375,10 +441,63 @@ def test_docs_table_links_agree_with_extension(name: str):
             )
         if in_table and not row["link"].startswith(_DOCS_ORIGIN):
             problems.append(f"{name}:{row['line']} {rule_id}: ссылка не на {_DOCS_ORIGIN}")
+        elif entry is not None and in_table and row["link"] != f"{_DOCS_ORIGIN}{entry.page}/":
+            problems.append(
+                f"{name}:{row['line']} {rule_id}: в таблице {row['link']}, "
+                f"а ruleDocs.ts открывает {entry.page}"
+            )
     without = sorted(r["id"] for r in _registry() if not _has_doc_link(r["id"]))
     assert not problems, (
         "столбец Документация разошёлся с ruleDocs.ts:\n" + "\n".join(problems)
         + f"\n\nсейчас без ссылки на доки {len(without)} правил: {', '.join(without)}"
+    )
+
+
+#: Characters a heading id may carry without showing them. The panel finds a section by the
+#: EXACT id (getElementById), so an anchor has to carry them as well; the guard names such a
+#: near miss rather than reporting a bare "no section".
+_INVISIBLE = re.compile("[\u00AD\u200B\u200C\u200D\uFEFF\uFFFD]")
+_HEADING_ID = re.compile(r'\bid="([^"]+)"')
+
+
+def _visible(text: str) -> str:
+    """The text with its invisible characters spelled as escapes - the way ruleDocs.ts writes them."""
+    return _INVISIBLE.sub(lambda m: f"\\u{ord(m.group()):04X}", text)
+
+
+@pytest.mark.needs_data
+def test_rule_docs_pages_and_anchors_exist_in_the_default_data_version():
+    """Every page and section ruleDocs.ts opens exists in the documentation of the default version.
+
+    The panel reads the page from docs.sqlite of the data version in use and scrolls to the
+    exact heading id. The entries were checked by hand, against the version of their day; when
+    a newer version became the default, six of the pages were no longer in it, and a click on
+    the rule showed "Page not found" with nothing to notice it. The default version is what a
+    fresh setup reads, so that is the one the links must hold for.
+    """
+    from xbsl import dataset, docs
+
+    version = dataset.default_version()
+    if not docs.available(version):
+        pytest.skip(f"у версии данных по умолчанию {version} нет docs.sqlite – сверять не с чем")
+    headings: dict[str, set[str] | None] = {}
+    problems = []
+    for entry in _rule_doc_entries():
+        if entry.page not in headings:
+            record = docs.page(entry.page, version)
+            headings[entry.page] = None if record is None else set(_HEADING_ID.findall(record["html"]))
+        ids = headings[entry.page]
+        if ids is None:
+            problems.append(f"{entry.rules()}: страницы {entry.page} нет")
+        elif entry.anchor is not None and entry.anchor not in ids:
+            twins = sorted(i for i in ids if _INVISIBLE.sub("", i) == _INVISIBLE.sub("", entry.anchor))
+            hint = f" (есть {_visible(twins[0])} – отличается невидимым символом)" if twins else ""
+            problems.append(
+                f"{entry.rules()}: на странице {entry.page} нет раздела #{_visible(entry.anchor)}{hint}"
+            )
+    assert not problems, (
+        f"ruleDocs.ts ведёт мимо справки версии данных по умолчанию {version}:\n"
+        + "\n".join(problems)
     )
 
 
