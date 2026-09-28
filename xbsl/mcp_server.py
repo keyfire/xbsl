@@ -420,8 +420,10 @@ def lint_paths(
                   tree is clean. `summary.as_ci`, when present, narrows to one line,
                   {"adopted": true, "brief": ...}: the file relative to the checkout, the job,
                   the flags with a long list counted ("--enable ×10"), the jobs not taken and
-                  the includes left unread;
-    as_ci_full  - with `compact`, keep the whole `as_ci` record instead of the line;
+                  the includes left unread. A call with `select` asks about a few rules, and
+                  it gets the same line without `compact`: the record of a long pipeline ran
+                  to two kilobytes over an answer of two findings;
+    as_ci_full  - with `compact` or `select`, keep the whole `as_ci` record instead of the line;
     compare     - a file that keeps the run for the next call; the CLI `--compare` reads and
                   writes the same file. The first call saves the run and answers
                   `compare: {file, compared: false}`. Every next call compares with the saved
@@ -460,6 +462,7 @@ def lint_paths(
     base = _base(root)
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
+    narrow = bool(select)  # the caller's own selection, before the job adds its set
     job = None
     if as_ci or as_ci_job:
         try:
@@ -526,6 +529,8 @@ def lint_paths(
         # pipeline has to know which of them it reproduced), where the command actually
         # stands when an `include:` brought it, and the includes nobody fetched.
         payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
+        if narrow and not as_ci_full:
+            payload["summary"]["as_ci"] = report.compact_as_ci(payload["summary"]["as_ci"])
     if state is not None:
         return _compared(payload, diags, paths, base, state, saved, active, chosen,
                          compact=compact, as_ci_full=as_ci_full)
