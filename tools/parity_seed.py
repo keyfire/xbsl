@@ -2185,6 +2185,25 @@ _NO_SCROLL_LIST_RU = (
     "        Имя: Список\n"
     "        Навигация: Отсутствует\n"
 )
+#: A scrolled dynamic list over the catalog of the seeds, declared in its own source; `{hierarchy}`
+#: is the line block of UsedHierarchy (empty - the main table decides), `{navigation}` the value.
+_SCROLLED_DYNLIST_RU = (
+    "    Содержимое:\n"
+    "        Тип: Таблица<ДинамическийСписок<Заявки>>\n"
+    "        Имя: Список\n"
+    "        Источник:\n"
+    "{hierarchy}"
+    "            ОсновнаяТаблица:\n"
+    "                Таблица: Заявки\n"
+    "        Навигация: {navigation}\n"
+    "        ПрокруткаПоВертикали: Истина\n"
+)
+#: The flat hierarchy in the typed spelling of the platform's own examples.
+_FLAT_HIERARCHY_RU = (
+    "            ИспользуемаяИерархия:\n"
+    "                Тип: РежимИерархии\n"
+    "                Значение: Выключено\n"
+)
 
 
 SEEDS: list[Seed] = [
@@ -4871,15 +4890,13 @@ SEEDS: list[Seed] = [
     Seed(
         rule="yaml/list-scroll-without-loading",
         expect=FINDING,
-        note="a scrolled list whose navigation never asks for the next portion",
+        note="a scrolled list whose navigation never asks for the next portion - a dynamic list "
+             "its own source declares flat",
         files={
             "Заявки.yaml": _CATALOG_RU,
-            "СписокЗаявок.yaml": _LIST_FORM_RU
-                                 + "    Содержимое:\n"
-                                   "        Тип: Таблица<ДинамическийСписок<Заявки>>\n"
-                                   "        Имя: Список\n"
-                                   "        Навигация: Отсутствует\n"
-                                   "        ПрокруткаПоВертикали: Истина\n",
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy=_FLAT_HIERARCHY_RU, navigation="Отсутствует",
+            ),
         },
         tokens=_LIST_FORM_TOKENS,
     ),
@@ -4889,12 +4906,33 @@ SEEDS: list[Seed] = [
         note="the same list loading the next portion as it scrolls",
         files={
             "Заявки.yaml": _CATALOG_RU,
-            "СписокЗаявок.yaml": _LIST_FORM_RU
-                                 + "    Содержимое:\n"
-                                   "        Тип: Таблица<ДинамическийСписок<Заявки>>\n"
-                                   "        Имя: Список\n"
-                                   "        Навигация: ПодгрузкаПриПрокрутке\n"
-                                   "        ПрокруткаПоВертикали: Истина\n",
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy=_FLAT_HIERARCHY_RU, navigation="ПодгрузкаПриПрокрутке",
+            ),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-scroll-without-loading",
+        expect=FINDING,
+        note="a scrolled dynamic list whose hierarchy is left to a catalog that declares none",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy="", navigation="Отсутствует",
+            ),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-scroll-without-loading",
+        expect=CLEAN,
+        note="the same list over a hierarchical catalog always loads on scroll",
+        files={
+            "Заявки.yaml": _CATALOG_RU + "Иерархический: Истина\n",
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy="", navigation="Отсутствует",
+            ),
         },
         tokens=_LIST_FORM_TOKENS,
     ),

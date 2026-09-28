@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 260 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 261 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -104,6 +104,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does: the apply rejects the node as an unknown property [details](#a-yaml-unknown-component-property) [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A list with `Navigation: None` never loads the tail: a vertical scroll moves through one portion, and a list over an array without a scroll of its own keeps the automatic portion of ten rows [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru/) |
+| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written or `Auto`): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
 
@@ -155,8 +156,23 @@ sets the portion and the scrolling moves through that portion alone: the list se
 row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list over an array
 without a scroll of its own is judged too while `PageSize` is automatic (ten rows): the page
 scrolls around one portion, and the cure is a page size by the limit of the data or loading with a
-scroll of the list's own. A tree source loads on scroll whatever is written and is not judged;
-neither is a dynamic list without a scroll, nor an expression in `Navigation`.
+scroll of the list's own. A tree source and a hierarchical dynamic list load on scroll whatever is
+written and are not judged, nor is an expression in `Navigation`. A dynamic list is judged here
+when its source declares it flat - `UsedHierarchy` as the typed node `{Type: HierarchyMode, Value:
+Disabled}`, the spelling of the platform's own examples; one whose hierarchy is left to the main
+table is judged by `yaml/dynlist-scroll-without-loading`, and one built in code is not judged.
+
+<a id="a-yaml-dynlist-scroll-without-loading"></a>**`yaml/dynlist-scroll-without-loading`.** The
+project half of the rule above: `UsedHierarchy` not written, `Auto` or a bare `Disabled` leaves the
+hierarchy to the main table ("Auto interprets the query of the dynamic list depending on whether it
+supports hierarchy"), and the table is read from the project. Judged is a list over a catalog that
+declares none of `Hierarchical`, `Hierarchy`, `AdditionalHierarchies` and `DefaultHierarchy`, or
+over a document, a register, an exchange plan, a settings storage or an integrable application - the
+platform gives hierarchies to catalogs alone. A table outside the project, a data journal, a
+virtual table, a table derived from a catalog (its groups) and a name shared by elements that do
+not all agree are left alone. The findings and the fix are those of the file rule; the rule is
+split off so that the editor keeps checking the file on every keystroke and reads the project on
+save.
 
 ### Tier B - text and conventions
 

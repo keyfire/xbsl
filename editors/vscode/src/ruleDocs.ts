@@ -350,6 +350,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru",
     anchor: "отсутствует",
   },
+  {
+    match: (r) => r === "yaml/dynlist-scroll-without-loading",
+    page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
+    anchor: "навигация",
+  },
   { match: (r) => r === "code/load-object-unwrap", page: "topics/data-deletion" },
   {
     match: (r) => r === "code/permission-right-not-computable" || r === "code/access-key-handler-flavour",
