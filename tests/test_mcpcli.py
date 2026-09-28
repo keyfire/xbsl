@@ -24,6 +24,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -555,3 +556,24 @@ def test_the_translate_entries_command_lists_what_the_tool_lists(
 
     assert len(tool["entries"]) == 2
     assert json.loads(capsys.readouterr().out)["entries"] == tool["entries"]
+
+
+def test_old_staged_folders_are_swept_and_the_rest_kept(tmp_path):
+    """A server leaves its folder for a command run after the restart; the next one sweeps."""
+    day = 24 * 3600
+    now = time.time()
+    old = tmp_path / "xbsl-mcp-old"
+    old.mkdir()
+    (old / "call.xbsl").write_text("x", encoding="utf-8")
+    young = tmp_path / "xbsl-mcp-young"
+    young.mkdir()
+    stranger = tmp_path / "another-tool-old"
+    stranger.mkdir()
+    lone_file = tmp_path / "xbsl-mcp-file"
+    lone_file.write_text("x", encoding="utf-8")
+    for aged in (old, stranger, lone_file):
+        os.utime(aged, (now - 2 * day, now - 2 * day))
+
+    assert mcpcli.sweep_old_folders(str(tmp_path), now) == 1
+    assert not old.exists()
+    assert young.exists() and stranger.exists() and lone_file.exists()

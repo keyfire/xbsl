@@ -294,6 +294,21 @@ def test_a_tool_runs_on_the_loaded_plugins_and_says_so_first(site, mcp_module):
     assert event["reason"] == "plugins" and event["on_disk"] == "acme-rules 2.0.0"
 
 
+def test_the_warning_of_a_tool_with_a_command_carries_the_command(site, mcp_module):
+    """The answer by the plugins on disk is one command away, as it is on a refusal."""
+    freshness.remember()
+    _upgrade(site, "2.0.0")
+
+    def list_rules(select=None, ignore=None, rules_filter=""):
+        return {"rules": []}
+
+    answer = mcp_module._stale_guard(list_rules)()
+
+    assert list(answer) == ["stale", "rules"]
+    assert "--list-rules" in answer["stale"]["cli"]
+    assert "cli" in answer["stale"]["message"]
+
+
 def test_an_answer_that_is_a_list_stays_a_list(site, mcp_module):
     freshness.remember()
     _upgrade(site, "2.0.0")

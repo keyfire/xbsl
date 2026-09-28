@@ -91,13 +91,15 @@ Bash on Windows). The command starts the server's own interpreter, which imports
 from the same place and so runs the code that is on disk now. `lint_paths`, `lint_source`,
 `baseline_prune`, `list_rules`, `meta_fold_comments` and the `translate_*` tools have such a
 command. The text of a `lint_source` call and the inline edits of a `translate_set` call are
-saved to a temporary file that the command reads, and `cli_note` names that file. The other
+saved to a temporary file that the command reads, and `cli_note` names that file; a folder of
+such files older than a day, left by an earlier server, is taken out by the next one. The other
 tools refuse as before.
 
 The plugins are compared too. When the plugins installed differ from the ones the server loaded,
 the tools still run, on the rules loaded at start, and every answer that is an object starts with
 `stale`: reason `plugins`, the `changed` distributions with both versions and a request to restart
-the server. `version_info` shows `plugins_on_disk` next to `plugins`. The server lists the installed
+the server; for a tool with a CLI command the record carries `cli` too, the answer by the
+plugins on disk. `version_info` shows `plugins_on_disk` next to `plugins`. The server lists the installed
 distributions again only when a folder they are installed into changes, so a call costs one check
 of that folder.
 

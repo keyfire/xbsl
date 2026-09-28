@@ -121,14 +121,21 @@ def _stale_answer(found: dict, message: str, same: dict | None = None) -> dict:
     return {"error": f"{message}. {i18n.t('mcpcli.same-call')}", **same, "stale": stale}
 
 
-def _warned(answer, found: dict):
+def _warned(answer, found: dict, same: dict | None = None):
     """The answer of a tool that ran with the plugins loaded at start, the plugins on disk
     being others: `stale` goes first in a dict answer. Another answer (a list) is left as it
-    is - the journal still hears it, and version_info names the state."""
+    is - the journal still hears it, and version_info names the state.
+
+    `same` is the CLI command of the call (see mcpcli.same_call): the record carries it, so
+    the answer by the plugins on disk is one command away, as it is on a refusal.
+    """
     if not isinstance(answer, dict) or "stale" in answer:
         return answer
     message = i18n.t("freshness.plugins-warning", state=freshness.describe(found))
-    return {"stale": {**found, "location": environment.location(), "message": message}, **answer}
+    if same:
+        message = f"{message}. {i18n.t('mcpcli.same-call-plugins')}"
+    stale = {**found, "location": environment.location(), "message": message, **(same or {})}
+    return {"stale": stale, **answer}
 
 
 def _stale_guard(fn):
@@ -172,7 +179,7 @@ def _stale_guard(fn):
         found = freshness.plugins_state()
         if found is not None:
             _journal_stale(found, fn.__name__)
-            answer = _warned(answer, found)
+            answer = _warned(answer, found, same_call(args, kwargs))
         return answer
 
     return call
