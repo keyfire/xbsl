@@ -368,10 +368,17 @@ def test_the_language_server_tells_the_editor_once_per_state(tmp_path, monkeypat
     monkeypatch.setattr(freshness, "state", lambda sources=False: next(states))
     server = lsp._make_server()
     server.lsp._workspace = Workspace(uris.from_fs_path(str(tmp_path)))
-    shown, logged = [], []
+    shown, logged, asked, notified = [], [], [], []
     monkeypatch.setattr(server, "show_message", lambda text, kind=None: shown.append((text, kind)))
     monkeypatch.setattr(server, "show_message_log", lambda text, *args: logged.append(text))
     monkeypatch.setattr(server, "publish_diagnostics", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "send_notification", lambda method, *args: notified.append(method))
+
+    def request(method, params=None, callback=None):
+        asked.append((method, params, callback))
+        shown.append((params.message, params.type))
+
+    monkeypatch.setattr(server.lsp, "send_request", request)
     fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
     features = getattr(fm, "features", fm)
     path = tmp_path / "Задачи.yaml"
@@ -392,6 +399,14 @@ def test_the_language_server_tells_the_editor_once_per_state(tmp_path, monkeypat
     assert all(text.startswith("xbsl-lsp: ") and "Перезапустите сервер языка" in text
                for text, _kind in shown)
     assert logged == [text for text, _kind in shown]
+    # The message carries a button, and a click asks the client for the restart.
+    method, params, callback = asked[0]
+    assert method == lsp.lsp.WINDOW_SHOW_MESSAGE_REQUEST
+    assert [action.title for action in params.actions] == ["Перезапустить"]
+    callback(None)  # the message closed without a click
+    assert notified == []
+    callback({"title": "Перезапустить"})
+    assert notified == ["xbsl/restartRequested"]
 
 
 def test_the_language_server_takes_the_start_before_it_serves(monkeypatch):

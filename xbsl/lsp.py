@@ -506,7 +506,28 @@ def _make_server() -> "LanguageServer":
         STATE.stale_told.add(told)
         text = i18n.t("freshness.editor", state=freshness.describe(found))
         server.show_message_log(text)
-        server.show_message(text, lsp.MessageType.Warning)
+        # A message with a button rather than a line naming the command: the click comes back
+        # as the answer, and the server asks its client to restart it (`xbsl/restartRequested`,
+        # which the extension runs as "XBSL: restart the linter"). A client that knows nothing
+        # of the request still shows the message.
+        restart = i18n.t("lsp.restart-button")
+
+        def chosen(answer: object) -> None:
+            title = answer.get("title") if isinstance(answer, dict) else getattr(answer, "title", None)
+            if title == restart:
+                server.send_notification("xbsl/restartRequested")
+
+        try:
+            server.lsp.send_request(
+                lsp.WINDOW_SHOW_MESSAGE_REQUEST,
+                lsp.ShowMessageRequestParams(
+                    type=lsp.MessageType.Warning, message=text,
+                    actions=[lsp.MessageActionItem(title=restart)],
+                ),
+                callback=chosen,
+            )
+        except Exception:  # noqa: BLE001 - the plain message still says what to do
+            server.show_message(text, lsp.MessageType.Warning)
 
     def lint_buffer(uri: str) -> None:
         tell_if_stale()

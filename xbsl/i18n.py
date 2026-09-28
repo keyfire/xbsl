@@ -653,6 +653,10 @@ _CORE_MESSAGES = {
         "ru": "формат вывода: text - план и разница, json - для агентов",
         "en": "output format: text - the plan and the diff, json - for agents",
     },
+    "lsp.restart-button": {
+        "ru": "Перезапустить",
+        "en": "Restart",
+    },
     "cli.help.fold-compact": {
         "ru": "кратко: переносы по файлам и спорные переносы вместо каждого переноса и разницы "
               "(с --format json - краткий отчет, как у meta_fold_comments с compact)",
