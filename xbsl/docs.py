@@ -107,11 +107,18 @@ PROPERTY_REFERENCES = (
     "stdlib/element/InterfaceComponents",
     "stdlib/element/IntegrationProcessSchema",
 )
-_IN_PROPERTY_REFERENCES = (
-    "(" + " OR ".join(["id = ? OR id LIKE ?"] * len(PROPERTY_REFERENCES)) + ")"
+#: The glossary: a page per term of the documentation. Its titles are ordinary words of the
+#: platform (the Russian for "value", "task", "expression"), and a symbol spelled that way is a
+#: variable, a type or a member rather than the term - so a glossary page never answers a symbol
+#: either.
+GLOSSARY = "topics/terms"
+#: The roots of the pages that never answer a symbol: a root page and every page under it.
+_NOT_SYMBOL_ROOTS = (*PROPERTY_REFERENCES, GLOSSARY)
+_IN_NOT_SYMBOL_ROOTS = (
+    "(" + " OR ".join(["id = ? OR id LIKE ?"] * len(_NOT_SYMBOL_ROOTS)) + ")"
 )
-_PROPERTY_REFERENCE_PATTERNS = tuple(
-    value for root in PROPERTY_REFERENCES for value in (root, root + "/%")
+_NOT_SYMBOL_PATTERNS = tuple(
+    value for root in _NOT_SYMBOL_ROOTS for value in (root, root + "/%")
 )
 # Query token: letters (incl. Cyrillic), digits, underscore - everything else is dropped for FTS5.
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
@@ -298,8 +305,9 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
     no exact page, and a guide topic guessed by the word is confusing - candidates are
     picked by the caller via search().
 
-    A property reference (PROPERTY_REFERENCES) never answers: a name its title repeats is a
-    type's or a member's, and the callers look a member up when this answers nothing.
+    A property reference (PROPERTY_REFERENCES) and a glossary term (GLOSSARY) never answer: a
+    name their titles repeat is a type's or a member's, and the callers look a member up when
+    this answers nothing.
 
     The qualifier match is REFERENCE pages only: a topic's `qualified` is whatever `Std::...`
     its text happened to mention first (the topic about breakpoints quotes `Std::Array::Add`),
@@ -329,19 +337,21 @@ def _page_of(con: sqlite3.Connection, name: str) -> str | None:
     """The page id for one exact spelling: an exact title, then a reference qualifier.
 
     A property reference is left out: it carries no qualified name, and ranked with the rest
-    it took `Button` and `Date` away from the pages of the types.
+    it took `Button` and `Date` away from the pages of the types. A glossary term is left out
+    as well: where no reference page has its title, it answered the Russian words for "value"
+    and "task", which the code names its variables and members after.
     """
     exact = con.execute(
-        f"SELECT id FROM pages WHERE title = ? AND NOT {_IN_PROPERTY_REFERENCES} "
+        f"SELECT id FROM pages WHERE title = ? AND NOT {_IN_NOT_SYMBOL_ROOTS} "
         "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
-        (name, *_PROPERTY_REFERENCE_PATTERNS),
+        (name, *_NOT_SYMBOL_PATTERNS),
     ).fetchone()
     if exact:
         return exact["id"]
     byq = con.execute(
         "SELECT id FROM pages WHERE qualified LIKE ? AND id LIKE 'stdlib/%' "
-        f"AND NOT {_IN_PROPERTY_REFERENCES} ORDER BY length(qualified) LIMIT 1",
-        (f"%::{name}", *_PROPERTY_REFERENCE_PATTERNS),
+        f"AND NOT {_IN_NOT_SYMBOL_ROOTS} ORDER BY length(qualified) LIMIT 1",
+        (f"%::{name}", *_NOT_SYMBOL_PATTERNS),
     ).fetchone()
     return byq["id"] if byq else None
 

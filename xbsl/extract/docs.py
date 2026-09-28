@@ -43,8 +43,9 @@ _TEMPLATE_NS = "stdlib/element/xbsl/DeveloperName"
 # Site section tabs that go into the tree (sidebar key -> label), in the order of the site menu.
 # The server management REST API (console) is 534 endpoints with no bearing on writing code, so
 # it is not included. The property references of project elements, interface components and the
-# integration process schema are panels of their own; a panel the bundle lacks simply yields no
-# section - a missing key is skipped below.
+# integration process schema are panels of their own, and so is the glossary: the pages of those
+# references link to its terms. A panel the bundle lacks simply yields no section - a missing key
+# is skipped below.
 SIDEBARS = [
     ("developer", "Руководство разработчика"),
     ("administrator", "Руководство администратора"),
@@ -53,6 +54,7 @@ SIDEBARS = [
     ("interfaceComponentsStdlib", "Свойства компонентов интерфейса"),
     ("integrationProcessSchemaStdlib", "Схема процесса интеграции"),
     ("xbqlStdlib", "Язык запросов"),
+    ("glossary", "Глоссарий"),
 ]
 
 # The canonical docs site address comes from the sitemap; the fallback is the Element cloud.

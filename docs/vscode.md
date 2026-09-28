@@ -619,6 +619,9 @@ its record types, a common module or a form its own module, and a virtual table,
 event-log event, localized strings or a navigation command none. A new module is an
 empty file beside the description, named in the language of the description
 (`Name.Object.xbsl` in a project written in English), and it opens right away.
+A tabular section of a catalog or a document offers the module of its row the same way:
+**Create row module (Object.TabularSection.xbsl)** writes an empty `Name.Section.xbsl`
+beside the description, and the attributes of the row are in scope there.
 
 **Properties panel** – the same one the form designer uses. Scalar properties are edited in place:
 dropdowns for `VisibilityScope` and `Environment`, a `True` / `False` toggle, text for the rest.
@@ -771,8 +774,9 @@ platform version you use and works offline.
 
 **The tree.** A curated "Contents" that mirrors the site: the developer and administrator guides,
 the type reference (`Std::Collections` → `Array` → ...), the properties of project elements and
-interface components, the integration process schema and the query language. It is built from the
-distribution's own sidebar, so the structure matches the site. Clicking a node opens the page.
+interface components, the integration process schema, the query language and the glossary. It is
+built from the distribution's own sidebar, so the structure matches the site. Clicking a node
+opens the page.
 
 **Search.** The search button in the view title (command *XBSL: search the documentation*) runs a
 full-text search over the whole reference and guide; pick a hit to open it.
@@ -995,6 +999,8 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Create record set module (.RecordSet.xbsl) | `xbsl.metadata.createRecordSetModule` | panel / context menu |
 | Open record key module (.RecordKey.xbsl) | `xbsl.metadata.openRecordKeyModule` | panel / context menu |
 | Create record key module (.RecordKey.xbsl) | `xbsl.metadata.createRecordKeyModule` | panel / context menu |
+| Open row module (Object.TabularSection.xbsl) | `xbsl.metadata.openRowModule` | panel / context menu |
+| Create row module (Object.TabularSection.xbsl) | `xbsl.metadata.createRowModule` | panel / context menu |
 | Open in the form designer | `xbsl.metadata.previewForm` | Command Palette |
 | Open application module (Project.xbsl) | `xbsl.metadata.openAppModule` | Command Palette |
 | Properties | `xbsl.metadata.props` | Command Palette |

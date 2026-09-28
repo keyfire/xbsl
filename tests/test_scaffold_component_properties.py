@@ -298,6 +298,44 @@ def test_the_default_of_an_existing_property_is_set_in_place(tmp_path):
     ]
 
 
+_PROPERTIES_EN = (
+    "Properties:\n"
+    "    -\n"
+    "        Name: Title\n"
+    "        Type: String\n"
+)
+
+
+@pytest.mark.needs_data  # the English keys and the boolean pair come from the platform data
+def test_a_boolean_goes_into_an_english_component_the_way_english_sources_write_it(tmp_path):
+    # The English sources of the distribution write `True` and `False`; the Russian word in the
+    # middle of an English file is an island the next reader has to know.
+    path = _component(tmp_path, _HEAD_EN, "WarehouseCard.yaml")
+
+    text = _added(path, "Shown", type_="Boolean", props={
+        "DefaultValue": False, "StoredData": True, "Contextual": "True",
+    })
+
+    assert text.endswith(
+        "Properties:\n    -\n        Name: Shown\n        Type: Boolean\n"
+        "        DefaultValue: False\n        StoredData: True\n        Contextual: True\n"
+    )
+
+
+@pytest.mark.needs_data  # the keys a property takes are its metamodel class's own
+def test_a_boolean_set_on_an_existing_property_keeps_the_spelling_of_the_file(tmp_path):
+    russian = _component(tmp_path, _HEAD + _PROPERTIES)
+    english = _component(tmp_path, _HEAD_EN + _PROPERTIES_EN, "WarehouseCard.yaml")
+
+    ru = scaffold.op_set_field_property(russian, "свойство", "Название",
+                                        {"СохраняемыеДанные": True}).changes[0].content
+    en = scaffold.op_set_field_property(english, "свойство", "Title",
+                                        {"StoredData": True}).changes[0].content
+
+    assert ru == _HEAD + _PROPERTIES + "        СохраняемыеДанные: Истина\n"
+    assert en == _HEAD_EN + _PROPERTIES_EN + "        StoredData: True\n"
+
+
 @pytest.mark.needs_data  # the schema answers from the metamodel
 def test_the_schema_of_a_component_item_matches_what_add_field_takes(mcp_module):
     """metadata_schema is where a caller learns the keys before passing them: it has to
@@ -383,6 +421,28 @@ def test_an_event_takes_no_default_value(tmp_path):
 
     with pytest.raises(ScaffoldError, match="нет свойства 'ЗначениеПоУмолчанию'"):
         _event_added(path, "ПриВыбореСклада", props={"ЗначениеПоУмолчанию": "Истина"})
+
+
+def test_a_property_and_an_event_share_one_namespace(tmp_path):
+    """A live probe refused a component with a property and an event of one name ("Property
+    name X is not unique", "Event name X is not unique"): add-field does not write one."""
+    path = _component(tmp_path, _HEAD + _PROPERTIES + _EVENTS)
+
+    with pytest.raises(ScaffoldError, match="'ПриВыбореСклада' уже есть в секции События"):
+        _added(path, "ПриВыбореСклада")
+    with pytest.raises(ScaffoldError, match="'Название' уже есть в секции Свойства"):
+        _event_added(path, "Название")
+    # The negative control: a free name goes into either section.
+    assert "Имя: Емкость" in _added(path, "Емкость")
+    assert "Имя: ПриОчистке" in _event_added(path, "ПриОчистке")
+
+
+@pytest.mark.needs_data  # both spellings of the sections come from the metamodel
+def test_a_property_and_an_event_share_one_namespace_in_english(tmp_path):
+    path = _component(tmp_path, _HEAD_EN + _EVENTS_EN, "WarehouseCard.yaml")
+
+    with pytest.raises(ScaffoldError, match="'OnWarehouseChosen' уже есть"):
+        _added(path, "OnWarehouseChosen")
 
 
 def test_an_event_is_the_component_s_own_kind(tmp_path):
@@ -498,6 +558,27 @@ def test_the_cli_passes_the_description(tmp_path, capsys):
     assert path.read_text(encoding="utf-8") == _HEAD  # a dry run writes nothing
 
 
+@pytest.mark.parametrize("field_kind, name, prop, expected", [
+    ("свойство", "Название", "ЗначениеПоУмолчанию=Главный склад",
+     {"Имя": "Название", "Тип": "Строка", "ЗначениеПоУмолчанию": "Главный склад"}),
+    ("событие", "ПриВыбореСклада", "Тип=СобытиеСДанными<Строка>",
+     {"Имя": "ПриВыбореСклада", "Тип": "СобытиеСДанными<Строка>"}),
+], ids=["property", "event"])
+def test_the_cli_sets_a_property_and_an_event_of_the_component(
+        tmp_path, capsys, field_kind, name, prop, expected):
+    # The help of set-field-property names both kinds: the operation takes them the way
+    # add-field does.
+    path = _component(tmp_path, _HEAD + _PROPERTIES + _EVENTS)
+
+    code = cli.main(["set-field-property", str(path), field_kind, name, "--prop", prop,
+                     "--dry-run"])
+
+    assert code == 0
+    content = json.loads(capsys.readouterr().out)["files"][0]["content"]
+    section = "Свойства" if field_kind == "свойство" else "События"
+    assert yaml.safe_load(content)[section] == [expected]
+
+
 def test_the_mcp_tool_writes_the_property_with_its_description(mcp_module, tmp_path):
     path = _component(tmp_path, _HEAD + _EVENTS)
 
@@ -509,6 +590,20 @@ def test_the_mcp_tool_writes_the_property_with_its_description(mcp_module, tmp_p
     batch = mcp_module.meta_add_field(str(path), "свойство", names=["Адрес", "Вместимость"],
                                       doc="Общий текст")
     assert "одному элементу" in batch["error"]
+
+
+@pytest.mark.needs_data  # the English keys and the boolean pair come from the platform data
+def test_the_mcp_tool_writes_a_json_boolean_in_the_spelling_of_the_file(mcp_module, tmp_path):
+    # The MCP is where a boolean arrives as one: the JSON of the call carries `true`.
+    path = _component(tmp_path, _HEAD_EN + _PROPERTIES_EN, "WarehouseCard.yaml")
+
+    res = mcp_module.meta_set_field_property(str(path), "свойство", "Title",
+                                             {"StoredData": True})
+
+    assert "error" not in res, res
+    assert path.read_text(encoding="utf-8-sig") == (
+        _HEAD_EN + _PROPERTIES_EN + "        StoredData: True\n"
+    )
 
 
 def test_the_lsp_request_passes_the_description(tmp_path):

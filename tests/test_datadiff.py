@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from xbsl import datadiff
+from xbsl import datadiff, i18n
 
 
 def test_previous_version_orders_numerically():
@@ -136,6 +136,15 @@ def test_diff_terms_reports_changed_pairs():
     assert diff["types"]["added"] == ["Новый"]
     assert diff["types"]["removed"] == ["Старый"]
     assert diff["types"]["changed"] == {"Запрос": ["Query", "DataQuery"]}
+
+
+def test_diff_terms_reports_the_reserved_words_of_the_query_language():
+    """The list of the reserved words is a section of pairs like the others: data extracted
+    before it existed shows the whole list as added, and the section has a title of its own."""
+    diff = datadiff.diff_terms({}, {"query_reserved": {"ИСТИНА": "TRUE"}})
+    assert diff["query_reserved"]["added"] == ["ИСТИНА"]
+    lines = datadiff._section_lines("terms", diff, None)
+    assert any(i18n.t("datadiff.term.query-reserved") in str(line) for line in lines)
 
 
 def test_diff_docs_pages_added_removed_retitled():

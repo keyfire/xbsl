@@ -74,6 +74,7 @@ import {
   componentMemberRequest,
   componentMemberTypeChoices,
   existingModule,
+  existingRowModules,
   groupResources,
   MetaField,
   MetaInternals,
@@ -83,6 +84,8 @@ import {
   parseInternals,
   ResourceFile,
   ResourceScope,
+  rowModuleMenuTokens,
+  rowModulePathFor,
   SERIALIZER_KIND_SPELLINGS,
   standardAttrNames,
   translationRef,
@@ -426,6 +429,11 @@ interface Element {
   objectModulePath?: string;
   // The modules of the record types (`Record`, `RecordSet`, `RecordKey`) that exist, by tail.
   recordModules?: Partial<Record<ModuleTail, string>>;
+  // The modules of the rows of the tabular sections that exist, by the name of the section.
+  rowModules?: Record<string, string>;
+  // The parsed sections of an element the tree shows tabular sections for: read once when the
+  // model is built (the row modules need the names of the sections) and reused by its node.
+  internals?: MetaInternals;
   queryPath?: string; // VirtualTable: the paired `.xbql` query
   ownerType?: string;
   text: string;
@@ -603,6 +611,7 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
         recordModules[tail] = found;
       }
     }
+    const internals = KIND_ADD_GROUPS[kind]?.includes("tabular") ? parseInternals(text) : undefined;
     elements.push({
       kind,
       englishKind,
@@ -612,6 +621,10 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
       // Either spelling: a project written in English names it `Name.Object.xbsl`.
       objectModulePath: existingModule(yamlPath, "Объект", onDisk),
       recordModules,
+      rowModules: internals
+        ? existingRowModules(yamlPath, internals.tabulars.map((section) => section.name), onDisk)
+        : undefined,
+      internals,
       queryPath: xbqlSet.has(queryPath.toLowerCase()) ? queryPath : undefined,
       ownerType: kind === FORM_KIND ? RE_OWNER_TYPE.exec(text)?.[1]?.split(".")[0] : undefined,
       text,
@@ -716,6 +729,8 @@ class XbslNode extends vscode.TreeItem {
   modulePath?: string;
   objectModulePath?: string;
   recordModules?: Partial<Record<ModuleTail, string>>; // modules of the record types, by tail
+  tabularName?: string; // tabular section: its name - the tail of the module of its row
+  rowModulePath?: string; // tabular section: the module of its row, when it is there
   englishKind?: boolean; // the description is written in English: a new module is named so too
   queryPath?: string;
   appModulePath?: string;
@@ -1326,10 +1341,15 @@ function fieldNode(field: MetaField, yamlPath: string, icon: string): XbslNode {
   return node;
 }
 
-// Tabular section node: like a field, but with the "+ add attribute" action (the addtcattr marker).
-function tabularNode(tc: MetaField, yamlPath: string): XbslNode {
-  const node = fieldNode(tc, yamlPath, "table");
-  node.contextValue = "member field props addtcattr";
+// Tabular section node: like a field, but with the "+ add attribute" action (the addtcattr marker)
+// and the module of its row - opened when it is there, created where the kind's rows take one
+// (rowModuleMenuTokens).
+function tabularNode(tc: MetaField, el: Element): XbslNode {
+  const node = fieldNode(tc, el.yamlPath, "table");
+  node.tabularName = tc.name;
+  node.rowModulePath = el.rowModules?.[tc.name];
+  node.contextValue = ["member field props addtcattr", ...rowModuleMenuTokens(el.kind, !!node.rowModulePath)]
+    .join(" ");
   return node;
 }
 
@@ -1361,16 +1381,16 @@ function standardAttrsGroupNode(kind: string, yamlPath: string, internals?: Meta
   return node;
 }
 
-function addGroupNode(addKind: string, yamlPath: string, fields: MetaField[]): XbslNode {
+function addGroupNode(addKind: string, el: Element, fields: MetaField[]): XbslNode {
   const spec = ADD_SPECS[addKind];
   const node = new XbslNode(vscode.l10n.t(spec.label), vscode.TreeItemCollapsibleState.Collapsed);
   node.iconPath = new vscode.ThemeIcon(spec.icon);
   node.description = String(fields.length);
-  node.yamlPath = yamlPath;
+  node.yamlPath = el.yamlPath;
   node.addKind = addKind;
   node.contextValue = `group ${spec.token}`;
   // In the tabular group the children are sections with attribute adding; other groups - plain fields.
-  node.children = fields.map((f) => (addKind === "tabular" ? tabularNode(f, yamlPath) : fieldNode(f, yamlPath, spec.icon)));
+  node.children = fields.map((f) => (addKind === "tabular" ? tabularNode(f, el) : fieldNode(f, el.yamlPath, spec.icon)));
   return node;
 }
 
@@ -1510,7 +1530,7 @@ function formsGroupNode(forms: Element[], owner?: { name: string; yamlPath: stri
 
 function elementNode(el: Element, boundForms: Element[], namespace?: string): XbslNode {
   const groups: XbslNode[] = [];
-  const internals = parseInternals(el.text);
+  const internals = el.internals ?? parseInternals(el.text);
   const stdNames = new Set(standardAttrNames(el.kind));
   if (stdNames.size) {
     groups.push(standardAttrsGroupNode(el.kind, el.yamlPath, internals));
@@ -1521,7 +1541,7 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
     if (key === "attr" && stdNames.size) {
       fields = fields.filter((f) => !stdNames.has(f.name));
     }
-    groups.push(addGroupNode(key, el.yamlPath, fields));
+    groups.push(addGroupNode(key, el, fields));
   }
   if (internals) {
     // Tabular sections of a catalog/document go through KIND_ADD_GROUPS (with adding); here are only
@@ -2570,6 +2590,19 @@ async function createModule(node: XbslNode | undefined, tail: ModuleTail): Promi
     return;
   }
   const target = modulePathFor(node.yamlPath, tail, !!node.englishKind);
+  if (!fs.existsSync(target)) {
+    await vscode.workspace.fs.writeFile(vscode.Uri.file(target), new Uint8Array());
+  }
+  await openFile(target);
+}
+
+// Creates the module of the row of a tabular section the same way: an empty `Name.Section.xbsl`
+// beside the description, opened right away (rowModulePathFor).
+async function createRowModule(node: XbslNode | undefined): Promise<void> {
+  if (!node?.yamlPath || !node.tabularName) {
+    return;
+  }
+  const target = rowModulePathFor(node.yamlPath, node.tabularName);
   if (!fs.existsSync(target)) {
     await vscode.workspace.fs.writeFile(vscode.Uri.file(target), new Uint8Array());
   }
@@ -3691,6 +3724,8 @@ export function registerMetadataTree(
     vscode.commands.registerCommand(
       "xbsl.metadata.createRecordKeyModule", (n?: XbslNode) => createModule(n, "КлючЗаписи")
     ),
+    vscode.commands.registerCommand("xbsl.metadata.openRowModule", (n?: XbslNode) => openFile(n?.rowModulePath)),
+    vscode.commands.registerCommand("xbsl.metadata.createRowModule", (n?: XbslNode) => createRowModule(n)),
     vscode.commands.registerCommand("xbsl.metadata.openAppModule", (n?: XbslNode) => openFile(n?.appModulePath)),
     vscode.commands.registerCommand("xbsl.metadata.reveal", (n?: XbslNode) => reveal(n)),
     vscode.commands.registerCommand("xbsl.metadata.previewForm", (n?: XbslNode) => previewForm(n)),

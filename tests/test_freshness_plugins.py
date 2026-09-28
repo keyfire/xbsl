@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from xbsl import cli, freshness, mcpjournal, plugins
+from xbsl import cli, freshness, mcpcli, mcpjournal, plugins
 
 
 class _Dist:
@@ -294,8 +294,11 @@ def test_a_tool_runs_on_the_loaded_plugins_and_says_so_first(site, mcp_module):
     assert event["reason"] == "plugins" and event["on_disk"] == "acme-rules 2.0.0"
 
 
-def test_the_warning_of_a_tool_with_a_command_carries_the_command(site, mcp_module):
+def test_the_warning_of_a_tool_with_a_command_carries_the_command(
+        site, mcp_module, monkeypatch, tmp_path):
     """The answer by the plugins on disk is one command away, as it is on a refusal."""
+    # On Python 3.10 the command stands in the folder of the staged data: the test's own.
+    monkeypatch.setattr(mcpcli, "_staged_in", str(tmp_path))
     freshness.remember()
     _upgrade(site, "2.0.0")
 

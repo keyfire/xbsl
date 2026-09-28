@@ -3119,24 +3119,68 @@ def test_new_object_presentation_only_where_the_kind_has_one(tmp_path):
 
 
 @pytest.mark.needs_data
-def test_new_object_presentation_is_a_caption_or_an_attribute_name(tmp_path):
-    """Presentation means two different things, and the tool refuses the wrong one.
+def test_new_object_caption_of_an_attribute_name_kind_goes_into_the_interface(tmp_path):
+    """Presentation means two different things, and the caption goes where the kind keeps it.
 
-    A catalog shows the value of a string ATTRIBUTE (metamodel type AttributeName); a
-    caption written there compiles into "Field specified as a presentation field is not
-    found" (checked on the server 07.08.2026). A constants set has no attributes at all -
-    there the value is a caption, and the server takes it.
+    A catalog shows the value of a string ATTRIBUTE (metamodel type AttributeName); a caption
+    written there compiles into "Field specified as a presentation field is not found" - an
+    identifier as much as a phrase, since a new catalog declares no attribute to name. Its
+    caption lives in the interface section, and a live probe applied a catalog, a document, an
+    exchange plan and a settings storage captioned there with no attribute declared. A
+    constants set has no attributes at all - there the top-level value is the caption.
     """
-    with pytest.raises(ScaffoldError, match="ИМЯ строкового реквизита"):
-        scaffold.op_new_object(tmp_path, "Справочник", "Товары", presentation="Товары склада")
-    apply_result(scaffold.op_new_object(
-        tmp_path, "Справочник", "Товары", presentation="Название",
-    ))
-    assert "Представление: Название" in (tmp_path / "Товары.yaml").read_text(encoding="utf-8")
+    result = scaffold.op_new_object(tmp_path, "Справочник", "Товары", presentation="Товары склада")
+    apply_result(result)
+    text = (tmp_path / "Товары.yaml").read_text(encoding="utf-8")
+    data = _valid_yaml(text)
+    assert "Представление" not in data
+    assert data["Интерфейс"] == {"Список": {"Представление": "Товары склада"}}
+    assert "Интерфейс.Объект.Представление" in result.notes[0]
+    assert "имя строкового реквизита" in result.notes[0]
+    # An identifier is a caption too: nothing it could name exists yet.
+    apply_result(scaffold.op_new_object(tmp_path, "Документ", "Заказы", presentation="Заказы"))
+    data = _valid_yaml((tmp_path / "Заказы.yaml").read_text(encoding="utf-8"))
+    assert "Представление" not in data and data["Интерфейс"]["Список"]["Представление"] == "Заказы"
     apply_result(scaffold.op_new_object(
         tmp_path, "НаборКонстант", "Настройки", presentation="Настройки приложения",
     ))
     assert "Представление: Настройки приложения" in (tmp_path / "Настройки.yaml").read_text(encoding="utf-8")
+
+
+@pytest.mark.needs_data
+def test_new_object_caption_of_a_kind_without_a_top_level_one(tmp_path):
+    # A register names its list in the interface, a processing the interface itself; both
+    # used to be refused as having no Presentation at all.
+    result = scaffold.op_new_object(tmp_path, "РегистрСведений", "Курсы", presentation="Курсы валют")
+    apply_result(result)
+    data = _valid_yaml((tmp_path / "Курсы.yaml").read_text(encoding="utf-8"))
+    assert data["Интерфейс"] == {"Список": {"Представление": "Курсы валют"}}
+    assert "Интерфейс.Запись.Представление" in result.notes[0]
+    assert data["Измерения"]  # the starter dimension stays
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "Загрузка", presentation="Загрузка цен"))
+    data = _valid_yaml((tmp_path / "Загрузка.yaml").read_text(encoding="utf-8"))
+    assert data["Интерфейс"] == {"Представление": "Загрузка цен"}
+
+
+@pytest.mark.needs_data
+def test_new_object_caption_replaces_the_one_a_kind_writes_itself(tmp_path):
+    # A command is born captioned with its name; the caller's caption used to be written
+    # next to it - two top-level keys of one name.
+    apply_result(scaffold.op_new_object(
+        tmp_path, "ОбычнаяКоманда", "Отправить", presentation="Отправить письмо",
+    ))
+    text = (tmp_path / "Отправить.yaml").read_text(encoding="utf-8")
+    assert text.count("Представление:") == 1
+    assert _valid_yaml(text)["Представление"] == "Отправить письмо"
+
+
+@pytest.mark.needs_data
+def test_new_object_caption_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Catalog", "Goods", presentation="Goods in stock"))
+    data = _valid_yaml((subsystem / "Goods.yaml").read_text(encoding="utf-8"))
+    assert data["Interface"] == {"List": {"Presentation": "Goods in stock"}}
+    assert "Presentation" not in data
 
 
 # --- routes_for: the verbs are checked, not just upper-cased -------------------------------

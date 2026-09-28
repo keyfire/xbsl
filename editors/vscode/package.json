@@ -239,6 +239,16 @@
         "category": "XBSL"
       },
       {
+        "command": "xbsl.metadata.openRowModule",
+        "title": "%cmd.metadata.openRowModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.createRowModule",
+        "title": "%cmd.metadata.createRowModule%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.metadata.previewForm",
         "title": "%cmd.metadata.previewForm%",
         "category": "XBSL",
@@ -1024,6 +1034,14 @@
           "when": "false"
         },
         {
+          "command": "xbsl.metadata.openRowModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.createRowModule",
+          "when": "false"
+        },
+        {
           "command": "xbsl.metadata.addComponentProperty",
           "when": "false"
         },
@@ -1198,6 +1216,16 @@
           "command": "xbsl.metadata.createRecordKeyModule",
           "when": "view == xbslMetadata && viewItem =~ /\\bnewreckeymod\\b/",
           "group": "1_open@3.3"
+        },
+        {
+          "command": "xbsl.metadata.openRowModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\btcmod\\b/",
+          "group": "1_open@3.4"
+        },
+        {
+          "command": "xbsl.metadata.createRowModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewtcmod\\b/",
+          "group": "1_open@3.4"
         },
         {
           "command": "xbsl.metadata.openQuery",

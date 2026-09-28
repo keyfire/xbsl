@@ -18,7 +18,8 @@ the file of the element that HOLDS the reference. That sentence is the compiler'
 appears on no page of the shipped documentation, which is why the message names its source.
 
 Only some kinds have a deletion mode at all - four of the forty one. A register has none -
-neither the metamodel nor `topics/information-register-properties` gives the kind such a
+neither the metamodel nor the property reference of the kind
+(`stdlib/element/ProjectElements/Std/ProjectElements/InformationRegister`) gives it such a
 property - while its dimensions and resources may well carry the action, and the compiler takes
 them. So a register is out of the rule's reach entirely.
 

@@ -36,6 +36,8 @@
   "cmd.metadata.createRecordSetModule": "Создать модуль набора записей (.НаборЗаписей.xbsl)",
   "cmd.metadata.openRecordKeyModule": "Открыть модуль ключа записи (.КлючЗаписи.xbsl)",
   "cmd.metadata.createRecordKeyModule": "Создать модуль ключа записи (.КлючЗаписи.xbsl)",
+  "cmd.metadata.openRowModule": "Открыть модуль строки (Объект.ТабличнаяЧасть.xbsl)",
+  "cmd.metadata.createRowModule": "Создать модуль строки (Объект.ТабличнаяЧасть.xbsl)",
   "cmd.metadata.previewForm": "Открыть в конструкторе",
   "cmd.metadata.openAppModule": "Открыть модуль приложения (Проект.xbsl)",
   "cmd.metadata.props": "Свойства",

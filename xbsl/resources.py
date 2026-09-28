@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from xbsl import dataset, terms
+from xbsl import dataset, terms, typeinfer
 from xbsl.layout import Layout, PROJECT_FILES, Place, service_dirs
 from xbsl.restext import RESOURCE_DIRS
 
@@ -53,7 +53,13 @@ def _version(value: object) -> tuple[int, ...] | None:
 
 
 def project_compatibility(project_dir: Path | None) -> tuple[int, ...] | None:
-    """Compatibility mode declared by a project, or None when it is not known."""
+    """The compatibility mode a project is read in, or None when it is not known.
+
+    The mode is read the way the platform reads it (`typeinfer.read_mode`): a description that
+    declares no mode, a value that names none or a mode the platform does not support is
+    refused by the build, and the reader goes on in the newest mode. Unknown without the
+    description or when it does not parse; without data only a declared mode is known.
+    """
     if project_dir is None:
         return None
     for name in PROJECT_FILES:
@@ -66,11 +72,9 @@ def project_compatibility(project_dir: Path | None) -> tuple[int, ...] | None:
             return None
         if not isinstance(data, dict):
             return None
-        for key in terms.key_forms("РежимСовместимости"):
-            version = _version(data.get(key))
-            if version is not None:
-                return version
-        return None
+        declared = next((version for key in terms.key_forms("РежимСовместимости")
+                         if (version := _version(data.get(key))) is not None), None)
+        return typeinfer.read_mode(declared)[0]
     return None
 
 

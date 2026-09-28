@@ -493,6 +493,59 @@ def test_presentation_skips_kind_without_property():
     assert _lint(_PRESENTATION, "ОбщийМодуль", "Общее") == []
 
 
+_LIST_CAPTION = "Интерфейс:\n    Список:\n        Представление: Партии товаров\n"
+
+
+@pytest.mark.needs_data
+def test_presentation_of_an_attribute_name_kind_points_at_the_interface():
+    """A catalog's top-level Presentation names an attribute: the message must not call it a
+    caption (a caption pasted there fails the build) and says where the captions go."""
+    d = _lint(_PRESENTATION, "Справочник", "Партии")
+    assert len(d) == 1
+    assert "имя строкового реквизита" in d[0].message
+    assert "Интерфейс.Список.Представление" in d[0].message
+    assert "Интерфейс.Объект.Представление" in d[0].message
+    assert "задаёт заголовок" not in d[0].message
+    # A kind whose top-level property is a text keeps the caption message.
+    report = _lint(_PRESENTATION, "Отчет", "Сверка")
+    assert len(report) == 1 and "задаёт заголовок" in report[0].message
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("tail", [
+    _LIST_CAPTION,
+    "Интерфейс:\n    Объект:\n        Представление: Партия товара\n",
+])
+def test_presentation_interface_caption_satisfies_an_attribute_name_kind(tail):
+    assert _lint(_PRESENTATION, "Справочник", "Партии", tail) == []
+    assert _lint(_PRESENTATION, "Документ", "Партии", tail) == []
+
+
+@pytest.mark.needs_data
+def test_presentation_interface_without_a_caption_is_still_reported():
+    # The negative control: an interface section that names no caption satisfies nothing.
+    tail = "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Истина\n    Список:\n        Форма: Партии\n"
+    assert len(_lint(_PRESENTATION, "Справочник", "Партии", tail)) == 1
+
+
+@pytest.mark.needs_data
+def test_presentation_interface_caption_does_not_count_for_a_text_kind():
+    # A report keeps its caption in the top-level property; an interface block is no excuse.
+    assert len(_lint(_PRESENTATION, "Отчет", "Сверка", _LIST_CAPTION)) == 1
+
+
+@pytest.mark.needs_data
+def test_presentation_interface_caption_in_an_english_file():
+    text = (
+        f"ElementKind: Catalog\nId: {_ID}\nName: Batches\n"
+        "Interface:\n    List:\n        Presentation: Batches of goods\n"
+    )
+    source = engine.load_text("Batches.yaml", text)
+    assert engine.run_sources([source], select={_PRESENTATION}) == []
+    bare = engine.load_text("Batches.yaml", f"ElementKind: Catalog\nId: {_ID}\nName: Batches\n")
+    assert len(engine.run_sources([bare], select={_PRESENTATION})) == 1
+
+
 # --- mandatory prefixes and postfixes by kind -----------------------------------------
 
 @pytest.mark.parametrize("name", ["ApiСайта", "WebСайт"])

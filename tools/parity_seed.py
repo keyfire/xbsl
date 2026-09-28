@@ -2146,6 +2146,44 @@ Id: 1d1f5c60-0000-4000-8000-000000000f32
 Name: Stock
 VisibilityScope: InProject
 """
+#: A document and a register: their object and record modules override handlers the compiler
+#: declares for the kind, and a scheduled job overrides its own `Handler`.
+_OVERRIDE_DOCUMENT_RU = """\
+ВидЭлемента: Документ
+Ид: 1d1f5c60-0000-4000-8000-000000000f33
+Имя: Накладные
+ОбластьВидимости: ВПроекте
+"""
+_OVERRIDE_DOCUMENT_EN = """\
+ElementKind: Document
+Id: 1d1f5c60-0000-4000-8000-000000000f33
+Name: Invoices
+VisibilityScope: InProject
+"""
+_OVERRIDE_JOB_RU = """\
+ВидЭлемента: ЗапланированноеЗадание
+Ид: 1d1f5c60-0000-4000-8000-000000000f34
+Имя: ОчисткаСкладов
+ОбластьВидимости: ВПроекте
+"""
+_OVERRIDE_JOB_EN = """\
+ElementKind: ScheduledJob
+Id: 1d1f5c60-0000-4000-8000-000000000f34
+Name: StockCleanup
+VisibilityScope: InProject
+"""
+_OVERRIDE_REGISTER_RU = """\
+ВидЭлемента: РегистрСведений
+Ид: 1d1f5c60-0000-4000-8000-000000000f35
+Имя: ОстаткиСкладов
+ОбластьВидимости: ВПроекте
+"""
+_OVERRIDE_REGISTER_EN = """\
+ElementKind: InformationRegister
+Id: 1d1f5c60-0000-4000-8000-000000000f35
+Name: StockBalances
+VisibilityScope: InProject
+"""
 #: A client application: its module overrides the web chat handler, which is there below
 #: compatibility mode 8.0 only.
 _WEB_CHAT_APP_RU = """\
@@ -2221,6 +2259,44 @@ _FLAT_HIERARCHY_RU = (
     "                Тип: РежимИерархии\n"
     "                Значение: Выключено\n"
 )
+
+
+#: A component with a property and an event (yaml/component-member-unique); the event name is
+#: substituted: the same name as the property is refused by the build, another one is legal.
+_MEMBERS_COMPONENT_RU = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Ид: 6f0b6a44-0000-4000-8000-00000000d101\n"
+    "Имя: ПанельЗаказа\n"
+    "ОбластьВидимости: ВПроекте\n"
+    "Наследует:\n"
+    "    Тип: Группа\n"
+    "Свойства:\n"
+    "    -\n"
+    "        Имя: Смена\n"
+    "        Тип: Строка\n"
+    "События:\n"
+    "    -\n"
+    "        Имя: {event}\n"
+    "        Тип: СобытиеКомпонента\n"
+)
+_MEMBERS_TOKENS = {"ПанельЗаказа": "OrderPanel", "Смена": "Shift", "ПриСмене": "OnShift"}
+
+#: A form with a button (yaml/auto-bare-value); the property line is substituted.
+_AUTO_BUTTON_FORM_RU = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Ид: 6f0b6a44-0000-4000-8000-00000000d102\n"
+    "Имя: ФормаЗаказа\n"
+    "ОбластьВидимости: ВПроекте\n"
+    "Наследует:\n"
+    "    Тип: Форма\n"
+    "    Содержимое:\n"
+    "        Тип: ПроизвольныйШаблонФормы\n"
+    "        Содержимое:\n"
+    "            Тип: Кнопка\n"
+    "            Имя: КнопкаЗаказа\n"
+    "            {line}\n"
+)
+_AUTO_TOKENS = {"ФормаЗаказа": "OrderForm", "КнопкаЗаказа": "OrderButton"}
 
 
 SEEDS: list[Seed] = [
@@ -5735,6 +5811,32 @@ SEEDS: list[Seed] = [
         needs_section="element_module_handlers",
     ),
     Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the object module of a document overrides the create-on-basis handler, and the "
+             "dictionary spells it otherwise - the translated tree keeps the platform's word, "
+             "the entry is reported as a dictionary defect",
+        files={"Накладные.yaml": _OVERRIDE_DOCUMENT_RU,
+               "Накладные.Объект.xbsl": "@Обработчик\nметод ПриСозданииНаОсновании(Основание: Объект)\n;\n"},
+        english={"Invoices.yaml": _OVERRIDE_DOCUMENT_EN,
+                 "Invoices.Object.xbsl": "@Handler\nmethod OnCreateOnBasis(Basis: Object)\n;\n"},
+        tokens={"Накладные": "Invoices", "Основание": "Basis",
+                "ПриСозданииНаОсновании": "OnCreateFromBasis"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the module of a scheduled job overrides its handler - the translated tree spells "
+             "it the platform's way with no dictionary entry",
+        files={"ОчисткаСкладов.yaml": _OVERRIDE_JOB_RU,
+               "ОчисткаСкладов.xbsl": "@Обработчик\nметод Обработчик()\n;\n"},
+        english={"StockCleanup.yaml": _OVERRIDE_JOB_EN,
+                 "StockCleanup.xbsl": "@Handler\nmethod Handler()\n;\n"},
+        tokens={"ОчисткаСкладов": "StockCleanup"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
         rule="code/local-method-cross-component",
         expect=FINDING,
         note="a component method at the default visibility called through an instance from another component",
@@ -5896,6 +5998,39 @@ SEEDS: list[Seed] = [
         files={"Работа.xbsl": "метод Лишний()\n;\n",
                "Склад.yaml": "# Лишний зовёт вставка по имени\nИмя: Склад\n"},
         tokens={"Работа": "Work", "Лишний": "Spare", "Склад": "Store"},
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=CLEAN,
+        note="the fill handler of a register record without the annotation - the platform calls "
+             "it by name, and the English spelling of the element lists is a handler too",
+        files={"ОстаткиСкладов.yaml": _OVERRIDE_REGISTER_RU,
+               "ОстаткиСкладов.Запись.xbsl": "метод ПриЗаполнении()\n;\n"},
+        english={"StockBalances.yaml": _OVERRIDE_REGISTER_EN,
+                 "StockBalances.Record.xbsl": "method OnFill()\n;\n"},
+        tokens={"ОстаткиСкладов": "StockBalances", "ПриЗаполнении": "OnFill"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=CLEAN,
+        note="the record-level security handler of a catalog without the annotation - the build "
+             "names it after the access settings, and no data section lists it",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU,
+               "Склады.xbsl": "метод ВычислитьРазрешенияДоступаДляОбъектов()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN,
+                 "Stock.xbsl": "method ComputeAccessPermissionsForObjects()\n;\n"},
+        tokens={"Склады": "Stock",
+                "ВычислитьРазрешенияДоступаДляОбъектов": "ComputeAccessPermissionsForObjects"},
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=FINDING,
+        note="a method named like the before-write handler of an object form of format 5.0 - "
+             "the converter of format 6.0 renames it, and no supported mode calls it",
+        files={"Работа.xbsl": "метод ПередЗаписьюОбъекта()\n;\n"},
+        english={"Work.xbsl": "method BeforeWriteObject()\n;\n"},
+        tokens={"Работа": "Work", "ПередЗаписьюОбъекта": "BeforeWriteObject"},
     ),
     Seed(
         rule="code/unused-local",
@@ -7320,6 +7455,34 @@ SEEDS: list[Seed] = [
                 hierarchy=_FLAT_HIERARCHY_RU, navigation="ПодгрузкаПриПрокрутке"),
         },
         tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/component-member-unique",
+        expect=FINDING,
+        note="a property and an event of one component share a name - the build refuses it",
+        files={"ПанельЗаказа.yaml": _MEMBERS_COMPONENT_RU.format(event="Смена")},
+        tokens=_MEMBERS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/component-member-unique",
+        expect=CLEAN,
+        note="the same component with the event named apart from the property",
+        files={"ПанельЗаказа.yaml": _MEMBERS_COMPONENT_RU.format(event="ПриСмене")},
+        tokens=_MEMBERS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/auto-bare-value",
+        expect=FINDING,
+        note="a bare Auto in the caption of a button, a property typed Auto or string",
+        files={"ФормаЗаказа.yaml": _AUTO_BUTTON_FORM_RU.format(line="Заголовок: Авто")},
+        tokens=_AUTO_TOKENS,
+    ),
+    Seed(
+        rule="yaml/auto-bare-value",
+        expect=CLEAN,
+        note="a bare Auto in the visibility of a button - a union of Auto and a boolean",
+        files={"ФормаЗаказа.yaml": _AUTO_BUTTON_FORM_RU.format(line="Видимость: Авто")},
+        tokens=_AUTO_TOKENS,
     ),
 ]
 

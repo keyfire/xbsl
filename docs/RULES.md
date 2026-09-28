@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 262 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 264 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -106,6 +106,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A list with `Navigation: None` never loads the tail: a vertical scroll moves through one portion, and a list over an array without a scroll of its own keeps the automatic portion of ten rows [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru/) |
 | `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` of a dynamic list: the apply refuses the value as one whose type is not specified. The fix writes the typed node, or takes `Auto` out [details](#a-yaml-hierarchy-bare-value) |
+| `yaml/component-member-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name repeated among the own `Properties` and `Events` of an interface component: the two lists are one namespace, and the build refuses the name as not unique [details](#a-yaml-component-member-unique) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
 
@@ -190,6 +191,15 @@ enumeration (`HierarchyMode.Disabled`) is read as a name too, so it is no cure. 
 typed node in the language of the file, and takes the line out for `Auto`, which is what an
 unwritten property means; a property inside a flow mapping keeps the finding without a fix.
 
+<a id="a-yaml-component-member-unique"></a>**`yaml/component-member-unique`.** An interface
+component declares its own properties and its own events by name, and the compiler keeps the two
+lists in one namespace: a probe on a live server with a property and an event of the same name was
+refused twice, "Property name X is not unique" at the property and "Event name X is not unique" at
+the event. The rule reads the top-level `Properties` and `Events` of the component and reports every
+repeated name after the first, naming the line of the first; the markup under `Inherits` is another
+namespace and is not read. There is no fix - which of the two to rename is the author's call.
+`add-field` refuses such a name as well.
+
 ### Tier B - text and conventions
 
 Encoding, newlines, whitespace, typography (dashes, quotes, ellipsis, characters off the keyboard),
@@ -240,9 +250,11 @@ the keyword table of the query language in the platform data (the `query` sectio
 `terms.json`): a keyword prose does not shout (SELECT, DESC), a keyword of several words
 (ORDER BY) or the head of a CASE expression or of a statement changing a temporary table
 (CASE WHEN, `INSERT INTO Table (`) marks the whole line, and any other keyword counts as syntax
-only when code follows it. The literals TRUE, FALSE, UNDEFINED and the word TEMP, which the
-table does not hold, count the same way, and a literal after a comparison sign is syntax too.
-Without the table the rule falls back on a short list of its own. The fix restores the case.
+only when code follows it. The reserved words the table does not hold (the literals TRUE, FALSE,
+UNDEFINED and the word TEMP) come from the list of reserved words in the same file
+(`query_reserved`, the table of the platform documentation) and count the same way, and a literal
+after a comparison sign is syntax too. Without the table or the list the rule falls back on short
+lists of its own. The fix restores the case.
 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** The finding suggests the
 wording with a word of condition. The legend of a value is left alone: nothing is named there
@@ -481,6 +493,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/unknown-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Unknown object property |
 | `code/reserved-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A reserved name: the type keyword in either language as a structure field or a parameter. The server apply refuses all three spellings [details](#d-code-reserved-name) |
 | `yaml/builtin-property-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Built-in property name clash |
+| `yaml/auto-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare `Auto` in a property whose type is the union of `Auto` and a string (the caption of a button, the presentation of a filter of a dynamic list): the apply refuses the value as one whose type is not specified [details](#d-yaml-auto-bare-value) |
 | `yaml/property-shadows-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A component property named after a common module: the name hides the module across the component, `Module.Method()` reads as a member of the property value, and the apply fails [details](#d-yaml-property-shadows-module) [docs](https://1cmycloud.com/docs/help/topics/addressing-module/) |
 | `yaml/size-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A size without disabling the stretch [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/col-width-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A `Width` on a table column - a number or a binding - without `HorizontalStretch`: while the column stretches the number acts as a share of the free space rather than pixels [details](#d-yaml-col-width-needs-no-stretch) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
@@ -502,7 +515,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/localization-missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An unqualified `$Dictionary.Key` whose dictionary lies in a namespace this yaml does not import: the apply refuses the node [details](#d-yaml-localization-missing-import) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The presentation field of an object [docs](https://1cmycloud.com/docs/help/topics/element-view/) |
 | `yaml/unexpected-type-argument` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A type argument on a property the ui schema declares without one: that is another type, and the build apply rejects it [details](#d-yaml-unexpected-type-argument) [docs](https://1cmycloud.com/docs/help/topics/command-interface/) |
-| `yaml/property-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
+| `yaml/property-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property. A project description that declares no supported mode is read in the newest mode, as the platform reads it [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
 | `query/deletion-mark-immediate` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A deletion-mark condition in a query on an object whose `DeletionMode` is `Immediately` - such an object has no mark and the query fails on apply [docs](https://1cmycloud.com/docs/help/topics/data-deletion/) |
 | `code/load-object-unwrap` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A force-unwrapped `LoadObject()` result on a reference from another record or a tabular-section row: the record may have been deleted physically, and the unwrap fails the whole pass [details](#d-code-load-object-unwrap) [docs](https://1cmycloud.com/docs/help/topics/data-deletion/) |
 | `yaml/item-id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A metadata collection item (an attribute, a tabular section, an enumeration item, an access-key parameter) without the `Id` its class declares - apply answers `ID required` |
@@ -564,6 +577,20 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/deprecated-project` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A use bound to a project method, property, constructor, parameter or enumeration value marked deprecated, as the platform IDE warns [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru/) |
 
 #### Tier D rules in detail
+
+<a id="d-yaml-auto-bare-value"></a>**`yaml/auto-bare-value`.** The refusal of
+`yaml/hierarchy-bare-value` is not particular to the hierarchy: a property whose type is the union of
+`Auto` and a string reads a bare `Auto` as neither. A probe on a live server got "the type of the
+value is not specified" for the caption of a button (a component property of the ui schema) and for
+three members of a dynamic list - the presentation of a filter group, of a filter item and the
+ascending sort presentation of a field's automatic filter. The rule walks the markup with types: a
+node is typed by its own `Type` or by the member type its parent declares for its key (a component
+property from the ui schema, any other member from the type catalog); the source of a list takes the
+first generic argument of the list, and a property's default value the type the property declares.
+Judged is a union of exactly `Auto` and `String`: `Visibility: Auto` of a union with a boolean is
+the `Auto` the union names, and `UsedHierarchy` stays with its own rule. A quoted word is text and a
+project component is not typed. There is no fix: whether the author meant the default value or the
+word as text is not in the file.
 
 <a id="d-yaml-value-choice-title"></a>**`yaml/value-choice-title`.** Put the caption into a
 separate `Label` next to the switcher. A node without an explicit kind and a node with an
@@ -683,8 +710,9 @@ a binding. Off by default: a card living only in a wide row keeps it legitimatel
 <a id="d-code-unused-method"></a>**`code/unused-method`.** A name inside a string literal counts as a
 use: an HTML insert calls the method by name, and such a call is invisible to static reading. A comment
 counts nowhere – not in the module that declares the method, not in the yaml paired with it, not in any
-other element; when a comment is the only place the name turns up, the finding says so. Never judged: the
-platform's own events, an object module, a module paired with an HTTP service, and a method whose
+other element; when a comment is the only place the name turns up, the finding says so. Never judged: a
+handler the platform calls by name, in either spelling (the handler lists of the data and the record-level
+security handlers), an object module, a module paired with an HTTP service, and a method whose
 annotation names a caller outside the project code (`@Handler`, `@Subscription`, `@Implementation` and the
 rest) – that annotation is the answer for a method the platform or a contract calls itself. For a call that
 stays invisible anyway – a name assembled at run time, a client entry point kept on purpose – freeze the

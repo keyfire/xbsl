@@ -544,6 +544,43 @@ export function existingModule(
   return undefined;
 }
 
+// The module of the row of a tabular section. Every section generates a row type named after the
+// element and the section, and the help page on tabular sections says that type may have a module:
+// `Name.Section.xbsl` beside the description. The section has one name in both languages of a
+// project, so unlike the tail of an object module there is nothing to spell in English.
+export function rowModulePathFor(yamlPath: string, section: string): string {
+  return `${yamlPath.replace(/\.yaml$/i, "")}.${section}.xbsl`;
+}
+
+// The kinds whose rows the tree offers a new module for. A probe compiled the module of a row of a
+// catalog and of a document; exchange plans, integrable applications, settings storages and entity
+// contracts have tabular sections too, but a module of their rows is not confirmed yet.
+export const ROW_MODULE_KINDS: ReadonlySet<string> = new Set(["Справочник", "Документ"]);
+
+// The menu tokens of the row module of a tabular section: `tcmod` opens the module that is there,
+// `newtcmod` creates a missing one where the rows of the kind take a module. A module that is
+// there is opened whatever the kind, the way moduleMenuTokens treats the modules of an element.
+export function rowModuleMenuTokens(kind: string, present: boolean): string[] {
+  if (present) {
+    return ["tcmod"];
+  }
+  return ROW_MODULE_KINDS.has(kind) ? ["newtcmod"] : [];
+}
+
+// The row modules that exist, by the name of their section; `exists` gets the candidate path.
+export function existingRowModules(
+  yamlPath: string, sections: readonly string[], exists: (candidate: string) => boolean
+): Record<string, string> {
+  const found: Record<string, string> = {};
+  for (const section of sections) {
+    const candidate = rowModulePathFor(yamlPath, section);
+    if (exists(candidate)) {
+      found[section] = candidate;
+    }
+  }
+  return found;
+}
+
 // Standard attribute names of a kind (for the tree).
 export function standardAttrNames(kind: string): string[] {
   return (STANDARD_ATTRS[kind] ?? []).map((s) => s.name);

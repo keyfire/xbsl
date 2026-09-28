@@ -36,8 +36,9 @@ Guards (such methods are never reported):
   deliberately kept for compatibility (@Deprecated). An annotation the dictionary does not
   know is treated the same way - a project may declare its own, and doubt silences the
   finding;
-- names of the platform's own lifecycle events - called by the
-  platform even when the annotation was forgotten;
+- names of the handlers the platform calls by name, in both spellings - called by the
+  platform even when the annotation was forgotten. The lists come from the data, whatever
+  module declares the method (see platform_handlers);
 - object modules (`X.Объект.xbsl`) - object event handlers live there;
 - modules paired with an `HttpService` yaml - their methods are wired to endpoints;
 - a qualified use `Модуль.Метод` of a static manager method is an ordinary mention and is
@@ -67,7 +68,7 @@ from collections import Counter
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, restext, terms
+from xbsl import dataset, i18n, modulehandlers, restext, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules import _comments
@@ -121,23 +122,65 @@ def _internal_annotations() -> frozenset[str]:
 
 dataset.register_reset(_internal_annotations.cache_clear)
 
-# Platform events: the platform calls these by name, a project-wide mention is not required.
-# Collected from the 9.2 docs (catalog-types/document-types/exchange-plan-types,
-# whats-new-in-5-0 "Переопределяемые обработчики") and the access-control contract.
-_PLATFORM_EVENTS = frozenset({
-    # object module: catalogs, documents, exchange plans
-    "ПриЗаполнении", "ПередЗаписью", "ПослеЗаписи", "ПередУдалением",
-    # overridable handlers of Компонент / Форма / ФормаОбъекта / КлиентскоеПриложение
-    "ПослеСоздания", "ПриОбновлении", "ПослеЗакрытия", "ПередЗакрытием",
-    "ПослеЧтения", "ПередЗаписьюОбъекта", "ПослеЗаписиОбъекта",
-    "ПередУдалениемОбъекта", "ПослеУдаленияОбъекта",
+# What platform_handlers falls back on for a section the data does not carry - a public
+# checkout, or data extracted before the section existed: the names the rule listed by hand
+# before the data had the lists, split by the section that now answers for them. The
+# component modules (a component, a form, a client application):
+_COMPONENT_FALLBACK = frozenset({
+    "ПослеСоздания", "ПриОбновлении", "ПослеЗакрытия", "ПередЗакрытием", "ПослеЧтения",
     "ПриИзмененииИсторииПереходов", "ПриОткрытииПоСсылке",
-    # access control and RLS
-    "ВычислитьРазрешенияДоступа", "ВычислитьРазрешенияДоступаДляОбъектов",
-    "ПроверитьНаличиеКлючейДоступа",
-    # client work parameters
+})
+# ... and the modules of the other elements (an object module, the own module of an entity,
+# of an access key, of the client work parameters):
+_ELEMENT_FALLBACK = frozenset({
+    "ПриЗаполнении", "ПередЗаписью", "ПослеЗаписи", "ПередУдалением",
+    "ВычислитьРазрешенияДоступа", "ПроверитьНаличиеКлючейДоступа",
     "ВычислитьПараметрыРаботыКлиента",
 })
+
+
+@lru_cache(maxsize=1)
+def platform_handlers() -> frozenset[str]:
+    """Both spellings of every handler the platform calls by name: no mention is required.
+
+    The lists come from the data (see xbsl/modulehandlers.py): the handlers of the component
+    modules, read from the component descriptions of the distribution, and those of the other
+    modules, read from the compiler's handler providers - a flat set of names, whatever module
+    declares the method: a doubt silences the finding. The record-level security handlers are
+    added by hand (modulehandlers.RECORD_SECURITY has their proof): the build takes their name
+    from the access settings of the element, and no section can list them. A section the data
+    lacks is stood in for by the names of the fallback lists, with the English spelling the term
+    dictionary gives where it has one.
+
+    The hand list this replaced also named four handlers of an object form ending in `Object`
+    (`BeforeWriteObject`, `AfterWriteObject`, `BeforeDeleteObject`, `AfterDeleteObject`), taken
+    from the release notes of 5.0. They are the names of mode 5.0: the release notes of 6.0 list
+    them as renamed into `BeforeWrite` and its kin, the classes of the distribution keep them only
+    in the project converter, whose stage of 6.0 does that renaming (`HANDLERS_RENAMES` of
+    `Stage6_0__7_record_form`) when the compatibility mode of a project is raised, and 6.0 is the
+    oldest mode the platform supports. No module of a project that builds overrides them, and a
+    method under such a name is judged like any other.
+    """
+    names: set[str] = {name for row in modulehandlers.RECORD_SECURITY
+                       for name in (row["ru"], row["en"])}
+    sections = ((modulehandlers.available(), modulehandlers.all_names, _COMPONENT_FALLBACK),
+                (modulehandlers.element_available(), modulehandlers.element_names,
+                 _ELEMENT_FALLBACK))
+    for present, listed, fallback in sections:
+        if present:
+            names.update(listed())
+            continue
+        for name in fallback:
+            names.add(name)
+            english = terms.common_english(name)
+            if english:
+                names.add(english)
+    return frozenset(names)
+
+
+# The lists and the term pairs may both be installed while a server keeps running.
+dataset.register_reset(platform_handlers.cache_clear)
+dataset.register_recheck(platform_handlers.cache_clear)
 
 
 def _silenced_by_annotation(toks: list, i: int) -> bool:
@@ -215,7 +258,7 @@ def _unused_mapper(source: SourceFile) -> dict | None:
         if i + 1 >= len(toks) or toks[i + 1].kind != "IDENT":
             continue
         name_tok = toks[i + 1]
-        if name_tok.value in _PLATFORM_EVENTS:
+        if name_tok.value in platform_handlers():
             continue
         if _silenced_by_annotation(toks, i):
             continue

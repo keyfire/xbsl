@@ -222,6 +222,28 @@ def test_for_symbol_never_answers_with_a_property_reference(tmp_path):
         dataset.set_data_root(None)
 
 
+def test_for_symbol_never_answers_with_a_glossary_term(tmp_path):
+    """A glossary term is titled with an ordinary word of the platform, and code names variables
+    and members that way: the Russian word for "value" would open the term instead of the member
+    it names.
+
+    The control is the same page outside the glossary, which answers - the path keeps the term
+    out, not its title. Search still reaches the term.
+    """
+    term = f"{docs.GLOSSARY}/value"
+    page = ("member", "Значение", "", "", "https://host/v/", "<h1>Значение</h1>", "значение термин")
+    ver_dir = _write_docs(tmp_path, list(_PAGES) + [(term, *page)])
+    dataset.set_data_root(tmp_path)
+    try:
+        assert docs.for_symbol("Значение") is None
+        assert docs.search("термин")[0]["id"] == term
+        (ver_dir / "docs.sqlite").unlink()
+        _write_db(ver_dir, list(_PAGES) + [("topics/value", *page)])
+        assert docs.for_symbol("Значение") == "topics/value"
+    finally:
+        dataset.set_data_root(None)
+
+
 def test_type_pages(docs_root):
     # the bulk read for extract_uischema: type pages only, ordered by id
     pages = docs.type_pages()

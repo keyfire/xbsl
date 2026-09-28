@@ -49,6 +49,10 @@ morph = ["pymorphy3>=2.0"]
 [project.scripts]
 xbsl = "xbsl.cli:main"
 xbsl-mcp = "xbsl.mcp_server:main"
+# The same server behind a supervisor that replaces it when the engine on disk changes
+# (xbsl/mcp_supervisor.py). A command of its own rather than a flag of xbsl-mcp: importing
+# xbsl.mcp_server loads the engine, and the supervisor must not hold one.
+xbsl-mcp-supervisor = "xbsl.mcp_supervisor:main"
 xbsl-web = "xbsl.web:main"
 xbsl-lsp = "xbsl.lsp:main"
 # Команды под старым именем пакета остаются псевдонимами на переходный период.

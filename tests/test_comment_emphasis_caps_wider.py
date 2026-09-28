@@ -41,13 +41,14 @@ _TABLE = {
 def keyword_table(tmp_path_factory):
     """Pin a data root holding nothing but a keyword table (`_TABLE` unless the test swaps it).
 
-    Returns the pin: a test that compares two tables calls it with the second one.
+    Returns the pin: a test that compares two tables calls it with the second one, and a test
+    of the reserved words passes the other keys of terms.json along with the table.
     """
-    def pin(table=_TABLE):
+    def pin(table=_TABLE, **other):
         root = tmp_path_factory.mktemp("data")
         (root / "1.0.0").mkdir()
         (root / "1.0.0" / "terms.json").write_text(
-            json.dumps({"query": table}, ensure_ascii=False), encoding="utf-8",
+            json.dumps({"query": table, **other}, ensure_ascii=False), encoding="utf-8",
         )
         (root / "index.json").write_text(
             json.dumps({"available": ["1.0.0"], "default": "1.0.0"}), encoding="utf-8",
@@ -362,7 +363,48 @@ def test_the_division_written_by_hand_names_words_of_the_platform_table():
     # holds them, the list written by hand has nothing left to add.
     assert comment_prose._FALLBACK_WORDS - words == set()
     assert {word for phrase in comment_prose._FALLBACK_PHRASES for word in phrase.split()} <= words
-    assert comment_prose._WORDS_OUTSIDE_THE_TABLE & words == set()
+    assert comment_prose._FALLBACK_WORDS_OUTSIDE_THE_TABLE & words == set()
+
+
+@pytest.mark.needs_data
+def test_the_reserved_words_kept_by_hand_are_the_ones_the_documentation_lists():
+    """The words outside the table stand in for the documentation's list only where the data
+    has none: with the list, every one of them is read from it, and the translator's spellings
+    of the reserved words agree with it."""
+    from xbsl.translation import platform_map
+
+    data = dataset.load_json("terms.json")
+    if not data.get("query_reserved"):
+        pytest.skip("the data keeps no list of the reserved words of the query language")
+
+    outside = comment_prose._words_outside_the_table()
+    assert comment_prose._FALLBACK_WORDS_OUTSIDE_THE_TABLE <= outside
+    assert platform_map._RESERVED_FALLBACK.items() <= platform_map._reserved_spellings(data).items()
+
+
+_RESERVED = {"ИЗ": "FROM", "ИСТИНА": "TRUE", "ЛОЖЬ": "FALSE", "ПУСТО": "EMPTY"}
+
+
+def test_the_reserved_words_outside_the_table_are_read_from_the_data(keyword_table):
+    """A reserved word the data lists is a word of the language: a literal compared with is
+    syntax. A word of the keyword table is not "outside" it, and a marker (`NULL`) stays a
+    marker. The control is the same line over a table alone: the word is a stress then."""
+    comment = "# отбор ГДЕ Т.Вид = ПУСТО\n"
+    assert _words(_lint_yaml(comment)) == ["ПУСТО"]
+
+    keyword_table(query_reserved=_RESERVED, query_reserved_english_only=["NULL", "TEMP"])
+
+    assert comment_prose._words_outside_the_table() == {
+        "ИСТИНА", "ЛОЖЬ", "ПУСТО", "TRUE", "FALSE", "EMPTY", "TEMP",
+    }
+    assert _lint_yaml(comment) == []
+    assert "NULL" not in comment_prose._query_words()
+
+
+def test_without_the_list_the_reserved_words_kept_by_hand_stand_in(keyword_table):
+    """Data with the keyword table and no list of the reserved words (an older extraction)."""
+    fallback = comment_prose._FALLBACK_WORDS_OUTSIDE_THE_TABLE
+    assert comment_prose._words_outside_the_table() == fallback
 
 
 # --- where the comments are ------------------------------------------------------------------

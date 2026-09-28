@@ -115,7 +115,9 @@ qualified names under "conflicts". The versions seen so far have no such name cl
 
 The docs dataset of the chosen version must exist (the docs extractor); the root is
 picked the standard way (--data-dir / env XBSL_DATA_DIR / the clone default) and the
-output goes into the same root - never a hardcoded machine path.
+output goes into the same root - never a hardcoded machine path. The type catalog
+(stdlib.json) of the same version supplies the retired components and the compatibility
+floors; a root without it yields a schema without them, and the run warns about that.
 """
 
 from __future__ import annotations
@@ -123,6 +125,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from html import unescape
 from pathlib import Path
 
@@ -803,7 +806,19 @@ def main(argv=None) -> int:
             "tools/extract_docs.py"
         )
 
-    stdlib = dataset.load_optional("stdlib.json") or {}
+    # The type catalog of the SAME version: the retired components and the compatibility floors
+    # are facts of that runtime, not of the default one. A root holding the documentation alone
+    # has no catalog, and the schema would lose the retired components without a word - so the
+    # gap is reported.
+    stdlib = dataset.load_optional("stdlib.json", version)
+    if stdlib is None:
+        print(
+            f"Внимание: нет stdlib.json версии {version} в {root} – в схему не попадут "
+            "выведенные из употребления компоненты и режимы совместимости, с которых "
+            "компоненты зарегистрированы; сначала запустите шаг stdlib",
+            file=sys.stderr,
+        )
+        stdlib = {}
     schema = build_schema(
         docs.type_pages(version), version, docs.guide_pages(version),
         retired_components=stdlib.get("retired_components"),

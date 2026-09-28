@@ -139,7 +139,9 @@ def test_a_method_without_the_annotation_stays_the_projects_word(tmp_path):
 
 
 def test_an_override_of_an_object_module_reads_the_platform_tables(tmp_path):
-    """The lists speak for component modules; the name still is the platform's elsewhere."""
+    """The component lists do not speak for an object module; the name still is the platform's
+    there - the element lists spell it (test_translate_element_handler_overrides), and without
+    them the platform tables do."""
     module = "@Обработчик\nметод ПередЗаписью()\n;\n"
     _report, written = _translate(tmp_path, {"Склады.yaml": CATALOG_YAML,
                                              "Склады.Объект.xbsl": module})

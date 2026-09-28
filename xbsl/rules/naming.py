@@ -144,6 +144,18 @@ MESSAGES = {
         "en": "The element of kind '{vid}' has no {prop} – it is required for top-level elements "
               "and sets the title in the interface.",
     },
+    "naming/presentation.missing-caption": {
+        "ru": "У элемента вида '{vid}' не задан заголовок в интерфейсе. {prop} верхнего уровня "
+              "у этого вида – не заголовок, а имя строкового реквизита, которым платформа "
+              "обозначает элемент (заголовок, записанный туда, сборка не примет). Заголовки "
+              "пишутся в {list} – список и команда его открытия, во множественном числе – и в "
+              "{obj} – объект, в единственном.",
+        "en": "The element of kind '{vid}' has no caption in the interface. The top-level {prop} "
+              "of this kind is not a caption but the name of the string attribute the platform "
+              "shows for an element (the build refuses a caption written there). The captions "
+              "go into {list} - the list and the command that opens it, in the plural - and "
+              "{obj} - the object, in the singular.",
+    },
     "naming/presentation.deprecated": {
         "ru": "Имя '{name}' начинается с '{n[Устарело]}', а представление не начинается с "
               "'(не используется)' – у устаревших элементов представление помечают именно так.",
@@ -825,36 +837,70 @@ def boolean_name(source: SourceFile) -> Iterable[Diagnostic]:
             yield _diag(source, ref, "naming/boolean-name", "naming/boolean-name.noun", name=ref.name)
 
 
+#: Where a kind whose top-level Presentation names an attribute keeps its captions: the list
+#: (and the command that opens it) and the object - the help topic on a catalog in the
+#: interface; the tool writes the first (scaffold.caption_path).
+_INTERFACE_CAPTIONS = ("Интерфейс.Список.Представление", "Интерфейс.Объект.Представление")
+
+
+def _interface_caption(data, vid: str) -> bool:
+    """Whether the description writes a caption into its interface section, either spelling."""
+    ui = value_of(data, "Интерфейс", vid)
+    for path in _INTERFACE_CAPTIONS:
+        node = ui
+        for key in path.split(".")[1:]:
+            node = value_of(node, key) if isinstance(node, dict) else None
+        if isinstance(node, str) and node.strip():
+            return True
+    return False
+
+
 @rule("naming/presentation", "naming/presentation.title", "D", severity=Severity.WARNING)
 def presentation(source: SourceFile) -> Iterable[Diagnostic]:
-    """2.1: a top-level element has Представление filled in; for a deprecated one it starts
+    """2.1: a top-level element has its presentation filled in; for a deprecated one it starts
     with "(не используется)" (1.6). Kinds that have no Представление property are skipped.
-    The deprecation mark applies only where the property is a text: on the kinds where it is
-    an attribute NAME (metamodel type AttributeName - a catalog, a document...) no prefix can
-    be written into the value, and the validity of the name itself is yaml/presentation-field's
-    business."""
+
+    Where the top-level property is an attribute NAME (metamodel type AttributeName, with
+    Attributes to name - a catalog, a document, an exchange plan) it is no caption: the
+    standard (2.3) wants these kinds captioned in the interface section, the list in the plural
+    and the object in the singular, and the help topic on a catalog in the interface names the
+    same two places. Such an element is satisfied by a caption there - or, as before, by the
+    attribute name itself, so a project that names its presentation field is not re-judged -
+    and the message for it says where the caption goes instead of calling the attribute name
+    one: a caption pasted into the top-level property fails the build ("Field specified as a
+    presentation field is not found"). The deprecation mark applies only where the property
+    is a text: no prefix can be written into an attribute name, and the validity of the name
+    itself is yaml/presentation-field's business."""
     got = _vid(source)
     if got is None:
         return
     vid, data = got
-    prop = metamodel.properties(vid).get("Представление")
+    props = metamodel.properties(vid)
+    prop = props.get("Представление")
     if prop is None:
         return  # the kind has no such property (or no metamodel) - nothing to require
 
     ref = _object_name(_names(source))
     value = value_of(data, "Представление")
+    names_attribute = prop.get("type") == "AttributeName" and "Реквизиты" in props
     if not isinstance(value, str) or not value.strip():
+        if names_attribute and _interface_caption(data, vid):
+            return
         line, col = (ref.line, ref.col) if ref else (1, 1)
-        yield Diagnostic(
-            source.rel, line, col, "naming/presentation", Severity.WARNING,
-            # Имена метаданных внутри сообщения - на языке сообщения: английскому читателю
-            # ни к чему искать в своих исходниках слово "Представление".
-            i18n.t(
-                "naming/presentation.missing",
-                vid=i18n.name(vid, "types"),
-                prop=i18n.name("Представление", "properties"),
-            ),
-        )
+        # Metadata names inside the message are spelled in the language of the message: an
+        # English reader has no reason to look for the Russian word in their sources.
+        names = {
+            "vid": i18n.name(vid, "types"),
+            "prop": i18n.name("Представление", "properties"),
+        }
+        if names_attribute:
+            message = i18n.t(
+                "naming/presentation.missing-caption", **names,
+                list=i18n.name(_INTERFACE_CAPTIONS[0]), obj=i18n.name(_INTERFACE_CAPTIONS[1]),
+            )
+        else:
+            message = i18n.t("naming/presentation.missing", **names)
+        yield Diagnostic(source.rel, line, col, "naming/presentation", Severity.WARNING, message)
         return
     if (
         ref is not None

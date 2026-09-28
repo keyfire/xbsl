@@ -24,18 +24,42 @@ processing, the operations of a SOAP client, the record-level security handlers 
 and their slot says `dynamic`: any name may be a handler there, and element_slot answers None.
 Without the sections - a public checkout, or data extracted before they existed - every answer
 is empty, and a caller judges nothing.
+
+The record-level security handlers are the one dynamic source whose names are the platform's
+and not the project's. The build picks the handler by the access settings of the element, so
+the extractor sees a term read from metadata; the terms it picks from are three constants of the
+distribution, listed in RECORD_SECURITY with their proof. element_rows adds them to a module
+whose slot names that source, and handler_names to the names of the whole data.
 """
 
 from __future__ import annotations
 
 from functools import lru_cache
 
-from xbsl import dataset
+from xbsl import dataset, terms
 
 #: The section of stdlib.json this module reads.
 SECTION = "module_handlers"
 #: The section with the handlers of the modules of the other elements.
 ELEMENT_SECTION = "element_module_handlers"
+
+#: The record-level security handlers of an entity, both spellings. The build names the handler
+#: by the access settings of the element (`PermissionsComputedForEachObject`): the permissions of
+#: the objects for every entity, the access keys for read and for update apart for a periodic
+#: register. The three terms are constants of the access-control constants class of the
+#: distribution (`AccessControlCommonConstants`, the fields ending in `_NAME_TERM`), and the
+#: producer of the access-control metadata (`AccessControlRtMetadataProducer`, the constants set
+#: has one of its own) stores one of them as the handler term of the entity - the very value
+#: the extractor meets as a term read at build time. The help names the same three handlers
+#: (topics manage-access-control and rights-for-information-registers).
+RECORD_SECURITY: tuple[dict, ...] = (
+    {"ru": "ВычислитьРазрешенияДоступаДляОбъектов", "en": "ComputeAccessPermissionsForObjects"},
+    {"ru": "ВычислитьКлючиДоступаДляЧтения", "en": "ComputeAccessKeysForRead"},
+    {"ru": "ВычислитьКлючиДоступаДляИзменения", "en": "ComputeAccessKeysForUpdate"},
+)
+#: The place a slot names for them in `dynamic`: the handler term of the access-control
+#: metadata of an entity, as the extractor writes it.
+RECORD_SECURITY_SOURCE = "EntityAccessControlMetadata$HandlerMetadata.computeHandlerTerm"
 
 
 def _catalog() -> dict:
@@ -187,6 +211,26 @@ def element_slot(kind: str, module: str) -> tuple[dict, ...] | None:
     return slot["handlers"]
 
 
+def element_rows(kind: str, module: str) -> tuple[dict, ...]:
+    """Every handler row known for the module `module` of an element of `kind`, () when none.
+
+    Unlike element_slot, a module that takes more names at build time answers too - what the
+    translator needs, not what a rule judges by. It answers the rows the compiler declares there
+    whatever the element's description says and, where the slot takes the record-level security
+    handlers (RECORD_SECURITY_SOURCE), those: all of them are the platform's words. The other
+    names such a module takes - the operations of a processing, of a SOAP client - are the
+    project's or the service's, and are not here.
+    """
+    slot = _elements().get(kind, {}).get(module)
+    if slot is None:
+        return ()
+    rows = slot["handlers"]
+    if RECORD_SECURITY_SOURCE in slot["dynamic"]:
+        known = {row["ru"] for row in rows}
+        rows = rows + tuple(row for row in RECORD_SECURITY if row["ru"] not in known)
+    return rows
+
+
 @lru_cache(maxsize=1)
 def element_modules() -> frozenset[str]:
     """The module words the section names (the Russian `Object`, `RecordSet`), own module aside."""
@@ -202,6 +246,44 @@ def element_names() -> frozenset[str]:
     )
 
 
+@lru_cache(maxsize=1)
+def handler_names() -> frozenset[str]:
+    """Both spellings of every handler the data lets some module override.
+
+    The component lists, the element lists and, once some slot of the element lists takes them,
+    the record-level security handlers (see element_rows). Empty without the sections.
+    """
+    names = set(all_names()) | element_names()
+    if any(RECORD_SECURITY_SOURCE in slot["dynamic"]
+           for modules in _elements().values() for slot in modules.values()):
+        names.update(name for row in RECORD_SECURITY for name in (row["ru"], row["en"]))
+    return frozenset(names)
+
+
+@lru_cache(maxsize=1)
+def module_words() -> dict[str, str]:
+    """{the word a module file adds, in either spelling: the module as the data names it}."""
+    words: dict[str, str] = {}
+    for module in element_modules():
+        words[module] = module
+        english = terms.facet_suffix_english(module)
+        if english:
+            words[english] = module
+    return words
+
+
+def element_module(stem: str) -> tuple[str, str]:
+    """(the stem of the element's yaml, the module) of a module file stem.
+
+    `Stock.Object` gives (`Stock`, the Russian `Object`) - the file pairs with `Stock.yaml`; a
+    stem without a module word the section names is the element's own module: (stem, "").
+    """
+    base, dot, word = stem.rpartition(".")
+    if dot and "/" not in word and word in module_words():
+        return base, module_words()[word]
+    return stem, ""
+
+
 def _reset() -> None:
     _table.cache_clear()
     rows_of.cache_clear()
@@ -209,6 +291,8 @@ def _reset() -> None:
     _elements.cache_clear()
     element_modules.cache_clear()
     element_names.cache_clear()
+    handler_names.cache_clear()
+    module_words.cache_clear()
 
 
 dataset.register_reset(_reset)

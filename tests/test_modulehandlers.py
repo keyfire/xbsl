@@ -32,13 +32,14 @@ _TERMS = {"types": {"Компонент": "Component", "Форма": "Form", "Ф
                     "Надпись": "Label", "Объект": "Object"}}
 
 
-def _root(tmp_path, stdlib: dict) -> None:
+def _root(tmp_path, stdlib: dict, terms: dict | None = None) -> None:
     version = tmp_path / "9.9.9"
     version.mkdir()
     (tmp_path / "index.json").write_text(
         json.dumps({"available": ["9.9.9"], "default": "9.9.9"}), encoding="utf-8")
     (version / "stdlib.json").write_text(json.dumps(stdlib, ensure_ascii=False), encoding="utf-8")
-    (version / "terms.json").write_text(json.dumps(_TERMS, ensure_ascii=False), encoding="utf-8")
+    (version / "terms.json").write_text(json.dumps(terms or _TERMS, ensure_ascii=False),
+                                        encoding="utf-8")
 
 
 @pytest.fixture
@@ -193,3 +194,96 @@ def test_the_module_words_and_the_names_of_the_element_lists(elements):
 def test_data_without_the_element_section_answers_nothing(data):
     assert not modulehandlers.element_available()
     assert modulehandlers.element_slot("Справочник", "Объект") is None
+
+
+# --- what the element lists give the translator and the guard ------------------------------
+
+#: A catalog whose own module takes the record-level security handlers at build time, and a
+#: processing whose object module takes the names of its operations.
+_ACCESS_ELEMENTS = {
+    "Справочник": {
+        "": {"handlers": [{"ru": "ВычислитьРазрешенияДоступа", "en": "ComputeAccessPermissions"}],
+             "dynamic": [modulehandlers.RECORD_SECURITY_SOURCE]},
+        "Объект": {"handlers": [{"ru": "ПередЗаписью", "en": "BeforeWrite"}]},
+    },
+    "Обработка": {
+        "Объект": {"handlers": [{"ru": "ПриЗаполнении", "en": "OnFill"}],
+                   "dynamic": ["IProcessingOperationRtMetadata.getNameTerm"]},
+    },
+    "РегистрСведений": {
+        "НаборЗаписей": {"handlers": [{"ru": "ПередЗаписью", "en": "BeforeWrite"}]},
+    },
+}
+_FACET_TERMS = {**_TERMS, "facets": {
+    "Справочник.Объект": "Catalog.Object",
+    "РегистрСведений.НаборЗаписей": "InformationRegister.RecordSet",
+}}
+_RECORD_SECURITY_NAMES = {name for row in modulehandlers.RECORD_SECURITY
+                          for name in (row["ru"], row["en"])}
+
+
+@pytest.fixture
+def access(tmp_path):
+    _root(tmp_path, {**_STDLIB, "element_module_handlers": _ACCESS_ELEMENTS}, _FACET_TERMS)
+    dataset.set_data_root(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_the_rows_of_a_module_that_takes_the_record_security_handlers(access):
+    """The slot is not judged, yet its names are the platform's: the static rows lead."""
+    assert modulehandlers.element_slot("Справочник", "") is None
+    rows = modulehandlers.element_rows("Справочник", "")
+    assert [row["en"] for row in rows] == [
+        "ComputeAccessPermissions", "ComputeAccessPermissionsForObjects",
+        "ComputeAccessKeysForRead", "ComputeAccessKeysForUpdate"]
+
+
+def test_the_rows_leave_out_what_a_description_names(access):
+    """The operations of a processing are the project's words: only the fixed rows answer."""
+    assert modulehandlers.element_slot("Обработка", "Объект") is None
+    assert modulehandlers.element_rows("Обработка", "Объект") == (
+        {"ru": "ПриЗаполнении", "en": "OnFill"},)
+
+
+def test_the_rows_of_a_static_module_are_its_slot(access):
+    assert modulehandlers.element_rows("Справочник", "Объект") == \
+        modulehandlers.element_slot("Справочник", "Объект")
+
+
+def test_a_module_the_data_does_not_list_has_no_rows(access):
+    assert modulehandlers.element_rows("Справочник", "НаборЗаписей") == ()
+    assert modulehandlers.element_rows("HttpСервис", "") == ()
+
+
+def test_the_names_of_the_data_take_the_record_security_handlers_with_their_slot(access):
+    names = modulehandlers.handler_names()
+    assert _RECORD_SECURITY_NAMES <= names
+    assert {"ПослеСоздания", "AfterCreate", "ПриЗаполнении", "OnFill"} <= names
+
+
+def test_control_a_slot_of_another_source_does_not_bring_them(elements):
+    """The negative control: the same shape, a dynamic source of another name."""
+    assert modulehandlers.handler_names().isdisjoint(_RECORD_SECURITY_NAMES)
+    assert modulehandlers.element_rows("Справочник", "") == (
+        {"ru": "ПолучитьЗначенияВыбора", "en": "GetChoiceValues"},)
+
+
+@pytest.mark.parametrize("stem, pair", [
+    ("Склады/Склады.Объект", ("Склады/Склады", "Объект")),
+    ("Stock/Stock.Object", ("Stock/Stock", "Объект")),
+    ("Stock/Stock.RecordSet", ("Stock/Stock", "НаборЗаписей")),
+    ("Склады/Склады", ("Склады/Склады", "")),  # the element's own module
+    ("Склады.Черновик", ("Склады.Черновик", "")),  # a word the section does not name
+    ("v1.Объект/Склады", ("v1.Объект/Склады", "")),  # a dot in a folder is not a module word
+])
+def test_a_module_file_names_its_element_and_its_module(access, stem, pair):
+    assert modulehandlers.element_module(stem) == pair
+
+
+def test_without_the_element_section_every_module_is_its_elements_own(data):
+    assert modulehandlers.element_module("Склады/Склады.Объект") == ("Склады/Склады.Объект", "")
+    assert modulehandlers.element_rows("Справочник", "Объект") == ()
+    assert modulehandlers.handler_names() == modulehandlers.all_names()

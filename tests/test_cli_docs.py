@@ -167,6 +167,39 @@ def generator():
     return mod
 
 
+def test_a_description_wrapped_on_a_hyphen_is_joined_back(generator):
+    # argparse wraps a long word on its hyphen, and a description joined with a space put
+    # "see also set- localization" on the page. A dash standing between two words is not a
+    # wrapped word and keeps its space.
+    parsed = generator.parse(
+        "usage: xbsl add-localization [-h] yaml_path\n"
+        "\n"
+        "add a translation file; see also set-\n"
+        "localization, which writes the text -\n"
+        "in every language\n"
+        "\n"
+        "options:\n"
+        "  -h, --help  show this help message and exit\n"
+    )
+
+    assert parsed["description"] == (
+        "add a translation file; see also set-localization, which writes the text - "
+        "in every language"
+    )
+
+
+def test_no_command_name_is_torn_on_the_pages():
+    names = [command.name for command in cli.COMMANDS if "-" in command.name]
+    assert "set-field-property" in names
+    for fname in ("CLI.md", "CLI.ru.md"):
+        text = (DOCS / fname).read_text(encoding="utf-8")
+        for name in names:
+            parts = name.split("-")
+            for cut in range(1, len(parts)):
+                torn = "-".join(parts[:cut]) + "- " + "-".join(parts[cut:])
+                assert torn not in text, f"{fname}: {torn}"
+
+
 @pytest.mark.needs_data
 def test_committed_pages_are_current(generator):
     # the generator is the source of truth; a mismatch means the committed page went

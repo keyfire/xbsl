@@ -78,7 +78,9 @@ pairs come from the platform data, from the metamodel's own English name of ever
 name the platform spells differently depending on the class keeps its original spelling in both
 reading and writing, with nothing left to guess: the enumeration values section is `Items` there
 and `Elements` elsewhere. Values such as types and access methods are yours and are written as
-given.
+given. A boolean an MCP call passes as `true` or `false` is written in the word of the file's
+language: `Истина` and `Ложь` in a Russian file, `True` and `False` in an English one, as the
+sources of the distribution write it.
 
 `add-field` puts a new item at the end of the section of its kind, and creates that section only
 when the file has none. A register keeps its data in `Dimensions` and `Resources`. So an

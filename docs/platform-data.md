@@ -31,7 +31,7 @@ images are stored alongside. The 1C reference is copyrighted, so the database do
 package: you generate it from your own distribution, like the language data. Besides the type
 reference, the database takes the other sections of the site menu: the developer and administrator
 guides, the properties of project elements and interface components, the integration process
-schema and the query language.
+schema, the query language and the glossary.
 
 ```sh
 python tools/extract_docs.py --dist "$ELEMENT_DIST"
@@ -39,7 +39,9 @@ python tools/extract_docs.py --dist "$ELEMENT_DIST"
 
 `docs.sqlite` is read by the `xbsl.docs` API: `search`, `page`, `tree`, `for_symbol`, `asset`,
 plus the pure `sections` and `summarize` over a page's HTML. With no database the search is simply
-empty. The MCP tools run on this API, and later the reference panel of the VS Code extension will
+empty. `for_symbol` never answers with a page of the property references or of the glossary: their
+titles repeat the names of types, members and variables, so search and the tree reach those pages
+instead. The MCP tools run on this API, and later the reference panel of the VS Code extension will
 too.
 
 ## Retired interface components
@@ -52,9 +54,10 @@ limit is stated. It marks the result with `source: runtime`, `retired: true`, an
 Known property types and inherited properties become `props`; a known key whose type or
 event signature is unavailable remains in `yaml_props` without a guessed type.
 
-Re-extract both stdlib and uischema to obtain these records. A dataset without the optional
-section keeps the previous behavior, and a current help page is never replaced by a runtime
-description.
+Re-extract both stdlib and uischema to obtain these records. The uischema step reads the
+`stdlib.json` of the version it builds; in a root without one it builds the schema without the
+retired components and says so. A dataset without the optional section keeps the previous
+behavior, and a current help page is never replaced by a runtime description.
 
 Component and property queries retain these definitions for existing compatibility markup.
 Catalog entries preserve `retired` and `until`. The insertion palette excludes retired

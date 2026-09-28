@@ -240,3 +240,61 @@ def test_build_takes_the_property_reference_panels(tmp_path):
         "Типы языка 1С:Элемент", "Свойства элементов проекта", "Свойства компонентов интерфейса",
         "Схема процесса интеграции", "Язык запросов",
     ]
+
+
+def _glossary_dist(tmp_path):
+    """A distribution whose overview links to a glossary term, the term under the glossary panel."""
+    import zipfile
+
+    term = "topics/terms/tenant"
+    js = (
+        'x={"developer":[{"type":"link","label":"Обзор","href":"/docs/help/topics/overview"}],'
+        '"glossary":[{"type":"category","label":"А","items":['
+        f'{{"type":"link","label":"Абонент","href":"/docs/help/{term}"}}]}}]}}'
+    )
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    with zipfile.ZipFile(dist / "element-server-with-ide-1.0.0-x.car", "w") as car:
+        car.writestr(ex.SITE_ROOT + "assets/js/sidebars.js", js)
+        car.writestr(ex.SITE_ROOT + "topics/overview/index.html",
+                     _page("Обзор", f'<p><a href="/docs/help/{term}">Абонент</a></p>'))
+        car.writestr(ex.SITE_ROOT + term + "/index.html",
+                     _page("Абонент", "<p>Клиент сервиса.</p>"))
+    return dist, term
+
+
+def _built(tmp_path, dist) -> tuple[list[str], list[str]]:
+    """(page ids, section labels) of a database built from the distribution."""
+    import sqlite3
+
+    out = tmp_path / "data" / "docs.sqlite"
+    out.parent.mkdir(exist_ok=True)
+    ex.build(dist, out)
+    con = sqlite3.connect(out)
+    try:
+        ids = [row[0] for row in con.execute("SELECT id FROM pages ORDER BY id")]
+        roots = con.execute("SELECT label FROM tree WHERE parent IS NULL ORDER BY ord")
+        sections = [row[0] for row in roots]
+    finally:
+        con.close()
+    return ids, sections
+
+
+def test_build_takes_the_glossary_panel(tmp_path, monkeypatch):
+    """The pages of the property references link to the terms of the glossary, a panel of its
+    own; without the panel those links led nowhere. It stands last, as in the site menu.
+
+    The control builds the same distribution without the panel: the term is not taken, so it is
+    the panel that brings it.
+    """
+    dist, term = _glossary_dist(tmp_path)
+
+    ids, sections = _built(tmp_path, dist)
+    assert term in ids
+    assert sections == ["Руководство разработчика", "Глоссарий"]
+    assert ex.SIDEBARS[-1] == ("glossary", "Глоссарий")
+
+    monkeypatch.setattr(ex, "SIDEBARS", [pair for pair in ex.SIDEBARS if pair[0] != "glossary"])
+    ids, sections = _built(tmp_path, dist)
+    assert term not in ids
+    assert sections == ["Руководство разработчика"]

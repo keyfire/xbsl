@@ -14,7 +14,9 @@ path with spaces or Cyrillic reaches the process as it was written. It opens wit
 the server's answers depend on - their language, the Element data, the plugins switched off, the
 rule parameters moved off their defaults - as variable assignments, since the agent's shell does
 not share the environment the client gave the server. The rest of that environment stays out:
-`XBSL_TRANSLATE_*_KEY` hold the keys of a paid translation service.
+`XBSL_TRANSLATE_*_KEY` hold the keys of a paid translation service. On Python 3.10 each run of
+the line stands in a subshell that changes into a folder of this process first (`_start_folder`):
+that interpreter has no other way to keep the shell's own folder off the import path.
 
 A call whose input is data rather than a path - the text of `lint_source`, the inline edits of
 `translate_set` - has that data written into a temporary folder of this process, and the command
@@ -24,6 +26,10 @@ than a day is taken out by the next server that stages anything (`sweep_old_fold
 
 A tool that runs with the plugins loaded at start while others are on disk answers anyway, and
 its `stale` record carries the same command: the answer by the plugins on disk.
+
+The command of a meta_* reader prints what the tool reads, through the function the tool calls.
+What the tool puts around that data stays out: the `root` and the `file` it repeats, which the
+command names in its own words, and the hint of meta_component_tree about its own parameters.
 
 A call the CLI cannot make the same way - several filters where the CLI takes one, a batch that
 is half a file and half inline - gets no command rather than a different one, and so does a tool
@@ -132,7 +138,8 @@ def same_call(tool: str, arguments: dict) -> dict | None:
         assignments = " ".join(
             f"{name}={shlex.quote(value)}" for name, value in _environment().items()
         )
-        answer = {"cli": "; ".join(_line(run, assignments) for run in runs)}
+        folder = _start_folder()
+        answer = {"cli": "; ".join(_line(run, assignments, folder) for run in runs)}
     except Exception:  # noqa: BLE001 - see the docstring
         return None
     if note:
@@ -140,12 +147,21 @@ def same_call(tool: str, arguments: dict) -> dict | None:
     return answer
 
 
-def _line(run: Run, assignments: str) -> str:
+def _line(run: Run, assignments: str, folder: str = "") -> str:
     words = shlex.join([*_interpreter(), *run.argv])
     line = f"{assignments} {words}" if assignments else words
     if run.stdin:
         line += f" < {shlex.quote(run.stdin)}"
+    if folder:
+        # A subshell per run: a `cd` that fails stops its own run, no run starts from the
+        # shell's folder, and the shell of the agent stays where it stood.
+        line = f"(cd {shlex.quote(folder)} && {line})"
     return line
+
+
+def _takes_safe_path() -> bool:
+    """Whether the interpreter knows `-P`, which keeps the working folder off sys.path: 3.11+."""
+    return sys.version_info >= (3, 11)
 
 
 def _interpreter() -> list[str]:
@@ -153,13 +169,27 @@ def _interpreter() -> list[str]:
 
     `-m` puts the working folder first on sys.path, so a shell standing in a checkout of the
     engine would run that checkout instead of the installation the server came from; `-P`
-    (Python 3.11+) leaves the folder out. An older interpreter has no such flag, and there a
-    folder named `xbsl` where the shell stands still takes the engine's place.
+    (Python 3.11+) leaves the folder out. An older interpreter has no such flag, and its
+    command starts from a folder where no import finds a module (`_start_folder`).
     """
     words = [sys.executable or "python"]
-    if sys.version_info >= (3, 11):
+    if _takes_safe_path():
         words.append("-P")
     return [*words, "-m", "xbsl"]
+
+
+def _start_folder() -> str:
+    """The folder the command changes into before it starts; "" when it stays where it is.
+
+    Only an interpreter without `-P` needs one. Python 3.10 knows neither the flag nor
+    `PYTHONSAFEPATH`, and `-I` would leave out PYTHONPATH - the way to a source checkout -
+    together with the folder. So the command starts from the folder of the staged data
+    (`_folder`): `mkdtemp` made it private, and its files are named by a digest, so no import
+    finds a module there. The paths of the command are absolute and read the same from any
+    folder; only the name lint_source files its findings under stays as the call gave it. When
+    the folder cannot be made the command goes without it, as it did before.
+    """
+    return "" if _takes_safe_path() else _folder()
 
 
 def _environment() -> dict[str, str]:
@@ -202,21 +232,40 @@ def _key(folder: str) -> str:
     return os.path.normcase(os.path.realpath(folder))
 
 
-def _stage(data: bytes, suffix: str) -> str:
-    """The path of a file holding `data` for the command to read; "" when it cannot be written.
+def _folder() -> str:
+    """The folder of this process's staged data, made on first use; "" when it cannot be.
 
-    Bytes, not text: the text of lint_source has to reach --stdin exactly as the tool would
-    have encoded it, its line endings included. The folder is this process's own (`mkdtemp`:
-    private, its name unpredictable), and a file is named by the digest of its data, so a call
-    refused twice writes one file.
+    The folder is this process's own (`mkdtemp`: private, its name unpredictable). Its time is
+    moved on whenever it is handed out: the next server sweeps the folders older than a day,
+    and a command given out now has to find its folder in place.
     """
     global _staged_in
     try:
         if _staged_in is None or not os.path.isdir(_staged_in):
             sweep_old_folders()
             _staged_in = tempfile.mkdtemp(prefix=_FOLDER_PREFIX)
-        name = hashlib.sha256(data).hexdigest()[:16]
-        path = os.path.join(_staged_in, name + (suffix if _SUFFIX.fullmatch(suffix) else ""))
+    except OSError:
+        return ""
+    try:
+        os.utime(_staged_in)
+    except OSError:
+        pass  # an old time only lets the next server take the folder a little earlier
+    return _staged_in
+
+
+def _stage(data: bytes, suffix: str) -> str:
+    """The path of a file holding `data` for the command to read; "" when it cannot be written.
+
+    Bytes, not text: the text of lint_source has to reach --stdin exactly as the tool would
+    have encoded it, its line endings included. A file is named by the digest of its data, so
+    a call refused twice writes one file.
+    """
+    folder = _folder()
+    if not folder:
+        return ""
+    name = hashlib.sha256(data).hexdigest()[:16]
+    path = os.path.join(folder, name + (suffix if _SUFFIX.fullmatch(suffix) else ""))
+    try:
         with open(path, "wb") as target:
             target.write(data)
     except OSError:
@@ -376,6 +425,71 @@ def _fold_comments(arguments: dict) -> Built:
     return [Run((*argv, "--format", "json"))], ""
 
 
+# --- the metadata readers -----------------------------------------------------------------------
+
+
+def _project_info(arguments: dict) -> Built:
+    argv = ["project-info", _base(arguments.get("root"))]
+    for name in ("kind", "subsystem", "package", "project"):
+        # `is not None`, as the scaffolding reads them: `project=""` names no project and is
+        # refused, while a filter left out takes everything.
+        if arguments.get(name) is not None:
+            argv += _option(f"--{name}", arguments[name])
+    argv += [f"--{name}" for name in ("brief", "reference") if arguments.get(name)]
+    return [Run(tuple(argv))], ""
+
+
+def _object_info(arguments: dict) -> Built:
+    base = _base(arguments.get("root"))
+    argv = ["object-info", base]
+    if arguments.get("name"):
+        argv += _option("--name", arguments["name"])
+    if arguments.get("yaml_path"):
+        argv += _option("--path", _under(base, arguments["yaml_path"]))
+    return [Run(tuple(argv))], ""
+
+
+def _localization_info(arguments: dict) -> Built:
+    if not arguments.get("yaml_path"):
+        return None  # the tool has no file to read either
+    base = _base(arguments.get("root"))
+    return [Run(("localization-info", _under(base, arguments["yaml_path"])))], ""
+
+
+def _component_tree(arguments: dict) -> Built:
+    if not arguments.get("yaml_path"):
+        return None
+    argv = ["form-tree", _under(_base(arguments.get("root")), arguments["yaml_path"])]
+    if arguments.get("node_id"):
+        argv += _option("--node", arguments["node_id"])
+    if arguments.get("name"):
+        argv += _option("--name", arguments["name"])
+    if arguments.get("max_depth"):
+        argv += _option("--max-depth", arguments["max_depth"])  # below one: no limit, both ways
+    if not arguments.get("properties", True):
+        argv.append("--no-properties")
+    if arguments.get("brief"):
+        argv.append("--brief")
+    return [Run(tuple(argv))], ""
+
+
+def _resource_references(arguments: dict) -> Built:
+    if not arguments.get("resource_path"):
+        return None
+    base = _base(arguments.get("root"))
+    # Every place: the CLI has no limit, and the tool's `limit` only cuts the list it answers.
+    return [Run(("resource-references", base, _under(base, arguments["resource_path"])))], ""
+
+
+def _unused_resources(arguments: dict) -> Built:
+    argv = ["unused-resources", _base(arguments.get("root"))]
+    if arguments.get("include_protected"):
+        argv.append("--include-protected")
+    # Named even at the default, which the tool and the CLI share today: the call stays the
+    # same call should one of them change it.
+    return [Run((*argv, *_option("--limit", arguments.get("limit", 100))))], ""
+
+
 # --- the translation dictionary -----------------------------------------------------------------
 
 
@@ -485,7 +599,7 @@ def _translate_set(arguments: dict) -> Built:
 
 #: The tools the CLI can run, each with the builder of its command. A tool missing here has no
 #: counterpart that answers the same way, and its refusal stays as it was: the documentation and
-#: the schemas have no command at all, and the meta_* scaffolding has subcommands whose
+#: the schemas have no command at all, and the writing meta_* tools have subcommands whose
 #: arguments are not the tools' one to one (properties as nested objects, batches of names, the
 #: JSON of a report) - a write the command would not repeat exactly is worse than none.
 BUILDERS: dict[str, Callable[[dict], Built]] = {
@@ -494,6 +608,12 @@ BUILDERS: dict[str, Callable[[dict], Built]] = {
     "lint_source": _lint_source,
     "baseline_prune": _baseline_prune,
     "meta_fold_comments": _fold_comments,
+    "meta_project_info": _project_info,
+    "meta_object_info": _object_info,
+    "meta_localization_info": _localization_info,
+    "meta_component_tree": _component_tree,
+    "meta_resource_references": _resource_references,
+    "meta_unused_resources": _unused_resources,
     "translate_status": _translate_status,
     "translate_gaps": _translate_gaps,
     "translate_entries": _translate_entries,

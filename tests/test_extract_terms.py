@@ -531,3 +531,107 @@ def test_a_title_with_a_control_character_inside_a_word_still_pairs(tmp_path):
     sections, _conflicts = terms.extract(tmp_path)
 
     assert sections["types"].get("Перечень") == "Listing"
+
+
+# --- the reserved words of the query language, out of the help ------------------------------
+
+#: The table as a minified site writes it: the closing tags of rows and cells are left out.
+_RESERVED_MINIFIED = (
+    "<p>В языке запросов зарезервированы следующие ключевые слова:</p>"
+    "<table><thead><tr><th>Русский язык<th>Английский язык<th>Подробнее<tbody>"
+    "<tr><td><code>ИЗ</code><td><code>FROM</code><td><a href=/docs/help/topics/select-from/>"
+    "Предложение ИЗ</a>"
+    "<tr><td><code>ИСТИНА</code><td><code>TRUE</code><td>Значение типа <code>Булево</code>"
+    "<tr><td><code>НЕОПРЕДЕЛЕНО</code><td><code>UNDEFINED</code><td>Литерал типа Неопределено"
+    "</table>\n<p>Также зарезервированными словами языка запросов без варианта на русском языке "
+    "являются <a href=/docs/help/topics/is-null-expression/><code>NULL</code></a> и "
+    "<code>TEMP</code>.</p>\n<p>Ключевые слова нечувствительны к регистру.</p>"
+)
+#: The same table with every closing tag, as an older help writes it.
+_RESERVED_FULL = (
+    "<table><thead><tr><th>Русский язык</th><th>Английский язык</th><th>Подробнее</th></tr>"
+    "</thead><tbody><tr><td><code>ИЗ</code></td><td><code>FROM</code></td><td>-</td></tr>"
+    "<tr><td><code>ИСТИНА</code></td><td><code>TRUE</code></td><td>-</td></tr>"
+    "<tr><td><code>НЕОПРЕДЕЛЕНО</code></td><td><code>UNDEFINED</code></td><td>-</td></tr>"
+    "</tbody></table> <p>Также зарезервированными словами языка запросов без варианта на "
+    "русском языке являются <code>NULL</code> и <code>TEMP</code>.</p>"
+)
+_RESERVED = {"ИЗ": "FROM", "ИСТИНА": "TRUE", "НЕОПРЕДЕЛЕНО": "UNDEFINED"}
+
+
+def test_the_reserved_words_are_read_from_the_table_of_the_help():
+    """The literals of the query language are in no vocabulary of the parser; the help lists
+    them in a table of both spellings, and the words without a Russian spelling after it. The
+    minified markup and the full one read alike."""
+    from xbsl.extract.terms import query_reserved_words
+
+    assert query_reserved_words(_RESERVED_MINIFIED) == (_RESERVED, ["NULL", "TEMP"])
+    assert query_reserved_words(_RESERVED_FULL) == (_RESERVED, ["NULL", "TEMP"])
+
+
+def test_only_the_table_of_both_spellings_is_the_list_of_the_reserved_words():
+    """Another table of the help and a paragraph that is not about the missing Russian spelling
+    give nothing: a code word of any paragraph is not a reserved word."""
+    from xbsl.extract.terms import query_reserved_words
+
+    other = _RESERVED_FULL.replace("Русский язык", "Имя").replace("Английский язык", "Тип")
+    unrelated = _RESERVED_FULL.replace("без варианта на русском языке", "среди прочих")
+
+    assert query_reserved_words(other) == ({}, [])
+    assert query_reserved_words(unrelated) == (_RESERVED, [])
+    assert query_reserved_words("<p>Страница без таблицы</p>") == ({}, [])
+
+
+def test_the_step_takes_the_reserved_words_from_the_page_of_the_distribution(tmp_path):
+    """End to end over a distribution: the page is read the way the other pages are, and a help
+    without the page leaves both lists empty, so the step writes neither key."""
+    import zipfile
+
+    from xbsl.extract import terms
+
+    with_page = tmp_path / "with"
+    with_page.mkdir()
+    car = with_page / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr(terms._QUERY_SYNTAX_PAGE, "<html><body>" + _RESERVED_MINIFIED + "</body></html>")
+    without_page = tmp_path / "without"
+    without_page.mkdir()
+    with zipfile.ZipFile(without_page / car.name, "w") as z:
+        z.writestr("data/docs/help/ru/topics/other/index.html", _RESERVED_MINIFIED)
+
+    sections, _conflicts = terms.extract(with_page)
+    empty, _conflicts = terms.extract(without_page)
+
+    assert sections["query_reserved"] == _RESERVED
+    assert sections["query_reserved_english_only"] == ["NULL", "TEMP"]
+    assert empty["query_reserved"] == {} and empty["query_reserved_english_only"] == []
+
+
+def test_the_reserved_words_are_written_only_when_the_help_lists_them(tmp_path):
+    """An absent key tells a reader to keep the words it knows by hand; an empty list would claim
+    that the language reserves nothing."""
+    import json
+    import zipfile
+
+    from xbsl.extract import _distro, terms
+
+    written = {}
+    pages = (("with", terms._QUERY_SYNTAX_PAGE), ("without", "data/docs/help/ru/x/index.html"))
+    for name, page in pages:
+        dist = tmp_path / name
+        dist.mkdir()
+        car = dist / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+        with zipfile.ZipFile(car, "w") as z:
+            z.writestr(page, _RESERVED_MINIFIED)
+        root = tmp_path / f"data-{name}"
+        try:
+            terms.main(["--dist", str(dist), "--element-version", "9.9.9+1",
+                        "--data-dir", str(root)])
+        finally:
+            _distro.set_data_root(None)
+        written[name] = json.loads((root / "9.9.9+1" / "terms.json").read_text(encoding="utf-8"))
+
+    assert written["with"]["query_reserved"] == _RESERVED
+    assert written["with"]["query_reserved_english_only"] == ["NULL", "TEMP"]
+    assert "query_reserved" not in written["without"]
+    assert "query_reserved_english_only" not in written["without"]
