@@ -219,7 +219,11 @@ tier keep to the module and the element description; `translation/english-shape`
 <a id="b-comment-emphasis-caps"></a>**`comment/emphasis-caps`.** The rule judges a function word,
 any other word the same file also writes in small letters, a one-letter word inside a sentence, a
 negation glued on, and the capitals of the English line of a comment in the translation
-dictionary. Abbreviations, date masks and a cited query are left alone. The fix restores the case.
+dictionary. Abbreviations, date masks and a cited query are left alone. A cited query is told by
+the keyword table of the query language in the platform data (the `query` section of
+`terms.json`): a keyword prose does not shout (SELECT, DESC) or a keyword of several words
+(ORDER BY) marks the whole line, and any other keyword counts as syntax only when code follows
+it. The fix restores the case.
 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** The finding suggests the
 wording with a word of condition. The legend of a value is left alone: nothing is named there
