@@ -121,7 +121,7 @@ def compact(payload: dict, *, as_ci_full: bool = False) -> dict:
     `errors`, because an error is what a build fails on and the reader has to see which one.
 
     `as_ci`, under `summary` when the caller asked for it, narrows to one line - see
-    _compact_as_ci; `as_ci_full` keeps the whole record. Every other key of the payload (the
+    compact_as_ci; `as_ci_full` keeps the whole record. Every other key of the payload (the
     environment, the baseline record) stays as it was.
     """
     out = dict(payload)
@@ -146,7 +146,7 @@ def compact_summary(summary: dict, *, as_ci_full: bool = False) -> dict:
     out = {key: value for key, value in summary.items() if key != "by_file"}
     as_ci = out.get("as_ci")
     if as_ci is not None and not as_ci_full:
-        out["as_ci"] = _compact_as_ci(as_ci)
+        out["as_ci"] = compact_as_ci(as_ci)
     return out
 
 
@@ -182,7 +182,7 @@ def _compact_finding(d: dict) -> str:
     return f"{d['path']}:{d['line']} {d['rule']} – {d['message']}"
 
 
-def _compact_as_ci(job: dict) -> dict:
+def compact_as_ci(job: dict) -> dict:
     """`as_ci` (cijob.CiLint.as_dict()) as one line: `{"adopted": True, "brief": ...}`.
 
     The same record comes with every call of a session, and the full `flags` sentence with an

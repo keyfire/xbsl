@@ -311,7 +311,8 @@ usage: xbsl mcp-log [-h] [--last LAST] [--json]
 fold the yaml comments into the description of the node the environment reads: by default only show the plan
 
 ```bash
-usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [paths ...]
+usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] [--compact]
+                          paths [paths ...]
 ```
 
 **Arguments**
@@ -328,6 +329,7 @@ usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [p
 | `--write` | write the folded files; a file that fails the audit is not written |
 | `--all` | apply the proposed moves too - the ones that may be read two ways |
 | `--format {text,json}` | output format: text - the plan and the diff, json - for agents |
+| `--compact` | briefly: the moves counted per file and the disputed ones instead of every move and the diff (with `--format` json - the short report meta_fold_comments gives with compact) |
 
 ## Metadata scaffolding
 
@@ -399,10 +401,11 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 
 ### `xbsl add-field`
 
-add an attribute/dimension/resource/value/tabular section; see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
+add an attribute/dimension/resource/value/property/tabular section; see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
 
 ```bash
-usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--dry-run]
+usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--doc DOC]
+                      [--dry-run]
                       yaml_path field_kind name
 ```
 
@@ -411,7 +414,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object to add the field to |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, табличная-часть |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, свойство, табличная-часть |
 | `name` | the field name |
 
 **Options**
@@ -422,6 +425,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | `--type TYPE` | the field type (default String; a standard attribute takes its class default) |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
 | `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address; a nested block by a dotted key: Autonumbering.Prefix=RQ |
+| `--doc DOC` | the field description – its documentation comment: the ## lines at the head of the item, which the development environment shows and keeps |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-route`

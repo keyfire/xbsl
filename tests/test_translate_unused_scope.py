@@ -237,6 +237,25 @@ def test_an_explicit_key_on_an_added_line_is_read_as_a_candidate(tmp_path):
 
 
 @pytest.mark.needs_data
+def test_a_new_dictionary_file_outside_the_index_counts_whole(tmp_path):
+    """A file the change created and did not `git add` is not in the diff; every pair of it
+    was written by the change. A range examines commits and leaves it out."""
+    project, dictionary, base = _repo(tmp_path)
+    (dictionary.parent / "020-new.yaml").write_text(
+        "phrases:\n    Первая редакция строки.: The first wording of the line.\n"
+        "    Вторая редакция строки.: The second wording of the line.\n",
+        encoding="utf-8",
+    )
+
+    removed = entries.removed_surfaces(project, base, dictionary.parent)
+
+    assert removed.dictionary_files == 1 and removed.dictionary_added == 2
+    assert removed.added_keys == {"Первая редакция строки.", "Вторая редакция строки."}
+    ranged = entries.removed_surfaces(project, f"{base}..HEAD", dictionary.parent)
+    assert ranged.dictionary_files == 0 and ranged.added_keys == set()
+
+
+@pytest.mark.needs_data
 def test_a_dictionary_outside_the_repository_adds_no_candidates(tmp_path):
     """There is no diff to read for it: the mode answers with zeros rather than failing."""
     repo = tmp_path / "repo"

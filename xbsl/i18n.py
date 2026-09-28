@@ -653,6 +653,17 @@ _CORE_MESSAGES = {
         "ru": "формат вывода: text - план и разница, json - для агентов",
         "en": "output format: text - the plan and the diff, json - for agents",
     },
+    "lsp.restart-button": {
+        "ru": "Перезапустить",
+        "en": "Restart",
+    },
+    "cli.help.fold-compact": {
+        "ru": "кратко: переносы по файлам и спорные переносы вместо каждого переноса и разницы "
+              "(с --format json - краткий отчет, как у meta_fold_comments с compact)",
+        "en": "briefly: the moves counted per file and the disputed ones instead of every move "
+              "and the diff (with --format json - the short report meta_fold_comments gives "
+              "with compact)",
+    },
     "cli.help.commands.mcp-log": {
         "ru": "журнал MCP-сервера: когда серверы запускались, как завершились и кто их остановил",
         "en": "the MCP server journal: when servers started, how they ended and who stopped them",
@@ -1092,6 +1103,12 @@ _CORE_MESSAGES = {
         "ru": "тип поля (по умолчанию Строка; у стандартного реквизита – тип его класса)",
         "en": "the field type (default String; a standard attribute takes its class default)",
     },
+    "cli.help.scaf.af-doc": {
+        "ru": "описание поля – документирующий комментарий: строки ## в начале элемента, "
+              "которые среда разработки показывает и сохраняет",
+        "en": "the field description – its documentation comment: the ## lines at the head of "
+              "the item, which the development environment shows and keeps",
+    },
     "cli.help.scaf.ar-yaml": {
         "ru": "yaml HttpСервис, в который добавить маршруты",
         "en": "the yaml of the HttpService to add the routes to",
@@ -1159,10 +1176,10 @@ _CORE_MESSAGES = {
         "en": "report description (JSON: source, rows, columns, measures)",
     },
     "cli.help.scaf.add-field": {
-        "ru": "добавить реквизит/измерение/ресурс/значение/ТЧ; см. также set-field-property – "
-              "свойства уже существующего элемента, set-localization – тексты строки "
-              "ЛокализованныеСтроки по языкам",
-        "en": "add an attribute/dimension/resource/value/tabular section; see also "
+        "ru": "добавить реквизит/измерение/ресурс/значение/свойство/ТЧ; см. также "
+              "set-field-property – свойства уже существующего элемента, set-localization – "
+              "тексты строки ЛокализованныеСтроки по языкам",
+        "en": "add an attribute/dimension/resource/value/property/tabular section; see also "
               "set-field-property for an item that already exists and set-localization for the "
               "texts of a LocalizedStrings string per language",
     },

@@ -545,6 +545,23 @@ def test_the_flag_that_ate_the_path_answers_with_the_form_that_works(tmp_path: P
 
 
 @pytest.mark.needs_data
+@pytest.mark.parametrize("name", ("Склады.xbsl", "Склады.yaml"))
+def test_a_source_named_as_the_pipeline_answers_with_the_form_that_works(
+        tmp_path: Path, capsys, name: str):
+    """`xbsl --as-ci e1c/Stores.xbsl` - a source is never a pipeline file, and it used to fail
+    as a pipeline that does not parse ("mapping values are not allowed here")."""
+    source = _write(tmp_path / name, "ВидЭлемента: Справочник\nИмя: Склады\n"
+                    if name.endswith(".yaml") else "метод Пересчитать()\n;\n")
+    _write(tmp_path / ".gitlab-ci.yml", "xbsl-lint:\n  script:\n    - xbsl project\n")
+
+    assert cli.main(["--as-ci", str(source)]) == 2
+
+    said = capsys.readouterr().err
+    assert f"xbsl {source} --as-ci" in said
+    assert "mapping values" not in said
+
+
+@pytest.mark.needs_data
 def test_a_job_that_is_not_in_the_file_refuses_by_name(tmp_path: Path, capsys):
     root = _project_with_a_copied_subtree(tmp_path)
     assert cli.main([str(root), "--as-ci-job", "no-such-job"]) == 2

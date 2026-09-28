@@ -3,7 +3,8 @@
 A comment of an element description and a comment of a resource file need no Element data -
 the first is cut out with the yaml composer, the second with the resource scanner - so most of
 the tests here run in a public checkout. A module is read by the lexer, which takes its words
-from the dataset: those tests are marked `needs_data`.
+from the dataset, and a query cited in a comment is told by the keyword table of the dataset:
+those tests are marked `needs_data`.
 """
 
 import pytest
@@ -284,7 +285,9 @@ def test_emphasis_caps_fix_lands_on_the_file_with_crlf(tmp_path):
     "# строки ТЧ и таблица СУБД",
     "# ответ в JSON, запрос в SQL",
     "# СКЛАД ЗАКРЫТ НА ПЕРЕУЧЁТ",
-    "# условие ГДЕ НЕ Удалён",
+    # The words of a cited query come from the keyword table of the dataset; the same line runs
+    # without the data in test_comment_emphasis_caps_wider, against a table of its own.
+    pytest.param("# условие ГДЕ НЕ Удалён", marks=pytest.mark.needs_data),
     "# подпись \"НЕ ТРОГАТЬ\" показывается как есть",
     "# константа НОВАЯ_СТРОКА",
 ))

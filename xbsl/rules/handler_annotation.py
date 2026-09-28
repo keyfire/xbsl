@@ -29,10 +29,22 @@ declares their handlers in code, some of them after the element's own yaml (the 
 processing), and no description lists them. A chain of components ending outside the project
 and the catalog, and data without the lists, are not judged either.
 
+A handler may be there in some compatibility modes only (`from` and `to` of its row, a
+half-open range - see modulehandlers.declared_in): the web chat handler of a client
+application is gone from mode 8.0 on. Such a handler counts as declared only when the mode of
+the project admits it, and an override of it in another mode gets a message of its own that
+names both the modes of the handler and the mode of the project. The mode is the one the
+project description declares, and a mode the platform does not support is taken as the newest,
+the way code/deprecated-api takes it. A description that declares no mode at all is refused by
+the build, while the reader of the platform goes on in the newest mode (`LAST`) - so does the
+rule. A run with no project description knows no mode, and every handler of the base counts.
+
 Both fixes remove the annotation - with its line when nothing else stands there. When the name
 is a near miss of a handler the base does declare, the second rule offers no fix: the author
 more likely misspelled the override than put the annotation on the wrong method, and taking
-the annotation away would quietly turn a broken override into a method nobody calls.
+the annotation away would quietly turn a broken override into a method nobody calls. Nor is
+there a fix for a handler of other modes: the platform does not call such a method in the mode
+of the project, with the annotation or without it.
 """
 
 from __future__ import annotations
@@ -40,12 +52,15 @@ from __future__ import annotations
 import difflib
 from collections.abc import Iterable
 from functools import lru_cache
+from pathlib import PurePosixPath
 
-from xbsl import dataset, i18n, modulehandlers, terms
+from xbsl import dataset, i18n, modulehandlers, terms, typeinfer
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
+from xbsl.layout import PROJECT_FILES
 from xbsl.lexer import linemap
+from xbsl.rules.deprecated_api import _effective_mode, _supported_modes
 from xbsl.rules.handlers import _IDENT_RE, _event_names, _handler_pair_stem
 from xbsl.rules.unused_methods import _PLATFORM_EVENTS
 from xbsl.rules.yaml_schema import (
@@ -107,6 +122,34 @@ MESSAGES = {
               "{base} overrides no such handler. It looks like a misspelled {similar}: the "
               "build refuses it (\"A handler associated with method \"{name}\" is not "
               "found\"), and once renamed the platform will call the method as the handler.",
+    },
+    f"{OVERRIDE_RULE}.mode": {
+        "ru": "Метод '{name}' помечен @{annotation}, но переопределять ему нечего: модуль "
+              "компонента на базе {base} переопределяет {handler} {modes}, а режим "
+              "совместимости проекта – {mode}. Сборка откажет: \"A handler associated with "
+              "method \"{name}\" is not found\". Снять аннотацию мало: в этом режиме платформа "
+              "такой метод не вызывает.",
+        "en": "Method '{name}' carries @{annotation}, yet it has nothing to override: a module "
+              "of a component built on {base} overrides {handler} {modes}, and the project "
+              "compatibility mode is {mode}. The build refuses it: \"A handler associated with "
+              "method \"{name}\" is not found\". Removing the annotation is not enough: in this "
+              "mode the platform does not call such a method.",
+    },
+    f"{OVERRIDE_RULE}.until": {
+        "ru": "только в режимах ниже {until}",
+        "en": "only in modes below {until}",
+    },
+    f"{OVERRIDE_RULE}.since": {
+        "ru": "только начиная с режима {since}",
+        "en": "only from mode {since} on",
+    },
+    f"{OVERRIDE_RULE}.between": {
+        "ru": "только в режимах от {since} и ниже {until}",
+        "en": "only in modes from {since} and below {until}",
+    },
+    f"{OVERRIDE_RULE}.assumed": {
+        "ru": "{mode} (новейший: проект не указывает режим, который поддерживает платформа)",
+        "en": "{mode} (the newest: the project states no mode the platform supports)",
     },
 }
 i18n.register(MESSAGES)
@@ -289,8 +332,51 @@ def _override_mapper(source: SourceFile) -> dict | None:
     if source.kind == "xbsl":
         return _module_fact(source)
     if source.kind == "yaml":
+        if PurePosixPath(source.rel.replace("\\", "/")).name in PROJECT_FILES:
+            # The folder of the project and the mode it declares: the fact the project typing
+            # takes from the description, read once per source for every rule that asks.
+            return typeinfer.project_fact(source)
         return _component_fact(source)
     return None
+
+
+def _project_modes(facts: dict[str, dict]) -> dict[str, tuple[tuple[int, ...] | None, bool]]:
+    """{rel: (the compatibility mode the project of the source is built in, whether assumed)}.
+
+    The mode is the declared one, the newest for a mode the platform does not support or for
+    a description that declares none (assumed, both of them), and None - unknown - when the run
+    carries no project description for the source.
+    """
+    newest = max(_supported_modes(), default=None)
+    found: dict[str, tuple[tuple[int, ...] | None, bool]] = {}
+    for root, group in typeinfer._projects(facts).items():
+        described = next((fact for fact in group.values()
+                          if fact.get("k") == "project" and fact.get("root") in (root, ".")), None)
+        answer: tuple[tuple[int, ...] | None, bool] = (None, False)
+        if described is not None and described.get("compat"):
+            declared = tuple(described["compat"])
+            mode = _effective_mode(declared)
+            answer = (mode, mode != declared)
+        elif described is not None:
+            answer = (newest, True)
+        found.update(dict.fromkeys(group, answer))
+    return found
+
+
+def _mode_shown(mode: tuple[int, ...], assumed: bool) -> str:
+    """The mode of the project as a message names it, with a word on where it comes from."""
+    written = ".".join(str(part) for part in mode)
+    return i18n.t(f"{OVERRIDE_RULE}.assumed", mode=written) if assumed else written
+
+
+def _modes_shown(row: dict) -> str:
+    """The modes a handler is there in, as a message words them."""
+    since, until = str(row.get("from") or "").strip(), str(row.get("to") or "").strip()
+    if since and until:
+        return i18n.t(f"{OVERRIDE_RULE}.between", since=since, until=until)
+    if until:
+        return i18n.t(f"{OVERRIDE_RULE}.until", until=until)
+    return i18n.t(f"{OVERRIDE_RULE}.since", since=since)
 
 
 def _language() -> str:
@@ -317,6 +403,7 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         # Two components under one name: which one a base means cannot be told from here.
         return heads[0] if len(heads) == 1 else ""
 
+    modes = _project_modes(facts)
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
@@ -324,27 +411,45 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if component is None:
             continue
         base = modulehandlers.platform_base(component["head"], project_base)
-        allowed = modulehandlers.of_type(base) if base else {}
-        if not allowed:
+        rows = modulehandlers.rows_of(base) if base else ()
+        if not rows:
             continue
-        rows = modulehandlers.rows_of(base)
+        mode, assumed = modes.get(rel, (None, False))
+        # {handler name in either spelling: its row}, in the mode of the project and out of it.
+        present: dict[str, dict] = {}
+        elsewhere: dict[str, dict] = {}
+        shown: list[dict] = []
+        for row in rows:
+            if modulehandlers.declared_in(row, mode):
+                shown.append(row)
+                present.update(dict.fromkeys((row["ru"], row["en"]), row))
+            else:
+                elsewhere.update(dict.fromkeys((row["ru"], row["en"]), row))
         bound = set(component["bound"])
         for method in fact["annotated"]:
             name = method["name"]
-            if name in bound or name in allowed:
+            if name in bound or name in present:
                 continue
             fields = {"name": name, "annotation": method["annotation"], "base": base}
-            near = difflib.get_close_matches(name, list(allowed), n=1, cutoff=_NEAR_MISS)
-            if near:
-                meant = next(row for row in rows if near[0] in (row["ru"], row["en"]))
+            other = elsewhere.get(name)
+            if other is not None and mode is not None:  # an unknown mode keeps every row
                 yield Diagnostic(
                     rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
-                    i18n.t(f"{OVERRIDE_RULE}.misspelled", similar=meant[_language()], **fields),
+                    i18n.t(f"{OVERRIDE_RULE}.mode", handler=other[_language()],
+                           modes=_modes_shown(other), mode=_mode_shown(mode, assumed), **fields),
+                )
+                continue
+            near = difflib.get_close_matches(name, list(present), n=1, cutoff=_NEAR_MISS)
+            if near:
+                yield Diagnostic(
+                    rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                    i18n.t(f"{OVERRIDE_RULE}.misspelled", similar=present[near[0]][_language()],
+                           **fields),
                 )
                 continue
             yield Diagnostic(
                 rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
                 i18n.t(f"{OVERRIDE_RULE}.found",
-                       handlers=", ".join(row[_language()] for row in rows), **fields),
+                       handlers=", ".join(row[_language()] for row in shown), **fields),
                 fix=TextEdit(method["start"], method["end"], ""),
             )

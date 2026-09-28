@@ -159,6 +159,29 @@ def test_compact_as_ci_full_keeps_the_whole_record(server, tmp_path):
 
 
 @pytest.mark.needs_data
+def test_a_question_about_a_few_rules_gets_the_line_of_the_ci_job(server, tmp_path):
+    """`select` asks about a few rules: the record of the job narrows to its line even without
+    `compact`, and `as_ci_full` keeps it whole."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "Первый.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "xbsl-lint:\n  script:\n    - xbsl project --ignore structure/xbsl-pair"
+        + "".join(f" --enable code/rule-{n}" for n in range(12)) + "\n",
+        encoding="utf-8",
+    )
+
+    narrow = server.lint_paths([str(project)], as_ci=True, select=["whitespace/trailing"])
+    assert set(narrow["summary"]["as_ci"]) == {"adopted", "brief"}
+    assert "diagnostics" in narrow and "by_file" in narrow["summary"]
+    whole = server.lint_paths([str(project)], as_ci=True, select=["whitespace/trailing"],
+                              as_ci_full=True)
+    assert len(whole["summary"]["as_ci"]["enable"]) == 12
+    plain = server.lint_paths([str(project)], as_ci=True)
+    assert "flags" in plain["summary"]["as_ci"]
+
+
+@pytest.mark.needs_data
 def test_compact_as_ci_names_the_job_when_the_file_runs_several(server, tmp_path):
     project = tmp_path / "project"
     project.mkdir()

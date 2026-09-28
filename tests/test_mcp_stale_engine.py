@@ -8,17 +8,25 @@ clean. Now every tool but version_info compares the version on disk with the loa
 refuses with the cure named; a failure under the same number is checked against the fingerprint
 of the sources taken at start; a crashed rule names the restart in its own report.
 
+A restart is in the client's hands, not the agent's: on 27.09.2026 a session met the refusal on
+every call after the engine moved from 0.119.1 to 0.120.0 and finished its work through the CLI
+by hand. So the refusal of a tool the CLI can run carries `cli`, the command line of the same
+call (xbsl/mcpcli.py; the command itself is tested in tests/test_mcpcli.py).
+
 No Element data and no live server: the package on disk is a folder of the test's own.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
+import shlex
+from pathlib import Path
 
 import pytest
 
-from xbsl import cli, engine, freshness, i18n, mcpjournal
+from xbsl import cli, engine, freshness, i18n, mcpcli, mcpjournal
 
 
 def _package(folder, version: str):
@@ -46,6 +54,9 @@ def disk(tmp_path, monkeypatch):
     monkeypatch.setattr(freshness, "_plugins_found", None)
     monkeypatch.setattr(freshness, "_unsettled", False)
     monkeypatch.setattr(freshness, "_SOURCES_TTL", 0.0)
+    # A refusal saves the data of a call for its CLI command - here in the test's own folder.
+    (tmp_path / "staged").mkdir()
+    monkeypatch.setattr(mcpcli, "_staged_in", str(tmp_path / "staged"))
     return folder
 
 
@@ -154,7 +165,7 @@ def test_a_replaced_engine_is_refused_in_words_not_in_a_type_error(mcp_module, d
 
     answer = _lint(mcp_module)(paths=[str(source)])
 
-    assert set(answer) == {"error", "stale"}
+    assert set(answer) == {"error", "cli", "stale"}
     assert f"{freshness.__version__} -> 9.9.9" in answer["error"]
     assert "Перезапустите сервер MCP" in answer["error"]
     assert answer["stale"]["reason"] == "version" and answer["stale"]["on_disk"] == "9.9.9"
@@ -175,6 +186,77 @@ def test_every_tool_but_version_info_is_behind_the_check(mcp_module, disk):
 def test_version_info_on_a_fresh_engine_carries_no_stale_record(mcp_module, disk):
     info = mcp_module.version_info()
     assert info["engine_on_disk"] == info["engine"] and "stale" not in info
+
+
+def _after_xbsl(words: list[str]) -> list[str]:
+    """The words of a command after `-m xbsl`: what the CLI reads."""
+    return words[words.index("-m") + 2:]
+
+
+def test_a_refusal_names_the_cli_command_of_the_same_call(mcp_module, disk, tmp_path):
+    _update(disk, "9.9.9")
+
+    answer = _lint(mcp_module)(paths=["acme/Задачи.xbsl"], root=str(tmp_path), select=["code"])
+
+    assert list(answer) == ["error", "cli", "stale"]
+    assert "Перезапустите сервер MCP" in answer["error"]
+    assert "команда из поля cli" in answer["error"]
+    assert _after_xbsl(shlex.split(answer["cli"])) == [
+        str(tmp_path / "acme" / "Задачи.xbsl"), "--select", "code", "--format", "json"]
+
+
+def test_a_refused_lint_source_saves_its_text_for_the_stdin_of_the_command(mcp_module, disk):
+    _update(disk, "9.9.9")
+    content = "метод Ф()\r\n;\n"
+
+    answer = mcp_module.mcp.tools["lint_source"](filename="Задачи.xbsl", content=content)
+
+    words = shlex.split(answer["cli"])
+    staged = words[words.index("<") + 1]
+    assert Path(staged).read_bytes() == content.encode("utf-8")
+    assert staged in answer["cli_note"] and "--stdin" in words
+    assert list(answer) == ["error", "cli", "cli_note", "stale"]
+
+
+def test_every_guarded_tool_can_answer_with_a_refusal(mcp_module):
+    """The refusal is an object, and the SDK checks an answer against the declared return type.
+
+    A tool declared to return a list alone had its refusal replaced by a validation error of the
+    SDK, the message lost inside it (`docs_search`, until 28.09.2026).
+    """
+    for name, tool in mcp_module.mcp.tools.items():
+        if name == "version_info":
+            continue
+        declared = str(inspect.signature(tool).return_annotation).split("|")
+        assert any(part.strip() == "dict" or part.strip().startswith("dict[")
+                   for part in declared), name
+
+
+def test_a_tool_without_a_cli_counterpart_is_refused_as_before(mcp_module, disk):
+    _update(disk, "9.9.9")
+
+    answer = mcp_module.mcp.tools["docs_search"](query="Массив")
+
+    assert set(answer) == {"error", "stale"}
+    assert answer["error"] == i18n.t("freshness.refusal", state=freshness.describe(
+        freshness.version_state()))
+
+
+def test_a_failure_after_the_sources_moved_names_the_command_too(mcp_module, disk, tmp_path):
+    freshness.remember()
+
+    def translate_drift(root: str, filter: str = "", limit: int = 50, offset: int = 0) -> dict:
+        raise TypeError("drift_rows() takes 2 positional arguments but 3 were given")
+
+    guarded = mcp_module._stale_guard(translate_drift)
+    _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+
+    answer = guarded(root=str(tmp_path), filter="Задач")
+
+    assert answer["stale"]["reason"] == "sources" and "TypeError: drift_rows()" in answer["error"]
+    assert _after_xbsl(shlex.split(answer["cli"])) == [
+        "translate", str(tmp_path), "--drift", "--filter", "Задач", "--limit", "50",
+        "--format", "json"]
 
 
 def test_the_journal_hears_the_state_once_not_per_call(mcp_module, disk, tmp_path):

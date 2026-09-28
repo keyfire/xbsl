@@ -47,6 +47,7 @@ in `ci/sub/ci/` and reported a pipeline that runs no xbsl command.
 
 from __future__ import annotations
 
+import re
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,6 +72,12 @@ MESSAGES = {
         "en": "--as-ci takes the pipeline FILE, and {path} is a directory. To check it with"
               " the CI rule set: xbsl {path} --as-ci (the flag goes AFTER the paths); a"
               " pipeline file inside the directory is named in full",
+    },
+    "ci.named-source": {
+        "ru": "--as-ci берёт файл конвейера, а {path} – исходник проекта. Проверить его набором"
+              " из CI: xbsl {path} --as-ci (ключ пишется после путей)",
+        "en": "--as-ci takes the pipeline FILE, and {path} is a source of the project. To check"
+              " it with the CI rule set: xbsl {path} --as-ci (the flag goes AFTER the paths)",
     },
     "ci.no-command": {
         "ru": "В {path} нет команды xbsl – набор правил брать неоткуда",
@@ -330,6 +337,25 @@ def discover(start: Path | str) -> Path | None:
     return None
 
 
+#: The head of an element description: a pipeline file never names an element kind.
+_ELEMENT_KIND_RE = re.compile(r"^(?:ВидЭлемента|ElementKind)\s*:", re.M)
+
+
+def _is_source(path: Path) -> bool:
+    """Whether a file is a source of the project rather than a pipeline: a module, a query
+    file, or an element description."""
+    suffix = path.suffix.lower()
+    if suffix in (".xbsl", ".xbql"):
+        return True
+    if suffix not in (".yaml", ".yml") or not path.is_file():
+        return False
+    try:
+        head = path.read_text(encoding="utf-8-sig", errors="replace")[:4096]
+    except OSError:
+        return False
+    return _ELEMENT_KIND_RE.search(head) is not None
+
+
 def read(path: Path | str, job: str | None = None) -> CiLint:
     """The rule set of an xbsl command in the pipeline file. Raises CiLintError.
 
@@ -343,11 +369,15 @@ def read(path: Path | str, job: str | None = None) -> CiLint:
     so `xbsl --as-ci e1c` hands it the tree that was meant to be checked, leaving the run to
     lint the current directory - and the reader got "cannot read e1c" from the file system,
     which says nothing about the mistake. The refusal names the flag's subject and the form
-    that works instead of letting the file system speak for it.
+    that works instead of letting the file system speak for it. A SOURCE of the project named
+    here is the same typo with a file (`xbsl --as-ci e1c/Site.xbsl`), and it used to fail as a
+    pipeline that does not parse; it is refused the same way.
     """
     path = Path(path)
     if path.is_dir():
         raise CiLintError(i18n.t("ci.named-directory", path=path))
+    if _is_source(path):
+        raise CiLintError(i18n.t("ci.named-source", path=path))
     root = _checkout_root(path)
     documents, unread = _documents(path, root)
     found: list[tuple[str, list[str], Path]] = [

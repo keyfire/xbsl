@@ -1,10 +1,11 @@
 """Tier A: a scrolled list whose navigation never loads the rest of the rows.
 
-The yaml/list-scroll-without-loading rule. A list component takes its rows in PORTIONS of
-`PageSize`, and the `Navigation` property decides whether the next portion is ever asked
-for. The platform documentation of `ListNavigation` says it in so many words: with
-`None` "the list is always shown without navigation. Part of the data may then be
-unavailable if it does not fit the size of the list."
+The yaml/list-scroll-without-loading rule and its project half, yaml/dynlist-scroll-without-loading
+(the end of this docstring). A list component takes its rows in PORTIONS of `PageSize`, and the
+`Navigation` property decides whether the next portion is ever asked for. The platform
+documentation of `ListNavigation` says it in so many words: with `None` "the list is always
+shown without navigation. Part of the data may then be unavailable if it does not fit the size
+of the list."
 
 `VerticalScroll` does not change that - it scrolls what is already loaded. So the pair
 `VerticalScroll: True` with `Navigation: None` is a contradiction the compiler cannot see:
@@ -42,23 +43,62 @@ and is left alone. The cure is not one line here - a page size by the limit of t
 `LoadingOnScroll` together with a scroll of the list's own changes the layout - so this half
 carries no fix.
 
-Which lists the rule judges comes from the documentation as well:
+Which lists are judged comes from the documentation as well:
 
-- a TREE source (`TreeDataSource`, `LoadableTreeDataSource`) is never judged - with such a
-  source the navigation is "always `LoadingOnScroll`" (the documentation of `List.Navigation`),
-  whatever the property says;
-- the half without a scroll judges an ARRAY source only (`ArrayDataSource` in the type of the
-  component). A dynamic list is loaded on scroll as well when it is hierarchical, and by
-  default that is decided by the metadata of its main table, which a file rule does not see;
-  a list whose source the type does not name is not judged either. Both are documented false
-  negatives. The default of `Navigation` itself is not `None` (the page of the standard list
-  names `PageSwitcher`), so only a written `None` is judged.
+- a TREE source (`TreeDataSource`, `LoadableTreeDataSource`) is never judged, and neither is a
+  HIERARCHICAL dynamic list: with any of them the navigation is "always `LoadingOnScroll`"
+  (the documentation of `List.Navigation`), whatever the property says;
+- the half without a scroll judges an ARRAY source and a flat dynamic list; a list whose source
+  the type does not name is not judged there (a documented false negative). The default of
+  `Navigation` itself is not `None` (the page of the standard list names `PageSwitcher`), so
+  only a written `None` is judged.
+
+Whether a dynamic list is hierarchical is said by its `UsedHierarchy`, typed
+`Auto|HierarchyMode|String` (the documentation of `DynamicList`): with `Disabled` "the
+dynamic list returns its flat view", `Default` or a string naming a hierarchy shows one, and
+`Auto` - the value of a property not written as well - "interprets the query of the dynamic
+list depending on whether it supports hierarchy. If it does - `Default`". The declaration is
+read where the file keeps it: in the `Source` of the component, or in the default value of the
+element property the source binds to (`Source: =List`, the way a list form declares its list).
+A list built in code declares nothing in the file and is not judged. Of the values:
+
+- the typed node `UsedHierarchy: {Type: HierarchyMode, Value: Disabled}` - the spelling of
+  the platform's own examples - makes the list flat, and the file rule judges it like any list;
+- the property not written, `Auto`, or a bare `Disabled` leaves the answer to the main table.
+  A bare word falls under the `String` member of the union and may be read as the name of a
+  hierarchy; whichever way the platform reads it, over a table without a hierarchy the list is
+  flat - so such a list goes to the project half;
+- `Default`, a hierarchy by name, a quoted string or an expression is never judged.
+
+The yaml/dynlist-scroll-without-loading rule is that project half. It is split off rather than
+the whole check promoted to the project: the editor runs a file rule on every keystroke and a
+project rule on save only, and most lists need nothing beyond their own file. It judges the
+lists the file left to the main table when the table is an element of the project that
+certainly has no hierarchy:
+
+- a catalog - the only kind the platform gives hierarchies to
+  (`ObjectEntityWithHierarchiesReflection` has a single child type, `CatalogReflection`) - that
+  declares none of `Hierarchical` (other than `False`), `Hierarchy`, `AdditionalHierarchies`
+  and `DefaultHierarchy`. A table derived from a catalog (its `Groups` catalog, a hierarchy
+  table) is not judged;
+- a document, an information or accumulation register, an exchange plan, a settings storage or
+  an integrable application - the kinds the documentation of the dynamic list names as main
+  tables next to the catalog (its default sort order), none of them with a hierarchy; a table
+  derived from them (a register slice) is flat as well.
+
+The table is matched by its name without the namespace, and every element of the project under
+that name has to agree. A table outside the project (a system table such as `Users`, a library),
+a data journal or a virtual table - composite sources whose hierarchy the documentation does
+not settle - is not judged. The findings and the fix are those of the file rule, with the main
+table named.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import re
+from collections.abc import Iterable, Iterator
 from functools import lru_cache
+from typing import NamedTuple
 
 from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
@@ -70,8 +110,10 @@ from xbsl.rules.yaml_schema import (
     _mapping_nodes,
     _parsed,
     _scalar_entries,
+    object_kind_fast,
+    object_name_fast,
 )
-from xbsl.rules.yaml_types import _parse_type_string
+from xbsl.rules.yaml_types import _key_spellings, _parse_type_string
 
 if _HAVE_YAML:
     import yaml
@@ -106,6 +148,43 @@ MESSAGES = {
               "{n[Навигация]}: {n[ПодгрузкаПриПрокрутке]} together with a scroll of the list's "
               "own ({n[ПрокруткаПоВертикали]}).",
     },
+    "yaml/dynlist-scroll-without-loading.title": {
+        "ru": "Прокрутка плоского динамического списка не догружает строки",
+        "en": "Scrolling a flat dynamic list never loads more rows",
+    },
+    "yaml/dynlist-scroll-without-loading.none": {
+        "ru": "Список прокручивается ({n[ПрокруткаПоВертикали]}), а {n[Навигация]} задана как "
+              "{n[Отсутствует]}. Динамический список здесь плоский: иерархию "
+              "({n[ИспользуемаяИерархия]}) решает основная таблица '{table}', а она иерархии не "
+              "объявляет. Строки берутся одной порцией ({n[РазмерСтраницы]}), и прокрутка крутит "
+              "только её – остальные данные недостижимы (поиск списка их находит, прокрутка "
+              "нет). Поставьте {n[Навигация]}: {n[ПодгрузкаПриПрокрутке]}.",
+        "en": "The list scrolls ({n[ПрокруткаПоВертикали]}), yet {n[Навигация]} is "
+              "{n[Отсутствует]}. The dynamic list is flat here: its hierarchy "
+              "({n[ИспользуемаяИерархия]}) is left to the main table '{table}', and the table "
+              "declares none. The rows come in a single portion ({n[РазмерСтраницы]}) and the "
+              "scrolling moves through that portion alone - the rest of the data is unreachable "
+              "(the list search still finds it, the scrolling does not). Write {n[Навигация]}: "
+              "{n[ПодгрузкаПриПрокрутке]}.",
+    },
+    "yaml/dynlist-scroll-without-loading.page": {
+        "ru": "Список не прокручивается сам, а {n[Навигация]} задана как {n[Отсутствует]} без "
+              "{n[РазмерСтраницы]}. Динамический список здесь плоский: иерархию "
+              "({n[ИспользуемаяИерархия]}) решает основная таблица '{table}', а она иерархии не "
+              "объявляет. Строки берутся одной порцией в десять штук (размер страницы Авто), и "
+              "прокрутка страницы показывает только их – остальные данные недостижимы. Задайте "
+              "{n[РазмерСтраницы]} по пределу данных либо {n[Навигация]}: "
+              "{n[ПодгрузкаПриПрокрутке]} вместе со своей прокруткой списка "
+              "({n[ПрокруткаПоВертикали]}).",
+        "en": "The list does not scroll itself, yet {n[Навигация]} is {n[Отсутствует]} with no "
+              "{n[РазмерСтраницы]}. The dynamic list is flat here: its hierarchy "
+              "({n[ИспользуемаяИерархия]}) is left to the main table '{table}', and the table "
+              "declares none. The rows come in a single portion of ten (the automatic page size), "
+              "and scrolling the page shows those alone - the rest of the data is unreachable. "
+              "Set {n[РазмерСтраницы]} to the limit of the data, or write {n[Навигация]}: "
+              "{n[ПодгрузкаПриПрокрутке]} together with a scroll of the list's own "
+              "({n[ПрокруткаПоВертикали]}).",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -124,10 +203,37 @@ _LOADING_VALUE = "ПодгрузкаПриПрокрутке"
 _PAGE_SIZE_KEYS = ("РазмерСтраницы", "PageSize")
 _AUTO_PAGE_SIZES = frozenset({"Авто", "Auto", "0"})
 
+#: The enumeration a dynamic list's hierarchy is chosen from, its flat value and the automatic
+#: value of the property - the other spelling of each comes from the data.
+_HIERARCHY_ENUM = "РежимИерархии"
+_FLAT_HIERARCHY = "Выключено"
+_AUTO_VALUE = "Авто"
+#: What the declaration of a dynamic list says about its hierarchy (module docstring).
+_DECLARED_FLAT = "flat"  # the typed Disabled: the file rule judges the list
+_BY_TABLE = "table"  # not written, Auto or a bare Disabled: the main table decides
+_UNSETTLED = "unsettled"  # a hierarchy asked for, or a value a file cannot read
+#: The element kinds the documentation of the dynamic list names as main tables and the
+#: platform gives no hierarchy to, the one kind that may carry hierarchies, and the keys a
+#: catalog declares them with (the other spelling of each key comes from the metamodel).
+_FLAT_KINDS = frozenset({
+    "Документ", "РегистрСведений", "РегистрНакопления", "ПланОбмена", "ХранилищеНастроек",
+    "ИнтегрируемоеПриложение",
+})
+_CATALOG_KIND = "Справочник"
+_HIERARCHICAL_KEY = "Иерархический"
+_HIERARCHY_KEYS = (_HIERARCHICAL_KEY, "Иерархия", "ДополнительныеИерархии", "ИерархияПоУмолчанию")
+#: What an element says of the tables named after it: a kind without hierarchies, a catalog
+#: declaring none, or anything else - which keeps a list over that name unjudged.
+_FLAT_ELEMENT = "kind"
+_FLAT_CATALOG = "catalog"
+_OTHER_ELEMENT = "other"
+#: A source bound to an element property by its bare name (`=List`).
+_BINDING_RE = re.compile(r"^=\s*([^\W\d]\w*)\s*$")
+
 
 @lru_cache(maxsize=1)
-def _source_names() -> tuple[frozenset[str], frozenset[str]]:
-    """(the array source, the tree sources) - both spellings, from the data.
+def _source_names() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """(the array source, the tree sources, the dynamic list) - both spellings, from the data.
 
     Without the data bundle the English half is simply absent, and the rule has no list
     components to judge in the first place.
@@ -138,19 +244,48 @@ def _source_names() -> tuple[frozenset[str], frozenset[str]]:
     return (
         pair("ИсточникДанныхМассив"),
         pair("ИсточникДанныхДерево") | pair("ИсточникДанныхДеревоПодгружаемый"),
+        pair("ДинамическийСписок"),
     )
 
 
 dataset.register_reset(_source_names.cache_clear)
 
 
+@lru_cache(maxsize=1)
+def _hierarchy_words() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """(the hierarchy mode enumeration, its flat value, the automatic value) - both spellings.
+
+    The English value is taken per enumeration: the same Russian word answers to other English
+    names in other enumerations.
+    """
+    def pair(name: str, english: str | None) -> frozenset[str]:
+        return frozenset({name, english or name})
+
+    values = uischema.enum_value_aliases(_HIERARCHY_ENUM)
+    return (
+        pair(_HIERARCHY_ENUM, terms.common_english(_HIERARCHY_ENUM)),
+        pair(_FLAT_HIERARCHY, values.get(_FLAT_HIERARCHY)),
+        pair(_AUTO_VALUE, terms.common_english(_AUTO_VALUE)),
+    )
+
+
+dataset.register_reset(_hierarchy_words.cache_clear)
+
+
+#: A namespace qualifier in front of a name (`Vendor::Project::Subsystem::`) - the type parser
+#: does not read one, so it is dropped before the parse (the pattern `yaml/ambiguous-type`
+#: validates types with). A row type written in full is how a list form names its own rows.
+_QUALIFIER = re.compile(r"(?<![\w.])(?:[^\W\d]\w*\s*::\s*)+")
+
+
 def _source_head(written: str) -> str | None:
     """The data source named by the first type argument of a component type, or None.
 
-    `Table<ArrayDataSource<Row>>` gives `ArrayDataSource`; a namespace qualifier is dropped.
+    `Table<ArrayDataSource<Row>>` gives `ArrayDataSource`; a namespace qualifier is dropped,
+    and a type the parser does not read names no source.
     """
-    chains = _parse_type_string(written)
-    if len(chains) < 2 or not chains[1]:
+    chains = _parse_type_string(_QUALIFIER.sub("", written))
+    if not chains or len(chains) < 2 or not chains[1]:
         return None
     return chains[1][-1]
 
@@ -195,6 +330,20 @@ def _entry(entries: dict, keys: tuple[str, ...]):
     return None
 
 
+def _raw_entries(mapping) -> dict:
+    """{key as written: value node} of a composed mapping, scalar keys only.
+
+    The nodes that declare a dynamic list and its element are no component, so the schema
+    has no canonical name for their keys; they are matched by the spellings from the data.
+    """
+    return {k.value: v for k, v in mapping.value if isinstance(k, yaml.ScalarNode)}
+
+
+def _first(entries: dict, name: str):
+    """The value node of the first spelling of `name` the raw entries carry, or None."""
+    return next((entries[key] for key in _key_spellings(name) if key in entries), None)
+
+
 def _plain_value(node) -> str | None:
     """The written value of a scalar node, or None for anything a file rule cannot read."""
     if not isinstance(node, yaml.ScalarNode) or node.style in ("|", ">"):
@@ -230,12 +379,113 @@ def _loading_spelled(written: str) -> str:
     return f"{qualifier}.{target}" if qualifier else target
 
 
-@rule(
-    "yaml/list-scroll-without-loading", "yaml/list-scroll-without-loading.title", "A",
-    severity=Severity.WARNING,
-)
-def list_scroll_without_loading(source: SourceFile) -> Iterable[Diagnostic]:
-    """A scrolled list that never loads the tail - see the module docstring."""
+def _element_properties(root) -> dict[str, dict]:
+    """{name: raw entries} of the properties the element declares at its top level - the ones a
+    bare `=Name` binding of its markup reads."""
+    if not isinstance(root, yaml.MappingNode):
+        return {}
+    section = _first(_raw_entries(root), "Свойства")
+    if not isinstance(section, yaml.SequenceNode):
+        return {}
+    found: dict[str, dict] = {}
+    for item in section.value:
+        if isinstance(item, yaml.MappingNode):
+            entries = _raw_entries(item)
+            name = _plain_value(_first(entries, "Имя"))
+            if name:
+                found.setdefault(name, entries)
+    return found
+
+
+def _declaration(entries: dict, properties: dict[str, dict]) -> dict | None:
+    """The raw entries that declare the dynamic list a component shows, or None.
+
+    Either the component's own `Source` or the default value of the element property the source
+    binds to by name (`Source: =List`). A list built in code, or a source bound to anything
+    else, declares nothing the file can read.
+    """
+    source = _entry(entries, _key_spellings("Источник"))
+    if source is None:
+        return None
+    if isinstance(source[1], yaml.MappingNode):
+        return _raw_entries(source[1])
+    bound = _BINDING_RE.match(_plain_value(source[1]) or "")
+    owner = properties.get(bound.group(1)) if bound else None
+    default = _first(owner, "ЗначениеПоУмолчанию") if owner is not None else None
+    return _raw_entries(default) if isinstance(default, yaml.MappingNode) else None
+
+
+def _mode_value(written: str, enums: frozenset[str]) -> str | None:
+    """The value of a hierarchy mode without its qualifier (`HierarchyMode.Disabled` ->
+    `Disabled`); None when the qualifier names something else."""
+    qualifier, _, value = written.rpartition(".")
+    if qualifier and _QUALIFIER.sub("", qualifier) not in enums:
+        return None
+    return value
+
+
+def _hierarchy_mode(declaration: dict) -> str:
+    """What the declaration says about the hierarchy of the list - see the module docstring."""
+    node = _first(declaration, "ИспользуемаяИерархия")
+    if node is None:
+        return _BY_TABLE  # not written: Auto
+    enums, flat, auto = _hierarchy_words()
+    if isinstance(node, yaml.MappingNode):
+        # The typed node of the platform's own examples - {Type: HierarchyMode, Value: Disabled}.
+        typed = _raw_entries(node)
+        kind = _plain_value(_first(typed, "Тип"))
+        value = _plain_value(_first(typed, "Значение"))
+        if kind and value and _QUALIFIER.sub("", kind) in enums:
+            return _DECLARED_FLAT if _mode_value(value, enums) in flat else _UNSETTLED
+        return _UNSETTLED
+    written = _plain_value(node)
+    if written is None or node.style in ("'", '"') or written[0] in "=%":
+        return _UNSETTLED  # a string of the author's, an expression or an unreadable value
+    value = _mode_value(written, enums)
+    if value in flat or (value in auto and value == written):
+        return _BY_TABLE
+    return _UNSETTLED  # Default, or a hierarchy by name
+
+
+def _main_table(declaration: dict) -> str | None:
+    """The main table of a dynamic list as written, or None when the file cannot read it."""
+    main = _first(declaration, "ОсновнаяТаблица")
+    if not isinstance(main, yaml.MappingNode):
+        return None
+    table = _plain_value(_first(_raw_entries(main), "Таблица"))
+    if table is None or table[0] in "=%&$":
+        return None
+    return table
+
+
+class _Finding(NamedTuple):
+    """A list with `Navigation: None` that loses its tail unless its source is hierarchical."""
+
+    #: The message: `none` for a list that scrolls, `page` for one the page scrolls around.
+    key: str
+    #: The `Navigation` value node - where the finding points and what the fix replaces.
+    node: object
+    fix: TextEdit | None
+    #: None for a source that is no dynamic list, else what its declaration says (`_DECLARED_FLAT`
+    #: or `_BY_TABLE` - an unsettled list is not a finding at all).
+    mode: str | None
+    #: The main table of a dynamic list as written, None when the file does not name it.
+    table: str | None
+
+
+def _findings(source: SourceFile) -> list[_Finding]:
+    """The lists of the file that lose their tail, both halves, cached per source.
+
+    The two rules sort them: the file rule reports all but the lists whose main table decides,
+    the project rule reports those when the table has no hierarchy.
+    """
+    key = "list_navigation_findings"
+    if key not in source.cache:
+        source.cache[key] = list(_collect(source))
+    return source.cache[key]
+
+
+def _collect(source: SourceFile) -> Iterator[_Finding]:
     if source.kind != "yaml" or not _HAVE_YAML:
         return
     if not any(key in source.text for key in _NAVIGATION_KEYS):
@@ -249,7 +499,8 @@ def list_scroll_without_loading(source: SourceFile) -> Iterable[Diagnostic]:
     root = _composed(source)
     if root is None:  # pragma: no cover - _parsed has already vetted the syntax
         return
-    array_source, tree_sources = _source_names()
+    array_source, tree_sources, dynamic_list = _source_names()
+    properties: dict[str, dict] | None = None  # read once, and only for a dynamic list
     for mapping in _mapping_nodes(root):
         entries = _scalar_entries(mapping)
         type_entry = _entry(entries, ("Тип", "Type"))
@@ -267,18 +518,24 @@ def list_scroll_without_loading(source: SourceFile) -> Iterable[Diagnostic]:
         source_head = _source_head(written_type)
         if source_head in tree_sources:
             continue  # a tree source always loads on scroll, whatever the property says
+        mode = table = None
+        if source_head in dynamic_list:
+            if properties is None:
+                properties = _element_properties(root)
+            declaration = _declaration(entries, properties)
+            if declaration is None:
+                continue  # built elsewhere: whether it is hierarchical is not in the file
+            mode = _hierarchy_mode(declaration)
+            if mode == _UNSETTLED:
+                continue  # a hierarchical list always loads on scroll
+            table = _main_table(declaration)
         value_node = navigation[1]
         scroll = _entry(entries, _SCROLL_KEYS)
         scrolled = _plain_value(scroll[1]) if scroll is not None else None
         if scroll is None or scrolled in _FALSE_VALUES:
             # No scroll of its own: the page scrolls around one portion of the list.
-            if source_head in array_source and _automatic_page_size(entries):
-                yield Diagnostic(
-                    source.rel,
-                    value_node.start_mark.line + 1, value_node.start_mark.column + 1,
-                    "yaml/list-scroll-without-loading", Severity.WARNING,
-                    i18n.t("yaml/list-scroll-without-loading.page"),
-                )
+            if (source_head in array_source or mode is not None) and _automatic_page_size(entries):
+                yield _Finding("page", value_node, None, mode, table)
             continue
         if scrolled is None:
             continue  # a scroll value a file rule cannot read
@@ -289,10 +546,103 @@ def list_scroll_without_loading(source: SourceFile) -> Iterable[Diagnostic]:
             TextEdit(start, end, _loading_spelled(written))
             if source.text[start:end] == written else None
         )
+        yield _Finding("none", value_node, fix, mode, table)
+
+
+@rule(
+    "yaml/list-scroll-without-loading", "yaml/list-scroll-without-loading.title", "A",
+    severity=Severity.WARNING,
+)
+def list_scroll_without_loading(source: SourceFile) -> Iterable[Diagnostic]:
+    """A scrolled list that never loads the tail - see the module docstring."""
+    for finding in _findings(source):
+        if finding.mode == _BY_TABLE:
+            continue  # the main table decides: yaml/dynlist-scroll-without-loading
         yield Diagnostic(
             source.rel,
-            value_node.start_mark.line + 1, value_node.start_mark.column + 1,
+            finding.node.start_mark.line + 1, finding.node.start_mark.column + 1,
             "yaml/list-scroll-without-loading", Severity.WARNING,
-            i18n.t("yaml/list-scroll-without-loading.none"),
-            fix=fix,
+            i18n.t(f"yaml/list-scroll-without-loading.{finding.key}"),
+            fix=finding.fix,
         )
+
+
+def _is_false(value) -> bool:
+    """A flag written as false in either spelling (yaml reads `False` as a boolean)."""
+    return value is False or (isinstance(value, str) and value.strip() in _FALSE_VALUES)
+
+
+def _element_verdict(source: SourceFile) -> tuple[str, str] | None:
+    """(name, what the element says of the tables named after it) of an element description."""
+    kind = object_kind_fast(source)
+    name = object_name_fast(source) if kind else None
+    if not name:
+        return None
+    if kind in _FLAT_KINDS:
+        return name, _FLAT_ELEMENT
+    if kind != _CATALOG_KIND:
+        return name, _OTHER_ELEMENT
+    data, err = _parsed(source)
+    if err is not None or not isinstance(data, dict):
+        return name, _OTHER_ELEMENT
+    for key in _HIERARCHY_KEYS:
+        for spelled in _key_spellings(key):
+            if spelled in data and not (key == _HIERARCHICAL_KEY and _is_false(data[spelled])):
+                return name, _OTHER_ELEMENT  # a hierarchy, or something a file cannot rule out
+    return name, _FLAT_CATALOG
+
+
+def _dynlist_mapper(source: SourceFile) -> dict | None:
+    """The map phase: an element contributes its name and what it says of its tables; a yaml
+    with lists contributes those whose main table decides - (table, message key, line, column,
+    fix as (start, end, text))."""
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return None
+    fact: dict = {}
+    element = _element_verdict(source)
+    if element is not None:
+        fact["element"] = element
+    lists = [
+        (
+            finding.table, finding.key,
+            finding.node.start_mark.line + 1, finding.node.start_mark.column + 1,
+            (finding.fix.start, finding.fix.end, finding.fix.new) if finding.fix else None,
+        )
+        for finding in _findings(source)
+        if finding.mode == _BY_TABLE and finding.table
+    ]
+    if lists:
+        fact["lists"] = lists
+    return fact or None
+
+
+def _flat_table(table: str, elements: dict[str, set[str]]) -> bool:
+    """Whether the main table certainly has no hierarchy - see the module docstring."""
+    head, derived, _rest = _QUALIFIER.sub("", table).strip().partition(".")
+    verdicts = elements.get(head)
+    if not verdicts:
+        return False  # not an element of the project: a system table, a library
+    allowed = {_FLAT_ELEMENT} if derived else {_FLAT_ELEMENT, _FLAT_CATALOG}
+    return verdicts <= allowed
+
+
+@rule(
+    "yaml/dynlist-scroll-without-loading", "yaml/dynlist-scroll-without-loading.title", "A",
+    scope="project", severity=Severity.WARNING, mapper=_dynlist_mapper,
+)
+def dynlist_scroll_without_loading(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A flat dynamic list that never loads the tail, its hierarchy left to the main table."""
+    elements: dict[str, set[str]] = {}
+    for fact in facts.values():
+        element = fact.get("element")
+        if element is not None:
+            elements.setdefault(element[0], set()).add(element[1])
+    for rel, fact in facts.items():
+        for table, key, line, col, fix in fact.get("lists", ()):
+            if not _flat_table(table, elements):
+                continue
+            yield Diagnostic(
+                rel, line, col, "yaml/dynlist-scroll-without-loading", Severity.WARNING,
+                i18n.t(f"yaml/dynlist-scroll-without-loading.{key}", table=table),
+                fix=TextEdit(*fix) if fix else None,
+            )

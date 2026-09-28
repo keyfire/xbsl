@@ -216,6 +216,15 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   return { client: new LanguageClient("xbslLsp", "XBSL LSP", serverOptions, clientOptions), plan, args };
 }
 
+// The server warns when the engine or a plugin on disk changed under it, with a "Restart"
+// button; the click comes back to the server, which asks for the restart with this
+// notification. Every client gets the handler: a restart builds a new one.
+function listenForRestart(started: LanguageClient): void {
+  started.onNotification("xbsl/restartRequested", () => {
+    void vscode.commands.executeCommand("xbsl.restartLinter");
+  });
+}
+
 export async function activateLsp(
   context: vscode.ExtensionContext,
   output: vscode.OutputChannel,
@@ -226,6 +235,7 @@ export async function activateLsp(
   client = built.client;
   try {
     await client.start();
+    listenForRestart(client);
     serverGeneration++;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -265,6 +275,7 @@ export async function activateLsp(
       try {
         await fresh.client.start();
         client = fresh.client;
+        listenForRestart(fresh.client);
         serverGeneration++;
         afterStart?.();
         void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL LSP: server restarted"), 3000);

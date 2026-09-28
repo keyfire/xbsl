@@ -517,14 +517,16 @@ def _section_bounds(text: str, section: str, top_level: bool = False) -> tuple[i
 
 
 def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "\n",
-                     top_level: bool = False, lang: str = "ru") -> TextEdit:
+                     top_level: bool = False, lang: str = "ru",
+                     before: tuple[str, ...] = ()) -> TextEdit:
     """Pinpoint insertion of a new item (a set of field lines) at the end of a section.
 
-    If the section is missing, it is appended at the end of the file. top_level=True -
-    only an unindented section (otherwise an object attribute would land in a nested
-    tabular part section). A port of insertItemEdit from the VS Code extension
-    (metadataCore.ts) with one difference: the newline is passed as a parameter so the
-    edit does not mix styles in CRLF files.
+    If the section is missing, it is appended at the end of the file - or, when `before`
+    names top-level sections the new one precedes, in front of the first of them the file
+    has (see _SECTION_PRECEDES). top_level=True - only an unindented section (otherwise an
+    object attribute would land in a nested tabular part section). A port of insertItemEdit
+    from the VS Code extension (metadataCore.ts) with one difference: the newline is passed
+    as a parameter so the edit does not mix styles in CRLF files.
 
     The section is named the Russian way by the caller and found under either spelling;
     lang is the spelling to CREATE it in when it is not there yet.
@@ -535,14 +537,41 @@ def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "
 
     bounds = _section_bounds(text, section, top_level)
     if bounds is None:
+        new = f"{spelled_key(section, lang)}:{nl}{body('    ', '        ')}{nl}"
+        anchor = _top_level_key_line(text, before)
+        if anchor is not None:
+            return TextEdit(anchor, anchor, new)
         tail = "" if (not text or text.endswith("\n")) else nl
-        new = f"{tail}{spelled_key(section, lang)}:{nl}{body('    ', '        ')}{nl}"
-        return TextEdit(len(text), len(text), new)
+        return TextEdit(len(text), len(text), f"{tail}{new}")
 
     header_indent, header_line_end, body_end = bounds
     item, fld = _detect_indent(text[header_line_end:body_end], header_indent)
     insert_at = body_end
     return TextEdit(insert_at, insert_at, f"{nl}{body(item, fld)}")
+
+
+def _top_level_key_line(text: str, keys: tuple[str, ...]) -> int | None:
+    """The start of the line of the first unindented key of `keys` the text has, or None.
+
+    Either spelling of a key counts. The unindented `#` lines right above the key go with
+    it: a note written over a section stays over that section when another one is put in
+    front of it.
+    """
+    starts = [
+        m.start()
+        for key in keys
+        for spelling in key_forms(key)
+        if (m := re.search(rf"^{re.escape(spelling)}:(?:[ \t]|\r?$)", text, re.M)) is not None
+    ]
+    if not starts:
+        return None
+    start = min(starts)
+    while start > 0:
+        previous = text.rfind("\n", 0, start - 1) + 1
+        if not text.startswith("#", previous):
+            break
+        start = previous
+    return start
 
 
 def insert_nested_item_edit(
@@ -1197,6 +1226,19 @@ KIND_SECTIONS: dict[str, tuple[str, ...]] = {
     "КонтрактТипа": ("свойство",),
     "КонтрактСущности": ("свойство", "табличная-часть"),
     "СобытиеЖурналаСобытий": ("свойство",),
+    # The component's own properties - what its module reads as `этот.<Name>` and a form
+    # using the component fills in. The item class (PropertyModel) declares a name and a
+    # type and nothing else, no Id among them.
+    "КомпонентИнтерфейса": ("свойство",),
+}
+
+# Where a section the file lacks goes when the end of the file is not its place:
+# (kind, section) -> the top-level sections it precedes. A component keeps `Properties`
+# after `Inherits` and before `Events`: on two live projects 194 of the 205 components with
+# properties write them after `Inherits`, and 7 of the 8 that also declare events - before
+# `Events`. So a new `Properties` joins the end of the file unless `Events` is there.
+_SECTION_PRECEDES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("КомпонентИнтерфейса", "Свойства"): ("События",),
 }
 
 # Line sets that differ from the kind's common ones: for ХранимаяСтруктура fields and
@@ -2331,6 +2373,53 @@ def _starter_attribute_span(text: str, tabular_offset: int, tabular: str) -> tup
     return start, end, indent
 
 
+def _doc_lines(doc: str | None) -> list[str]:
+    """A description as the `##` lines that open a list item; empty when there is none.
+
+    The spelling is the one the documentation comment editor writes (xbsl/doccomments.py):
+    `## ` and the line, a bare `##` for a blank line inside the text. The blank lines around
+    the text are dropped, and the trailing spaces of every line - the line is kept otherwise,
+    its own indent included, since the environment renders the text as Markdown.
+    """
+    if doc is None:
+        return []
+    if any(char < " " and char not in "\t\n\r" for char in doc):
+        raise ScaffoldError("Описание (doc) содержит управляющий символ – yaml его не примет")
+    lines = [line.rstrip() for line in doc.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    return [f"## {line}" if line else "##" for line in lines]
+
+
+def _check_doc_slot(kind: str, path: tuple[tuple[str, str | None], ...]) -> None:
+    """Refuse a description for an item whose class keeps no documentation comment.
+
+    The `##` lines at the head of a list item are the documentation comment only for a
+    class the metamodel marks documentable, and not for a built-in item the collection picks
+    by its name (the `Code` and `Name` of a catalog): there the environment does not read
+    them and loses them when it writes the file. The judge is the one the rule
+    yaml/doc-comment-misplaced uses; without the data (or with a class the metamodel does
+    not map) nothing is judged, and the text is written as given.
+    """
+    from xbsl.rules import yaml_doc_comments  # the rules package imports this module
+
+    if not yaml_doc_comments._documentable_known():
+        return
+    cls = metamodel.item_class(kind, path)
+    if cls is None or (
+        metamodel.inherits(cls, yaml_doc_comments._DOCUMENTABLE)
+        and metamodel.dispatch_name(cls) is None
+    ):
+        return
+    raise ScaffoldError(
+        f"У {_item_label(cls, path)} нет места для документирующего комментария: среда "
+        "разработки не читает у него строки `##` и теряет их при записи файла – "
+        "описание (doc) здесь не задаётся"
+    )
+
+
 def op_add_field(
     yaml_path: Path,
     field_kind: str,
@@ -2339,11 +2428,13 @@ def op_add_field(
     type_: str | None = None,
     tabular: str | None = None,
     props: Mapping[str, object] | None = None,
+    doc: str | None = None,
     reader=None,
 ) -> ScaffoldResult:
     """Add a section item to an object: an attribute, dimension, resource, enumeration
-    value, parameter, structure field or tabular part; tabular - the tabular part name
-    when adding an attribute into it.
+    value, parameter, structure field, property (of a contract, an event-log event or an
+    interface component) or tabular part; tabular - the tabular part name when adding an
+    attribute into it.
 
     type_ - the item's type; None is the default: `String` for a regular item, and for a
     BUILT-IN one (the `Number` and `Date` of a document, the `Code` of a catalog) whatever
@@ -2355,12 +2446,17 @@ def op_add_field(
     writes itself (Name, Type, Id) are refused there. A nested block goes in as a dict or as
     dotted keys, a list property as a list - see _checked_props.
 
+    doc - the item's documentation comment, written as the `##` lines at the head of the
+    item (after its `-`, before the first key) - see _doc_lines and _check_doc_slot.
+
     The item joins the end of the section of its kind. A section the file lacks is created at
-    the end of the file; for a register, which keeps its fields in several sections, notes say
-    so and point at the sibling section that already exists - see _new_section_notes.
+    the end of the file - or in front of the sections it precedes, see _SECTION_PRECEDES;
+    for a register, which keeps its fields in several sections, notes say so and point at
+    the sibling section that already exists - see _new_section_notes.
     """
     yaml_path = Path(yaml_path)
     name = _check_identifier(name, "элемента")
+    doc_lines = _doc_lines(doc)
     text, nl = _load_for_edit(yaml_path, reader)
     kind = element_kind(text) or "?"
     if kind == "?":
@@ -2381,7 +2477,9 @@ def op_add_field(
         path = (("ТабличныеЧасти", tabular), ("Реквизиты", name))
         extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
         resolved = _item_type(kind, path, name, type_, lang)
-        lines = spelled_lines(
+        if doc_lines:
+            _check_doc_slot(kind, path)
+        lines = doc_lines + spelled_lines(
             _reconciled_id(
                 _reconciled_type(
                     [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {resolved}"], resolved,
@@ -2409,6 +2507,11 @@ def op_add_field(
 
     map_spec = _MAPPING_SPECS.get(field_kind)
     if map_spec is not None:
+        if doc_lines:
+            raise ScaffoldError(
+                f"У записи '{field_kind}' нет места для документирующего комментария: "
+                "значение ключа – скаляр, а строки `##` читаются только в начале элемента списка"
+            )
         return _add_mapping_entry(yaml_path, text, nl, kind, field_kind, map_spec, name, type_)
 
     spec = _SECTION_SPECS.get(field_kind)
@@ -2418,9 +2521,8 @@ def op_add_field(
         )
     allowed = KIND_SECTIONS.get(kind)
     if allowed is None:
-        # A kind with no extendable sections (ОбщийМодуль, HttpСервис, КомпонентИнтерфейса
-        # etc.): the check used to let such a kind through and silently append a foreign
-        # section to it.
+        # A kind with no extendable sections (CommonModule, HttpService etc.): the check used
+        # to let such a kind through and silently append a foreign section to it.
         raise ScaffoldError(
             f"У вида {kind} нет пополняемых секций; они есть у: " + ", ".join(sorted(KIND_SECTIONS))
         )
@@ -2435,7 +2537,9 @@ def op_add_field(
     path = ((spec["section"], name),)
     extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
     resolved = _item_type(kind, path, name, type_, lang)
-    lines = spelled_lines(_reconciled_id(_reconciled_type([
+    if doc_lines:
+        _check_doc_slot(kind, path)
+    lines = doc_lines + spelled_lines(_reconciled_id(_reconciled_type([
         line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=resolved or "")
         for line in template
     ], resolved), kind, path) + _prop_lines(extra), lang)
@@ -2443,17 +2547,23 @@ def op_add_field(
     notes: list[str] = []
     if starter is None:
         # The item joins the end of an existing section; a section the file lacks is created
-        # (at the end of the file), and a register hears about it - see _new_section_notes.
+        # (at the end of the file or in front of the sections it precedes), and a register
+        # hears about it - see _new_section_notes.
         if _section_bounds(text, spec["section"], top_level=True) is None:
             notes.extend(_new_section_notes(text, kind, field_kind, name, yaml_path.name, lang))
-        edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
+        edit = insert_item_edit(
+            text, spec["section"], lines, nl, top_level=True, lang=lang,
+            before=_SECTION_PRECEDES.get((kind, spec["section"]), ()),
+        )
     else:
         start, end, indent = starter
         edit = TextEdit(start, end, (nl + " " * indent).join(lines))
         notes.append(f"Заглушка {_STARTER_ITEMS[spec['section']][0]} секции "
                      f"{spec['section']} заменена на {name}")
     new_text = apply_edit(text, edit)
-    cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
+    # The point of interest is the end of the item, not the line after it: a section created
+    # in front of another one ends with a newline, and the cursor would land on that section.
+    cursor = _cursor_at(new_text, edit.start + len(edit.new_text.rstrip("\r\n")))
     result = ScaffoldResult(
         [FileChange(yaml_path, new_text, created=False, cursor=cursor)], notes=notes,
     )
@@ -2475,6 +2585,7 @@ def op_add_fields(
     type_: str | None = None,
     tabular: str | None = None,
     props: Mapping[str, object] | None = None,
+    doc: str | None = None,
     reader=None,
 ) -> ScaffoldResult:
     """Several items of one kind in one pass, with the same type and properties.
@@ -2484,7 +2595,9 @@ def op_add_fields(
     file stays as it was. Only the kinds whose item lives in the element's yaml alone go in a
     batch. An operation also writes its handler into the module, and a localized string
     echoes into the translation files - those take one call per item, and many strings at
-    once are written by set-localization / meta_set_localization with entries.
+    once are written by set-localization / meta_set_localization with entries. A description
+    (doc) is one item's own text: a batch of several names with one is refused rather than
+    copying the same comment onto every item.
     """
     if field_kind == "операция":
         raise ScaffoldError(
@@ -2493,6 +2606,11 @@ def op_add_fields(
     if field_kind in _MAPPING_SPECS:
         raise ScaffoldError(
             "Строки и шаблоны пачкой пишет set-localization / meta_set_localization с entries"
+        )
+    if _doc_lines(doc) and len(names) > 1:
+        raise ScaffoldError(
+            "Описание (doc) относится к одному элементу: пачка из нескольких имён с ним не "
+            "добавляется – описание задаётся каждому элементу своим вызовом"
         )
     repeated = sorted({name for name in names if names.count(name) > 1})
     if repeated:
@@ -2506,7 +2624,7 @@ def op_add_fields(
     merged = ScaffoldResult()
     for name in names:
         step = op_add_field(yaml_path, field_kind, name, type_=type_, tabular=tabular,
-                            props=props, reader=planned_or_read)
+                            props=props, doc=doc, reader=planned_or_read)
         for change in step.changes:
             planned[change.path] = change.content
         merged.notes.extend(step.notes)

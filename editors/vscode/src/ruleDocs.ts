@@ -11,10 +11,15 @@ const DOCS_ORIGIN = "https://1cmycloud.com/docs/help/";
 
 // Standards (mandatory).
 const NAMES = "topics/project-element-names-standard";
+const VARIABLE_NAMES = "topics/variable-and-constant-names-standard";
 const PROPS = "topics/project-properties-standard";
+// The two sections of the variable and constant names standard. The id of the second heading
+// carries U+FFFD in the documentation itself, and the panel looks a section up by its exact
+// id, so the anchor keeps the character.
+const VARIABLES_SECTION = "1-правила-именования-переменных";
+const CONSTANTS_SECTION = "2-правила-имено\uFFFDвания-констант";
 // The "Рекомендации по написанию кода" section.
 const DESIGN = "topics/general-design";
-const NAMING = "topics/naming-convention";
 const TYPES = "topics/type-description-and-initialization";
 const WRAP = "topics/split-expressions";
 const CONCAT = "topics/string-concatenation";
@@ -24,13 +29,13 @@ const EXEC = "topics/module-execution";
 const MODULAR = "topics/modular-development";
 const ADDRESSING = "topics/addressing-module";
 const STATIC = "topics/static-methods";
-const ENUM = "topics/enumeration-properties";
 const IMAGES = "topics/image-library";
 const DOC_COMMENTS = "topics/documentation-comments";
 
 // Mapping rule/group -> documentation page + section anchor (heading id on the page).
-// Specific rules go before group ones. Anchors are heading ids in docs.sqlite
-// (see extract_docs); every pair is verified to exist.
+// Specific rules go before group ones. The panel opens the page from docs.sqlite of the data
+// version in use and scrolls to the exact heading id, so every page and anchor here must exist
+// in the documentation of the DEFAULT data version - tests/test_metadata_sync.py checks it.
 const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string; anchor?: string }> = [
   { match: (r) => r === "code/computed-property-server-call", page: "topics/calculated-property-values-for-ui-components" },
   { match: (r) => r === "code/sequential-server-calls", page: "topics/move-execution-from-client-to-server" },
@@ -74,19 +79,26 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "style/line-length", page: DESIGN, anchor: "длина-строки" },
   { match: (r) => r === "style/semicolon-line" || r === "code/blocks", page: DESIGN, anchor: "составные-инструкции" },
 
-  // --- recommendations: names in code ---
-  { match: (r) => r === "style/camel-case", page: NAMING, anchor: "общие-рекомендации" },
-  { match: (r) => r === "style/abbreviation-case", page: NAMING, anchor: "аббревиатуры" },
-  { match: (r) => r === "style/const-case", page: NAMING, anchor: "константы" },
-  { match: (r) => r === "style/enum-name-vid", page: NAMING, anchor: "перечисления" },
-  { match: (r) => r === "style/exception-prefix", page: NAMING, anchor: "исключения" },
-
-  // --- the variable-and-constant-names standard ---
-  { match: (r) => r === "style/abstract-name", page: NAMING, anchor: "общие-рекомендации" },
-  { match: (r) => r === "style/single-letter-name", page: NAMING, anchor: "общие-рекомендации" },
-  { match: (r) => r === "style/negated-boolean-name", page: NAMING, anchor: "общие-рекомендации" },
-  { match: (r) => r === "style/type-in-name", page: NAMING, anchor: "общие-рекомендации" },
-  { match: (r) => r === "style/numeral-in-const-name", page: NAMING, anchor: "константы" },
+  // --- names in code: the variable and constant names standard ---
+  {
+    match: (r) => r === "style/camel-case"
+      || r === "style/abbreviation-case"
+      || r === "style/abstract-name"
+      || r === "style/single-letter-name"
+      || r === "style/negated-boolean-name"
+      || r === "style/type-in-name",
+    page: VARIABLE_NAMES,
+    anchor: VARIABLES_SECTION,
+  },
+  {
+    match: (r) => r === "style/const-case" || r === "style/numeral-in-const-name",
+    page: VARIABLE_NAMES,
+    anchor: CONSTANTS_SECTION,
+  },
+  // "Kind" over "type" in a name is rule 1.5 of the project element names standard.
+  { match: (r) => r === "style/enum-name-vid", page: NAMES, anchor: "1-общие-правила-наименования" },
+  // style/exception-prefix links nowhere: no page of the documentation states the marker of an
+  // exception name.
   // Same story as shadow-own-property: the finding is a name OVERRIDING another, so the page
   // about name scopes answers it, not the one about how names are spelled.
   { match: (r) => r === "style/shadow-project-name", page: "topics/name-scope" },
@@ -164,7 +176,12 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "code/use-needs-closeable",
     page: "topics/variable-declaration-statement",
   },
-  { match: (r) => r === "code/unknown-enum-value", page: ENUM, anchor: "элементы" },
+  // The values of a project enumeration are reached through the type it generates.
+  {
+    match: (r) => r === "code/unknown-enum-value",
+    page: "topics/enumeration-name-type",
+    anchor: "тип-имя-перечисления",
+  },
 
   // --- operations the types already decide: casts, guards against Undefined, `is` checks ---
   { match: (r) => r === "code/missing-return", page: "topics/methods-in-built-in-script-language" },
@@ -228,10 +245,12 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "topics/query-literal",
     anchor: "параметры-запроса",
   },
+  { match: (r) => r === "query/deletion-mark-immediate", page: "topics/data-deletion", anchor: "режимы-удаления" },
+  // The section states this very ban on an element that only marks a deletion.
   {
-    match: (r) => r === "query/deletion-mark-immediate"
-      || r === "yaml/delete-current-needs-immediate",
-    page: "topics/catalog-properties",
+    match: (r) => r === "yaml/delete-current-needs-immediate",
+    page: "topics/data-deletion",
+    anchor: "разрешение-конфликтов-связанных-со-ссылками-на-удаляемые-объекты",
   },
   {
     match: (r) => r === "code/per-object-permissions-need-common"
@@ -264,8 +283,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "code/handler-overrides-nothing",
     page: "stdlib/element/xbsl/Std/Annotations/Handler_ru",
   },
-  { match: (r) => r === "yaml/enum-needs-nullable", page: ENUM, anchor: "элементы" },
-  { match: (r) => r === "yaml/enum-default-value", page: ENUM, anchor: "элементы" },
+  // The page on project enumerations explains their values and the default one.
+  {
+    match: (r) => r === "yaml/enum-needs-nullable" || r === "yaml/enum-default-value",
+    page: "topics/fixed-set-of-values",
+  },
   { match: (r) => r === "yaml/ref-needs-nullable", page: TYPES, anchor: "тип-неопределено" },
   { match: (r) => r === "yaml/date-input-needs-plain-date", page: "topics/edit-component" },
   { match: (r) => r === "code/resource-bare-name", page: IMAGES },
@@ -278,11 +300,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "yaml/unknown-component-property",
     page: "topics/system-and-interface-components",
   },
-  {
-    match: (r) => r === "yaml/standard-field-length",
-    page: "topics/catalog-properties",
-    anchor: "наименование",
-  },
+  // yaml/standard-field-length links nowhere: the length limit of a standard field is stated only
+  // in the reference of project element properties, a section docs.sqlite does not carry.
   { match: (r) => r === "code/unused-import", page: "topics/modular-development" },
   {
     match: (r) => r === "code/missing-import",
@@ -317,11 +336,24 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "фильтрация-данных",
   },
   { match: (r) => r === "yaml/list-form-needs-dynlist", page: "topics/list-form-component" },
-  { match: (r) => r === "yaml/badge-column-image", page: "topics/standard-table-column-component" },
+  // The picture of a cell is described together with the Picture kind.
+  {
+    match: (r) => r === "yaml/badge-column-image",
+    page: "stdlib/element/xbsl/Std/Interface/Lists/StandardTableColumn_ru",
+    anchor: "изображение",
+  },
   { match: (r) => r === "yaml/popup-in-markup", page: "topics/popup-component" },
+  // The value None of the navigation is where the documentation warns that rows past the size of
+  // the list stay out of reach.
   {
     match: (r) => r === "yaml/list-scroll-without-loading",
-    page: "topics/custom-list-component",
+    page: "stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru",
+    anchor: "отсутствует",
+  },
+  {
+    match: (r) => r === "yaml/dynlist-scroll-without-loading",
+    page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
+    anchor: "навигация",
   },
   { match: (r) => r === "code/load-object-unwrap", page: "topics/data-deletion" },
   {
@@ -338,15 +370,17 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
     anchor: "приредактированиистроки",
   },
+  // The recommendations advise keeping the importance in the description of the event.
   {
     match: (r) => r === "yaml/event-needs-importance",
-    page: "topics/event-properties",
-    anchor: "важность",
+    page: "topics/event-log-event",
+    anchor: "рекомендации-по-работе-с-событиями-журнала-событий",
   },
+  // The closed list of property types is the value type of the Properties map of an event.
   {
     match: (r) => r === "yaml/event-property-type",
-    page: "topics/event-properties",
-    anchor: "тип",
+    page: "stdlib/element/xbsl/Std/EventLog/EventLogEvent_ru",
+    anchor: "свойства-1",
   },
   {
     match: (r) => r === "yaml/slot-needs-list",

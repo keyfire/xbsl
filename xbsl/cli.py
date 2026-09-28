@@ -395,7 +395,26 @@ def _fold_parser() -> argparse.ArgumentParser:
                         help=i18n.t("cli.help.fold-all"))
     parser.add_argument("--format", choices=("text", "json"), default="text",
                         help=i18n.t("cli.help.fold-format"))
+    parser.add_argument("--compact", action="store_true", help=i18n.t("cli.help.fold-compact"))
     return parser
+
+
+def _fold_compact_text(short: dict) -> None:
+    """The short report of a fold in words: the files with the most moves, the moves worth a
+    look, the files the audit stopped - what a dry run over a whole tree is read for."""
+    for rel, counted in short["by_file"].items():
+        said = ", ".join(f"{i18n.t(f'fold.action.{action}')} {count}"
+                         for action, count in counted.items() if count)
+        print(f"{rel}: {said}")
+    if short.get("by_file_hint"):
+        print(short["by_file_hint"])
+    for line in short["review"]:
+        print(f"  {line}")
+    if short.get("review_hint"):
+        print(short["review_hint"])
+    for stopped in short["audit"]:
+        for problem in stopped["audit"]:
+            print(f"  ! {stopped['file']}: {problem}")
 
 
 def _fold_main(argv: list[str]) -> int:
@@ -412,10 +431,13 @@ def _fold_main(argv: list[str]) -> int:
         (move.kind, move.action) for fold in folds for move in fold.moves
     )
     if args.format == "json":
-        # The MCP tool meta_fold_comments answers with the same report.
-        print(json.dumps(commentfold.report(folds, written), ensure_ascii=False, indent=1))
+        # The MCP tool meta_fold_comments answers with the same report, `compact` included.
+        full = (commentfold.compact_report if args.compact else commentfold.report)(folds, written)
+        print(json.dumps(full, ensure_ascii=False, indent=1))
         return 0
-    for fold in folds:
+    if args.compact:
+        _fold_compact_text(commentfold.compact_report(folds, written))
+    for fold in [] if args.compact else folds:
         print(fold.rel)
         for move in fold.moves:
             where = f" -> {move.target_line}" if move.target_line else ""
@@ -758,12 +780,14 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
     # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose.
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
-                                                 "параметр", "поле", "табличная-часть")))
+                                                 "параметр", "поле", "свойство",
+                                                 "табличная-часть")))
     p.add_argument("name", help=i18n.t("cli.help.scaf.af-name"))
     p.add_argument("--type", help=i18n.t("cli.help.scaf.af-type"))
     p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
     p.add_argument("--prop", action="append", metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))
+    p.add_argument("--doc", help=i18n.t("cli.help.scaf.af-doc"))
 
     p = command("set-field-property")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
@@ -1167,7 +1191,7 @@ def _scaffold_main(argv: list[str]) -> int:
         elif args.command == "add-field":
             result = scaffold.op_add_field(
                 Path(args.yaml_path), args.field_kind, args.name,
-                type_=args.type, tabular=args.tabular, props=_props(args.prop),
+                type_=args.type, tabular=args.tabular, props=_props(args.prop), doc=args.doc,
             )
         elif args.command == "set-field-property":
             result = scaffold.op_set_field_property(

@@ -28,8 +28,8 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, freshness, i18n, mcpjournal, metamodel, plugins, report, resource_usage,
-    rundiff, scaffold, uischema,
+    cijob, formmodel, freshness, i18n, mcpcli, mcpjournal, metamodel, plugins, report,
+    resource_usage, rundiff, scaffold, uischema,
 )
 from xbsl.cli import _context_of, _filter_requested, discover, discover_with_context
 from xbsl.engine import (
@@ -81,6 +81,20 @@ mcp = _new_server()
 # a client such as Codex does not start a failed server again. The first sighting of each state
 # goes into the journal, where `xbsl mcp-log` shows it.
 #
+# Only the client can restart the server, and an agent calling the tools cannot. A new process
+# can run the new code, though, so the refusal of a tool the CLI can run carries `cli`: the
+# command line of the same call (xbsl/mcpcli.py), started by this server's interpreter.
+#
+# Nor does the server restart itself: it speaks over the stdio of the process the client
+# started, and exec does not keep that conversation. On Windows `os.execv` starts a NEW process
+# and ends this one, so the client sees its server gone - and Codex does not start it again.
+# Where exec keeps the process, the new image has lost the session: it waits for `initialize`
+# and refuses every request before it ("Received request before initialization was
+# complete"), while the client, initialized long ago, sends `tools/call`. Whatever the old image
+# had read ahead from stdin is lost too, and the client waits for those answers forever. A
+# supervisor that owns stdio and restarts a worker behind it, replaying the handshake, could do
+# it safely - but that is a different server, not a line in this one.
+#
 # Plugins changed on disk are not a reason to refuse: the loaded plugin stays whole in memory and
 # answers consistently - only not the way the CLI and CI answer now. So the tool runs, and a dict
 # answer carries `stale` first, with the plugins loaded and installed and the advice to restart.
@@ -99,8 +113,12 @@ def _journal_stale(found: dict, tool: str, error: str = "") -> None:
     mcpjournal.record("stale", tool=tool, **found, **({"error": error[:500]} if error else {}))
 
 
-def _stale_answer(found: dict, message: str) -> dict:
-    return {"error": message, "stale": {**found, "location": environment.location()}}
+def _stale_answer(found: dict, message: str, same: dict | None = None) -> dict:
+    """The refusal: the message, the CLI command of the same call when there is one, the state."""
+    stale = {**found, "location": environment.location()}
+    if not same:
+        return {"error": message, "stale": stale}
+    return {"error": f"{message}. {i18n.t('mcpcli.same-call')}", **same, "stale": stale}
 
 
 def _warned(answer, found: dict):
@@ -116,13 +134,26 @@ def _warned(answer, found: dict):
 def _stale_guard(fn):
     """The tool behind the check: refused on a stale engine, its failure explained on one,
     its answer marked when the plugins on disk are not the loaded ones."""
+    signature = inspect.signature(fn)
+
+    def same_call(args: tuple, kwargs: dict) -> dict | None:
+        """The CLI command of this call (xbsl/mcpcli.py): its arguments, defaults included."""
+        try:
+            bound = signature.bind(*args, **kwargs)
+        except TypeError:
+            return None
+        bound.apply_defaults()
+        return mcpcli.same_call(fn.__name__, dict(bound.arguments))
 
     @functools.wraps(fn)
     def call(*args, **kwargs):
         found = freshness.version_state()
         if found is not None:
             _journal_stale(found, fn.__name__)
-            return _stale_answer(found, i18n.t("freshness.refusal", state=freshness.describe(found)))
+            return _stale_answer(
+                found, i18n.t("freshness.refusal", state=freshness.describe(found)),
+                same_call(args, kwargs),
+            )
         freshness.take_noted()  # a crash an earlier call noted is not this call's
         try:
             answer = fn(*args, **kwargs)
@@ -133,7 +164,8 @@ def _stale_guard(fn):
             error = f"{type(exc).__name__}: {exc}"
             _journal_stale(found, fn.__name__, error)
             return _stale_answer(found, i18n.t(
-                "freshness.failure", state=freshness.describe(found), error=error))
+                "freshness.failure", state=freshness.describe(found), error=error),
+                same_call(args, kwargs))
         noted = freshness.take_noted()
         if noted is not None:
             _journal_stale(noted, fn.__name__)
@@ -250,7 +282,12 @@ def version_info() -> dict:
 
     `engine_on_disk` is the version the installation on disk declares now. This tool answers
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
-    server is restarted, since the modules it would load next are from another version.
+    server is restarted, since the modules it would load next are from another version. The
+    refusal of a tool the CLI can run (lint_paths, lint_source, baseline_prune, list_rules,
+    meta_fold_comments, translate_*) carries `cli`: the command line of the same call for a
+    POSIX shell (Git Bash on Windows), which runs this server's interpreter on the code now on
+    disk. `cli_note` names the file the command reads data from - the text of lint_source, the
+    inline edits of translate_set.
 
     `plugins` are the plugins this server loaded at start, `plugins_on_disk` the ones installed
     now. When those differ, `stale` names both (reason `plugins`, with the `changed`
@@ -420,8 +457,10 @@ def lint_paths(
                   tree is clean. `summary.as_ci`, when present, narrows to one line,
                   {"adopted": true, "brief": ...}: the file relative to the checkout, the job,
                   the flags with a long list counted ("--enable ×10"), the jobs not taken and
-                  the includes left unread;
-    as_ci_full  - with `compact`, keep the whole `as_ci` record instead of the line;
+                  the includes left unread. A call with `select` asks about a few rules, and
+                  it gets the same line without `compact`: the record of a long pipeline ran
+                  to two kilobytes over an answer of two findings;
+    as_ci_full  - with `compact` or `select`, keep the whole `as_ci` record instead of the line;
     compare     - a file that keeps the run for the next call; the CLI `--compare` reads and
                   writes the same file. The first call saves the run and answers
                   `compare: {file, compared: false}`. Every next call compares with the saved
@@ -460,6 +499,7 @@ def lint_paths(
     base = _base(root)
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
+    narrow = bool(select)  # the caller's own selection, before the job adds its set
     job = None
     if as_ci or as_ci_job:
         try:
@@ -526,6 +566,8 @@ def lint_paths(
         # pipeline has to know which of them it reproduced), where the command actually
         # stands when an `include:` brought it, and the includes nobody fetched.
         payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
+        if narrow and not as_ci_full:
+            payload["summary"]["as_ci"] = report.compact_as_ci(payload["summary"]["as_ci"])
     if state is not None:
         return _compared(payload, diags, paths, base, state, saved, active, chosen,
                          compact=compact, as_ci_full=as_ci_full)
@@ -685,7 +727,7 @@ def _page_as_text(doc_id: str | None, brief: bool = False, section: str = "") ->
 
 
 @mcp.tool()
-def docs_search(query: str, limit: int = 10) -> list[dict]:
+def docs_search(query: str, limit: int = 10) -> list[dict] | dict:
     """Full-text search over the 1C:Element documentation.
 
     Covers stdlib types, their methods, properties and parameters. Returns ranked hits
@@ -1129,21 +1171,32 @@ def meta_add_field(
     props: dict[str, Any] | None = None,
     root: str | None = None,
     names: list[str] | None = None,
+    doc: str | None = None,
 ) -> dict:
-    """Add a section item to an object: реквизит, измерение, ресурс, значение (enum),
-    параметр, поле (structure), константа, свойство (contract), табличная-часть, операция
-    (Обработка: also writes the @Обработчик method into the module), индекс (Имя + Поля with
-    a stub field to replace), параметр-запроса (Отчет) or строка / шаблон (ЛокализованныеСтроки:
-    key-value mapping sections, `type` carries the VALUE, defaulting to the key itself; the
-    key is echoed into the translations the element already has, with the DEFAULT-language
-    text - the text of a translation is written by meta_set_localization, which takes the
-    values by language, and a call aimed at a translation file itself is refused naming it).
+    """Add a section item to an object, the field_kind naming which one:
+    "реквизит", "измерение", "ресурс", "значение" (enum), "параметр", "поле" (structure),
+    "константа", "свойство" (a contract, an event-log event or an InterfaceComponent - the
+    component's `Properties`: a name and a type, no Id), "табличная-часть", "операция"
+    (Processing: also writes the @Handler method into the module), "индекс" (Name + Fields
+    with a stub field to replace), "параметр-запроса" (Report) or "строка" / "шаблон"
+    (LocalizedStrings: key-value mapping sections, `type` carries the VALUE, defaulting to
+    the key itself; the key is echoed into the translations the element already has, with the
+    DEFAULT-language text - the text of a translation is written by meta_set_localization,
+    which takes the values by language, and a call aimed at a translation file itself is
+    refused naming it).
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected. The item joins the end of the section of its kind; a
-    section the file lacks is created at the end of the file, and for a register `notes` say
-    so - naming, when the sibling data section already exists (`Resources` while a "реквизит"
-    is asked, and the other way round), the field_kind that would have placed the item beside
-    the existing fields.
+    section the file lacks is created at the end of the file (a component's `Properties` in
+    front of its `Events` when it has them - the designer's order), and for a register
+    `notes` say so - naming, when the sibling data section already exists (`Resources` while
+    a "реквизит" is asked, and the other way round), the field_kind that would have placed
+    the item beside the existing fields.
+
+    doc - the item's description, written as its documentation comment: the `##` lines at the
+    head of the item, after its `-` and before the first key - the place the development
+    environment reads the comment from and keeps it when it writes the file. A multi-line text
+    becomes several lines. Refused for an item that holds no such comment (a built-in
+    attribute, a "строка" / "шаблон" mapping entry) and for a batch of several `names`.
 
     type - the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
     name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
@@ -1184,14 +1237,14 @@ def meta_add_field(
         batch = ([name] if name else []) + list(names)
         return _meta(
             base, scaffold.op_add_fields, _under(base, yaml_path), field_kind, batch,
-            type_=type, tabular=tabular, props=props,
+            type_=type, tabular=tabular, props=props, doc=doc,
         )
     if not name:
         return _failed(scaffold.ScaffoldError(
             "Нужно имя: name для одного элемента или names для нескольких"), base)
     return _meta(
         base, scaffold.op_add_field, _under(base, yaml_path), field_kind, name, type_=type,
-        tabular=tabular, props=props,
+        tabular=tabular, props=props, doc=doc,
     )
 
 

@@ -85,6 +85,15 @@ fails, the server compares its code files with the state at start and names a re
 changed. A crashed rule says the same in its own report. The server does not restart or exit on
 its own, and `xbsl mcp-log` shows the first time it noticed each change.
 
+Only the client can restart the server; an agent that calls the tools cannot. So the refusal of
+a tool the CLI can run carries `cli`, the command line of the same call for a POSIX shell (Git
+Bash on Windows). The command starts the server's own interpreter, which imports the engine
+from the same place and so runs the code that is on disk now. `lint_paths`, `lint_source`,
+`baseline_prune`, `list_rules`, `meta_fold_comments` and the `translate_*` tools have such a
+command. The text of a `lint_source` call and the inline edits of a `translate_set` call are
+saved to a temporary file that the command reads, and `cli_note` names that file. The other
+tools refuse as before.
+
 The plugins are compared too. When the plugins installed differ from the ones the server loaded,
 the tools still run, on the rules loaded at start, and every answer that is an object starts with
 `stale`: reason `plugins`, the `changed` distributions with both versions and a request to restart
@@ -161,7 +170,7 @@ never means reading the files.
 
 | Tool | What it does |
 |---|---|
-| `meta_add_field(yaml_path, field_kind, name, type, props, names, ...)` | add a section item: attribute, dimension, resource, enumeration value, parameter, field, tabular section. `names` adds several items of one kind in one call with the same type and properties, such as the values of an enumeration; the batch is planned whole, and a taken name refuses all of it. A built-in attribute (`Number`, `Date`, `Code`, `Name`, `Owner`) is judged by its own class, so `Length`, `Uniqueness` and the `Autonumbering` block are accepted and `type` may be omitted where the class fixes it; `props` takes a nested block as a dict or a dotted key (`Autonumbering.Prefix`) and a list as a sequence; a block of a class the metamodel does not describe (`Presentation`) is refused as a known limitation; a section the file lacks is created at the end of the file, and for a register `notes` say so and name the sibling kind that would have placed the item beside the existing fields (a resource where an attribute was asked, and the other way round) |
+| `meta_add_field(yaml_path, field_kind, name, type, props, names, doc, ...)` | add a section item: attribute, dimension, resource, enumeration value, parameter, field, a property of a contract or of an interface component (a name and a type, no `Id`), tabular section. `doc` is the item's description, written as its documentation comment: the `##` lines at the head of the item, which the development environment reads and keeps; it is refused for a built-in attribute, a localized string key and a batch of several names. `names` adds several items of one kind in one call with the same type and properties, such as the values of an enumeration; the batch is planned whole, and a taken name refuses all of it. A built-in attribute (`Number`, `Date`, `Code`, `Name`, `Owner`) is judged by its own class, so `Length`, `Uniqueness` and the `Autonumbering` block are accepted and `type` may be omitted where the class fixes it; `props` takes a nested block as a dict or a dotted key (`Autonumbering.Prefix`) and a list as a sequence; a block of a class the metamodel does not describe (`Presentation`) is refused as a known limitation; a section the file lacks is created at the end of the file (a component's `Properties` in front of its `Events`, the order the designer writes), and for a register `notes` say so and name the sibling kind that would have placed the item beside the existing fields (a resource where an attribute was asked, and the other way round) |
 | `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | set properties on a section item that already exists; the same value shapes as `meta_add_field`, a nested block replaces the old one whole |
 | `meta_add_route(yaml_path, routes, template, methods)` | add url templates to an `HttpService` plus the handler stubs |
 | `meta_add_method(module_path, name, params, returns, ...)` | insert a method into an `.xbsl` module without tearing annotation blocks apart |

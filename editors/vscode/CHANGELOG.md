@@ -31,6 +31,19 @@
   written; inside a `///` line `@` offers the tags, the parameters the block has not described
   yet and, on an empty line above a declaration, the block the environment's template writes;
   the tag word and the name after it are colored the way a JSDoc tag is. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **The `yaml/dynlist-scroll-without-loading` finding links to the documentation.** Its code in
+  the Problems panel opens the section about navigation on the page of the list component. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **The warning about the language server's code changed on disk has a Restart button.** It
+  used to name the command to run; now a click on the button restarts the server. ([#154](https://github.com/keyfire/xbsl/pull/154))
+
+### Fixed
+
+- **Twenty findings lead to documentation pages that exist again.** The help of the default
+  data version no longer has their old pages, and the code in the Problems panel led to a
+  missing page; the naming rules now open the names standards, the rest the pages on data
+  deletion, enumerations and the event log and the reference of lists and table columns.
+  `style/exception-prefix` and `yaml/standard-field-length` link nowhere: no page states their
+  requirement. ([#154](https://github.com/keyfire/xbsl/pull/154))
 
 ## 0.77.0
 

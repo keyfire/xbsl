@@ -59,6 +59,28 @@ def test_a_type_answers_its_own_handlers_and_those_of_its_bases_nearest_first(da
     assert rows[2]["to"] == "8.0"
 
 
+def test_a_handler_gone_from_a_mode_is_there_below_that_mode_only(data):
+    row = next(row for row in modulehandlers.rows_of("Форма") if row["en"] == "GetChatData")
+    assert modulehandlers.declared_in(row, (7, 0))
+    assert not modulehandlers.declared_in(row, (8, 0))  # `to` is the first mode it is gone from
+    assert not modulehandlers.declared_in(row, (9, 0))
+    assert modulehandlers.declared_in(row, None)  # an unknown mode keeps every row
+
+
+@pytest.mark.parametrize("bounds, mode, declared", [
+    ({}, (6, 0), True),
+    ({"from": "8.0"}, (7, 0), False),
+    ({"from": "8.0"}, (8, 0), True),  # `from` is the first mode the handler is there in
+    ({"from": "8.0"}, (9, 0), True),
+    ({"from": "7.0", "to": "9.0"}, (6, 0), False),
+    ({"from": "7.0", "to": "9.0"}, (8, 0), True),
+    ({"from": "7.0", "to": "9.0"}, (9, 0), False),
+])
+def test_the_modes_of_a_row_are_a_half_open_range(bounds, mode, declared):
+    row = {"ru": "ПолучитьДанныеЧата", "en": "GetChatData", **bounds}
+    assert modulehandlers.declared_in(row, mode) is declared
+
+
 def test_both_spellings_answer_the_english_one(data):
     names = modulehandlers.of_type("Форма")
     assert names["ПередЗакрытием"] == names["BeforeClose"] == "BeforeClose"

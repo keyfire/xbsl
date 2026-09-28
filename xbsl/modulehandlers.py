@@ -11,7 +11,8 @@ The list comes from the distribution: each component description it ships names 
 handlers of a module built on that component (`moduleHandlers`), both spellings included, and
 the stdlib extractor keeps them in the `module_handlers` section of stdlib.json - each type
 with its OWN handlers. A component inherits the handlers of its bases, so the lookup walks
-`bases`, the way the member sets are expanded.
+`bases`, the way the member sets are expanded. A handler may be there in some compatibility
+modes only - the description says which (see `declared_in`).
 
 Only interface components are covered: the handlers of the other modules (an object module,
 the module of a register, of a scheduled job) are declared by the compiler in code, not in a
@@ -56,7 +57,8 @@ def rows_of(type_name: str) -> tuple[dict, ...]:
     """The handler rows of a module built on `type_name`: its own and its bases', nearest first.
 
     Empty when the type is unknown to the catalog or the data carries no lists. A row is
-    {"ru", "en"} plus the compatibility modes (`from`, `to`) where the description states them.
+    {"ru", "en"} plus the compatibility modes (`from`, `to`) where the description states them;
+    which modes those admit is `declared_in`'s call.
     """
     table = _table()
     if not table:
@@ -74,6 +76,32 @@ def rows_of(type_name: str) -> tuple[dict, ...]:
                 seen.add(row["ru"])
                 rows.append(row)
     return tuple(rows)
+
+
+def declared_in(row: dict, mode: tuple[int, ...] | None) -> bool:
+    """Whether a module declares the handler of `row` in compatibility mode `mode`.
+
+    A description limits a handler to some modes by `from` and `to`, and the range is half-open:
+    `from` is the first mode the handler is there in, `to` the first mode it is gone from. The
+    compiler says so itself. The web chat handler of a client application, `to: 8.0` in the
+    description, is declared by the handler provider of the compiler only while the mode is
+    below 8.0 (`G5CompatibilityMode.lt(CMODE_8_0)`), under a term named for that range
+    (`_00_80`); the web chat property of the newer modes is declared from 8.0 on, the mode
+    itself included (`ge(CMODE_8_0)`, a term named `_80_00`). The descriptions of the components
+    read the same way against the help: `to: 8.0` of the groups the help marks
+    `Версия 7.0 и ниже`, and the `from` of a component is the mode its page marks "and above".
+
+    An unknown mode (None) declares every row: which of them the project has cannot be told,
+    and a row taken away on a guess would report an override the compiler accepts.
+    """
+    if mode is None:
+        return True
+    # The reader of a dotted version the rules share; imported here, since the rules import
+    # this module.
+    from xbsl.rules.component_since import _version
+
+    first, last = _version(row.get("from")), _version(row.get("to"))
+    return (first is None or first <= mode) and (last is None or mode < last)
 
 
 @lru_cache(maxsize=None)
