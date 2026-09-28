@@ -114,6 +114,13 @@ MESSAGES = {
               " without the indent and without the trailing spaces, so the padding was"
               " taken off.",
     },
+    "translate.phrase.trimmed-value": {
+        "ru": "перевод окружён пробелами. Отступ строки комментария переводчик ставит сам,"
+              " и пробелы перевода легли бы поверх него, поэтому они сняты.",
+        "en": "the translation was padded with whitespace. The translator puts the indent of"
+              " the comment line back itself, and the padding would go on top of it, so it"
+              " was taken off.",
+    },
     "translate.phrase.newline-key": {
         "ru": "фраза не занимает несколько строк: каждую строку комментария переводчик ищет"
               " отдельно. Запишите строки отдельными записями.",
@@ -1382,6 +1389,13 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
                     # this edit corrects THAT one rather than adding a second spelling of it.
                     edit = {**edit, "key": key, "value": value}
                 normalized.extend({**note, "key": key, "kind": kind} for note in notes)
+        elif kind == "phrase":
+            # The key is taken as typed, the value is still pasted into the line as it stands.
+            notes = []
+            value = _phrase_value(value, notes)
+            if notes:
+                edit = {**edit, "value": value}
+                normalized.extend({**note, "key": key, "kind": kind} for note in notes)
         if (kind, key) in places:
             decided[(kind, key)] = edit
         else:
@@ -1416,11 +1430,16 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
             lines[index:index + span] = [f"{indent}{scalar(entry.key)}: {scalar(value)}{newline}"]
             changed += 1
             if value != entry.value:
-                rewritten.append({
+                row = {
                     "key": entry.key, "kind": entry.kind,
                     "was": entry.value, "now": value,
                     "file": str(file), "line": entry.line,
-                })
+                }
+                # Named apart: a rewrite no reader of the English line can see is more often
+                # a slip of the batch than a correction, and it read like any other rewrite.
+                if value.split() == str(entry.value).split():
+                    row["whitespace_only"] = True
+                rewritten.append(row)
         files[str(file)] = "".join(lines)
 
     added = 0
@@ -1529,8 +1548,24 @@ def _phrase_edit(key: str, value: str) -> tuple[str, str, list[dict]]:
         notes.append({"was": fixed_key, "now": trimmed,
                       "reason": i18n.t("translate.phrase.trimmed-key")})
         fixed_key = trimmed
-    fixed_value = _phrase_side(value, "translate.phrase.escaped-quote-value", notes)
+    fixed_value = _phrase_value(
+        _phrase_side(value, "translate.phrase.escaped-quote-value", notes), notes)
     return fixed_key, fixed_value, notes
+
+
+def _phrase_value(value: str, notes: list[dict]) -> str:
+    """The value of a phrase without the padding round it, and a note when there was some.
+
+    The pass puts the indent of the comment line back itself, so the padding of a value was
+    written into the English line on top of it. A continuation line of a list came to the
+    writer with its indent on both sides; the key was trimmed, the value was not, and the
+    padded value overwrote a pair the dictionary already had.
+    """
+    trimmed = value.strip()
+    if trimmed != value:
+        notes.append({"was": value, "now": trimmed,
+                      "reason": i18n.t("translate.phrase.trimmed-value")})
+    return trimmed
 
 
 def _phrase_side(text: str, message: str, notes: list[str]) -> str:

@@ -207,6 +207,10 @@ MESSAGES = {
         "ru": "переписано [{kind}] {key}: \"{was}\" -> \"{now}\"",
         "en": "rewritten [{kind}] {key}: \"{was}\" -> \"{now}\"",
     },
+    "translate.rewritten-whitespace": {
+        "ru": " – отличаются только пробелы",
+        "en": " - only the whitespace differs",
+    },
     "translate.refused": {
         "ru": "не записано записей: {count}; ниже сказано, почему:",
         "en": "entries not written: {count}; the reason for each is below:",
@@ -1392,8 +1396,9 @@ def _apply_edits(args, root: Path, loaded) -> int:
     else:
         print(i18n.t("translate.applied", **result))
         for row in result.get("rewritten") or []:
+            tail = i18n.t("translate.rewritten-whitespace") if row.get("whitespace_only") else ""
             print(f"  {row['file']}:{row['line']}: " + i18n.t("translate.rewritten", kind=row["kind"], key=row["key"],
-                                was=row["was"], now=row["now"]))
+                                was=row["was"], now=row["now"]) + tail)
         # A correction goes to stdout beside what was written: the entry IS in the dictionary,
         # and the run is not a failure - it only landed under a different spelling.
         if corrected:
