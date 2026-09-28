@@ -448,6 +448,14 @@ test("module tails: an object kind has its own module and the object module", ()
   assert.deepStrictEqual([...moduleTailsOf("ПравоНаДействие")], ["", "Объект"]);
 });
 
+test("module tails: an entity contract has the object module, a client event its own one", () => {
+  // Both compiled on a live server: the contract's object module takes abstract methods, the
+  // event's module compiles in the client environment.
+  assert.deepStrictEqual([...moduleTailsOf("КонтрактСущности")], ["", "Объект"]);
+  assert.deepStrictEqual([...moduleTailsOf("ГлобальноеКлиентскоеСобытие")], [""]);
+  assert.deepStrictEqual(moduleMenuTokens("КонтрактСущности", { "": "/p/К.xbsl" }), ["xbsl", "newobjmod"]);
+});
+
 test("module tails: a register has the modules of its record types, a constants set two of them", () => {
   assert.deepStrictEqual([...moduleTailsOf("РегистрСведений")], ["", "Запись", "НаборЗаписей", "КлючЗаписи"]);
   assert.deepStrictEqual([...moduleTailsOf("НаборКонстант")], ["", "Запись", "КлючЗаписи"]);

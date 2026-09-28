@@ -435,6 +435,10 @@ export const STANDARD_ATTRS: Record<string, StandardAttrSpec[]> = {
 // distribution declares extendable, checked against the "Модуль ..." sections of the help pages
 // on the types a kind generates. A kind missing here has no module at all - a virtual table, an
 // event-log event, localized strings, a navigation command, a privilege on an element, a report.
+// Two entries rest on a probe on a live server rather than on those sections: the object module
+// of an entity contract compiled, taking abstract methods only (the contract example of the help
+// creates it too), and so did the module of a global client event, in the client environment,
+// its methods becoming members of the event's type.
 export type ModuleTail = "" | "Объект" | "Запись" | "НаборЗаписей" | "КлючЗаписи";
 
 const OWN_MODULE: readonly ModuleTail[] = [""];
@@ -463,7 +467,7 @@ export const MODULE_TAILS: Readonly<Record<string, readonly ModuleTail[]>> = {
   КлиентSoapСервиса: OWN_MODULE,
   КонтрактСервиса: OWN_MODULE,
   КонтрактТипа: OWN_MODULE,
-  КонтрактСущности: OWN_MODULE,
+  КонтрактСущности: OBJECT_MODULES,
   ЖурналДанных: OWN_MODULE,
   ПроцессИнтеграции: OWN_MODULE,
   ЗапланированноеЗадание: OWN_MODULE,

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from functools import lru_cache
+from pathlib import Path
 
 from xbsl import dataset, i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.semantics import _MEMBER_TYPE_TAILS, _english_tails, _object_members
-from xbsl.rules.yaml_schema import _composed, _mapping_nodes
+from xbsl.rules.yaml_schema import _composed, _mapping_nodes, value_of
 
 try:
     import yaml
@@ -80,6 +81,45 @@ def _owner_yaml(source: SourceFile):
     return source.path.with_suffix(".yaml")
 
 
+#: The section of an element that declares its tabular sections, and the key of a section's
+#: name - both spellings (a section item has no kind of its own to look the pair up by).
+_TABULAR_SECTIONS = "ТабличныеЧасти"
+_SECTION_NAME_KEYS = ("Имя", "Name")
+
+
+def tabular_row_owner(module_path: Path) -> Path | None:
+    """The description of the element whose tabular-section row type the module extends.
+
+    Every tabular section generates a structure type named after the element and the section -
+    `Товары.Позиции` for the section `Позиции` of `Товары` - and "the type may have a module"
+    (the help page on tabular sections). A probe on a live server compiled such a module:
+    `Товары.Позиции.xbsl` beside `Товары.yaml`, the row's attributes in its scope and its
+    `@ВПроекте` methods members of the row type. The file is named after the section as the
+    yaml spells it, so only a section the yaml beside the module declares counts; None for any
+    other module, and for a module whose neighbour does not read.
+    """
+    name = module_path.name
+    if not _HAVE_YAML or not name.endswith(".xbsl"):
+        return None
+    base, _, section = name[: -len(".xbsl")].rpartition(".")
+    if not base or not section or section in _module_suffixes():
+        return None
+    owner = module_path.with_name(base + ".yaml")
+    try:
+        if not owner.is_file():
+            return None
+        data = yaml.safe_load(owner.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+    sections = value_of(data, _TABULAR_SECTIONS)
+    if not isinstance(sections, list):
+        return None
+    for item in sections:
+        if isinstance(item, dict) and any(item.get(key) == section for key in _SECTION_NAME_KEYS):
+            return owner
+    return None
+
+
 @rule("structure/xbsl-pair", "structure/xbsl-pair.title", "A", severity=Severity.WARNING)
 def xbsl_pair(source: SourceFile) -> Iterable[Diagnostic]:
     # A module (.xbsl) is the code of an element described by a paired .yaml - a lone .xbsl is orphaned.
@@ -87,7 +127,7 @@ def xbsl_pair(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "xbsl" or not source.path.exists():
         return
     yaml_path = _owner_yaml(source)
-    if not yaml_path.exists():
+    if not yaml_path.exists() and tabular_row_owner(source.path) is None:
         yield Diagnostic(
             source.rel, 1, 1, "structure/xbsl-pair", Severity.WARNING,
             i18n.t("structure/xbsl-pair.missing", name=yaml_path.name),

@@ -2179,6 +2179,10 @@ _COMPUTED_ALIAS_LIST_RU = (
     "                        ВидСравнения: Равно\n"
     "                        Значение: 1\n"
 )
+#: The same list with the column renamed instead of computed: `Заявки.Код` aliased `КодЗаявки`.
+_RENAMED_ALIAS_LIST_RU = _COMPUTED_ALIAS_LIST_RU.replace(
+    "Выражение: Заявки.Код * 2", "Выражение: Заявки.Код"
+).replace("Псевдоним: Код\n", "Псевдоним: КодЗаявки\n")
 _NO_SCROLL_LIST_RU = (
     "    Содержимое:\n"
     "        Тип: ПроизвольныйСписок<ИсточникДанныхМассив<Строка>>\n"
@@ -7250,6 +7254,13 @@ SEEDS: list[Seed] = [
         files={
             "СписокЗаявок.yaml": _LIST_FORM_RU + _COMPUTED_ALIAS_LIST_RU.format(field="Заявки.Код"),
         },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-filter-computed-alias",
+        expect=FINDING,
+        note="a filter item named after the alias of a renamed column finds no column of that name",
+        files={"СписокЗаявок.yaml": _LIST_FORM_RU + _RENAMED_ALIAS_LIST_RU.format(field="КодЗаявки")},
         tokens=_LIST_FORM_TOKENS,
     ),
 ]

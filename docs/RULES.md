@@ -104,7 +104,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does: the apply rejects the node as an unknown property [details](#a-yaml-unknown-component-property) [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A list with `Navigation: None` never loads the tail: a vertical scroll moves through one portion, and a list over an array without a scroll of its own keeps the automatic portion of ten rows [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru/) |
-| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written or `Auto`): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
 
@@ -153,26 +153,30 @@ element of its own.
 
 <a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** `PageSize`
 sets the portion and the scrolling moves through that portion alone: the list search still finds a
-row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list over an array
-without a scroll of its own is judged too while `PageSize` is automatic (ten rows): the page
-scrolls around one portion, and the cure is a page size by the limit of the data or loading with a
-scroll of the list's own. A tree source and a hierarchical dynamic list load on scroll whatever is
-written and are not judged, nor is an expression in `Navigation`. A dynamic list is judged here
-when its source declares it flat - `UsedHierarchy` as the typed node `{Type: HierarchyMode, Value:
-Disabled}`, the spelling of the platform's own examples; one whose hierarchy is left to the main
-table is judged by `yaml/dynlist-scroll-without-loading`, and one built in code is not judged.
+row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list over an array without
+a scroll of its own is judged too while `PageSize` is automatic (ten rows): the page scrolls around
+one portion, and the cure is a page size by the limit of the data or loading with a scroll of the
+list's own. A tree source and a hierarchical dynamic list load on scroll whatever is written and are
+not judged, nor is an expression in `Navigation`. A dynamic list is judged here when its source
+declares it flat - `UsedHierarchy` as the typed node `{Type: HierarchyMode, Value: Disabled}`, the
+spelling of the platform's own examples; one whose hierarchy is left to the main table is judged by
+`yaml/dynlist-scroll-without-loading`, and one built in code is not judged. A plain scalar in
+`UsedHierarchy` is not judged at all: on a live server a bare `Disabled`, `Auto` or `Default` failed
+the apply ("the value type is not specified" - the word fits the enumeration and the string at
+once), while a qualified word applied even with a value no enumeration has
+(`HierarchyMode.NoSuchValue`), so `HierarchyMode.Disabled` is read as the name of a hierarchy, not
+as the flat mode.
 
 <a id="a-yaml-dynlist-scroll-without-loading"></a>**`yaml/dynlist-scroll-without-loading`.** The
-project half of the rule above: `UsedHierarchy` not written, `Auto` or a bare `Disabled` leaves the
-hierarchy to the main table ("Auto interprets the query of the dynamic list depending on whether it
-supports hierarchy"), and the table is read from the project. Judged is a list over a catalog that
-declares none of `Hierarchical`, `Hierarchy`, `AdditionalHierarchies` and `DefaultHierarchy`, or
-over a document, a register, an exchange plan, a settings storage or an integrable application - the
-platform gives hierarchies to catalogs alone. A table outside the project, a data journal, a
-virtual table, a table derived from a catalog (its groups) and a name shared by elements that do
-not all agree are left alone. The findings and the fix are those of the file rule; the rule is
-split off so that the editor keeps checking the file on every keystroke and reads the project on
-save.
+project half of the rule above: `UsedHierarchy` not written leaves the hierarchy to the main table
+("Auto interprets the query of the dynamic list depending on whether it supports hierarchy"), and
+the table is read from the project. Judged is a list over a catalog that declares none of
+`Hierarchical`, `Hierarchy`, `AdditionalHierarchies` and `DefaultHierarchy`, or over a document, a
+register, an exchange plan, a settings storage or an integrable application - the platform gives
+hierarchies to catalogs alone. A table outside the project, a data journal, a virtual table, a table
+derived from a catalog (its groups) and a name shared by elements that do not all agree are left
+alone. The findings and the fix are those of the file rule; the rule is split off so that the editor
+keeps checking the file on every keystroke and reads the project on save.
 
 ### Tier B - text and conventions
 
@@ -416,7 +420,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `OnRowEdit` handler on a list over a flat dynamic source: the platform never calls it at all [details](#d-yaml-dynlist-row-editing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/dynlist-joined-table-param` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A parameter (`&Name`) or a binding (`=...`) in the arguments or the filter of a joined table of a dynamic list: it is never evaluated and the list fails at runtime [details](#d-yaml-dynlist-joined-table-param) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-filter-disabled` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A dynamic-list filter declared with `Use: False` while the paired module enables it by assignment: the first frame shows the whole table [details](#d-yaml-dynlist-filter-disabled) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `FilterItem` of a dynamic list is named after the alias of a computed field: a filter reads the columns of the tables, so it silently goes by a column of that name or fails the apply [details](#d-yaml-dynlist-filter-computed-alias) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/dynlist-filter-computed-alias` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `FilterItem` of a dynamic list is named after the alias of a list field that is not a column under its own name - a computed field, a renamed column, a path through a reference: a filter reads the columns of the tables, so it silently goes by a column of that name or fails the apply [details](#d-yaml-dynlist-filter-computed-alias) [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/list-form-needs-dynlist` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A form inherits `ListForm` while the table in its content comes from an `ArrayDataSource`: the navigation item silently disappears [details](#d-yaml-list-form-needs-dynlist) [docs](https://1cmycloud.com/docs/help/topics/list-form-component/) |
 | `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A reference `Edit` with no `Commands` of its own: the platform draws its own button next to it, opening the value in a separate window [details](#d-yaml-ref-input-auto-commands) [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/toggle-command-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Two adjacent `UsualCommand` nodes with mirrored `Visible` (`=X` against `=not X`) emulate one command with two states, which the platform already has [details](#d-yaml-toggle-command-pair) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru/) |
@@ -590,9 +594,16 @@ literal in the yaml and assign the live value from code: `Source.JoinedTables[i]
 first-render race: the platform draws the list without waiting for the code. Declare the filter
 enabled, with an empty value.
 
-<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** A
-filter looks its `Field` up among the columns of the main and the joined tables, not among the
-fields of the list, while sorting does take an alias. To filter by the computed value, use a
+<a id="d-yaml-dynlist-filter-computed-alias"></a>**`yaml/dynlist-filter-computed-alias`.** A filter
+looks its `Field` up among the columns of the main and the joined tables, not among the fields of
+the list, while sorting does take an alias. A column path under another name is no exception: on a
+live server a filter by the alias of the field `T.Article` (`ArticleT`) and of the path
+`T.Group.Description` (`GroupName`) failed the apply exactly like a computed alias, while the same
+path aliased after an existing column applied: the lookup found the table's own column of that name.
+A column under its own name (`T.Article` aliased `Article`) is what the filter finds and is not
+judged; neither is a two-part path whose last part is the alias when one of the tables has no
+`Alias` - its first part may be that table. For a column path, name the path in the filter (`Field:
+T.Article`, `Field: T.Group.Description` - both applied). To filter by the computed value, use a
 `FilterItemExpression` with the expression of the field and switch it on with a binding of `Use`;
 when the column is meant, name it with the table alias.
 

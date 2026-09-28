@@ -242,6 +242,39 @@ def test_xbsl_pair_module_of_generated_type(tmp_path):
     assert not _has(d, "structure/xbsl-pair")
 
 
+_CATALOG_WITH_ROWS = (
+    "ВидЭлемента: Справочник\nИд: 55555555-5555-5555-5555-555555555555\nИмя: Товары\n"
+    "ТабличныеЧасти:\n"
+    "    -\n"
+    "        Ид: 66666666-6666-6666-6666-666666666666\n"
+    "        Имя: Позиции\n"
+    "        Реквизиты:\n"
+    "            -\n"
+    "                Ид: 77777777-7777-7777-7777-777777777777\n"
+    "                Имя: Количество\n"
+    "                Тип: Число\n"
+)
+
+
+def test_xbsl_pair_module_of_tabular_row_type(tmp_path):
+    # the module of the row type `Товары.Позиции` - Товары.yaml describes it; a probe compiled
+    # such a module with the row's attributes in scope
+    (tmp_path / "Товары.yaml").write_text(_CATALOG_WITH_ROWS, encoding="utf-8")
+    (tmp_path / "Товары.Позиции.xbsl").write_text(
+        "@ВПроекте\nметод Удвоенное(): Число\n    возврат Количество * 2\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair", "code/undefined-name"})
+    assert d == []
+
+
+def test_xbsl_pair_module_named_after_no_tabular_section(tmp_path):
+    # the negative control: a section the yaml does not declare leaves the module orphaned
+    (tmp_path / "Товары.yaml").write_text(_CATALOG_WITH_ROWS, encoding="utf-8")
+    (tmp_path / "Товары.Строки.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair"})
+    assert any("Товары.Строки.yaml" in x.message for x in d)
+
+
 def test_xbsl_pair_module_of_missing_owner(tmp_path):
     # no owner at all - the module is orphaned, and that is what we report
     (tmp_path / "Цены.НаборЗаписей.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
