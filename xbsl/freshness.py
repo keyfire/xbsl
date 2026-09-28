@@ -36,7 +36,9 @@ The plugins and the sources are judged only in a process that called `remember` 
 the CLI lives for one run and has nothing to compare.
 
 Nothing here restarts or stops the process: a client such as Codex does not start a failed
-server again, so the server keeps answering and says what to do.
+server again, so the server keeps answering and says what to do - and for a tool the CLI can
+run, names the command line of the same call (xbsl/mcpcli.py), which a new process runs on the
+code now on disk.
 """
 
 from __future__ import annotations

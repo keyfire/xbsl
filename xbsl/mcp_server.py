@@ -28,8 +28,8 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, freshness, i18n, mcpjournal, metamodel, plugins, report, resource_usage,
-    rundiff, scaffold, uischema,
+    cijob, formmodel, freshness, i18n, mcpcli, mcpjournal, metamodel, plugins, report,
+    resource_usage, rundiff, scaffold, uischema,
 )
 from xbsl.cli import _context_of, _filter_requested, discover, discover_with_context
 from xbsl.engine import (
@@ -81,6 +81,20 @@ mcp = _new_server()
 # a client such as Codex does not start a failed server again. The first sighting of each state
 # goes into the journal, where `xbsl mcp-log` shows it.
 #
+# Only the client can restart the server, and an agent calling the tools cannot. A new process
+# can run the new code, though, so the refusal of a tool the CLI can run carries `cli`: the
+# command line of the same call (xbsl/mcpcli.py), started by this server's interpreter.
+#
+# Nor does the server restart itself: it speaks over the stdio of the process the client
+# started, and exec does not keep that conversation. On Windows `os.execv` starts a NEW process
+# and ends this one, so the client sees its server gone - and Codex does not start it again.
+# Where exec keeps the process, the new image has lost the session: it waits for `initialize`
+# and refuses every request before it ("Received request before initialization was
+# complete"), while the client, initialized long ago, sends `tools/call`. Whatever the old image
+# had read ahead from stdin is lost too, and the client waits for those answers forever. A
+# supervisor that owns stdio and restarts a worker behind it, replaying the handshake, could do
+# it safely - but that is a different server, not a line in this one.
+#
 # Plugins changed on disk are not a reason to refuse: the loaded plugin stays whole in memory and
 # answers consistently - only not the way the CLI and CI answer now. So the tool runs, and a dict
 # answer carries `stale` first, with the plugins loaded and installed and the advice to restart.
@@ -99,8 +113,12 @@ def _journal_stale(found: dict, tool: str, error: str = "") -> None:
     mcpjournal.record("stale", tool=tool, **found, **({"error": error[:500]} if error else {}))
 
 
-def _stale_answer(found: dict, message: str) -> dict:
-    return {"error": message, "stale": {**found, "location": environment.location()}}
+def _stale_answer(found: dict, message: str, same: dict | None = None) -> dict:
+    """The refusal: the message, the CLI command of the same call when there is one, the state."""
+    stale = {**found, "location": environment.location()}
+    if not same:
+        return {"error": message, "stale": stale}
+    return {"error": f"{message}. {i18n.t('mcpcli.same-call')}", **same, "stale": stale}
 
 
 def _warned(answer, found: dict):
@@ -116,13 +134,26 @@ def _warned(answer, found: dict):
 def _stale_guard(fn):
     """The tool behind the check: refused on a stale engine, its failure explained on one,
     its answer marked when the plugins on disk are not the loaded ones."""
+    signature = inspect.signature(fn)
+
+    def same_call(args: tuple, kwargs: dict) -> dict | None:
+        """The CLI command of this call (xbsl/mcpcli.py): its arguments, defaults included."""
+        try:
+            bound = signature.bind(*args, **kwargs)
+        except TypeError:
+            return None
+        bound.apply_defaults()
+        return mcpcli.same_call(fn.__name__, dict(bound.arguments))
 
     @functools.wraps(fn)
     def call(*args, **kwargs):
         found = freshness.version_state()
         if found is not None:
             _journal_stale(found, fn.__name__)
-            return _stale_answer(found, i18n.t("freshness.refusal", state=freshness.describe(found)))
+            return _stale_answer(
+                found, i18n.t("freshness.refusal", state=freshness.describe(found)),
+                same_call(args, kwargs),
+            )
         freshness.take_noted()  # a crash an earlier call noted is not this call's
         try:
             answer = fn(*args, **kwargs)
@@ -133,7 +164,8 @@ def _stale_guard(fn):
             error = f"{type(exc).__name__}: {exc}"
             _journal_stale(found, fn.__name__, error)
             return _stale_answer(found, i18n.t(
-                "freshness.failure", state=freshness.describe(found), error=error))
+                "freshness.failure", state=freshness.describe(found), error=error),
+                same_call(args, kwargs))
         noted = freshness.take_noted()
         if noted is not None:
             _journal_stale(noted, fn.__name__)
@@ -250,7 +282,12 @@ def version_info() -> dict:
 
     `engine_on_disk` is the version the installation on disk declares now. This tool answers
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
-    server is restarted, since the modules it would load next are from another version.
+    server is restarted, since the modules it would load next are from another version. The
+    refusal of a tool the CLI can run (lint_paths, lint_source, baseline_prune, list_rules,
+    meta_fold_comments, translate_*) carries `cli`: the command line of the same call for a
+    POSIX shell (Git Bash on Windows), which runs this server's interpreter on the code now on
+    disk. `cli_note` names the file the command reads data from - the text of lint_source, the
+    inline edits of translate_set.
 
     `plugins` are the plugins this server loaded at start, `plugins_on_disk` the ones installed
     now. When those differ, `stale` names both (reason `plugins`, with the `changed`
@@ -690,7 +727,7 @@ def _page_as_text(doc_id: str | None, brief: bool = False, section: str = "") ->
 
 
 @mcp.tool()
-def docs_search(query: str, limit: int = 10) -> list[dict]:
+def docs_search(query: str, limit: int = 10) -> list[dict] | dict:
     """Full-text search over the 1C:Element documentation.
 
     Covers stdlib types, their methods, properties and parameters. Returns ranked hits
