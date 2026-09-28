@@ -69,13 +69,14 @@ def _with_type_options(props: dict[str, dict]) -> dict[str, dict]:
     return out
 
 
-#: Which attribute TYPE a per-type property belongs to, the way the documentation of
-#: every object kind spells it ("Только у реквизитов, имеющих тип Число/Строка",
-#: "Только у ссылочных типов" - topics/catalog-properties and its twins for the other
-#: kinds). The metamodel itself does not record this: an attribute is ONE class with
-#: the union of the properties of every type, and the platform's designer decides the
-#: visibility in its own UI - so a schema consumer needs the table to filter honestly.
-#: The tokens are language-neutral; a name a class does not declare is simply skipped.
+#: Which attribute TYPE a per-type property belongs to, the way the guide page of every
+#: object kind spelled it ("Только у реквизитов, имеющих тип Число/Строка",
+#: "Только у ссылочных типов"); the reference of project element properties that replaced
+#: those pages leaves the condition to the wording of each key. The metamodel itself does
+#: not record this: an attribute is ONE class with the union of the properties of every
+#: type, and the platform's designer decides the visibility in its own UI - so a schema
+#: consumer needs the table to filter honestly. The tokens are language-neutral; a name a
+#: class does not declare is simply skipped.
 _PROPERTY_TYPE_APPLIES: dict[str, str] = {
     "МаксимальнаяДлина": "string",
     "Многострочная": "string",

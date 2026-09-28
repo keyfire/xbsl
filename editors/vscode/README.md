@@ -80,8 +80,8 @@ channel and nowhere else. There are no popups on every save.
   editable properties panel, creation of objects, fields and subsystems, and filtering by subsystems
   and packages. See [Metadata explorer](#metadata-explorer).
 - **Documentation** – a view in the secondary side bar that shows the 1C:Element reference the
-  way the docs site does: a "Contents" tree (the developer and administrator guides, the type and
-  query-language references), full-text search, and a page view with images and a link to the
+  way the docs site does: a "Contents" tree (the developer and administrator guides, the type,
+  property and query-language references), full-text search, and a page view with images and a link to the
   primary source. Right-click a type or variable to open its documentation.
   See [Documentation](#documentation).
 
@@ -763,7 +763,8 @@ platform version you use and works offline.
 > The reference shipped with the platform distribution exists in Russian only, so the pages and the contents tree stay Russian whatever the editor language is.
 
 **The tree.** A curated "Contents" that mirrors the site: the developer and administrator guides,
-the type reference (`Std::Collections` → `Array` → ...) and the query language. It is built from the
+the type reference (`Std::Collections` → `Array` → ...), the properties of project elements and
+interface components, the integration process schema and the query language. It is built from the
 distribution's own sidebar, so the structure matches the site. Clicking a node opens the page.
 
 **Search.** The search button in the view title (command *XBSL: search the documentation*) runs a

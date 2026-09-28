@@ -40,12 +40,18 @@ STD_BASE = SITE_ROOT + "stdlib/element/xbsl/Std/"  # the type reference: taken i
 # not a real reference; it goes into neither the tree nor the database.
 _TEMPLATE_NS = "stdlib/element/xbsl/DeveloperName"
 
-# Site section tabs that go into the tree (sidebar key -> label). The server management REST API
-# (console) is 534 endpoints with no bearing on writing code, so it is not included.
+# Site section tabs that go into the tree (sidebar key -> label), in the order of the site menu.
+# The server management REST API (console) is 534 endpoints with no bearing on writing code, so
+# it is not included. The property references of project elements, interface components and the
+# integration process schema are panels of their own; a panel the bundle lacks simply yields no
+# section - a missing key is skipped below.
 SIDEBARS = [
     ("developer", "Руководство разработчика"),
     ("administrator", "Руководство администратора"),
     ("xbslStdlib", "Типы языка 1С:Элемент"),
+    ("projectElementsStdlib", "Свойства элементов проекта"),
+    ("interfaceComponentsStdlib", "Свойства компонентов интерфейса"),
+    ("integrationProcessSchemaStdlib", "Схема процесса интеграции"),
     ("xbqlStdlib", "Язык запросов"),
 ]
 

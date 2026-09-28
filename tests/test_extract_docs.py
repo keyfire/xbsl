@@ -189,3 +189,54 @@ def test_href_to_page():
     assert ex._href_to_page("/docs/help/topics/x") == "topics/x"
     assert ex._href_to_page("https://external/x") is None
     assert ex._href_to_page("") is None
+
+
+# --- the whole build over a mini distribution ------------------------------------------
+
+def _page(title: str, body: str = "") -> str:
+    return (f'<article><div class="theme-doc-markdown markdown"><header><h1>{title}</h1></header>'
+            f"{body}</div></article>")
+
+
+def test_build_takes_the_property_reference_panels(tmp_path):
+    """The property references are panels of their own; their pages and sections land in the base.
+
+    A panel the bundle lacks (an older distribution) yields no section, and the order of the
+    sections is that of SIDEBARS - the order of the site menu.
+    """
+    import sqlite3
+    import zipfile
+
+    prop = "stdlib/element/ProjectElements/Std/Enums/EventImportance_ru"
+    js = (
+        'x={"developer":[{"type":"link","label":"Обзор","href":"/docs/help/topics/overview"}],'
+        '"projectElementsStdlib":[{"type":"category","label":"Перечисления",'
+        '"href":"/docs/help/stdlib/element/ProjectElements/Std/Enums/","items":['
+        f'{{"type":"link","label":"ВажностьСобытия","href":"/docs/help/{prop}"}}]}}]}}'
+    )
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    with zipfile.ZipFile(dist / "element-server-with-ide-1.0.0-x.car", "w") as car:
+        car.writestr(ex.SITE_ROOT + "assets/js/sidebars.js", js)
+        car.writestr(ex.SITE_ROOT + "topics/overview/index.html", _page("Обзор"))
+        car.writestr(ex.SITE_ROOT + "stdlib/element/ProjectElements/Std/Enums/index.html",
+                     _page("Перечисления"))
+        car.writestr(ex.SITE_ROOT + prop + "/index.html", _page(
+            "ВажностьСобытия", '<h2 id="литералы">Литералы</h2><h4 id="изконструктора">ИзКонструктора</h4>'))
+    out = tmp_path / "data" / "docs.sqlite"
+    out.parent.mkdir()
+    pages, _nodes = ex.build(dist, out)
+    assert pages == 3
+    con = sqlite3.connect(out)
+    try:
+        assert con.execute("SELECT title FROM pages WHERE id = ?", (prop,)).fetchone() == ("ВажностьСобытия",)
+        sections = [row[0] for row in con.execute("SELECT label FROM tree WHERE parent IS NULL ORDER BY ord")]
+        link = con.execute("SELECT kind FROM tree WHERE page = ? AND anchor IS NULL", (prop,)).fetchone()
+    finally:
+        con.close()
+    assert sections == ["Руководство разработчика", "Свойства элементов проекта"]
+    assert link == ("link",)
+    assert [label for key, label in ex.SIDEBARS if key.endswith("Stdlib")] == [
+        "Типы языка 1С:Элемент", "Свойства элементов проекта", "Свойства компонентов интерфейса",
+        "Схема процесса интеграции", "Язык запросов",
+    ]
