@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 261 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 262 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -105,6 +105,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A list with `Navigation: None` never loads the tail: a vertical scroll moves through one portion, and a list over an array without a scroll of its own keeps the automatic portion of ten rows [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/ListNavigation_ru/) |
 | `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` of a dynamic list: the apply refuses the value as one whose type is not specified. The fix writes the typed node, or takes `Auto` out [details](#a-yaml-hierarchy-bare-value) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
 
@@ -177,6 +178,17 @@ hierarchies to catalogs alone. A table outside the project, a data journal, a vi
 derived from a catalog (its groups) and a name shared by elements that do not all agree are left
 alone. The findings and the fix are those of the file rule; the rule is split off so that the editor
 keeps checking the file on every keystroke and reads the project on save.
+
+<a id="a-yaml-hierarchy-bare-value"></a>**`yaml/hierarchy-bare-value`.** `UsedHierarchy` of a
+dynamic list takes `Auto`, a `HierarchyMode` or a string, the name of a hierarchy of the main table.
+A mode written as a bare word - `Disabled`, `Default`, `Auto` - is none of the three to the server:
+a probe on a live server showed that the apply stops with "the type of the value is not specified"
+at the line of the property, over a catalog with a hierarchy and over one without. A quoted word or
+any other word is read as the name of a hierarchy and applies, and so does the typed node
+`{Type: HierarchyMode, Value: Disabled}` of the platform's own examples; a word qualified with the
+enumeration (`HierarchyMode.Disabled`) is read as a name too, so it is no cure. The fix writes the
+typed node in the language of the file, and takes the line out for `Auto`, which is what an
+unwritten property means; a property inside a flow mapping keeps the finding without a fix.
 
 ### Tier B - text and conventions
 

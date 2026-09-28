@@ -7263,6 +7263,27 @@ SEEDS: list[Seed] = [
         files={"СписокЗаявок.yaml": _LIST_FORM_RU + _RENAMED_ALIAS_LIST_RU.format(field="КодЗаявки")},
         tokens=_LIST_FORM_TOKENS,
     ),
+    Seed(
+        rule="yaml/hierarchy-bare-value",
+        expect=FINDING,
+        note="a bare mode word in the hierarchy of a dynamic list fails the apply",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy="            ИспользуемаяИерархия: Выключено\n",
+                navigation="ПодгрузкаПриПрокрутке"),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/hierarchy-bare-value",
+        expect=CLEAN,
+        note="the same mode written as the typed node of the platform's examples",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + _SCROLLED_DYNLIST_RU.format(
+                hierarchy=_FLAT_HIERARCHY_RU, navigation="ПодгрузкаПриПрокрутке"),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
 ]
 
 
