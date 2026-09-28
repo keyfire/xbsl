@@ -428,6 +428,118 @@ export const STANDARD_ATTRS: Record<string, StandardAttrSpec[]> = {
   ],
 };
 
+// The modules a project element may have: its own module (the empty tail, `Имя.xbsl`) and the
+// modules of the types it generates that a module may extend (`Имя.Объект.xbsl`,
+// `Имя.НаборЗаписей.xbsl`). The list follows the "+" next to an element in the project view of
+// the development environment, which offers the extendable types of the kind: the types the
+// distribution declares extendable, checked against the "Модуль ..." sections of the help pages
+// on the types a kind generates. A kind missing here has no module at all - a virtual table, an
+// event-log event, localized strings, a navigation command, a privilege on an element, a report.
+export type ModuleTail = "" | "Объект" | "Запись" | "НаборЗаписей" | "КлючЗаписи";
+
+const OWN_MODULE: readonly ModuleTail[] = [""];
+const OBJECT_MODULES: readonly ModuleTail[] = ["", "Объект"];
+const REGISTER_MODULES: readonly ModuleTail[] = ["", "Запись", "НаборЗаписей", "КлючЗаписи"];
+
+export const MODULE_TAILS: Readonly<Record<string, readonly ModuleTail[]>> = {
+  Справочник: OBJECT_MODULES,
+  Документ: OBJECT_MODULES,
+  ПланОбмена: OBJECT_MODULES,
+  Обработка: OBJECT_MODULES,
+  ИнтегрируемоеПриложение: OBJECT_MODULES,
+  ХранилищеНастроек: OBJECT_MODULES,
+  КлючДоступа: OBJECT_MODULES,
+  ПравоНаДействие: OBJECT_MODULES,
+  РегистрСведений: REGISTER_MODULES,
+  РегистрНакопления: REGISTER_MODULES,
+  НаборКонстант: ["", "Запись", "КлючЗаписи"],
+  ОбщийМодуль: OWN_MODULE,
+  Перечисление: OWN_MODULE,
+  Структура: OWN_MODULE,
+  ХранимаяСтруктура: OWN_MODULE,
+  КомпонентИнтерфейса: OWN_MODULE,
+  HttpСервис: OWN_MODULE,
+  SoapСервис: OWN_MODULE,
+  КлиентSoapСервиса: OWN_MODULE,
+  КонтрактСервиса: OWN_MODULE,
+  КонтрактТипа: OWN_MODULE,
+  КонтрактСущности: OWN_MODULE,
+  ЖурналДанных: OWN_MODULE,
+  ПроцессИнтеграции: OWN_MODULE,
+  ЗапланированноеЗадание: OWN_MODULE,
+  ПараметрыРаботыКлиента: OWN_MODULE,
+  ПараметрСамостоятельнойРегистрацииПользователя: OWN_MODULE,
+  ГлобальноеКлиентскоеСобытие: OWN_MODULE,
+  ФрагментКомандногоИнтерфейса: OWN_MODULE,
+  КомандаСКомпонентом: OWN_MODULE,
+  ОбычнаяКоманда: OWN_MODULE,
+  ПереключаемаяКоманда: OWN_MODULE,
+};
+
+// The English spelling of a tail: a project written in English names the module of a record set
+// `Prices.RecordSet.xbsl`.
+export const MODULE_TAIL_ENGLISH: Readonly<Record<string, string>> = {
+  Объект: "Object",
+  Запись: "Record",
+  НаборЗаписей: "RecordSet",
+  КлючЗаписи: "RecordKey",
+};
+
+// The modules a kind may have; none for a kind without modules or an unknown one.
+export function moduleTailsOf(kind: string): readonly ModuleTail[] {
+  return MODULE_TAILS[kind] ?? [];
+}
+
+// The file of a module of an element: beside the description, spelled the way the description is.
+export function modulePathFor(yamlPath: string, tail: ModuleTail, english: boolean): string {
+  const base = yamlPath.replace(/\.yaml$/i, "");
+  if (!tail) {
+    return base + ".xbsl";
+  }
+  return `${base}.${english ? MODULE_TAIL_ENGLISH[tail] : tail}.xbsl`;
+}
+
+// The menu tokens of the modules of an element in the metadata tree. A module that is there is
+// opened (`xbsl`, `objmod`, `recmod`...); a module the kind may have and the element lacks is
+// created (`newmod`, `newobjmod`...), the way the project view of the environment offers it
+// under "+". A module file of a kind the table does not know is still opened.
+const OPEN_MODULE_TOKENS: Record<ModuleTail, string> = {
+  "": "xbsl", Объект: "objmod", Запись: "recmod", НаборЗаписей: "recsetmod", КлючЗаписи: "reckeymod",
+};
+const NEW_MODULE_TOKENS: Record<ModuleTail, string> = {
+  "": "newmod", Объект: "newobjmod", Запись: "newrecmod", НаборЗаписей: "newrecsetmod",
+  КлючЗаписи: "newreckeymod",
+};
+
+export function moduleMenuTokens(
+  kind: string, present: Partial<Record<ModuleTail, string | undefined>>
+): string[] {
+  const tokens = (Object.keys(OPEN_MODULE_TOKENS) as ModuleTail[])
+    .filter((tail) => present[tail])
+    .map((tail) => OPEN_MODULE_TOKENS[tail]);
+  for (const tail of moduleTailsOf(kind)) {
+    if (!present[tail]) {
+      tokens.push(NEW_MODULE_TOKENS[tail]);
+    }
+  }
+  return tokens;
+}
+
+// The module file of an element that exists, in either spelling of the tail; `exists` gets the
+// candidate path. A Russian tail is looked for first, as the platform writes it by default.
+export function existingModule(
+  yamlPath: string, tail: ModuleTail, exists: (candidate: string) => boolean
+): string | undefined {
+  const spellings = tail ? [false, true] : [false];
+  for (const english of spellings) {
+    const candidate = modulePathFor(yamlPath, tail, english);
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 // Standard attribute names of a kind (for the tree).
 export function standardAttrNames(kind: string): string[] {
   return (STANDARD_ATTRS[kind] ?? []).map((s) => s.name);

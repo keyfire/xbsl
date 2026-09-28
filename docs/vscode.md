@@ -602,11 +602,23 @@ The properties panel starts with a **documentation comment** section for nodes t
 carry one. Edit Markdown, use the formatting buttons and preview the result, then save it
 into the current YAML buffer. Ordinary editor undo remains available. Raw HTML stays text
 and unsafe links are not active. A changed source comment refuses a stale save and keeps the draft.
+The section folds like the property groups: it is folded while the node has no comment and
+open when it has one, and a fold or an unfold by hand is kept for the node.
 
 **Clicks.** An object or a field opens the **properties panel** on the right. A field's `Type`
 there is a combo of primitives, reference types (`<Object>.Reference?`) and the project
 enumerations, and it still accepts a typed-in value. A common module opens its `.xbsl`, a form
 opens the preview. The context menu adds *Properties*, open description / module.
+
+**Modules.** The context menu of an object opens each of its modules and creates the ones
+it lacks: **Create module (xbsl)**, **Create object module (.Object.xbsl)** and, for a
+register or a constants set, the modules of a record, a record set and a record key. The
+items follow the kind, the way the **+** next to an element in the project view of the
+environment does: a catalog has a module and an object module, a register the modules of
+its record types, a common module or a form its own module, and a virtual table, an
+event-log event, localized strings or a navigation command none. A new module is an
+empty file beside the description, named in the language of the description
+(`Name.Object.xbsl` in a project written in English), and it opens right away.
 
 **Properties panel** – the same one the form designer uses. Scalar properties are edited in place:
 dropdowns for `VisibilityScope` and `Environment`, a `True` / `False` toggle, text for the rest.
@@ -966,6 +978,14 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Open resources description | `xbsl.metadata.openResourcesDescriptor` | Command Palette |
 | Open module (xbsl) | `xbsl.metadata.openModule` | Command Palette |
 | Open object module (.Object.xbsl) | `xbsl.metadata.openObjectModule` | Command Palette |
+| Create module (xbsl) | `xbsl.metadata.createModule` | panel / context menu |
+| Create object module (.Object.xbsl) | `xbsl.metadata.createObjectModule` | panel / context menu |
+| Open record module (.Record.xbsl) | `xbsl.metadata.openRecordModule` | panel / context menu |
+| Create record module (.Record.xbsl) | `xbsl.metadata.createRecordModule` | panel / context menu |
+| Open record set module (.RecordSet.xbsl) | `xbsl.metadata.openRecordSetModule` | panel / context menu |
+| Create record set module (.RecordSet.xbsl) | `xbsl.metadata.createRecordSetModule` | panel / context menu |
+| Open record key module (.RecordKey.xbsl) | `xbsl.metadata.openRecordKeyModule` | panel / context menu |
+| Create record key module (.RecordKey.xbsl) | `xbsl.metadata.createRecordKeyModule` | panel / context menu |
 | Open in the form designer | `xbsl.metadata.previewForm` | Command Palette |
 | Open application module (Project.xbsl) | `xbsl.metadata.openAppModule` | Command Palette |
 | Properties | `xbsl.metadata.props` | Command Palette |

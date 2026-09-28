@@ -199,6 +199,46 @@
         "category": "XBSL"
       },
       {
+        "command": "xbsl.metadata.createModule",
+        "title": "%cmd.metadata.createModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.createObjectModule",
+        "title": "%cmd.metadata.createObjectModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.openRecordModule",
+        "title": "%cmd.metadata.openRecordModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.createRecordModule",
+        "title": "%cmd.metadata.createRecordModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.openRecordSetModule",
+        "title": "%cmd.metadata.openRecordSetModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.createRecordSetModule",
+        "title": "%cmd.metadata.createRecordSetModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.openRecordKeyModule",
+        "title": "%cmd.metadata.openRecordKeyModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.createRecordKeyModule",
+        "title": "%cmd.metadata.createRecordKeyModule%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.metadata.previewForm",
         "title": "%cmd.metadata.previewForm%",
         "category": "XBSL",
@@ -940,6 +980,38 @@
         {
           "command": "xbsl.metadata.findResourceReferences",
           "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.createModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.createObjectModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.openRecordModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.createRecordModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.openRecordSetModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.createRecordSetModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.openRecordKeyModule",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.createRecordKeyModule",
+          "when": "false"
         }
       ],
       "editor/context": [
@@ -1068,6 +1140,46 @@
           "command": "xbsl.metadata.openObjectModule",
           "when": "view == xbslMetadata && viewItem =~ /\\bobjmod\\b/",
           "group": "1_open@3"
+        },
+        {
+          "command": "xbsl.metadata.createModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewmod\\b/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "xbsl.metadata.createObjectModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobjmod\\b/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "xbsl.metadata.openRecordModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\brecmod\\b/",
+          "group": "1_open@3.1"
+        },
+        {
+          "command": "xbsl.metadata.createRecordModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewrecmod\\b/",
+          "group": "1_open@3.1"
+        },
+        {
+          "command": "xbsl.metadata.openRecordSetModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\brecsetmod\\b/",
+          "group": "1_open@3.2"
+        },
+        {
+          "command": "xbsl.metadata.createRecordSetModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewrecsetmod\\b/",
+          "group": "1_open@3.2"
+        },
+        {
+          "command": "xbsl.metadata.openRecordKeyModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\breckeymod\\b/",
+          "group": "1_open@3.3"
+        },
+        {
+          "command": "xbsl.metadata.createRecordKeyModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewreckeymod\\b/",
+          "group": "1_open@3.3"
         },
         {
           "command": "xbsl.metadata.openQuery",
