@@ -2727,6 +2727,78 @@ def _projects(facts: dict[str, dict]) -> dict[str, dict[str, dict]]:
     return groups
 
 
+# --- the compatibility mode a project is read in -------------------------------------------------
+#
+# The reader of a project description in the platform takes the mode the description declares
+# when it is one of the supported modes. A description that declares no mode, a value that names
+# no mode, or a mode below the oldest supported one is an error of the description, and the build
+# refuses the project - but the reader does not stop there: it goes on in the newest mode, and the
+# code of the project is checked in that mode. The rules that depend on the mode read it the same
+# way, through `project_modes`, so one project is never judged in two modes at once.
+
+#: A value of the platform's compatibility mode enumeration names the mode by its numbers: the
+#: value for mode 9.0 ends with `9_0`.
+_MODE_VALUE_RE = re.compile(r"^Версия(\d+)_(\d+)$")
+
+
+@lru_cache(maxsize=1)
+def supported_modes() -> frozenset[tuple[int, ...]]:
+    """The compatibility modes a project may declare, from the enumeration of the modes.
+
+    The platform names each supported mode as a value of its mode enumeration, from the oldest
+    it still accepts to the newest. Empty without data: then no declared mode can be checked.
+    """
+    catalog = dataset.load_optional("stdlib.json") or {}
+    record = (catalog.get("type_members") or {}).get("РежимСовместимости") or {}
+    modes = set()
+    for value in record.get("properties") or ():
+        match = _MODE_VALUE_RE.match(value)
+        if match:
+            modes.add((int(match.group(1)), int(match.group(2))))
+    return frozenset(modes)
+
+
+# Rebuilt when the data changes, and when data missing at the first read has been installed since.
+dataset.register_reset(supported_modes.cache_clear)
+dataset.register_recheck(supported_modes.cache_clear)
+
+
+def read_mode(declared: tuple[int, ...] | None) -> tuple[tuple[int, ...] | None, bool]:
+    """(the mode a project description is read in, whether it differs from the declared one).
+
+    `declared` is what the description states, None when it states no mode or a value that is
+    not one (`project_fact` keeps only a value it can read as numbers). A supported mode is read
+    as declared; anything else - no mode, a value that names none, a mode below the oldest or
+    above the newest supported one - is read in the newest mode, and the second value says the
+    mode is assumed. Without data the declared mode is taken as written: there is nothing to
+    check it against, and no newest mode to assume.
+    """
+    supported = supported_modes()
+    if not supported or declared in supported:
+        return declared, False
+    return max(supported), True
+
+
+def project_modes(facts: dict[str, dict]) -> dict[str, tuple[tuple[int, ...] | None, bool]]:
+    """{rel: (the compatibility mode the project of the source is read in, whether assumed)}.
+
+    The facts are those of `project_fact`, split by project as the typing splits them
+    (`_projects`). The mode is `read_mode` of the description of the project; a source whose
+    project has no description in the run gets (None, False) - the mode is unknown, and a rule
+    judges nothing that depends on it.
+    """
+    found: dict[str, tuple[tuple[int, ...] | None, bool]] = {}
+    for root, group in _projects(facts).items():
+        described = next((fact for fact in group.values()
+                          if fact.get("k") == "project" and fact.get("root") in (root, ".")), None)
+        answer: tuple[tuple[int, ...] | None, bool] = (None, False)
+        if described is not None:
+            declared = described.get("compat")
+            answer = read_mode(tuple(declared) if declared else None)
+        found.update(dict.fromkeys(group, answer))
+    return found
+
+
 def _parsed_module(fact: dict) -> tuple[object, list]:
     """(the module, its tokens) of a fact's text, tokenized once: the parser, the query rows and
     the fixes all read the same tokens, and a second save of an unchanged module parses nothing."""

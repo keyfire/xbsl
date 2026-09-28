@@ -104,16 +104,6 @@ def declared_in(row: dict, mode: tuple[int, ...] | None) -> bool:
     return (first is None or first <= mode) and (last is None or mode < last)
 
 
-@lru_cache(maxsize=None)
-def of_type(type_name: str) -> dict[str, str]:
-    """{handler name in either spelling: its English spelling} for a module on `type_name`."""
-    names: dict[str, str] = {}
-    for row in rows_of(type_name):
-        names[row["ru"]] = row["en"]
-        names[row["en"]] = row["en"]
-    return names
-
-
 @lru_cache(maxsize=1)
 def all_names() -> frozenset[str]:
     """Both spellings of every handler a module of any component may override."""
@@ -154,7 +144,6 @@ def platform_base(head: str, project_base, limit: int = 32) -> str:
 def _reset() -> None:
     _table.cache_clear()
     rows_of.cache_clear()
-    of_type.cache_clear()
     all_names.cache_clear()
 
 

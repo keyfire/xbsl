@@ -81,25 +81,23 @@ def test_the_modes_of_a_row_are_a_half_open_range(bounds, mode, declared):
     assert modulehandlers.declared_in(row, mode) is declared
 
 
-def test_both_spellings_answer_the_english_one(data):
-    names = modulehandlers.of_type("Форма")
-    assert names["ПередЗакрытием"] == names["BeforeClose"] == "BeforeClose"
-    assert names["ПослеСоздания"] == "AfterCreate"
-    assert "ПередЗаписью" not in names  # the object form's own handler is not a form's
+def test_a_row_carries_both_spellings_of_the_handler(data):
+    rows = {row["ru"]: row["en"] for row in modulehandlers.rows_of("Форма")}
+    assert rows["ПередЗакрытием"] == "BeforeClose"
+    assert rows["ПослеСоздания"] == "AfterCreate"
+    assert "ПередЗаписью" not in rows  # the object form's own handler is not a form's
 
 
 def test_an_english_type_name_reads_the_same_lists(data):
-    assert modulehandlers.of_type("ObjectForm") == modulehandlers.of_type("ФормаОбъекта")
+    assert modulehandlers.rows_of("ObjectForm") == modulehandlers.rows_of("ФормаОбъекта")
 
 
 def test_a_component_without_handlers_of_its_own_inherits_the_base_ones(data):
-    assert modulehandlers.of_type("Надпись") == {
-        "ПослеСоздания": "AfterCreate", "AfterCreate": "AfterCreate"}
+    assert modulehandlers.rows_of("Надпись") == ({"ru": "ПослеСоздания", "en": "AfterCreate"},)
 
 
 def test_an_unknown_type_has_no_handlers(data):
     assert modulehandlers.rows_of("ПридуманныйТип") == ()
-    assert modulehandlers.of_type("ПридуманныйТип") == {}
 
 
 def test_every_spelling_of_every_list(data):
@@ -114,7 +112,7 @@ def test_data_without_the_section_answers_nothing(tmp_path):
     dataset.set_data_root(tmp_path)
     try:
         assert not modulehandlers.available()
-        assert modulehandlers.of_type("Форма") == {}
+        assert modulehandlers.rows_of("Форма") == ()
         assert modulehandlers.platform_base("Форма", lambda _name: None) == ""
     finally:
         dataset.set_data_root(None)

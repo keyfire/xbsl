@@ -68,10 +68,21 @@ method Execute(Renamed: String): String
     assert len(found) == 1 and found[0].severity is Severity.WARNING
 
 
-@pytest.mark.parametrize("compatibility", (None, "invalid"))
-def test_missing_or_invalid_compatibility_is_silent(compatibility):
+@pytest.mark.parametrize("compatibility", (None, "invalid", "5.0"),
+                         ids=("no-mode", "not-a-mode", "below-the-oldest"))
+def test_a_description_without_a_supported_mode_is_compiled_in_the_newest_mode(compatibility):
+    """The build refuses such a description, and the reader of the platform goes on in the
+    newest mode, where a mismatch is an error."""
     implementation = "@Implementation\nmethod Execute(Renamed: String): String\n return Renamed\n;\n"
-    assert _lint(_project(implementation, compatibility=compatibility)) == []
+    found = _lint(_project(implementation, compatibility=compatibility))
+    assert [(item.line, item.severity) for item in found] == [(2, Severity.ERROR)]
+
+
+def test_without_the_project_description_the_mode_is_unknown_and_nothing_is_judged():
+    implementation = "@Implementation\nmethod Execute(Renamed: String): String\n return Renamed\n;\n"
+    files = _project(implementation)
+    files.pop("Project.yaml")
+    assert _lint(files) == []
 
 
 def test_matching_name_and_method_without_implementation_annotation_are_clean():

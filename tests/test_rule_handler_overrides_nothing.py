@@ -301,10 +301,12 @@ def test_the_handlers_a_message_lists_follow_the_mode(handlers):
 
 
 @pytest.mark.needs_data
-@pytest.mark.parametrize("declared", ["", "8.5"], ids=["no-mode", "unsupported-mode"])
+@pytest.mark.parametrize("declared", ["", "8.5", "5.0", "новейший"],
+                         ids=["no-mode", "unsupported-mode", "below-the-oldest", "not-a-mode"])
 def test_a_project_without_a_supported_mode_is_read_in_the_newest_one(handlers, declared):
     """The build refuses such a description, and the reader of the platform goes on in the
-    newest mode - where the handler of the older modes is gone."""
+    newest mode - where the handler of the older modes is gone. A mode below the oldest
+    supported one is no exception: the reader does not fall back to the oldest mode."""
     diags = _app(WEB_CHAT, mode=declared)
     assert [d.rule_id for d in diags] == [RULE]
     assert "(новейший: проект не указывает режим, который поддерживает платформа)" in (

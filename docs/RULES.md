@@ -237,9 +237,12 @@ any other word the same file also writes in small letters, a one-letter word ins
 negation glued on, and the capitals of the English line of a comment in the translation
 dictionary. Abbreviations, date masks and a cited query are left alone. A cited query is told by
 the keyword table of the query language in the platform data (the `query` section of
-`terms.json`): a keyword prose does not shout (SELECT, DESC) or a keyword of several words
-(ORDER BY) marks the whole line, and any other keyword counts as syntax only when code follows
-it. The fix restores the case.
+`terms.json`): a keyword prose does not shout (SELECT, DESC), a keyword of several words
+(ORDER BY) or the head of a CASE expression or of a statement changing a temporary table
+(CASE WHEN, `INSERT INTO Table (`) marks the whole line, and any other keyword counts as syntax
+only when code follows it. The literals TRUE, FALSE, UNDEFINED and the word TEMP, which the
+table does not hold, count the same way, and a literal after a comparison sign is syntax too.
+Without the table the rule falls back on a short list of its own. The fix restores the case.
 
 <a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** The finding suggests the
 wording with a word of condition. The legend of a value is left alone: nothing is named there
@@ -994,7 +997,8 @@ when it is not there.
 <a id="d-code-deprecated-api"></a>**`code/deprecated-api`.** `ObjectStorage.UploadFromBytes(...)`
 and `ObjectStorage.Upload(Stream, Size)` next to the current `Upload("file", Bytes)` look like
 that. The overloads are picked by the compatibility mode of the project, the arguments and their
-known types. The message names the replacement when the documentation does.
+known types. A project description that declares no supported mode is read in the newest mode, as
+the platform reads it. The message names the replacement when the documentation does.
 
 ## Group details
 
@@ -1169,7 +1173,7 @@ Checks local and cross-module project calls in value expressions. Unknown target
 
 <a id="d-code-contract-parameter-name"></a>**`code/contract-parameter-name`.**
 
-Compares parameter names only for an unambiguous project service contract and matching signatures. Reports an error in compatibility mode 8.0 or later, a warning in earlier modes, and skips an unknown compatibility mode. No automatic fix is offered.
+Compares parameter names only for an unambiguous project service contract and matching signatures. Reports an error in compatibility mode 8.0 or later, a warning in earlier modes. A project description that declares no supported mode (none at all, a value that names no mode, a mode below the oldest one) is read in the newest mode, as the platform reads it; a run without the project description is not judged. No automatic fix is offered.
 
 <a id="d-conventions-platform-translation-shadow"></a>**`conventions/platform-translation-shadow`.**
 

@@ -16,9 +16,12 @@ The forms come from the catalog (`deprecated_members`: every form of a member th
 deprecated one, with the platform versions each exists in, the compatibility modes the deprecation
 applies in and the member the documentation names instead). A form is a candidate for a call when:
 
-- the compatibility mode of the project admits it (`CompatibilityMode` of the project description;
-  a mode the platform does not support is checked as the newest one, as the editor does). Without
-  a known mode a form limited by version decides nothing, and the call is left alone;
+- the compatibility mode of the project admits it (`CompatibilityMode` of the project description,
+  read the way the platform reads it - `typeinfer.project_modes`: a description that declares no
+  mode, a value that names none or a mode the platform does not support is refused by the build,
+  and its code is checked in the newest mode, so the rule checks it there too). A run without the
+  project description knows no mode: a form limited by version decides nothing, and the call is
+  left alone;
 - the arguments fit its parameters: no more positional arguments than parameters, every named
   argument names one of them, every required parameter gets an argument, and an argument of a
   known type is not of a type the parameter cannot take (`ReadableStream` for `FileName: String?`).
@@ -89,8 +92,6 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-#: The project descriptor: its folder is the boundary of one catalog and one compatibility mode.
-_PROJECT_FILES = frozenset({"Проект.yaml", "Project.yaml"})
 #: The root of the type hierarchy: a parameter of this type takes anything.
 _ROOT_TYPE = "Объект"
 
@@ -120,43 +121,6 @@ def _deprecated() -> tuple[dict[str, dict[str, list[dict]]], frozenset[str]]:
 
 
 dataset.register_reset(_deprecated.cache_clear)
-
-#: A value of the platform's compatibility mode enumeration names the mode by its numbers: the
-#: value for mode 9.0 ends with `9_0`.
-_MODE_VALUE_RE = re.compile(r"^Версия(\d+)_(\d+)$")
-
-
-@lru_cache(maxsize=1)
-def _supported_modes() -> frozenset[tuple[int, ...]]:
-    """The compatibility modes a project may declare, from the enumeration of the modes.
-
-    The platform accepts a mode "not below version 6.0" (topic about updating the application) and
-    names each one as a value of its mode enumeration. A project declaring a mode outside the list
-    is refused by the build, and the editor then checks the code in the newest mode - the same
-    calls warn as in a project of that mode.
-    """
-    try:
-        catalog = dataset.load_json("stdlib.json")
-    except Exception:  # noqa: BLE001 - no data, no list
-        return frozenset()
-    record = (catalog.get("type_members") or {}).get("РежимСовместимости") or {}
-    modes = set()
-    for value in record.get("properties") or ():
-        match = _MODE_VALUE_RE.match(value)
-        if match:
-            modes.add((int(match.group(1)), int(match.group(2))))
-    return frozenset(modes)
-
-
-dataset.register_reset(_supported_modes.cache_clear)
-
-
-def _effective_mode(declared: tuple[int, ...] | None) -> tuple[int, ...] | None:
-    """The mode the code is checked in: the declared one, or the newest when it is not supported."""
-    supported = _supported_modes()
-    if declared is None or not supported or declared in supported:
-        return declared
-    return max(supported)
 
 
 @dataclass(frozen=True)
@@ -325,30 +289,18 @@ typeinfer.wants_text(_calls_deprecated_name)
 
 # --- the reduce --------------------------------------------------------------------------------------
 
-def _modes(facts: dict[str, dict]) -> dict[str, tuple[int, ...] | None]:
-    """{rel: the compatibility mode of the project the source belongs to}, by the project groups of
-    the shared typing - the same grouping the catalog of each module is built over."""
-    out: dict[str, tuple[int, ...] | None] = {}
-    for root, group in typeinfer._projects(facts).items():
-        declared = next((fact.get("compat") for fact in group.values()
-                         if fact.get("k") == "project" and fact.get("root") in (root, ".") and fact.get("compat")),
-                        None)
-        mode = _effective_mode(tuple(declared) if declared else None)
-        for rel in group:
-            out[rel] = mode
-    return out
-
-
 def _findings(facts: dict[str, dict]) -> list[Diagnostic]:
     table, names = _deprecated()
     if not table:
         return []
-    modes = _modes(facts)
+    # The mode each source is read in, by the project groups of the shared typing - the same
+    # grouping the catalog of each module is built over.
+    modes = typeinfer.project_modes(facts)
     found: list[Diagnostic] = []
     for rel, typing in typeinfer.project_typings(facts).items():
         lines = None
         for site in typing.calls(names):
-            verdict = _verdict(site, typing.catalog, modes.get(rel))
+            verdict = _verdict(site, typing.catalog, modes.get(rel, (None, False))[0])
             if verdict is None:
                 continue
             key, fields = verdict
@@ -393,7 +345,7 @@ def _verdict(site: typeinfer.CallSite, catalog: typeinfer.ProjectCatalog,
             return None
         deprecated = all(form.deprecated for form in candidates)
     else:
-        newest = max(_supported_modes(), default=None)
+        newest = max(typeinfer.supported_modes(), default=None)
         candidates = [form for form in candidates if form.exists_in(mode)]
         deprecated = all(form.deprecated_in(mode, newest) for form in candidates)
     if not candidates or not deprecated:

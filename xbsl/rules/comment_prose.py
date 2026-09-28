@@ -536,10 +536,12 @@ _EMPHASIS = frozenset("""
 # The words of a cited query come from the platform's own keyword table: the `query` section of
 # terms.json, the vocabulary of the query parser in both spellings (`_query_language`). What is
 # written here by hand is only what the table cannot say - which keywords mark a cited query on
-# their own and which name an aggregate. Any other word of the table is an ordinary word as
-# well, and in capitals it is syntax only in context (`_query_syntax`): code after it or a word
-# naming a part of a query around it ("Т.Поле В (&Список)", "Склады КАК Склады",
-# "ГДЕ НЕ Удалён", "предложение ПОЛУЧИТЬ"); otherwise it is judged like any other word.
+# their own, which name an aggregate, the shapes of a query no single keyword marks, the reserved
+# words the table does not hold, and the words to fall back on when there is no table at all.
+# Any other word of the table is an ordinary word as well, and in capitals it is syntax only in
+# context (`_query_syntax`): code after it or a word naming a part of a query around it
+# ("Т.Поле В (&Список)", "Склады КАК Склады", "ГДЕ НЕ Удалён", "предложение ПОЛУЧИТЬ");
+# otherwise it is judged like any other word.
 #
 # That default is the one the corpora ask for. In the snapshot of a project taken before its
 # sweep, the words the hand-kept tables lacked stood in capitals for a stress
@@ -550,13 +552,10 @@ _EMPHASIS = frozenset("""
 # "LIKE" is a word of prose.
 
 #: Keywords that never stress a sentence: a comment line holding one in capitals cites a query
-#: ("ОБЪЕДИНИТЬ ВСЕ", "Дата УБЫВ"), and every capital of the line is syntax. The Russian CASE
-#: is one: the other words of the expression (WHEN, THEN, ELSE, END) are words of Russian prose
-#: as well, and a literal after THEN is not the code that would spare them.
+#: ("ОБЪЕДИНИТЬ ВСЕ", "Дата УБЫВ"), and every capital of the line is syntax.
 _RUSSIAN_MARKERS = frozenset((
     "ВЫБРАТЬ", "ПОМЕСТИТЬ", "СОЕДИНЕНИЕ", "ОБЪЕДИНИТЬ", "УПОРЯДОЧИТЬ", "СГРУППИРОВАТЬ",
-    "РАЗЛИЧНЫЕ", "СУЩЕСТВУЕТ", "ВЫРАЗИТЬ", "ПОДОБНО", "ИМЕЮЩИЕ", "ИЕРАРХИИ", "ВЫБОР", "ВОЗР",
-    "УБЫВ",
+    "РАЗЛИЧНЫЕ", "СУЩЕСТВУЕТ", "ВЫРАЗИТЬ", "ПОДОБНО", "ИМЕЮЩИЕ", "ИЕРАРХИИ", "ВОЗР", "УБЫВ",
 ))
 _ENGLISH_MARKERS = frozenset((
     "SELECT", "JOIN", "UNION", "EXISTS", "DISTINCT", "HAVING", "ASC", "DESC", "REFS",
@@ -579,6 +578,61 @@ _QUERY_MARKERS = (
 #: Every phrase of the table counts but a stock phrase of prose, which a comment shouts far more
 #: often than it cites the clause: "ПО УМОЛЧАНИЮ" (DEFAULT) is the "by default" of any sentence.
 _PROSE_PHRASES = frozenset(("ПО УМОЛЧАНИЮ",))
+
+#: An operand of the simple CASE: a parameter or a name with a capital, dotted or not.
+_OPERAND = r"[&%]?[А-ЯЁA-Z]\w*(?:\.\w+)*"
+#: The name of a table in a statement: a capital first and a small letter somewhere - a word in
+#: capitals from end to end after the keyword is the rest of a shout, not a table.
+_TABLE_NAME = r"(?=[\w.]*[а-яёa-z])[А-ЯЁA-Z]\w*(?:\.\w+)*"
+#: Shapes of a cited query no single keyword marks, both spellings of each; in capitals, each
+#: cites a query just as a marker does.
+#:
+#: - The head of a CASE expression: CASE with WHEN after it, and the operand of the simple form
+#:   between them (`ВЫБОР КОГДА Т.Остаток > 0 ТОГДА 1 ИНАЧЕ 0 КОНЕЦ`,
+#:   `ВЫБОР Т.Вид КОГДА 1 ТОГДА ...`). The other words of the expression (THEN, ELSE, END) are
+#:   words of Russian prose as well, and a literal after THEN is not the code that would spare
+#:   them, so the head marks the line. CASE alone is a stressed word as often as not
+#:   (`делает ВЫБОР склада`).
+#: - The head of a statement that changes a temporary table: the verb and its keyword in
+#:   capitals, the name of the table, and what the statement puts right after the name - the
+#:   list of fields of INSERT, the SET of UPDATE, the end of the line, USING or WHERE of DELETE
+#:   (`ВСТАВИТЬ В Склады (Код)`). The verb alone is a word of prose (`нельзя УДАЛИТЬ склад`), and
+#:   `DELETE` is an HTTP method as well.
+_QUERY_SHAPES = (
+    rf"ВЫБОР(?:[ \t]+{_OPERAND})?[ \t]+КОГДА",
+    rf"CASE(?:[ \t]+{_OPERAND})?[ \t]+WHEN",
+    rf"ВСТАВИТЬ[ \t]+В[ \t]+{_TABLE_NAME}(?=[ \t]*\()",
+    rf"INSERT[ \t]+INTO[ \t]+{_TABLE_NAME}(?=[ \t]*\()",
+    rf"ИЗМЕНИТЬ[ \t]+{_TABLE_NAME}[ \t]+УСТАНОВИТЬ",
+    rf"UPDATE[ \t]+{_TABLE_NAME}[ \t]+SET",
+    rf"УДАЛИТЬ[ \t]+ИЗ[ \t]+{_TABLE_NAME}(?=[ \t]*(?:$|(?:ИСПОЛЬЗУЯ|ГДЕ)(?![\w-])))",
+    rf"DELETE[ \t]+FROM[ \t]+{_TABLE_NAME}(?=[ \t]*(?:$|(?:USING|WHERE)(?![\w-])))",
+)
+
+#: Reserved words of the query language the keyword table does not hold: the literals of the
+#: Boolean values and of the empty value, both spellings, and `TEMP`, a reserved word without a
+#: Russian spelling (as `NULL` is). They are ordinary words like the words of the table: syntax
+#: in context (`ГДЕ Т.Активен = ИСТИНА И Т.Код В (&Коды)`), a stressed word otherwise. A literal
+#: stands at the end of a comparison more often than not, so for a literal a comparison sign
+#: right before it is context as well (`Т.Активен = ИСТИНА`): prose puts no such sign there.
+_WORDS_OUTSIDE_THE_TABLE = frozenset((
+    "ИСТИНА", "ЛОЖЬ", "НЕОПРЕДЕЛЕНО", "TRUE", "FALSE", "UNDEFINED", "TEMP",
+))
+#: A comparison sign at the end of the text before a word: `=`, `==`, `<>`, `!=`, `<`, `>`...
+_COMPARED = re.compile(r"[=<>][ \t]*$")
+
+#: The ordinary words of the query language when the data holds no keyword table (a public
+#: checkout, data extracted before the table existed): the words the rule kept by hand before it
+#: read the table, both spellings. A query cited with them is judged as it was then, and the
+#: table replaces them once it is there.
+_FALLBACK_WORDS = frozenset((
+    "В", "И", "ИЛИ", "НЕ", "КАК", "ПО", "ИЗ", "ГДЕ", "ЕСТЬ", "ВСЕ", "МЕЖДУ", "КОГДА", "ТОГДА",
+    "ИНАЧЕ", "КОНЕЦ", "ПЕРВЫЕ", "ПОЛУЧИТЬ",
+    "IN", "AND", "OR", "NOT", "AS", "ON", "IS", "BY", "ALL", "BETWEEN", "WHEN", "THEN", "ELSE",
+    "END", "LIKE", "FETCH", "OFFSET",
+))
+#: The phrase the rule knew then: the offset of the FETCH clause.
+_FALLBACK_PHRASES = ("СО СМЕЩЕНИЕМ",)
 
 #: The aggregate functions of the query language: written in capitals exactly like this, the
 #: word names the function ("по МИНИМУМ и МАКСИМУМ", "КОЛИЧЕСТВО(*)"). A stressed word is
@@ -686,34 +740,44 @@ def _opens_tag(prose: str) -> bool:
     return _DOC_TAG_HEAD.match(prose, _comments.lead(prose)) is not None
 
 
+def _phrase_pattern(words: list[str]) -> str:
+    """The words of a keyword phrase as a pattern: any run of blanks between them."""
+    return r"[ \t]+".join(re.escape(word) for word in words)
+
+
 @lru_cache(maxsize=1)
-def _query_language() -> tuple[frozenset[str], re.Pattern[str] | None]:
-    """(the ordinary words of the query language, the phrases that cite a query).
+def _query_language() -> tuple[frozenset[str], re.Pattern[str]]:
+    """(the ordinary words of the query language, the phrases and shapes that cite a query).
 
     Read once from the platform's keyword table, both spellings, upper-cased. The ordinary
     words are the words of the table that are neither markers nor functions, the words of its
     phrases included: a word of a phrase is a word of the language all the same, and the
     hand-kept tables knew `BY` of ORDER BY as one. A one-letter word counts only when it is a
-    word of Russian (`В`, `И`) - the `Т` of the table is the most common alias of a table.
+    word of Russian (`В`, `И`) - the `Т` of the table is the most common alias of a table. The
+    reserved words the table does not hold (`_WORDS_OUTSIDE_THE_TABLE`) and the shapes no
+    keyword marks (`_QUERY_SHAPES`) are added whatever the data says.
 
-    Without the data both are empty and the rule knows only the markers and the functions
-    written here: a query cited with ordinary words alone is then judged like prose. The table
-    only ever spares a finding, it never adds one.
+    Without the table the rule falls back on the words and the phrase it kept by hand before it
+    read the table (`_FALLBACK_WORDS`, `_FALLBACK_PHRASES`), and a query cited with them is
+    judged as it was then. The words only ever spare a finding, they never add one.
     """
     pairs = (dataset.load_optional("terms.json") or {}).get("query")
-    keywords = [word for pair in pairs.items() for word in pair] if isinstance(pairs, dict) else []
-    words: set[str] = set()
-    phrases: set[str] = set()
+    words: set[str] = set(_WORDS_OUTSIDE_THE_TABLE)
+    phrases: set[str] = set(_QUERY_SHAPES)
+    if isinstance(pairs, dict) and pairs:
+        keywords = [word for pair in pairs.items() for word in pair]
+    else:
+        keywords = []
+        words.update(_FALLBACK_WORDS)
+        phrases.update(_phrase_pattern(phrase.split()) for phrase in _FALLBACK_PHRASES)
     for keyword in keywords:
         if not isinstance(keyword, str):
             continue
         parts = keyword.upper().split()
         words.update(part for part in parts if len(part) > 1 or part in _LETTER_WORDS)
         if len(parts) > 1 and " ".join(parts) not in _PROSE_PHRASES:
-            phrases.add(r"[ \t]+".join(re.escape(part) for part in parts))
+            phrases.add(_phrase_pattern(parts))
     ordinary = frozenset(words - _RUSSIAN_MARKERS - _ENGLISH_MARKERS - _QUERY_FUNCTIONS)
-    if not phrases:
-        return ordinary, None
     return ordinary, re.compile(r"(?<![\w-])(?:" + "|".join(sorted(phrases)) + r")(?![\w-])")
 
 
@@ -729,9 +793,8 @@ def _query_words() -> frozenset[str]:
 
 
 def _cites_query(text: str) -> bool:
-    """Whether a Russian comment line cites a query: a marker or a phrase in capitals."""
-    phrases = _query_language()[1]
-    if phrases is not None and phrases.search(text):
+    """Whether a Russian comment line cites a query: a marker, a phrase or a shape in capitals."""
+    if _query_language()[1].search(text):
         return True
     return any(w in _QUERY_MARKERS for w in _ANY_CAPS_WORD.findall(text))
 
@@ -856,6 +919,8 @@ def _query_syntax(word: str, text: str, start: int, end: int, opens: bool) -> bo
         return True
     if word in _CLAUSE_WORDS and previous in _CLAUSE_PREPOSITIONS:
         return True
+    if word in _WORDS_OUTSIDE_THE_TABLE and _COMPARED.search(text, 0, start):
+        return True  # a literal compared with: `Т.Активен = ИСТИНА`
     following = re.match(r"\s*([A-Za-z]+)", text[end:])
     if following and following.group(1).lower() in _QUERY_NOUNS_ENGLISH:
         return True
@@ -1160,10 +1225,10 @@ def _english_findings(
     if not re.search(r"[a-z]", text):
         return []  # a heading in capitals from end to end: no single word is stressed
     ordinary, phrases = _query_language()
-    if (phrases is not None and phrases.search(text)) or any(
+    if phrases.search(text) or any(
         word in _ENGLISH_QUERY_MARKERS for word in _ENGLISH_CAPS.findall(text)
     ):
-        return []  # a cited query: a marker, or a keyword of several words ("ORDER BY")
+        return []  # a cited query: a marker, a keyword of several words ("ORDER BY"), a shape
     owned = {start for _word, start in _caps_findings("phrases", key, value, abbreviations)}
     key_latin = _key_words(key)
     key_caps = _KEY_CAPS.findall(key)

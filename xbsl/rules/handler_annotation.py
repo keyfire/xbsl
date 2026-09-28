@@ -34,10 +34,12 @@ half-open range - see modulehandlers.declared_in): the web chat handler of a cli
 application is gone from mode 8.0 on. Such a handler counts as declared only when the mode of
 the project admits it, and an override of it in another mode gets a message of its own that
 names both the modes of the handler and the mode of the project. The mode is the one the
-project description declares, and a mode the platform does not support is taken as the newest,
-the way code/deprecated-api takes it. A description that declares no mode at all is refused by
-the build, while the reader of the platform goes on in the newest mode (`LAST`) - so does the
-rule. A run with no project description knows no mode, and every handler of the base counts.
+project description declares, read the way the platform reads it (`typeinfer.project_modes`,
+shared with code/deprecated-api and code/contract-parameter-name): a description that declares
+no mode, a value that names none or a mode the platform does not support is refused by the
+build, and the reader of the platform goes on in the newest mode - so does the rule, and the
+message says the mode is assumed. A run with no project description knows no mode, and every
+handler of the base counts.
 
 Both fixes remove the annotation - with its line when nothing else stands there. When the name
 is a near miss of a handler the base does declare, the second rule offers no fix: the author
@@ -60,7 +62,6 @@ from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.layout import PROJECT_FILES
 from xbsl.lexer import linemap
-from xbsl.rules.deprecated_api import _effective_mode, _supported_modes
 from xbsl.rules.handlers import _IDENT_RE, _event_names, _handler_pair_stem
 from xbsl.rules.unused_methods import _PLATFORM_EVENTS
 from xbsl.rules.yaml_schema import (
@@ -340,29 +341,6 @@ def _override_mapper(source: SourceFile) -> dict | None:
     return None
 
 
-def _project_modes(facts: dict[str, dict]) -> dict[str, tuple[tuple[int, ...] | None, bool]]:
-    """{rel: (the compatibility mode the project of the source is built in, whether assumed)}.
-
-    The mode is the declared one, the newest for a mode the platform does not support or for
-    a description that declares none (assumed, both of them), and None - unknown - when the run
-    carries no project description for the source.
-    """
-    newest = max(_supported_modes(), default=None)
-    found: dict[str, tuple[tuple[int, ...] | None, bool]] = {}
-    for root, group in typeinfer._projects(facts).items():
-        described = next((fact for fact in group.values()
-                          if fact.get("k") == "project" and fact.get("root") in (root, ".")), None)
-        answer: tuple[tuple[int, ...] | None, bool] = (None, False)
-        if described is not None and described.get("compat"):
-            declared = tuple(described["compat"])
-            mode = _effective_mode(declared)
-            answer = (mode, mode != declared)
-        elif described is not None:
-            answer = (newest, True)
-        found.update(dict.fromkeys(group, answer))
-    return found
-
-
 def _mode_shown(mode: tuple[int, ...], assumed: bool) -> str:
     """The mode of the project as a message names it, with a word on where it comes from."""
     written = ".".join(str(part) for part in mode)
@@ -403,7 +381,7 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         # Two components under one name: which one a base means cannot be told from here.
         return heads[0] if len(heads) == 1 else ""
 
-    modes = _project_modes(facts)
+    modes = typeinfer.project_modes(facts)
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
