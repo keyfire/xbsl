@@ -653,6 +653,13 @@ _CORE_MESSAGES = {
         "ru": "формат вывода: text - план и разница, json - для агентов",
         "en": "output format: text - the plan and the diff, json - for agents",
     },
+    "cli.help.fold-compact": {
+        "ru": "кратко: переносы по файлам и спорные переносы вместо каждого переноса и разницы "
+              "(с --format json - краткий отчет, как у meta_fold_comments с compact)",
+        "en": "briefly: the moves counted per file and the disputed ones instead of every move "
+              "and the diff (with --format json - the short report meta_fold_comments gives "
+              "with compact)",
+    },
     "cli.help.commands.mcp-log": {
         "ru": "журнал MCP-сервера: когда серверы запускались, как завершились и кто их остановил",
         "en": "the MCP server journal: when servers started, how they ended and who stopped them",

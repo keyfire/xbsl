@@ -311,7 +311,8 @@ usage: xbsl mcp-log [-h] [--last LAST] [--json]
 fold the yaml comments into the description of the node the environment reads: by default only show the plan
 
 ```bash
-usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [paths ...]
+usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] [--compact]
+                          paths [paths ...]
 ```
 
 **Arguments**
@@ -328,6 +329,7 @@ usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [p
 | `--write` | write the folded files; a file that fails the audit is not written |
 | `--all` | apply the proposed moves too - the ones that may be read two ways |
 | `--format {text,json}` | output format: text - the plan and the diff, json - for agents |
+| `--compact` | briefly: the moves counted per file and the disputed ones instead of every move and the diff (with `--format` json - the short report meta_fold_comments gives with compact) |
 
 ## Metadata scaffolding
 

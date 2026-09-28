@@ -179,3 +179,24 @@ def test_the_command_shows_the_plan_and_writes_only_when_asked(tmp_path, capsys)
     report = json.loads(capsys.readouterr().out)
     assert report["written"] == 1
     assert "## * `Видимость`:" in path.read_bytes().decode("utf-8")
+
+
+def test_the_command_answers_briefly_with_compact(tmp_path, capsys):
+    """A dry run over a whole tree printed every move and the diff of every file; `--compact`
+    counts the moves per file and lists the disputed ones, `--format json` gives the short
+    report `meta_fold_comments` gives with `compact`."""
+    path = tmp_path / "КарточкаПробы.yaml"
+    path.write_bytes(_NOTE.encode("utf-8"))
+
+    assert cli.main(["fold-comments", str(tmp_path), "--compact"]) == 0
+    out = capsys.readouterr().out
+    assert "КарточкаПробы.yaml:" in out
+    assert "+    ## * `Видимость`:" not in out  # no diff
+    assert out.rstrip().splitlines()[-1].startswith(i18n.t("fold.summary.dry", files=1,
+                                                           written=0, applied=1, proposed=0,
+                                                           left=0)[:10])
+
+    assert cli.main(["fold-comments", str(tmp_path), "--compact", "--format", "json"]) == 0
+    short = json.loads(capsys.readouterr().out)
+    assert set(short) >= {"counts", "by_file", "review", "audit"}
+    assert short["counts"]["files"] == 1

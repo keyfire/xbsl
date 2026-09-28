@@ -311,7 +311,8 @@ usage: xbsl mcp-log [-h] [--last LAST] [--json]
 свернуть комментарии yaml в описание узла, которое читает среда разработки: по умолчанию только показать план
 
 ```bash
-usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [paths ...]
+usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] [--compact]
+                          paths [paths ...]
 ```
 
 **Аргументы**
@@ -328,6 +329,7 @@ usage: xbsl fold-comments [-h] [--write] [--all] [--format {text,json}] paths [p
 | `--write` | записать свернутые файлы; файл, не прошедший проверку, не пишется |
 | `--all` | применить и предложенные переносы - те, что можно прочитать двояко |
 | `--format {text,json}` | формат вывода: text - план и разница, json - для агентов |
+| `--compact` | кратко: переносы по файлам и спорные переносы вместо каждого переноса и разницы (с `--format` json - краткий отчет, как у meta_fold_comments с compact) |
 
 ## Создание метаданных
 
