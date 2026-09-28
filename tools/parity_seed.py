@@ -2133,6 +2133,27 @@ Inherits:
     Type: Form
 """
 _OVERRIDE_TOKENS = {"ПанельСкладов": "StockPanel", "Пересчитать": "Recalculate"}
+#: A client application: its module overrides the web chat handler, which is there below
+#: compatibility mode 8.0 only.
+_WEB_CHAT_APP_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000fc1
+Имя: ПриложениеСклада
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: ПроизвольноеКлиентскоеПриложение
+"""
+_WEB_CHAT_APP_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000fc1
+Name: StockApplication
+VisibilityScope: InProject
+Inherits:
+    Type: CustomClientApplication
+"""
+_WEB_CHAT_RU = "@Обработчик\nметод ПолучитьДанныеПользователяВебЧата()\n;\n"
+_WEB_CHAT_EN = "@Handler\nmethod GetWebChatUserData()\n;\n"
+_WEB_CHAT_TOKENS = {"Проба": "Probe", "ПриложениеСклада": "StockApplication"}
 
 
 #: A list form over a dynamic list of the catalog: one field computed over a column, and a
@@ -5609,6 +5630,29 @@ SEEDS: list[Seed] = [
                  "StockPanel.xbsl": "@Handler\nmethod AfterCreate()\n;\n\n"
                                     "@Handler\nmethod BeforeClose(Event: FormCloseParams)\n;\n"},
         tokens=_OVERRIDE_TOKENS,
+        needs_section="module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the web chat handler of a client application overridden in mode 9.0 - it is "
+             "there below mode 8.0 only, and the mode key lives in the project description",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"),
+               "ПриложениеСклада.yaml": _WEB_CHAT_APP_RU, "ПриложениеСклада.xbsl": _WEB_CHAT_RU},
+        english={"Project.yaml": _PROJECT_EN.format(mode="9.0"),
+                 "StockApplication.yaml": _WEB_CHAT_APP_EN, "StockApplication.xbsl": _WEB_CHAT_EN},
+        tokens=_WEB_CHAT_TOKENS,
+        needs_section="module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the same override in mode 7.0, where the handler is still there",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="7.0"),
+               "ПриложениеСклада.yaml": _WEB_CHAT_APP_RU, "ПриложениеСклада.xbsl": _WEB_CHAT_RU},
+        english={"Project.yaml": _PROJECT_EN.format(mode="7.0"),
+                 "StockApplication.yaml": _WEB_CHAT_APP_EN, "StockApplication.xbsl": _WEB_CHAT_EN},
+        tokens=_WEB_CHAT_TOKENS,
         needs_section="module_handlers",
     ),
     Seed(
