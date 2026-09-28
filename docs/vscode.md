@@ -189,7 +189,7 @@ Deeper chains would need type inference and are out of scope, as they are for go
 > | `Components` | the components collection of a form |
 > | `Multiline` · `Layout` · `HorizontalStretch` · `VerticalStretch` · `Pages` | the properties of a component |
 
-**Completion** (triggered by `.` and `:`):
+**Completion** (triggered by `.` and `:`, and in a `///` line by `@` and `/`):
 
 - after `<Object>.` – the type family (`Reference`, `Object`, ...), `TabularParts`, local types and
   manager-module methods; for an enum – its values;
@@ -227,6 +227,22 @@ takes its element out of the written type of the collection (`Array<Catalog.Card
 The members of stdlib types come from the Element data (the `--data-dir` root), everything else
 from the project index. A name in scope wins over a type of the same name: once a variable `List`
 is declared, `List.` is about its type, not about the `List` component. Requires `xbsl` >= 0.10.0.
+
+**Documentation comments.** A method documented with `///` lines reads in the editor the way it
+reads in the environment:
+
+- the hover of a project method shows the description and a section per kind of tag - Parameters,
+  Returns, Throws, See also; a parameter and an exception are listed as **Name** - text;
+- the signature help of a call of a project method (triggered by `(` and `,`) shows the
+  signature and, for the argument being written, the text of its `@parameter` tag;
+- inside a `///` line, `@` offers the tags in the language of the module; after `@parameter ` -
+  the parameters of the method below that the block has not described yet; on the only line of a
+  block, or on an empty line right above a declaration, the block the environment's own template
+  writes: a description, a line per parameter, the result;
+- the tag word and the name after it are colored the way a JSDoc tag is.
+
+The `comment/doc-tag-*` rules check the tags against the signature and against what the
+environment will show.
 
 Known limits. Outside LSP mode the index knows declarations, not types, so there is no completion
 after variables. A type is not inferred where there is nothing to infer it from: a generic

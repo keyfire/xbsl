@@ -66,6 +66,27 @@
           "end": "\\*/"
         },
         {
+          "comment": "A documentation comment line: the environment reads the tags at its start, and the tag word with the name after it is colored the way a JSDoc tag is.",
+          "name": "comment.line.triple-slash.documentation.xbsl",
+          "begin": "///",
+          "end": "$",
+          "patterns": [
+            {
+              "match": "\\G\\s*(@(?:параметр|parameter|выбрасывает|throws))(?![A-Za-zА-Яа-яЁё0-9_])(?:\\s+([A-Za-zА-Яа-яЁё0-9_]+(?:(?:\\.|::)[A-Za-zА-Яа-яЁё0-9_]+)*))?",
+              "captures": {
+                "1": { "name": "storage.type.class.xbsldoc" },
+                "2": { "name": "variable.other.xbsldoc" }
+              }
+            },
+            {
+              "match": "\\G\\s*(@(?:возвращает|returns|см|see))(?![A-Za-zА-Яа-яЁё0-9_])",
+              "captures": {
+                "1": { "name": "storage.type.class.xbsldoc" }
+              }
+            }
+          ]
+        },
+        {
           "name": "comment.line.double-slash.xbsl",
           "match": "//.*$"
         }
