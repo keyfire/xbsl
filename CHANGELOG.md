@@ -34,6 +34,10 @@ entry either - say what the behaviour was, not which class name was compared.
   `Interface.Presentation`: the form and the command that opens it are named by it, and without it
   both carry the element name. The standard lists processings among the elements whose
   presentation is mandatory, and `new-object --presentation` writes the caption right there.
+- **`data-diff` no longer says "no changes" where the data changed.** It now compares the whole
+  stdlib catalog, module handlers and signatures included, as well as `uiterms.json`,
+  `terms_full.json` and the text of the help pages. The text report keeps to a count and the first
+  names; `--limit 0` lists them all.
 
 ### Fixed
 
@@ -43,6 +47,12 @@ entry either - say what the behaviour was, not which class name was compared.
 - **Servers no longer answer from data replaced under them.** An MCP worker that read the term pairs
   just before a reinstall rewrote them kept answering from the old ones. Now it refuses with reason
   `data` and a new worker answers the call; the language server asks for a restart.
+- **`xbsl extract` no longer writes into the package.** The grammar step used to cache the grammar
+  files next to the package code whatever `--data-dir` said; now it reads them from the
+  distribution in memory, and an installed package stays as it was.
+- **The help of `--element-version` names the real default.** It said "the latest in the
+  bundle", while the version comes from `XBSL_ELEMENT_VERSION` or, without it, from the `default`
+  of `index.json` in the data root.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
