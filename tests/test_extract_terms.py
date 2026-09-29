@@ -287,6 +287,45 @@ def test_a_word_the_package_states_two_ways_keeps_only_a_neighbour_it_states():
     assert "DemoPackageImpl" not in stranger
 
 
+def test_a_data_class_is_read_by_the_aliases_of_its_properties():
+    """A data class names a property of its JSON in English and aliases it in Russian, the
+    alias first: the neighbourhood read the English of one property with the Russian of the
+    next. Under an annotation nobody reads, the same pool still shows the shift."""
+    from test_extract_classcode import DTO_PARAMETERS, JSON_ALIAS, JSON_PROPERTY, _data_class_of
+
+    from xbsl.extract import terms
+
+    members, _common, _types = _scan_classes(
+        {"demo/dto/DemoDto.class": _data_class_of(DTO_PARAMETERS)})
+    unread = [[(kind.replace("jackson", "acme"), elements) for kind, elements in parameter]
+              for parameter in DTO_PARAMETERS]
+    shifted, _common, _types = _scan_classes(
+        {"demo/dto/DemoDto.class": _data_class_of(unread)})
+
+    assert members["DemoDto"] == {"Поставщик": "Vendor", "Разработчик": "Developer"}
+    assert shifted["DemoDto"] == {"Поставщик": "Developer", "Разработчик": "Name"}
+    # The fixture spells the annotations the extractor reads, not a lookalike.
+    assert (JSON_ALIAS, JSON_PROPERTY) == (terms._JSON_ALIAS, terms._JSON_PROPERTY)
+
+
+def test_the_name_of_a_constant_is_not_the_english_of_its_value():
+    """The pool keeps the name of a string constant next to the string: `FINISH_NAME_RU` came
+    out as the English of the word for finish. A constant of the platform is written in
+    capitals in both languages, and that pair stays."""
+    from test_extract_classcode import _class_of
+
+    from xbsl.extract.terms import _names_its_field
+
+    members, common, _types = _scan_classes({"demo/words/Constants.class": _class_of(
+        [], extra_strings=["FINISH_NAME_RU", "Завершить", "NEW_LINE", "НОВАЯ_СТРОКА"])})
+
+    assert members["Constants"] == {"НОВАЯ_СТРОКА": "NEW_LINE"}
+    assert "Завершить" not in common
+    assert _names_its_field("SENDER_NAME_RU", "Отправитель")
+    assert not _names_its_field("NEW_LINE", "НОВАЯ_СТРОКА")
+    assert not _names_its_field("Recipient", "Получатель")
+
+
 # --- the kind table: the fullest copy of the serializer enum, not the first ---------------
 
 

@@ -440,3 +440,108 @@ def test_the_package_names_the_class_it_extends():
     assert classcode.super_class(_package_of(NODE_ANNOTATIONS)) == classcode.EMF_PACKAGE
     assert classcode.super_class(_class_of([])) == "java/lang/Object"
     assert classcode.super_class(b"\xca\xfe") is None
+
+
+# --- the string values of annotations --------------------------------------------------------
+
+
+JSON_ALIAS = "Lcom/fasterxml/jackson/annotation/JsonAlias;"
+JSON_PROPERTY = "Lcom/fasterxml/jackson/annotation/JsonProperty;"
+
+
+def _element(pool: _Pool, value) -> bytes:
+    """One element value: a string, a list of strings (an array), an int, or ("@", type) - a
+    nested annotation without elements."""
+    if isinstance(value, str):
+        return b"s" + struct.pack(">H", pool.string_utf8(value))
+    if isinstance(value, list):
+        return b"[" + struct.pack(">H", len(value)) + b"".join(_element(pool, v) for v in value)
+    if isinstance(value, tuple):
+        return b"@" + struct.pack(">HH", pool.string_utf8(value[1]), 0)
+    return b"I" + struct.pack(">H", 1)
+
+
+def _annotation(pool: _Pool, kind: str, elements: dict) -> bytes:
+    out = struct.pack(">HH", pool.string_utf8(kind), len(elements))
+    for name, value in elements.items():
+        out += struct.pack(">H", pool.string_utf8(name)) + _element(pool, value)
+    return out
+
+
+class _DataPool(_InternedPool):
+    """An interned pool whose element values point at utf8 entries, as annotations do."""
+
+    def string_utf8(self, value: str) -> int:
+        key = "utf8:" + value
+        if key not in self.interned:
+            self.interned[key] = self.text(value)
+        return self.interned[key]
+
+
+def _data_class_of(parameters: list[list[tuple[str, dict]]], this: str = "demo/dto/DemoDto",
+                   field_annotations: list[tuple[str, dict]] = ()) -> bytes:
+    """A class whose constructor annotates each parameter, the way a JSON data class does.
+
+    A parameter is a list of (annotation type, {element: value}); `field_annotations`, when
+    given, annotate a single field. The pool is interned in the order the annotations mention
+    the strings - the layout the neighbourhood reads.
+    """
+    pool = _DataPool()
+    body = bytearray([len(parameters)])
+    for annotations in parameters:
+        body += struct.pack(">H", len(annotations))
+        for kind, elements in annotations:
+            body += _annotation(pool, kind, elements)
+    attribute = struct.pack(">HI", pool.string_utf8("RuntimeVisibleParameterAnnotations"),
+                            len(body)) + bytes(body)
+    fields = b""
+    if field_annotations:
+        field_body = struct.pack(">H", len(field_annotations)) + b"".join(
+            _annotation(pool, kind, elements) for kind, elements in field_annotations)
+        fields = struct.pack(">HHHH", 0, pool.string_utf8("value"), pool.string_utf8("I"), 1)
+        fields += struct.pack(">HI", pool.string_utf8("RuntimeVisibleAnnotations"),
+                              len(field_body)) + field_body
+    method = struct.pack(">HHHH", 0, pool.string_utf8("<init>"), pool.string_utf8("()V"), 1)
+    method += attribute
+    this_class = pool.klass(this)
+    super_class = pool.klass("java/lang/Object")
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 1 if field_annotations else 0) + fields
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+#: The properties of a data class of the platform: named in English, aliased in Russian.
+DTO_PARAMETERS = [
+    [(JSON_ALIAS, {"value": ["Имя"]}), (JSON_PROPERTY, {"value": "Name"})],
+    [(JSON_ALIAS, {"value": ["Разработчик"]}), (JSON_PROPERTY, {"value": "Developer"})],
+    [(JSON_ALIAS, {"value": ["Поставщик"]}), (JSON_PROPERTY, {"value": "Vendor"})],
+]
+
+
+def test_the_annotations_of_each_parameter_give_their_string_values():
+    blob = _data_class_of(DTO_PARAMETERS)
+
+    assert classcode.annotation_values(blob) == [
+        {JSON_ALIAS: ["Имя"], JSON_PROPERTY: ["Name"]},
+        {JSON_ALIAS: ["Разработчик"], JSON_PROPERTY: ["Developer"]},
+        {JSON_ALIAS: ["Поставщик"], JSON_PROPERTY: ["Vendor"]},
+    ]
+
+
+def test_values_of_other_kinds_and_other_elements_are_stepped_over():
+    """A number, a nested annotation and an element other than `value` do not stop the reading,
+    and an annotated field is read like a parameter."""
+    blob = _data_class_of(
+        [[("Ldemo/Mark;", {"order": 3, "inner": ("@", "Ldemo/Inner;"), "value": "Name"})]],
+        field_annotations=[(JSON_PROPERTY, {"value": "Version"})],
+    )
+
+    assert classcode.annotation_values(blob) == [
+        {JSON_PROPERTY: ["Version"]},
+        {"Ldemo/Mark;": ["Name"]},
+    ]

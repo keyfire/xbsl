@@ -58,7 +58,8 @@ entry either - say what the behaviour was, not which class name was compared.
   plan named fields its object does not have. Now the kind spells them: `SentNumber`, `ThisNode`.
 - **`xbsl extract` no longer pairs a name of an element model with its neighbour.** Such a class
   writes the Russian name first, and this node of an exchange plan read as `ReceivedNumber`; a dozen
-  words of the compiler dictionary were wrong as well. Run `xbsl extract --dist ... --only terms`.
+  words of the compiler dictionary were wrong as well, and the name of a Java constant passed for
+  the English of the word it holds. Run `xbsl extract --dist ... --only terms`.
 - **A second translation of the same file no longer leaves the schedule kind Russian.** The
   translator wrote the English kind back into the parsed file kept with the source, so the next
   pass in the same process found nothing to change. It now leaves the parsed file as it was.

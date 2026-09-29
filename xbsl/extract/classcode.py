@@ -437,6 +437,96 @@ def annotation_details(blob: bytes) -> list[dict[str, str]]:
     return found
 
 
+#: The attributes a field, a method or a parameter carries its annotations in.
+_ANNOTATIONS = ("RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations")
+_PARAMETER_ANNOTATIONS = ("RuntimeVisibleParameterAnnotations",
+                          "RuntimeInvisibleParameterAnnotations")
+
+
+def annotation_values(blob: bytes) -> list[dict[str, list[str]]]:
+    """[{annotation type: the strings of its `value`}] of every annotated field, method and parameter.
+
+    One dictionary per annotated element, in the order the class declares them; the type is the
+    descriptor (`Lpkg/Name;`). A data class of the platform names a property of its JSON in
+    English and admits the Russian spelling as an alias of the same parameter - the two
+    annotations of one parameter are its pair. Only the element `value` is read, as a string or
+    an array of strings; nested annotations and values of other kinds are stepped over.
+    """
+    pool, position = constant_pool(blob)
+    found: list[dict[str, list[str]]] = []
+
+    def u2(at: int) -> int:
+        return int.from_bytes(blob[at:at + 2], "big")
+
+    def element_value(at: int, into: list[str] | None) -> int:
+        tag = chr(blob[at])
+        at += 1
+        if tag == "s":
+            value = text(pool, u2(at))
+            if into is not None and value is not None:
+                into.append(value)
+            return at + 2
+        if tag == "e":
+            return at + 4
+        if tag == "@":
+            return annotation(at, None)
+        if tag == "[":
+            count = u2(at)
+            at += 2
+            for _ in range(count):
+                at = element_value(at, into)
+            return at
+        if tag in "BCDFIJSZc":
+            return at + 2
+        raise ValueError(f"unknown element value tag {tag!r}")
+
+    def annotation(at: int, into: dict[str, list[str]] | None) -> int:
+        kind = text(pool, u2(at))
+        count = u2(at + 2)
+        at += 4
+        for _ in range(count):
+            name = text(pool, u2(at))
+            values: list[str] | None = [] if into is not None and name == "value" else None
+            at = element_value(at + 2, values)
+            if values is not None and into is not None and kind:
+                into.setdefault(kind, []).extend(values)
+        return at
+
+    def annotations(at: int) -> tuple[int, dict[str, list[str]]]:
+        here: dict[str, list[str]] = {}
+        count = u2(at)
+        at += 2
+        for _ in range(count):
+            at = annotation(at, here)
+        return at, here
+
+    position += 6  # access flags, this class, super class
+    position += 2 + u2(position) * 2  # interfaces
+    for _fields_then_methods in range(2):
+        members = u2(position)
+        position += 2
+        for _member in range(members):
+            position += 6  # access flags, name, descriptor
+            attributes = u2(position)
+            position += 2
+            for _attribute in range(attributes):
+                name = text(pool, u2(position))
+                length = int.from_bytes(blob[position + 2:position + 6], "big")
+                body = position + 6
+                if name in _ANNOTATIONS:
+                    _end, here = annotations(body)
+                    if here:
+                        found.append(here)
+                elif name in _PARAMETER_ANNOTATIONS:
+                    at = body + 1
+                    for _parameter in range(blob[body]):
+                        at, here = annotations(at)
+                        if here:
+                            found.append(here)
+                position = body + length
+    return found
+
+
 #: How a declaration of the platform says that a member is deprecated: an annotation object is
 #: made (`<init>` of the annotation class) and filed under a range of compatibility modes (`add`
 #: of the per-mode collection, two mode constants before it - the first and the last mode, the
