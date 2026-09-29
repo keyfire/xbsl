@@ -1663,7 +1663,7 @@ _CORE_MESSAGES = {
     "cli.help.scaf.set-access": {
         "ru": "задать КонтрольДоступа.Разрешения объекта; см. также object-info – текущие права и "
               "их набор у этого вида",
-        "en": "set the object's AccessControl.Разрешения; see also object-info for the current "
+        "en": "set the object's AccessControl.Permissions; see also object-info for the current "
               "rights and the set this kind has",
     },
     "cli.help.scaf.set-access-default": {

@@ -813,7 +813,7 @@ usage: xbsl delete-resource-folder [-h] [--apply] [--dry-run] root folder_dir
 
 ### `xbsl set-access`
 
-set the object's AccessControl.Разрешения; see also object-info for the current rights and the set this kind has
+set the object's AccessControl.Permissions; see also object-info for the current rights and the set this kind has
 
 ```bash
 usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]
