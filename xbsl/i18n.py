@@ -438,8 +438,10 @@ _CORE_MESSAGES = {
         "en": "show the engine location, interpreter and Element data (path, source, versions) and exit",
     },
     "cli.help.element-version": {
-        "ru": "версия данных Элемента (по умолчанию – последняя из бандла)",
-        "en": "Element data version (default: the latest in the bundle)",
+        "ru": "версия данных Элемента (по умолчанию – env XBSL_ELEMENT_VERSION, а без него – "
+              "default в index.json корня данных)",
+        "en": "Element data version (default: env XBSL_ELEMENT_VERSION, otherwise the default "
+              "in index.json of the data root)",
     },
     "cli.help.data-dir": {
         "ru": "корень данных Элемента (каталог с index.json); также env XBSL_DATA_DIR",
