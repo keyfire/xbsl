@@ -996,7 +996,7 @@ def test_the_references_command_cuts_the_list_as_the_tool_does(
 
     printed = _answered_alike(mcp_module, same, capsys, "limit", "meta_resource_references", call)
 
-    assert printed["total"] > len(printed["references"]) == 1
+    assert printed["total"] > len(printed["references"]) == 1 and printed["hasMore"] is True
     assert cli.main(["resource-references", str(repo), f"{repo}/{_STOCK}/Ресурсы/Стили",
                      "--limit", "-1"]) == 0
     assert json.loads(capsys.readouterr().out)["references"] == []  # none below zero, as there

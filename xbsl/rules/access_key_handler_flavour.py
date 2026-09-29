@@ -30,10 +30,12 @@ MESSAGES = {
     "code/access-key-handler-flavour.missing": {
         "ru": "У вычисляемого ключа доступа нет обработчика "
               "{n[ПроверитьНаличиеКлючейДоступа]} в модуле. Платформа требует его, "
-              "чтобы сопоставить экземпляры ключа с пользователями.",
+              "чтобы сопоставить экземпляры ключа с пользователями, и сборка откажет: "
+              "\"Mandatory handler \"{n[ПроверитьНаличиеКлючейДоступа]}\" is not defined\".",
         "en": "The computed access key has no {n[ПроверитьНаличиеКлючейДоступа]} "
               "handler in its manager module. The platform requires it to match key "
-              "instances to users.",
+              "instances to users, and the build refuses the key: \"Mandatory handler "
+              "\"{n[ПроверитьНаличиеКлючейДоступа]}\" is not defined\".",
     },
     "code/access-key-handler-flavour.forbidden": {
         "ru": "Ключ доступа с {n[РучнаяВыдача]}: {n[Истина]} не принимает обработчик "

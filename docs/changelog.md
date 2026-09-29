@@ -25,6 +25,46 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **`meta_resource_references` says when the limit cut the list.** The new `hasMore` field is
+  `true` when `references` holds fewer places than `total`: a cut list used to pass for the whole
+  one. The `resource-references` command returns the same field and prints a line on stderr with
+  the `--limit` that lists every place. ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **`new-object --object-presentation` writes the object caption of a catalog or a document.** It
+  goes into `Interface.Object.Presentation`, in the singular, beside the list caption that
+  `--presentation` writes, so a new object passes `naming/presentation`. MCP `meta_new_object` takes
+  it as `object_presentation`, the language server as `objectPresentation`; other kinds refuse it. ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **New `code/constant-unavailable` catches a module constant read where it does not exist.** A
+  form's constant without an environment annotation lives on the client, so a server method of the
+  same form fails the apply with `Variable "X" is not defined`. The quick fix adds the missing side. ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **Three new tier A rules catch descriptions the build refuses.** `yaml/document-date-required`
+  wants the standard `Date` attribute in a document, `yaml/soap-handler-name` a SOAP handler name of
+  Latin letters, digits and the underscore, `yaml/compute-permissions-by-unknown` a declared field
+  for every name in `ComputePermissionsBy`. ([#163](https://github.com/keyfire/xbsl/pull/163))
+
+### Changed
+
+- **`naming/presentation` asks a catalog, a document and similar kinds for both interface
+  captions.** The attribute name in the top-level `Presentation` no longer stands in for them:
+  section 2.3 of the naming standard wants `Interface.List.Presentation` in the plural and
+  `Interface.Object.Presentation` in the singular, and the message names the missing one. ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **A missing common permission handler is reported once.** `code/per-object-permissions-need-common`
+  gives way to the error of `code/mandatory-handler-missing` when the data carries the handler
+  lists, and speaks only in a checkout without them. `code/access-key-handler-flavour` now quotes
+  the answer of the build, and the title of `yaml/union-needs-nullable` names the write parameters. ([#163](https://github.com/keyfire/xbsl/pull/163))
+
+### Fixed
+
+- **`new-object SoapService` writes a handler the build accepts.** The handler of the example
+  operation had a Cyrillic name, and the build refused the new service; now it is `Operation1`, and
+  the module method keeps its name. ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **`set-access` knows the rights of a settings storage and a processing.** A storage takes
+  `Create`, `Read`, `Update` and `Delete` instead of `Default` alone, and a processing takes `Call`
+  instead of nothing. Per-object permissions are refused for the services and a processing. ([#163](https://github.com/keyfire/xbsl/pull/163))
+
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1
 
 ### Added

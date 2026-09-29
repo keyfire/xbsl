@@ -373,7 +373,7 @@ create a configuration object (yaml + a module by kind); see also add-field for 
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
-                       [--base BASE] [--dry-run]
+                       [--object-presentation OBJECT_PRESENTATION] [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -395,7 +395,8 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | the access method, in either language (e.g. PermitEveryone): for HttpService it goes to Permissions.Call, for data objects to Permissions.Default (individual rights are set by set-access) |
 | `--routes ROUTES` | HttpService routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | the element caption: written where the kind keeps it - into Presentation or, for a catalog, a document, a register and a processing, into the Interface section (without it the very first lint answers naming/presentation) |
+| `--presentation PRESENTATION` | the element caption: written where the kind keeps it - into Presentation or, for a catalog, a document, a register and a processing, into the Interface section; for a catalog and a document it is the list caption, and `--object-presentation` gives the object one (without a caption the very first lint answers naming/presentation) |
+| `--object-presentation OBJECT_PRESENTATION` | the object caption in the singular: written into Interface.Object.Presentation of a catalog, a document, an exchange plan and a settings storage, any other kind refuses it; with `--presentation` the new object passes naming/presentation |
 | `--base BASE` | the base type of an interface component (Group, ObjectForm&lt;Goods.Object&gt;); the InterfaceComponent kind only |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
@@ -904,7 +905,7 @@ usage: xbsl resource-references [-h] [--limit LIMIT] root resource_path
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--limit LIMIT` | list at most N places in references; total counts every place (default: 100, as in meta_resource_references) |
+| `--limit LIMIT` | list at most N places in references; total counts every place, and hasMore: true with a line on stderr says the list is cut (default: 100, as in meta_resource_references) |
 
 ### `xbsl unused-resources`
 

@@ -10,7 +10,7 @@ data nor the morphology.
 
 import pytest
 
-from xbsl import engine
+from xbsl import engine, i18n
 from xbsl.rules import naming
 
 _YO = "naming/yo"
@@ -450,7 +450,16 @@ def test_boolean_only_boolean_attributes(morph):
     assert _lint(_BOOLEAN, "Справочник", "Пользователи", tail) == []
 
 
-# --- 2.1 the element presentation (metamodel needed) --------------------------------------
+# --- 2.1 and 2.3 the element presentation (metamodel needed) ------------------------------
+
+_LIST_CAPTION = "Интерфейс:\n    Список:\n        Представление: Партии товаров\n"
+_OBJECT_CAPTION = "Интерфейс:\n    Объект:\n        Представление: Партия товара\n"
+_BOTH_CAPTIONS = (
+    "Интерфейс:\n"
+    "    Список:\n        Представление: Партии товаров\n"
+    "    Объект:\n        Представление: Партия товара\n"
+)
+
 
 @pytest.mark.needs_data
 def test_presentation_missing():
@@ -462,7 +471,20 @@ def test_presentation_missing():
 
 @pytest.mark.needs_data
 def test_presentation_filled_silent():
-    assert _lint(_PRESENTATION, "Справочник", "Партии", "Представление: Партии\n") == []
+    # A report keeps its caption in the top-level property, a catalog in its interface section.
+    assert _lint(_PRESENTATION, "Отчет", "Сверка", "Представление: Сверка\n") == []
+    assert _lint(_PRESENTATION, "Справочник", "Партии", _BOTH_CAPTIONS) == []
+
+
+@pytest.mark.needs_data
+def test_presentation_attribute_name_does_not_stand_for_the_captions():
+    """The top-level Presentation of a catalog names an attribute, and naming one does not
+    caption the element: the standard (2.3) wants the list and the object captioned."""
+    tail = "Представление: Наименование\n" + _section("Реквизиты", ("Наименование", "Строка"))
+    d = _lint(_PRESENTATION, "Справочник", "Партии", tail)
+    assert len(d) == 1
+    assert "нет заголовков в интерфейсе" in d[0].message
+    assert _lint(_PRESENTATION, "Справочник", "Партии", tail + _BOTH_CAPTIONS) == []
 
 
 @pytest.mark.needs_data
@@ -483,7 +505,10 @@ def test_presentation_deprecated_marked_silent():
 def test_presentation_deprecated_skips_attribute_name_kinds():
     # A catalog's Представление is an attribute NAME (metamodel type AttributeName): no
     # "(не используется)" prefix can be written into it - the branch must stay silent.
-    tail = "Представление: Наименование\n" + _section("Реквизиты", ("Наименование", ""))
+    tail = (
+        "Представление: Наименование\n" + _section("Реквизиты", ("Наименование", ""))
+        + _BOTH_CAPTIONS
+    )
     assert _lint(_PRESENTATION, "Справочник", "УстарелоПартии", tail) == []
 
 
@@ -491,9 +516,9 @@ def test_presentation_deprecated_skips_attribute_name_kinds():
 def test_presentation_skips_kind_without_property():
     # A common module has no Представление property - nothing to require.
     assert _lint(_PRESENTATION, "ОбщийМодуль", "Общее") == []
-
-
-_LIST_CAPTION = "Интерфейс:\n    Список:\n        Представление: Партии товаров\n"
+    # Nor has an information register: its captions live in the interface section alone, and
+    # the rule does not require them there.
+    assert _lint(_PRESENTATION, "РегистрСведений", "Цены") == []
 
 
 @pytest.mark.needs_data
@@ -512,13 +537,26 @@ def test_presentation_of_an_attribute_name_kind_points_at_the_interface():
 
 
 @pytest.mark.needs_data
-@pytest.mark.parametrize("tail", [
-    _LIST_CAPTION,
-    "Интерфейс:\n    Объект:\n        Представление: Партия товара\n",
+@pytest.mark.parametrize("vid", [
+    "Справочник", "Документ", "ПланОбмена", "ИнтегрируемоеПриложение", "ХранилищеНастроек",
 ])
-def test_presentation_interface_caption_satisfies_an_attribute_name_kind(tail):
-    assert _lint(_PRESENTATION, "Справочник", "Партии", tail) == []
-    assert _lint(_PRESENTATION, "Документ", "Партии", tail) == []
+def test_presentation_both_captions_satisfy_an_attribute_name_kind(vid):
+    assert _lint(_PRESENTATION, vid, "Партии", _BOTH_CAPTIONS) == []
+    assert len(_lint(_PRESENTATION, vid, "Партии")) == 1
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("tail, headline, missing", [
+    (_LIST_CAPTION, "нет заголовка объекта", "Интерфейс.Объект.Представление"),
+    (_OBJECT_CAPTION, "нет заголовка списка", "Интерфейс.Список.Представление"),
+])
+def test_presentation_one_caption_does_not_stand_for_the_other(tail, headline, missing):
+    """The list is captioned in the plural and the object in the singular (2.3), so one
+    caption is not enough, and the message names the one that is missing."""
+    for vid in ("Справочник", "Документ"):
+        d = _lint(_PRESENTATION, vid, "Партии", tail)
+        assert len(d) == 1
+        assert d[0].message.startswith(f"У элемента вида '{vid}' {headline} в интерфейсе: {missing} ")
 
 
 @pytest.mark.needs_data
@@ -531,19 +569,37 @@ def test_presentation_interface_without_a_caption_is_still_reported():
 @pytest.mark.needs_data
 def test_presentation_interface_caption_does_not_count_for_a_text_kind():
     # A report keeps its caption in the top-level property; an interface block is no excuse.
-    assert len(_lint(_PRESENTATION, "Отчет", "Сверка", _LIST_CAPTION)) == 1
+    assert len(_lint(_PRESENTATION, "Отчет", "Сверка", _BOTH_CAPTIONS)) == 1
+
+
+def _english_catalog(tail: str = "") -> list:
+    text = f"ElementKind: Catalog\nId: {_ID}\nName: Batches\nPresentation: Name\n{tail}"
+    return engine.run_sources([engine.load_text("Batches.yaml", text)], select={_PRESENTATION})
 
 
 @pytest.mark.needs_data
-def test_presentation_interface_caption_in_an_english_file():
-    text = (
-        f"ElementKind: Catalog\nId: {_ID}\nName: Batches\n"
-        "Interface:\n    List:\n        Presentation: Batches of goods\n"
+def test_presentation_interface_captions_in_an_english_file():
+    both = (
+        "Interface:\n"
+        "    List:\n        Presentation: Batches of goods\n"
+        "    Object:\n        Presentation: Batch of goods\n"
     )
-    source = engine.load_text("Batches.yaml", text)
-    assert engine.run_sources([source], select={_PRESENTATION}) == []
-    bare = engine.load_text("Batches.yaml", f"ElementKind: Catalog\nId: {_ID}\nName: Batches\n")
-    assert len(engine.run_sources([bare], select={_PRESENTATION})) == 1
+    assert _english_catalog(both) == []
+    list_only = _english_catalog("Interface:\n    List:\n        Presentation: Batches of goods\n")
+    assert len(list_only) == 1
+    assert "нет заголовка объекта в интерфейсе: Интерфейс.Объект.Представление " in list_only[0].message
+    assert len(_english_catalog()) == 1
+
+
+@pytest.mark.needs_data
+def test_presentation_english_message_names_the_english_paths():
+    i18n.set_lang("en")
+    d = _lint(_PRESENTATION, "Справочник", "Партии", _LIST_CAPTION)
+    assert len(d) == 1
+    assert d[0].message.startswith(
+        "The element of kind 'Catalog' has no object caption in the interface: "
+        "Interface.Object.Presentation - "
+    )
 
 
 # --- mandatory prefixes and postfixes by kind -----------------------------------------
@@ -651,7 +707,7 @@ def test_structural_yaml_skipped():
 @pytest.mark.needs_data
 def test_correct_object_passes_whole_group(morph):
     tail = (
-        "Представление: Партии\n"
+        _BOTH_CAPTIONS
         + _section("Реквизиты", ("ЭтоАрхивная", "Булево"), ("Заголовок", "Строка"))
         + _section("ТабличныеЧасти", ("Условия", ""))
     )

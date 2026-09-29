@@ -2259,28 +2259,113 @@ def caption_path(kind: str) -> tuple[str, ...]:
     raise ScaffoldError(f"У вида {kind} нет свойства Представление")
 
 
-def _caption_note(kind: str, path: tuple[str, ...]) -> str:
-    """What the caller learns when the caption did not go into the top-level property."""
+#: Where the object caption of a kind with the pair of interface captions is written.
+_OBJECT_CAPTION: tuple[str, ...] = ("Интерфейс", "Объект", "Представление")
+
+#: How a note names the parameter that writes the object caption, on every surface at once.
+_OBJECT_CAPTION_PARAMETER = "параметр object_presentation, в командной строке --object-presentation"
+
+
+def _singular_captions(kind: str) -> list[str]:
+    """The interface blocks of `kind` that carry a caption beside the list one (`Object`, or
+    `Record` of an information register), in the order of the metamodel."""
+    ui = _block_props(metamodel.properties(kind).get("Интерфейс"))
+    return [key for key, record in ui.items()
+            if key != "Список" and "Представление" in _block_props(record)]
+
+
+def _has_object_caption(kind: str) -> bool:
+    """Whether the interface of `kind` carries the pair: the list caption and the object one."""
+    ui = _block_props(metamodel.properties(kind).get("Интерфейс"))
+    return all("Представление" in _block_props(ui.get(block)) for block in ("Список", "Объект"))
+
+
+def object_caption_path(kind: str) -> tuple[str, ...]:
+    """Where the object caption of an element of `kind` is written: `Interface.Object.Presentation`.
+
+    Only a kind whose interface carries the pair of captions takes it - the list caption in the
+    plural, which the caption of op_new_object goes to, and the object caption in the singular
+    beside it (a catalog, a document, an exchange plan, a settings storage); naming/presentation
+    asks such a kind for both, and the tool cannot derive the singular from the plural. Any
+    other kind is refused: its caption is one, or its singular caption names something else
+    (the record of an information register). Without the metamodel the path is answered
+    unchecked - the caller asked for it, and there is nothing to judge it by.
+    """
+    if not metamodel.available() or _has_object_caption(kind):
+        return _OBJECT_CAPTION
+    try:
+        caption_path(kind)
+        captioned = True
+    except ScaffoldError:
+        captioned = False  # the kind has no caption at all - presentation is refused too
+    others = [key for key in _singular_captions(kind) if key != "Объект"]
+    raise ScaffoldError(
+        f"У вида {kind} нет заголовка объекта (Интерфейс.Объект.Представление) – параметр "
+        "object_presentation неприменим; его принимают виды с парой заголовков в интерфейсе: "
+        + ", ".join(sorted(k for k in KIND_SPECS if _has_object_caption(k)))
+        + (". Заголовок элемента задает параметр presentation" if captioned else "")
+        + "".join(f"; заголовок в единственном числе у вида {kind} – Интерфейс.{key}.Представление, "
+                  "его инструмент не пишет" for key in others)
+    )
+
+
+def _caption_note(kind: str, path: tuple[str, ...], object_written: bool = False) -> str:
+    """What the caller learns when the caption did not go into the top-level property.
+
+    The singular caption beside the list one is named with the parameter that writes it, or
+    as written when the caller passed it.
+    """
     note = f"Заголовок записан в {'.'.join(path)}"
     if path[1:2] == ("Список",):
-        ui = _block_props(metamodel.properties(kind).get("Интерфейс"))
-        others = [key for key, record in ui.items()
-                  if key != "Список" and "Представление" in _block_props(record)]
         note += " – так называются список и команда его открытия"
-        if others:
-            note += "; заголовок в единственном числе задается в " + " и ".join(
-                f"Интерфейс.{key}.Представление" for key in others
-            )
+        if object_written:
+            note += f", заголовок объекта – в {'.'.join(_OBJECT_CAPTION)}"
+        else:
+            others = _singular_captions(kind)
+            if others:
+                note += "; заголовок в единственном числе задается в " + " и ".join(
+                    f"Интерфейс.{key}.Представление"
+                    + (f" ({_OBJECT_CAPTION_PARAMETER})" if key == "Объект" else "")
+                    for key in others
+                )
     if metamodel.properties(kind).get("Представление") is not None:
         note += (f". Представление верхнего уровня у вида {kind} – не заголовок, а имя "
                  "строкового реквизита, которым платформа обозначает элемент")
     return note
 
 
-def _caption_lines(path: tuple[str, ...], value: str) -> list[str]:
-    """The block that writes `value` under `path` (Russian keys; spelled_lines translates)."""
-    lines = [f"{'    ' * depth}{key}:" for depth, key in enumerate(path[:-1])]
-    return lines + [f"{'    ' * (len(path) - 1)}{path[-1]}: {_yaml_scalar(value)}"]
+def _object_caption_note(kind: str) -> str:
+    """What the caller learns when the object caption came without the list one."""
+    list_caption = "Интерфейс.Список.Представление"
+    return (f"Заголовок объекта записан в {'.'.join(_OBJECT_CAPTION)}; заголовок списка во "
+            f"множественном числе задается в {list_caption} (параметр presentation, в командной "
+            f"строке --presentation) – у вида {kind} naming/presentation ждет оба")
+
+
+def _caption_lines(*captions: tuple[tuple[str, ...], str]) -> list[str]:
+    """The block that writes each value under its path (Russian keys; spelled_lines translates).
+
+    Paths that share their leading keys share the block: the list and the object caption both
+    live under one `Interface`, the list first, as the platform describes the section.
+    """
+    tree: dict = {}
+    for path, value in captions:
+        node = tree
+        for key in path[:-1]:
+            node = node.setdefault(key, {})
+        node[path[-1]] = value
+    lines: list[str] = []
+
+    def emit(node: dict, depth: int) -> None:
+        for key, value in node.items():
+            if isinstance(value, dict):
+                lines.append(f"{'    ' * depth}{key}:")
+                emit(value, depth + 1)
+            else:
+                lines.append(f"{'    ' * depth}{key}: {_yaml_scalar(value)}")
+
+    emit(tree, 0)
+    return lines
 
 
 def _presented(result: ScaffoldResult, yaml_path: Path, presentation: str | None) -> ScaffoldResult:
@@ -2323,6 +2408,7 @@ def op_new_object(
     report: dict | None = None,
     presentation: str | None = None,
     base: str | None = None,
+    object_presentation: str | None = None,
 ) -> ScaffoldResult:
     """Create a configuration object: Имя.yaml (+ Имя.xbsl for kinds with a module).
 
@@ -2334,7 +2420,10 @@ def op_new_object(
     Presentation of a report, a command, a constants set, and the interface section of a kind
     whose top-level Presentation names an attribute (a catalog, a document) or is absent (a
     register, a processing) - see caption_path. A caption the kind writes by default (a
-    command's own name) gives way to it.
+    command's own name) gives way to it. For a kind with the pair of interface captions it is
+    the list caption, and object_presentation is the object caption in the singular, written
+    into `Interface.Object.Presentation` beside it - see object_caption_path; any other kind
+    refuses object_presentation. Given both, the new element passes naming/presentation.
 
     A folder that does not exist yet is created with the object, and inside a subsystem that
     is how a package is born - a package has no descriptor, and a folder without objects is
@@ -2371,6 +2460,15 @@ def op_new_object(
         access = method
 
     caption = caption_path(kind) if presentation else None
+    # Checked before the kinds with a generator of their own: none of them has the pair. The
+    # metamodel refuses them in object_caption_path; without it they are refused here, since
+    # their generators would drop the caption without a word.
+    object_caption = object_caption_path(kind) if object_presentation else None
+    if object_caption and kind in ("HttpСервис", "SoapСервис", "Отчет"):
+        raise ScaffoldError(
+            f"У вида {kind} нет заголовка объекта (Интерфейс.Объект.Представление) – параметр "
+            "object_presentation неприменим"
+        )
 
     result = ScaffoldResult()
     if access in ("РазрешенияВычисляются", _PER_OBJECT):
@@ -2415,14 +2513,21 @@ def op_new_object(
         extra += ["КонтрольДоступа:", f"    {_PERMISSIONS_KEY}:",
                   f"        {ACCESS_DEFAULT_RIGHT}: {_spelled(access, lang, 'enums')}"]
     top_caption = presentation if caption == _TOP_CAPTION else None
+    captions: list[tuple[tuple[str, ...], str]] = []
     if top_caption:
         # A kind that writes a caption of its own (a command is born with its name) gives way
         # to the caller's: two top-level keys would be a duplicate, and of two the reader
         # takes whichever it likes.
         extra = [line for line in extra if not line.startswith("Представление:")]
     elif presentation and caption:
-        extra = _caption_lines(caption, presentation) + extra
-        result.notes.append(_caption_note(kind, caption))
+        captions.append((caption, presentation))
+        result.notes.append(_caption_note(kind, caption, object_written=bool(object_caption)))
+    if object_presentation and object_caption:
+        captions.append((object_caption, object_presentation))
+        if not presentation:
+            result.notes.append(_object_caption_note(kind))
+    if captions:
+        extra = _caption_lines(*captions) + extra
     content = new_object_yaml(
         kind, new_uuid(), name, scope or spec.scope, extra, lang,
         presentation=top_caption,
@@ -4284,7 +4389,12 @@ def _new_soap_service(
     ПространствоИменСервиса (WSDL targetNamespace), ИмяСервиса (WSDL name), КорневойUrl,
     Обработчики (the operation Имя + the Метод in the module). The operation signature is
     defined by the WSDL contract - the method is left as a stub.
+
+    The name of the handler is the name of the operation in the WSDL description, and the build
+    takes it in Latin letters, digits and the underscore only (yaml/soap-handler-name); the
+    method of the module that serves it keeps the name of the module's language.
     """
+    handler = "Operation1"
     operation = "Операция1"
     root_url = _root_url(name)
     lines = [
@@ -4298,7 +4408,7 @@ def _new_soap_service(
     ]
     if access:
         lines += ["КонтрольДоступа:", "    Разрешения:", f"        Вызов: {access}"]
-    lines += ["Обработчики:", "    -", f"        Имя: {operation}", f"        Метод: {operation}"]
+    lines += ["Обработчики:", "    -", f"        Имя: {handler}", f"        Метод: {operation}"]
     module = (
         f"метод {operation}()\n"
         "    // TODO: реализовать операцию SOAP-сервиса (сигнатуру задаёт WSDL-контракт)\n;"
@@ -4311,8 +4421,9 @@ def _new_soap_service(
             "публичные адреса SOAP-сервиса обычно задают латиницей"
         )
     result.notes.append(
-        f"Операция-пример {operation}: задайте её сигнатуру и опишите типы ошибок в "
-        "Обработчики.Ошибки (типы-исключения) – по контракту сервиса"
+        f"Обработчик-пример {handler} с методом {operation}: задайте сигнатуру метода и "
+        "опишите типы ошибок в Обработчики.Ошибки (типы-исключения) – по контракту сервиса; "
+        "имя обработчика – только латиница, цифры и подчеркивание"
     )
     return result
 
@@ -6208,22 +6319,29 @@ ACCESS_DEFAULT_RIGHT = "ПоУмолчанию"
 _ACCESS_IMPLICIT = "РазрешеноАдминистраторам"  # when there is no КонтрольДоступа section
 _PER_OBJECT = "РазрешенияВычисляютсяДляКаждогоОбъекта"
 
-# Rights per project element kind (the "Контроль прав доступа" documentation: exactly
-# these kinds support access control). An empty tuple - the kind supports ПоУмолчанию only.
+# Rights per project element kind: the kinds whose description has access settings, each with
+# the rights its permissions block declares besides `Default` - the descriptor classes of the
+# metamodel, which a data test holds this table to. A settings storage has the four rights of
+# an entity (the help page of the kind lists them) and a processing has `Call` (docs
+# topics/processing-access-rights): a probe build accepted both, and refused `Call` of a
+# storage and `Read` of a processing with "Ожидается элемент перечисления".
 ACCESS_KIND_RIGHTS: dict[str, tuple[str, ...]] = {
     "Справочник": ("Создание", "Чтение", "Изменение", "Удаление"),
     "Документ": ("Создание", "Чтение", "Изменение", "Удаление"),
     "ПланОбмена": ("Создание", "Чтение", "Изменение", "Удаление"),
+    "ИнтегрируемоеПриложение": ("Создание", "Чтение", "Изменение", "Удаление"),
+    "ХранилищеНастроек": ("Создание", "Чтение", "Изменение", "Удаление"),
     "РегистрСведений": ("Чтение", "Изменение"),
     "РегистрНакопления": ("Чтение", "Изменение"),
     "НаборКонстант": ("Чтение", "Изменение"),
     "HttpСервис": ("Вызов",),
     "SoapСервис": ("Вызов",),
-    "ХранилищеНастроек": (),
+    "Обработка": ("Вызов",),
 }
-# A constant set does not support per-record permissions (the "Свойства элемента проекта
-# вида НаборКонстант" documentation).
-_NO_PER_OBJECT_KINDS = ("НаборКонстант",)
+# The kinds whose access settings have no `ComputePermissionsBy` and so cannot compute the
+# permissions of each object: a constant set (the documentation of the properties of the
+# kind), the services and a processing (the metamodel, held to by the same data test).
+_NO_PER_OBJECT_KINDS = ("НаборКонстант", "HttpСервис", "SoapСервис", "Обработка")
 #: Every right some kind has, in the order of the table: what a right is read against when the
 #: kind is not at hand (the summary of a file, see access_info).
 _ALL_RIGHTS = tuple(dict.fromkeys(r for rights in ACCESS_KIND_RIGHTS.values() for r in rights))
@@ -8952,7 +9070,8 @@ def resource_references(root: Path, resource_path: Path, *, reader=None,
 
     `limit` keeps the first so many places in `references` (none for a negative one), and
     `total` still counts them all: the MCP tool and the CLI `--limit` cut the list the same way.
-    Without it every place is listed.
+    `hasMore` says whether the cut left a place out - a reader that takes the list for all of
+    them would otherwise miss the rest. Without a limit every place is listed.
 
     Refused: the resources folder itself, its description (`Resources.yaml`) and a folder
     without files - a key names none of them.
@@ -8985,10 +9104,12 @@ def resource_references(root: Path, resource_path: Path, *, reader=None,
             "range": {"start": _lsp_position(text, start), "end": _lsp_position(text, end)},
             "text": _line_text(text, start),
         })
+    shown = places if limit is None else places[:max(0, limit)]
     return {
         "resource": key,
         "folder": is_folder,
         "resourcesDir": str(folder.directory),
         "total": len(places),
-        "references": places if limit is None else places[:max(0, limit)],
+        "references": shown,
+        "hasMore": len(shown) < len(places),
     }

@@ -1160,6 +1160,7 @@ def meta_new_object(
     presentation: str | None = None,
     base: str | None = None,
     root: str | None = None,
+    object_presentation: str | None = None,
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
@@ -1182,6 +1183,11 @@ def meta_new_object(
     as for a register, which has no top-level one; `Interface.Presentation` of a processing.
     Pass it: without one the very first lint of the
     new file answers naming/presentation.
+    object_presentation - the object caption in the singular, `Interface.Object.Presentation`,
+    of a kind with the pair of interface captions (a catalog, a document, an exchange plan, a
+    settings storage), where presentation is the list caption in the plural; any other kind
+    refuses it. The tool cannot derive the singular from the plural, and naming/presentation
+    asks such a kind for both: given both, the new object lints clean.
     base - for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
@@ -1199,6 +1205,7 @@ def meta_new_object(
         _under(root_dir, directory), kind, name,
         scope=scope, environment=environment, access=access,
         routes=routes, report=report_spec, presentation=presentation, base=base,
+        object_presentation=object_presentation,
     )
 
 
@@ -1913,7 +1920,9 @@ def meta_resource_references(root: str, resource_path: str, limit: int = 100) ->
     the project's resources: seed data names a picture by its code, and the code adds the
     extension at run time.
     For a folder, every file under it counts. `total` is the number of places; `references`
-    holds the first `limit` of them, sorted by file and position.
+    holds the first `limit` of them, sorted by file and position, and `hasMore` is true when
+    the limit left some out - then the list is not all of them, and a call with `limit` at
+    `total` lists the rest.
     root - the caller's project or repository root (absolute): references are looked for under
     it, relative paths resolve against it, and the answer names it as `root`.
 

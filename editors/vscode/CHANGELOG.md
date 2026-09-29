@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+
+- **Three more rules link to the documentation:** `code/constant-unavailable`,
+  `yaml/document-date-required` and `yaml/soap-handler-name` open their pages from the
+  Problems panel. ([#163](https://github.com/keyfire/xbsl/pull/163))
+
 ## 0.78.0
 
 ### Added

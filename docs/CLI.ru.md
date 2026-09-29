@@ -373,7 +373,7 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
-                       [--base BASE] [--dry-run]
+                       [--object-presentation OBJECT_PRESENTATION] [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -395,7 +395,8 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | способ доступа, русским или английским именем (РазрешеноВсем или PermitEveryone): у HttpСервис пишется в Разрешения.Вызов, у объектов данных – в Разрешения.ПоУмолчанию (отдельные права ставит set-access) |
 | `--routes ROUTES` | маршруты HttpСервис: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | описание отчёта (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра и обработки, в раздел Интерфейс (без него первый же линт дает naming/presentation) |
+| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра и обработки, в раздел Интерфейс; у справочника и документа это заголовок списка, а заголовок объекта задает `--object-presentation` (без заголовка первый же линт дает naming/presentation) |
+| `--object-presentation OBJECT_PRESENTATION` | заголовок объекта в единственном числе: пишется в Интерфейс.Объект.Представление справочника, документа, плана обмена и хранилища настроек, другой вид его не принимает; вместе с `--presentation` новый объект проходит naming/presentation |
 | `--base BASE` | базовый тип компонента интерфейса (Группа, ФормаОбъекта&lt;Товар.Объект&gt;); только для вида КомпонентИнтерфейса |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
@@ -904,7 +905,7 @@ usage: xbsl resource-references [-h] [--limit LIMIT] root resource_path
 | Параметр | Описание |
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
-| `--limit LIMIT` | не более N мест в списке references; total считает все места (по умолчанию 100, как у meta_resource_references) |
+| `--limit LIMIT` | не более N мест в списке references; total считает все места, а hasMore: true и строка в stderr говорят, что список обрезан (по умолчанию 100, как у meta_resource_references) |
 
 ### `xbsl unused-resources`
 

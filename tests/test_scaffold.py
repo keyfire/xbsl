@@ -283,7 +283,9 @@ def test_new_soap_service(tmp_path):
     assert parsed["ИмяСервиса"] == "СервисМагазина"
     assert parsed["КорневойUrl"] == "/СервисМагазина"
     assert "ПространствоИменСервиса" in parsed
-    assert parsed["Обработчики"][0]["Имя"] == "Операция1"
+    # The handler is the WSDL operation and takes Latin letters only; the method keeps
+    # the language of the module.
+    assert parsed["Обработчики"][0]["Имя"] == "Operation1"
     assert parsed["Обработчики"][0]["Метод"] == "Операция1"
     assert parsed["КонтрольДоступа"]["Разрешения"]["Вызов"] == "РазрешеноАутентифицированным"
     # The operation method is declared in the paired module.
@@ -1509,6 +1511,58 @@ def test_access_validation(tmp_path):
     ))
     perms = _valid_yaml((subsystem / "Товары.yaml").read_text(encoding="utf-8"))["КонтрольДоступа"]["Разрешения"]
     assert perms["ПравоНаТовар.ИзменениеЦены"] == "РазрешенияВычисляются"
+
+
+def test_access_of_a_settings_storage_and_a_processing(tmp_path):
+    """The rights a probe build accepted: the four of an entity on a settings storage, `Call`
+    on a processing; `Read` of a processing and per-object permissions of a service are
+    refused before anything is written."""
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "ХранилищеНастроек", "НастройкиОтчетов"))
+    apply_result(scaffold.op_new_object(subsystem, "Обработка", "ПересчетЦен"))
+    apply_result(scaffold.op_new_object(subsystem, "HttpСервис", "Каталог"))
+
+    apply_result(scaffold.op_set_access(tmp_path, name="НастройкиОтчетов",
+                                        permissions={"Чтение": "РазрешеноВсем",
+                                                     "Удаление": "РазрешеноАдминистраторам"}))
+    storage = _valid_yaml((subsystem / "НастройкиОтчетов.yaml").read_text(encoding="utf-8"))
+    assert storage["КонтрольДоступа"]["Разрешения"] == {
+        "Чтение": "РазрешеноВсем", "Удаление": "РазрешеноАдминистраторам"}
+
+    apply_result(scaffold.op_set_access(tmp_path, name="ПересчетЦен",
+                                        permissions={"Вызов": "РазрешеноАутентифицированным"}))
+    processing = _valid_yaml((subsystem / "ПересчетЦен.yaml").read_text(encoding="utf-8"))
+    assert processing["КонтрольДоступа"]["Разрешения"]["Вызов"] == "РазрешеноАутентифицированным"
+    with pytest.raises(ScaffoldError, match="нет права 'Чтение'"):
+        scaffold.op_set_access(tmp_path, name="ПересчетЦен",
+                               permissions={"Чтение": "РазрешеноВсем"})
+    with pytest.raises(ScaffoldError, match="не поддерживает РазрешенияВычисляютсяДляКаждогоОбъекта"):
+        scaffold.op_set_access(tmp_path, name="Каталог",
+                               permissions={"Вызов": "РазрешенияВычисляютсяДляКаждогоОбъекта"},
+                               calc_by=["Код"])
+
+
+@pytest.mark.needs_data
+def test_access_rights_follow_the_metamodel():
+    """Every kind whose description has access settings, with the rights its permissions
+    descriptor declares besides the default one; the kinds whose settings have no list of
+    attributes to compute by cannot compute the permissions of each object."""
+    from xbsl import metamodel
+
+    rights: dict[str, set[str]] = {}
+    no_per_object: set[str] = set()
+    for kind in metamodel.kinds():
+        record = metamodel.properties(kind).get("КонтрольДоступа")
+        if not record:
+            continue
+        control = metamodel.properties_of_class(record.get("type") or "")
+        permissions = control.get("Разрешения") or {}
+        declared = metamodel.properties_of_class(permissions.get("type") or "")
+        rights[kind] = set(declared) - {scaffold.ACCESS_DEFAULT_RIGHT}
+        if "РасчетРазрешенийПо" not in control:
+            no_per_object.add(kind)
+    assert {kind: set(names) for kind, names in scaffold.ACCESS_KIND_RIGHTS.items()} == rights
+    assert set(scaffold._NO_PER_OBJECT_KINDS) == no_per_object
 
 
 def test_project_info_access_summary(tmp_path):
@@ -3318,6 +3372,8 @@ def test_new_object_caption_of_an_attribute_name_kind_goes_into_the_interface(tm
     assert "Представление" not in data
     assert data["Интерфейс"] == {"Список": {"Представление": "Товары склада"}}
     assert "Интерфейс.Объект.Представление" in result.notes[0]
+    # The note names the parameter that writes the object caption, on every surface.
+    assert "object_presentation" in result.notes[0] and "--object-presentation" in result.notes[0]
     assert "имя строкового реквизита" in result.notes[0]
     # An identifier is a caption too: nothing it could name exists yet.
     apply_result(scaffold.op_new_object(tmp_path, "Документ", "Заказы", presentation="Заказы"))
@@ -3363,6 +3419,68 @@ def test_new_object_caption_in_an_english_project(tmp_path):
     data = _valid_yaml((subsystem / "Goods.yaml").read_text(encoding="utf-8"))
     assert data["Interface"] == {"List": {"Presentation": "Goods in stock"}}
     assert "Presentation" not in data
+
+
+@pytest.mark.needs_data
+def test_new_object_with_both_captions_passes_the_naming_rule(tmp_path):
+    """A catalog keeps two captions in its interface: the list one in the plural
+    (presentation) and the object one in the singular (object_presentation). The tool cannot
+    derive one from the other, and naming/presentation asks for both - given both, the new
+    element lints clean."""
+    result = scaffold.op_new_object(
+        tmp_path, "Справочник", "Товары", presentation="Товары", object_presentation="Товар",
+    )
+    apply_result(result)
+    text = (tmp_path / "Товары.yaml").read_text(encoding="utf-8")
+    # One interface section, the list first, as the platform describes it.
+    assert (
+        "Интерфейс:\n    Список:\n        Представление: Товары\n"
+        "    Объект:\n        Представление: Товар\n"
+    ) in text
+    assert "Представление" not in _valid_yaml(text)
+    assert xbsl.engine.run([tmp_path / "Товары.yaml"], select={"naming/presentation"}) == []
+    assert "заголовок объекта – в Интерфейс.Объект.Представление" in result.notes[0]
+
+
+@pytest.mark.needs_data
+def test_new_object_object_caption_alone_names_the_list_one(tmp_path):
+    result = scaffold.op_new_object(tmp_path, "Документ", "Заказы", object_presentation="Заказ")
+    apply_result(result)
+    data = _valid_yaml((tmp_path / "Заказы.yaml").read_text(encoding="utf-8"))
+    assert data["Интерфейс"] == {"Объект": {"Представление": "Заказ"}}
+    assert data["Реквизиты"]  # the built-in date stays
+    assert "Интерфейс.Список.Представление" in result.notes[0]
+    assert "--presentation" in result.notes[0]
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("kind, name", [
+    ("Отчет", "Остатки"), ("РегистрСведений", "Курсы"), ("НаборКонстант", "Настройки"),
+    ("ОбщийМодуль", "Цены"), ("HttpСервис", "ОбменHttpСервис"),
+])
+def test_new_object_object_caption_only_where_the_kind_has_the_pair(tmp_path, kind, name):
+    """A kind without the object caption refuses the parameter, the way it refuses access or
+    base, and names the kinds that take it."""
+    with pytest.raises(ScaffoldError, match="object_presentation неприменим") as info:
+        scaffold.op_new_object(tmp_path, kind, name, object_presentation="Запись")
+    message = str(info.value)
+    assert "Документ, ПланОбмена, Справочник, ХранилищеНастроек" in message
+    # A register keeps its singular caption elsewhere, and the refusal says where.
+    assert ("Интерфейс.Запись.Представление" in message) == (kind in ("РегистрСведений", "НаборКонстант"))
+    # A kind with no caption at all is not sent to presentation, which it refuses too.
+    assert ("параметр presentation" in message) == (kind not in ("ОбщийМодуль", "HttpСервис"))
+    assert not (tmp_path / f"{name}.yaml").exists()
+
+
+@pytest.mark.needs_data
+def test_new_object_object_caption_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    apply_result(scaffold.op_new_object(
+        subsystem, "Catalog", "Orders", presentation="Orders", object_presentation="Order",
+    ))
+    data = _valid_yaml((subsystem / "Orders.yaml").read_text(encoding="utf-8"))
+    assert data["Interface"] == {"List": {"Presentation": "Orders"}, "Object": {"Presentation": "Order"}}
+    assert xbsl.engine.run([subsystem / "Orders.yaml"], select={"naming/presentation"}) == []
 
 
 # --- routes_for: the verbs are checked, not just upper-cased -------------------------------

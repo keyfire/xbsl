@@ -367,6 +367,20 @@ def test_resource_references_of_a_folder_take_every_file_and_the_strings_of_its_
     ]
 
 
+def test_resource_references_say_when_the_limit_cut_the_list(tmp_path):
+    """`total` counts every place, and `hasMore` says whether `references` holds them all: a
+    reader that takes a cut list for the whole one would miss the rest."""
+    folder = _project(tmp_path) / "Склад" / "Ресурсы" / "Стили"
+    whole = scaffold.resource_references(tmp_path, folder)
+    assert (len(whole["references"]), whole["total"], whole["hasMore"]) == (11, 11, False)
+    cut = scaffold.resource_references(tmp_path, folder, limit=2)
+    assert (len(cut["references"]), cut["total"], cut["hasMore"]) == (2, 11, True)
+    assert cut["references"] == whole["references"][:2]
+    assert scaffold.resource_references(tmp_path, folder, limit=11)["hasMore"] is False
+    # None below zero, and every place is then left out.
+    assert scaffold.resource_references(tmp_path, folder, limit=-1)["hasMore"] is True
+
+
 def test_a_resource_reference_whose_key_two_folders_hold_is_marked_ambiguous(tmp_path):
     project = _project(tmp_path, {"Склад/Партии/Ресурсы/Стили/a.css": "p {}\n"})
     places = _places(
@@ -627,11 +641,27 @@ def test_cli_resource_references_answer_json_without_a_dry_run(tmp_path, capsys)
         cli.main(["resource-references", str(tmp_path), str(resources / "logo.svg"), "--dry-run"])
 
 
+def test_cli_resource_references_name_a_cut_list_on_stderr(tmp_path, capsys):
+    """stdout stays one JSON document; the person at the terminal reads the cut on stderr."""
+    folder = _project(tmp_path) / "Склад" / "Ресурсы" / "Стили"
+    assert cli.main(["resource-references", str(tmp_path), str(folder), "--limit", "2"]) == 0
+    printed = capsys.readouterr()
+    answer = json.loads(printed.out)
+    assert (len(answer["references"]), answer["total"], answer["hasMore"]) == (2, 11, True)
+    assert printed.err.strip() == (
+        "Список references обрезан: показано 2 из 11; весь список даст --limit 11")
+    assert cli.main(["resource-references", str(tmp_path), str(folder), "--limit", "11"]) == 0
+    printed = capsys.readouterr()
+    assert json.loads(printed.out)["hasMore"] is False and printed.err == ""
+
+
 def test_mcp_meta_resource_references(mcp_module, tmp_path):
     project = _project(tmp_path)
     answer = mcp_module.meta_resource_references(str(tmp_path), "Демо/Учет/Склад/Ресурсы/Стили", limit=2)
     assert answer["root"] == str(tmp_path) and answer["total"] == 11
-    assert len(answer["references"]) == 2
+    assert len(answer["references"]) == 2 and answer["hasMore"] is True
+    whole = mcp_module.meta_resource_references(str(tmp_path), "Демо/Учет/Склад/Ресурсы/Стили", limit=11)
+    assert len(whole["references"]) == 11 and whole["hasMore"] is False
     assert answer["references"][0]["path"] == str(project / "Продажи" / "Заказы.xbsl")
     err = mcp_module.meta_resource_references(str(tmp_path), "Демо/Учет/Склад/Ресурсы")
     assert "сам каталог ресурсов" in err["error"] and err["root"] == str(tmp_path)
@@ -649,5 +679,6 @@ def test_lsp_resource_references_request(tmp_path):
     answer = features["xbsl/metaResourceReferences"](
         {"root": str(tmp_path), "path": str(resources / "Стили" / "flag.svg")})
     assert answer["total"] == 6 and {ref["kind"] for ref in answer["references"]} == {"reference", "computed"}
+    assert answer["hasMore"] is False  # the editor asks for every place
     refused = features["xbsl/metaResourceReferences"]({"root": str(tmp_path), "path": str(resources)})
     assert "сам каталог ресурсов" in refused["error"]

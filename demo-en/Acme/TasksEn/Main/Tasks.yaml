@@ -4,7 +4,10 @@ Name: Tasks
 Presentation: Name
 VisibilityScope: InProject
 Interface:
+    List:
+        Presentation: Tasks
     Object:
+        Presentation: Task
         Form: TaskCard
 Attributes:
     -

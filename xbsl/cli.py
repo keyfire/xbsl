@@ -792,6 +792,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--routes", help=i18n.t("cli.help.scaf.new-object-routes"))
     p.add_argument("--report", help=i18n.t("cli.help.scaf.new-object-report"))
     p.add_argument("--presentation", help=i18n.t("cli.help.scaf.no-presentation"))
+    p.add_argument("--object-presentation",
+                   help=i18n.t("cli.help.scaf.no-object-presentation"))
     p.add_argument("--base", help=i18n.t("cli.help.scaf.no-base"))
 
     p = command("add-field")
@@ -1206,6 +1208,7 @@ def _scaffold_main(argv: list[str]) -> int:
                 scope=args.scope, environment=args.environment, access=args.access,
                 routes=args.routes, presentation=args.presentation, base=args.base,
                 report=json.loads(args.report) if args.report else None,
+                object_presentation=args.object_presentation,
             )
         elif args.command == "add-field":
             result = scaffold.op_add_field(
@@ -1453,11 +1456,14 @@ def _scaffold_main(argv: list[str]) -> int:
             ))
             return 0
         elif args.command == "resource-references":
-            print(json.dumps(
-                scaffold.resource_references(Path(args.root), Path(args.resource_path),
-                                             limit=args.limit),
-                ensure_ascii=False,
-            ))
+            answer = scaffold.resource_references(Path(args.root), Path(args.resource_path),
+                                                  limit=args.limit)
+            print(json.dumps(answer, ensure_ascii=False))
+            if answer["hasMore"]:
+                # stdout stays one JSON document for a reader that parses it; the person at
+                # the terminal learns from stderr that the list is not all of the places.
+                print(i18n.t("cli.resource-references-more", shown=len(answer["references"]),
+                             total=answer["total"]), file=sys.stderr)
             return 0
         elif args.command == "unused-resources":
             from xbsl import resource_usage

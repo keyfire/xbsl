@@ -210,6 +210,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "code/query-needs-server"
       || r === "code/global-unavailable"
       || r === "code/type-unavailable"
+      || r === "code/constant-unavailable"
       || r === "code/image-binding-server-call",
     page: EXEC,
   },
@@ -303,6 +304,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "параметры-запроса",
   },
   { match: (r) => r === "yaml/date-input-needs-plain-date", page: "topics/edit-component" },
+  // The page of the kind calls the date the required standard attribute of a document.
+  { match: (r) => r === "yaml/document-date-required", page: "topics/document-element" },
+  // The page of the kind forbids Cyrillic in the names of the handlers.
+  { match: (r) => r === "yaml/soap-handler-name", page: "topics/soap-service" },
   { match: (r) => r === "code/resource-bare-name", page: IMAGES },
   { match: (r) => r === "code/unknown-resource", page: IMAGES },
   { match: (r) => r === "yaml/no-expression-in-literal", page: "topics/label-component" },

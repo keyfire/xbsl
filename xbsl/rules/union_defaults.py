@@ -80,8 +80,8 @@ if _HAVE_YAML:
 
 MESSAGES = {
     "yaml/union-needs-nullable.title": {
-        "ru": "Составной тип без пустого значения",
-        "en": "Union type without the empty value",
+        "ru": "Составной тип или тип параметра записи без пустого значения",
+        "en": "A union type, or the type of a write parameter, without the empty value",
     },
     "yaml/union-needs-nullable.union": {
         "ru": "Тип '{name}' – составной тип без пустого значения: значение по умолчанию "

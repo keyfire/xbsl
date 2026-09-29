@@ -42,6 +42,9 @@ def test_computed_key_without_manager_module_needs_handler():
     found = _lint({"Key.yaml": _yaml("Ложь")})
     assert len(found) == 1
     assert (found[0].line, found[0].col) == (1, 1)
+    # The answer a probe build gave at the same position, quoted so that the failed apply
+    # leads to the finding.
+    assert 'Mandatory handler "ПроверитьНаличиеКлючейДоступа" is not defined' in found[0].message
 
 
 def test_computed_key_without_physical_manager_module_needs_handler(tmp_path):

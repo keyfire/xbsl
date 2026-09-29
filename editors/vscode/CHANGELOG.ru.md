@@ -2,6 +2,14 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Добавлено
+
+- **Еще три правила ведут в документацию:** `code/constant-unavailable`,
+  `yaml/document-date-required` и `yaml/soap-handler-name` открывают свои страницы из панели
+  "Проблемы". ([#163](https://github.com/keyfire/xbsl/pull/163))
+
 ## 0.78.0
 
 ### Добавлено

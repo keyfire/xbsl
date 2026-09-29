@@ -1699,6 +1699,7 @@ def _make_server() -> "LanguageServer":
             access=_opt_str(params, "access"),
             routes=_opt_str(params, "routes"),
             presentation=_opt_str(params, "presentation"),
+            object_presentation=_opt_str(params, "objectPresentation"),
         )
 
     def _props_param(params: object) -> dict[str, str]:

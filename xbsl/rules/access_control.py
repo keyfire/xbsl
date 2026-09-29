@@ -8,7 +8,9 @@ until the application runs or refuses to build, and they are settled by this mod
 - code/per-object-permissions-need-common: an object asking for per-object permissions still
   needs the common handler `ВычислитьРазрешенияДоступа` in its module. It may return an empty
   array - the point is that the common calculation exists; without it the object has no
-  general permissions at all and nothing falls through to the per-object one.
+  general permissions at all and nothing falls through to the per-object one. The rule is the
+  fallback of a checkout without the handler lists of the data: with them
+  code/mandatory-handler-missing reports the same handler, and this one stays silent.
 
 - code/permission-field-not-declared: inside `ВычислитьРазрешенияДоступаДляОбъектов` the
   record is reached as `Запись.<Поле>`, and only the attributes listed in
@@ -85,7 +87,7 @@ from functools import lru_cache
 
 import yaml as _yaml
 
-from xbsl import dataset, i18n, metamodel, terms
+from xbsl import dataset, i18n, metamodel, modulehandlers, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules._syntax import code_tokens
@@ -354,6 +356,17 @@ def _access_mapper(source: SourceFile) -> dict | None:
     scope="project", severity=Severity.WARNING, mapper=_access_mapper,
 )
 def per_object_permissions_need_common(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """Per-object permissions in the yaml, no common calculation in the module.
+
+    Where the data carries the handlers of the element modules, code/mandatory-handler-missing
+    judges the same handler from the compiler's own lists: an error rather than a warning, for
+    every kind and compatibility mode the settings require it in, with the standard permissions
+    of a settings storage left alone and the module without the annotation told apart. Both
+    rules answered the same defect then, so this one gives way and speaks only without that
+    data.
+    """
+    if modulehandlers.element_available():
+        return
     modules = {f["stem"]: f for f in facts.values() if f["k"] == "x"}
     for rel, fact in facts.items():
         if fact["k"] != "y":
