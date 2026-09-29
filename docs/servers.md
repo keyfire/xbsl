@@ -77,14 +77,21 @@ elsewhere; the `XBSL_MCP_JOURNAL` variable points to another file.
 **When the engine on disk was updated under a running server.** The server loads some of its
 modules only when a tool needs them. After `self-update` or a `git pull` of an editable checkout,
 those modules come from the new code while the rest in memory stay old, and the two halves do
-not fit together. Before every call the server reads the version from `__init__.py` on disk.
-When it differs from the loaded one, every tool but `version_info` answers with an `error` that
-names both versions and asks for a restart, plus a `stale` record, instead of running; `ran:
-false` in the record says the tool did not run. `version_info` still answers and shows
-`engine_on_disk`. If the version is the same but a tool fails, the server compares its code
-files with the state at start and names a restart when they changed; the record then carries
-`ran: true`, since the tool may have written something before it failed. A crashed rule says
-the same in its own report. The server does not restart or exit on its own (the
+not fit together. Before every call the server reads the version from `__init__.py` on disk and
+checks whether the engine's code files changed since it started: a pull between two releases
+changes them and keeps the number. That check looks at the few folders the files lie in, and
+reads the files again only when a folder changed – git replaces a file by removing it and
+writing it anew – or when the last reading is five seconds old, since an editor may rewrite a
+file in place. When the version or the files changed, every tool but `version_info` answers with
+an `error` that names the change and asks for a restart, plus a `stale` record, instead of
+running. The record has reason `version` with both versions, or reason `sources` with the same
+version on both sides and a `fingerprint` of the files on disk, which tells one change from the
+next; `ran: false` says the tool did not run. `version_info` still answers, shows
+`engine_on_disk` and carries the same `stale`. The code of the plugins is left to their own check
+(below). If a tool fails all the same, the server compares all its code files, the plugins'
+included, with the state at start and names a restart when they changed; the record then
+carries `ran: true`, since the tool may have written something before it failed. A crashed rule
+says the same in its own report. The server does not restart or exit on its own (the
 [supervisor](#a-supervisor-that-replaces-the-server) does that for it), and `xbsl mcp-log` shows
 the first time it noticed each change.
 
@@ -95,11 +102,14 @@ from the same place and so runs the code that is on disk now. `lint_paths`, `lin
 `baseline_prune`, `list_rules`, `meta_fold_comments`, the `translate_*` tools and the readers
 `meta_project_info`, `meta_object_info`, `meta_localization_info`, `meta_component_tree`,
 `meta_resource_references` and `meta_unused_resources` have such a command. A reader's command
-prints the same data as the tool, without the `root` and `file` the tool repeats, and the one of
-`meta_resource_references` lists every place whatever the `limit`. The text of a `lint_source`
-call and the inline edits of a `translate_set` call are saved to a temporary file that the
-command reads, and `cli_note` names that file; a folder of such files older than a day, left by
-an earlier server, is taken out by the next one. The interpreter starts with `-P`, so a folder
+prints the same data as the tool, without the `root` and `file` the tool repeats. The text of a
+`lint_source` call and the inline edits of a `translate_set` call are saved to a temporary file
+that the command reads, and `cli_note` names that file; a folder of such files older than a day,
+left by an earlier server, is taken out by the next one. A relative `filename` of `lint_source`
+goes into the command made absolute against the server's working directory: the tool reads the
+name from there, and so do the rules that look for the paired yaml next to it, while the command
+may start from another folder. The findings of the command carry that absolute path. The
+interpreter starts with `-P`, so a folder
 named `xbsl` where the shell stands does not take the engine's place. Python 3.10 has no such
 flag, and there each run of the command first changes into that temporary folder, in a
 subshell: `(cd FOLDER && ...)`. The other tools refuse as before.
@@ -171,7 +181,7 @@ never means reading the files.
 | `meta_move_resource(root, resource_path, target_dir, dry_run)` | move a resource file or a folder into another folder of the same `Resources` folder and rewrite the `Resource{...}` keys and image property values that lead to it; lookups by a string are listed in `notes`, a move into another `Resources` folder is refused |
 | `meta_rename_resource_folder(root, folder_dir, new_name, dry_run)` | rename a folder inside a `Resources` folder with all its files and rewrite the keys that name them |
 | `meta_delete_resource_folder(root, folder_dir, dry_run)` | delete a folder inside a `Resources` folder with its files and list the keys and string lookups that name them; `dry_run` defaults to true |
-| `meta_resource_references(root, resource_path, limit)` | find the places that name a resource file or a folder: `Resource{...}` keys and image property values, keys two folders hold, strings with the path or with the file's key without its extension; each place has a file, a range, its line and a kind, and `limit` caps the list |
+| `meta_resource_references(root, resource_path, limit)` | find the places that name a resource file or a folder: `Resource{...}` keys and image property values, keys two folders hold, strings with the path or with the file's key without its extension; each place has a file, a range, its line and a kind; `limit` (100 by default) caps the list, and `total` counts every place |
 | `meta_unused_resources(root, include_protected, limit)` | find resource candidates with no known uses; computed and uncertain uses remain separate, every candidate needs review, and no file is deleted |
 | `meta_add_subsystem(parent_dir, name, ...)` | create a subsystem folder with its `Подсистема.yaml` |
 | `meta_add_dependency(root, vendor, name, version, ...)` | attach a library – the `Libraries` section of `Проект.yaml` |
@@ -233,9 +243,12 @@ configured.
 
 The worker decides when it has to go, and the supervisor reads that from its answers:
 
-- a refusal with `stale.ran: false` means the tool did not run. The supervisor sends the same
-  call to a new worker, and the agent gets the answer of the new code instead of the refusal.
-  `version_info` is asked again the same way, because it only reads;
+- a refusal with `stale.ran: false` means the tool did not run: the engine on disk has another
+  version, or its code files changed under the same one. The supervisor sends the same call to
+  a new worker, and the agent gets the answer of the new code instead of the refusal.
+  `version_info` is asked again the same way, because it only reads. A worker started after
+  one change of the files is replaced after the next one too: the `fingerprint` of the record
+  tells the two apart;
 - an answer whose `stale` says the tool ran (it failed on a mix of the old and the new code, or
   the plugins on disk changed) reaches the agent as it is, because the tool may have written
   files. The next call goes to a new worker;
@@ -251,6 +264,14 @@ then ends. After a new worker takes over, the client is told that the tools list
 for it again, so the tools and parameters an update brings are there without a restart. `xbsl
 mcp-log` names every replaced process and why it was replaced. When the client closes its end,
 the workers get the end of their input as well, and the supervisor ends once they have.
+
+The repeated `initialize` asks for the protocol version the client asked for, and a new worker
+may agree on another one than the client was answered at the start: an update of the `mcp`
+package can drop the version the client speaks. The supervisor changes nothing then – the
+client keeps its version and the new worker serves on – but writes both versions into the
+journal, and `xbsl mcp-log` shows them next to the replacement. When a client misbehaves after
+an update, that line is the place to look. A worker that agrees on the same version leaves no
+such line.
 
 ## Web interface
 

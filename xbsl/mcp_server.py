@@ -75,11 +75,15 @@ mcp = _new_server()
 # (self-update, a pull in an editable checkout), the modules it loads later come from the new
 # code while the ones in memory stay old, and a tool answers with crashes of rules that are
 # nobody's bug (xbsl/freshness.py tells the story). So every tool but version_info first compares
-# the version on disk with the one in memory - one small file per call - and refuses, naming the
-# cure, instead of running on a mix. A tool that fails while the number on disk is the same is
-# checked against the fingerprint of the sources taken at start. The server never exits over it:
-# a client such as Codex does not start a failed server again. The first sighting of each state
-# goes into the journal, where `xbsl mcp-log` shows it.
+# the version on disk with the one in memory - one small file per call - and then the engine's
+# code files with the ones of the start, which a pull between two releases changes under the
+# same number - a stat of their few folders per call, a walk over the files when a folder
+# changed or every few seconds. On either change the tool refuses, naming the cure, instead of
+# running on a mix. A tool that fails while the check still passed (a plugin's code changed, or
+# an editor rewrote a file a moment ago) is checked against the fingerprint of all the sources
+# taken at start. The server never exits over it: a client such as Codex does not start a
+# failed server again. The first sighting of each state goes into the journal, where
+# `xbsl mcp-log` shows it.
 #
 # Only the client can restart the server, and an agent calling the tools cannot. A new process
 # can run the new code, though, so the refusal of a tool the CLI can run carries `cli`: the
@@ -104,11 +108,12 @@ mcp = _new_server()
 #: The tools that answer on a stale engine too: the one that names the environment.
 _ANSWER_WHEN_STALE = frozenset({"version_info"})
 #: The stale states already written into the journal: one record per state, not per call.
-_journaled: set[tuple[str, str]] = set()
+_journaled: set[tuple[str, str, str]] = set()
 
 
 def _journal_stale(found: dict, tool: str, error: str = "") -> None:
-    key = (found["reason"], found["on_disk"])
+    # A change of the sources keeps the number: its fingerprint tells one change from the next.
+    key = (found["reason"], found["on_disk"], found.get("fingerprint", ""))
     if key in _journaled:
         return
     _journaled.add(key)
@@ -162,7 +167,7 @@ def _stale_guard(fn):
 
     @functools.wraps(fn)
     def call(*args, **kwargs):
-        found = freshness.version_state()
+        found = freshness.call_state()
         if found is not None:
             _journal_stale(found, fn.__name__)
             return _stale_answer(
@@ -298,15 +303,15 @@ def version_info() -> dict:
     `engine_on_disk` is the version the installation on disk declares now. This tool answers
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
     server is restarted, since the modules it would load next are from another version. The
-    refusal of a tool the CLI can run (lint_paths, lint_source, baseline_prune, list_rules,
-    translate_*, meta_fold_comments and the readers meta_project_info, meta_object_info,
-    meta_localization_info, meta_component_tree, meta_resource_references,
+    same holds when the engine's code files changed on disk under the same number (reason
+    `sources`). The refusal of a tool the CLI can run (lint_paths, lint_source, baseline_prune,
+    list_rules, translate_*, meta_fold_comments and the readers meta_project_info,
+    meta_object_info, meta_localization_info, meta_component_tree, meta_resource_references,
     meta_unused_resources) carries `cli`: the command line of the same call for a POSIX shell
     (Git Bash on Windows), which runs this server's interpreter on the code now on disk. A
-    reader's command prints the tool's data without the `root` and `file` the tool repeats; the
-    one of meta_resource_references lists every place, whatever `limit` says. `cli_note` names
-    the file the command reads data from - the text of lint_source, the inline edits of
-    translate_set.
+    reader's command prints the tool's data without the `root` and `file` the tool repeats.
+    `cli_note` names the file the command reads data from - the text of lint_source, the inline
+    edits of translate_set.
 
     `plugins` are the plugins this server loaded at start, `plugins_on_disk` the ones installed
     now. When those differ, `stale` names both (reason `plugins`, with the `changed`
@@ -319,7 +324,7 @@ def version_info() -> dict:
         info["plugins_on_disk"] = plugins.on_disk()
     except Exception as exc:  # noqa: BLE001 - the diagnostic tool answers whatever the disk is like
         info["plugins_on_disk"] = {"error": f"{type(exc).__name__}: {exc}"}
-    found = freshness.version_state()
+    found = freshness.call_state()  # what the other tools refuse over
     key = "freshness.refusal"
     if found is None:
         found, key = freshness.plugins_state(), "freshness.plugins-warning"
@@ -1901,10 +1906,9 @@ def meta_resource_references(root: str, resource_path: str, limit: int = 100) ->
     """
     base = _base(root)
     try:
-        answer = scaffold.resource_references(base, _under(base, resource_path))
+        answer = scaffold.resource_references(base, _under(base, resource_path), limit=limit)
     except scaffold.ScaffoldError as exc:
         return _failed(exc, base)
-    answer["references"] = answer["references"][:max(0, limit)]
     return {"root": str(base), **answer}
 
 

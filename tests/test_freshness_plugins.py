@@ -90,7 +90,7 @@ def site(tmp_path, monkeypatch):
     monkeypatch.setattr(plugins, "entry_points", installed)
     monkeypatch.setattr(freshness.sysconfig, "get_paths", lambda: {
         "purelib": str(environment), "platlib": str(environment)})
-    for name in ("_started", "_checked", "_noted", "_marks", "_plugins_found"):
+    for name in ("_started", "_checked", "_engine", "_noted", "_marks", "_plugins_found"):
         monkeypatch.setattr(freshness, name, None)
     monkeypatch.setattr(freshness, "_unsettled", False)
     monkeypatch.setattr(freshness, "_SOURCES_TTL", 0.0)
@@ -318,6 +318,24 @@ def test_an_answer_that_is_a_list_stays_a_list(site, mcp_module):
     assert mcp_module._stale_guard(lambda: [{"id": "code/missing-return"}])() == [
         {"id": "code/missing-return"}]
     assert [event["reason"] for event in _stale_events()] == ["plugins"]
+
+
+def test_the_code_of_a_plugin_changed_on_disk_does_not_refuse_a_call(
+        site, mcp_module, monkeypatch, tmp_path):
+    """The check before a call judges the engine's own files: a plugin is loaded whole at start
+    and answers consistently, so its change is told by the plugins check, not refused."""
+    module = tmp_path / "acme_rules.py"
+    module.write_text("levels = {}\n", encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "acme_rules", SimpleNamespace(__file__=str(module)))
+    freshness.remember()
+    module.unlink()
+    module.write_text("levels = {'code/missing-return': 'off'}\n", encoding="utf-8")
+    stat = module.stat()
+    os.utime(module, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+    assert freshness.sources_state()["reason"] == "sources"  # the whole fingerprint moved
+
+    assert freshness.call_state() is None
+    assert mcp_module._stale_guard(lambda: {"ok": True})() == {"ok": True}
 
 
 def test_a_tool_on_the_plugins_it_loaded_carries_no_stale_record(site, mcp_module):

@@ -233,3 +233,40 @@ def test_without_data_the_resources_take_the_declared_mode_as_written(tmp_path):
         assert resources.project_compatibility(tmp_path / "Склады") is None
     finally:
         dataset.set_data_root(None)
+
+
+_PROJECT_EN = "Vendor: Acme\nName: Warehouses\n"
+
+
+def _described_in_english(tmp_path, line: str):
+    project = tmp_path / "Warehouses"
+    project.mkdir()
+    (project / "Project.yaml").write_text(_PROJECT_EN + line, encoding="utf-8")
+    return project
+
+
+def test_an_english_description_gives_the_resources_its_mode_without_the_term_data(tmp_path):
+    """The resources read the key of the mode the way the project rules do, both spellings
+    always: looked up in the term data, `CompatibilityMode` was no key at all without it, and a
+    folder of an English project lost the mode its description declares."""
+    dataset.set_data_root(tmp_path / "no-data")
+    try:
+        project = _described_in_english(tmp_path, "CompatibilityMode: 5.0\n")
+        assert resources.project_compatibility(project) == (5, 0)
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_the_resources_and_the_project_rules_read_one_declared_mode(modes, tmp_path):
+    # The tiny data root holds the modes and no term pairs, exactly where the two readers
+    # used to part: the rules knew both keys by heart, the resources asked the terms.
+    project = _described_in_english(tmp_path, "CompatibilityMode: 7.0\n")
+    facts = _facts({"Warehouses/Project.yaml": _PROJECT_EN + "CompatibilityMode: 7.0\n",
+                    "Warehouses/Stock.txt": ""})
+
+    assert resources.project_compatibility(project) == (7, 0)
+    assert typeinfer.project_modes(facts)["Warehouses/Stock.txt"] == ((7, 0), False)
+    assert typeinfer.declared_compatibility({"CompatibilityMode": "7.0"}) == (7, 0)
+    assert typeinfer.declared_compatibility({"РежимСовместимости": 8.0}) == (8, 0)
+    assert typeinfer.declared_compatibility({"CompatibilityMode": "newest"}) is None
+    assert typeinfer.declared_compatibility({}) is None

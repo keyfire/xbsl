@@ -9,11 +9,13 @@ modules that need to be imported (and thereby activated).
 from . import (  # noqa: F401
     component_members,
     component_props,
+    contract_facets,
     duplicate_subtree,
     hierarchy_value,
     list_navigation,
     project,
     structure,
+    union_defaults,
     unused_components,
     yaml_schema,
 )
@@ -149,3 +151,5 @@ from . import procedure_value  # noqa: F401
 from . import contract_parameters  # noqa: F401
 
 from . import deprecated_project  # noqa: F401
+
+from . import entity_contract_methods  # noqa: F401

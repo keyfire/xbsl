@@ -131,11 +131,11 @@ _COMPONENT_FALLBACK = frozenset({
     "ПриИзмененииИсторииПереходов", "ПриОткрытииПоСсылке",
 })
 # ... and the modules of the other elements (an object module, the own module of an entity,
-# of an access key, of the client work parameters):
+# of an access key, of the client work parameters, the module of the project):
 _ELEMENT_FALLBACK = frozenset({
     "ПриЗаполнении", "ПередЗаписью", "ПослеЗаписи", "ПередУдалением",
     "ВычислитьРазрешенияДоступа", "ПроверитьНаличиеКлючейДоступа",
-    "ВычислитьПараметрыРаботыКлиента",
+    "ВычислитьПараметрыРаботыКлиента", "ВычислитьСистемныеРазрешенияДоступа",
 })
 
 
@@ -145,10 +145,11 @@ def platform_handlers() -> frozenset[str]:
 
     The lists come from the data (see xbsl/modulehandlers.py): the handlers of the component
     modules, read from the component descriptions of the distribution, and those of the other
-    modules, read from the compiler's handler providers - a flat set of names, whatever module
-    declares the method: a doubt silences the finding. The record-level security handlers are
-    added by hand (modulehandlers.RECORD_SECURITY has their proof): the build takes their name
-    from the access settings of the element, and no section can list them. A section the data
+    modules - the module of the project among them - read from the compiler's handler
+    providers: a flat set of names, whatever module declares the method: a doubt silences the
+    finding. The record-level security handlers are added by hand
+    (modulehandlers.RECORD_SECURITY has their proof): the build takes their name from the access
+    settings of the element, and no section can list them. A section the data
     lacks is stood in for by the names of the fallback lists, with the English spelling the term
     dictionary gives where it has one.
 

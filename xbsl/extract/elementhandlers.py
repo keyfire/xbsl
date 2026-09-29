@@ -26,6 +26,18 @@ access settings of the element: the provider reads such a name from metadata at 
 The interpreter cannot know it, and says so - the module is recorded as DYNAMIC, and a
 consumer must not judge it: any name may be a handler there.
 
+Two answers of the compiler the interpreter models on purpose, since a branch explored both
+ways there lands a handler in modules that never have it. The access-control provider asks the
+access-control info for the TARGET of the module (`IAccessControlInfoProvider.getTargetType`)
+and declares nothing when there is none; the info answers only for the own module of an element
+some access-control part names as the MANAGER of its target (`getManagerTypeClass` of an
+`IAccessControlInfoForTypeClassProvider`: the catalog for the items of a catalog, the HTTP
+service for itself) - not for a common module, a command, an access key or the project. So a
+path past that test stands for those managers alone, and a test of the target (`instanceof
+IEntityType`) is a test of the target class the part names (see access_managers). And one
+project type class stands for two kinds: the class of an access key serves the action privilege
+too, and the item type of the key tells them apart (see _KIND_TESTS).
+
 What the interpreter models is deliberately little: strings, terms, method descriptions (a
 value that carries the term it was built from), lists of those, lambdas passed to a stream,
 the tested type and the compatibility mode. Every other value is unknown, a condition on an
@@ -65,9 +77,32 @@ _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 #: `Object` in the reference).
 _TYPE_SUFFIX = "G5ProjectType"
 _FACET_ALIASES = {"Node": "Object"}
+#: A project type class named apart from its kind: the project of an application (the project
+#: description of the application kind, the default one) is the element of the kind `Project`,
+#: and its module is the module of the project. A library and an extension project have classes
+#: of their own and no handler.
+_KIND_ALIASES = {"ApplicationProject": "Project"}
 #: The kind whose modules the component descriptions cover, base by base (module_handlers):
 #: its providers answer for every component at once and are left to that source.
 COMPONENT_KIND = "КомпонентИнтерфейса"
+#: The access-control info the access-control provider asks for the target of a module, and the
+#: parts it answers from - each names a target type class and the type class of its manager.
+_ACCESS_INFO = "com/e1c/g5rt/appengine/core/accesscontrol/common/IAccessControlInfoProvider"
+_ACCESS_INFO_PART = ("com/e1c/g5rt/appengine/core/accesscontrol/common/spi/"
+                     "IAccessControlInfoForTypeClassProvider")
+_TYPE_CLASS_DESCRIPTOR = "()Lcom/e1c/g5rt/appengine/core/mdd/common/types/TypeClass;"
+#: A project type class that stands for two element kinds, told apart by a test of its item
+#: type: {(the class of the test, its method): (the class and the field of the term naming the
+#: kind the test is FALSE for)}. The class of an access key serves the action privilege as well:
+#: the build makes the item of an element of the privilege kind a non-key - the access-key
+#: producer sets the kind `PRIVILEGE` for the element type `ACCESS_PRIVILEGE_TERM`, and `isKey()`
+#: is that kind's negation - and the access-key provider declares the permissions handler for a
+#: non-key and the key check for a key.
+_KIND_TESTS = {
+    ("com/e1c/g5rt/appengine/accesskeys/common/types/AccessKeyObjectG5ProjectType", "isKey"):
+        ("com/e1c/g5rt/appengine/accesskeys/common/AccessKeysClassConstants",
+         "ACCESS_PRIVILEGE_TERM"),
+}
 #: The budget of the interpreter: how deep calls go, how many paths one method may take, how
 #: many times one instruction runs on one path (a loop body twice).
 _MAX_DEPTH = 8
@@ -312,6 +347,9 @@ class Found:
     low: tuple | None      # the first mode the path admits (inclusive), None - any
     high: tuple | None     # the first mode it no longer admits, None - any
     requires: frozenset = frozenset()  # instanceof tests of other values on the path
+    managed: bool = False  # past the test for an access-control target (see access_managers)
+    target_requires: frozenset = frozenset()  # instanceof tests of that target
+    kind: tuple | None = None  # the term of the kind a kind test chose (see _KIND_TESTS)
 
 
 @dataclass
@@ -325,10 +363,19 @@ class _Path:
     high: tuple | None = None
     requires: frozenset = frozenset()
     lists: dict = field(default_factory=dict)
+    managed: bool = False
+    target_requires: frozenset = frozenset()
+    kind: tuple | None = None
 
     def fork(self, pc: int) -> _Path:
         return _Path(pc, list(self.stack), dict(self.locals), dict(self.visits), self.tested,
-                     self.low, self.high, self.requires, dict(self.lists))
+                     self.low, self.high, self.requires, dict(self.lists), self.managed,
+                     self.target_requires, self.kind)
+
+    def branch(self) -> _Path:
+        """A fresh start on the facts of this branch: a helper or a lambda runs on it."""
+        return _Path(0, [], {}, {}, self.tested, self.low, self.high, self.requires, {},
+                     self.managed, self.target_requires, self.kind)
 
 
 def _mode_key(text: str) -> tuple[int, ...]:
@@ -725,9 +772,19 @@ class Interpreter:
     # -- conditions ------------------------------------------------------------------------
     def _condition(self, path: _Path, op: int, value, target: int, at: int):
         fall, jump = path.fork(at + 3), path.fork(target)
+        if op in (0xC6, 0xC7) and value == ("target",):
+            # ifnonnull jumps when the module has an access-control target, ifnull when not.
+            present = jump if op == 0xC7 else fall
+            present.managed = True
+            return (False, fall, jump)
         if op in (0x99, 0x9A) and isinstance(value, tuple):
             # ifeq jumps when the test is false, ifne when it is true.
             true, false = (fall, jump) if op == 0x99 else (jump, fall)
+            if value[0] == "kindtest":
+                term = self.static(*_KIND_TESTS[value[1]], 0)
+                if isinstance(term, tuple) and term[0] == "term":
+                    false.kind = term
+                return (False, fall, jump)
             if value[0] == "isinst":
                 subject, tested = value[1], value[2]
                 if subject == ("param", 1):
@@ -736,6 +793,8 @@ class Interpreter:
                         true.requires = true.requires | {tested}
                     else:
                         true.tested = tested
+                elif subject == ("target",):
+                    true.target_requires = true.target_requires | {tested}
                 else:
                     true.requires = true.requires | {tested}
             elif value[0] == "modetest":
@@ -793,6 +852,12 @@ class Interpreter:
               depth, record, provider):
         simple = callee_owner.rsplit("/", 1)[-1]
         result_kind = _result(descriptor)
+        # The target of the module whose access the access-control info controls (see the
+        # module docstring), and the test of an item type that picks one of two kinds.
+        if callee_owner == _ACCESS_INFO and callee == "getTargetType" and args == [("param", 1)]:
+            return ("target",)
+        if (callee_owner, callee) in _KIND_TESTS:
+            return ("kindtest", (callee_owner, callee))
         # The sink: the method a handler is declared by.
         if f"{simple}.{callee}".endswith(_SINK) or called_is(callee_owner, callee, _SINK):
             if record and provider:
@@ -899,7 +964,7 @@ class Interpreter:
         if record and provider and where == provider:
             # A helper of the provider itself may declare handlers: it runs on the caller's
             # branch, with the type and the modes the caller has tested.
-            start = _Path(0, [], {}, {}, path.tested, path.low, path.high, path.requires)
+            start = path.branch()
             slot = 0
             kinds = (["L"] if not method.static else []) + _arguments(method.descriptor)
             for value, kind in zip(call_args, kinds):
@@ -924,7 +989,7 @@ class Interpreter:
         if method is None:
             return None
         args = ([] if method.static else [None]) + list(captured) + [item]
-        start = _Path(0, [], {}, {}, path.tested, path.low, path.high, path.requires)
+        start = path.branch()
         slot = 0
         kinds = (["L"] if not method.static else []) + _arguments(method.descriptor)
         for value, kind in zip(args, kinds):
@@ -938,7 +1003,8 @@ class Interpreter:
     def _record(self, path: _Path, name) -> None:
         if path.tested is None:
             return
-        self.found.append(Found(path.tested, name, path.low, path.high, path.requires))
+        self.found.append(Found(path.tested, name, path.low, path.high, path.requires,
+                                path.managed, path.target_requires, path.kind))
 
 
 def called_is(owner: str, name: str, suffix: str) -> bool:
@@ -1029,6 +1095,68 @@ def providers(index: ClassIndex) -> list[str]:
     return sorted(found)
 
 
+def implementors(index: ClassIndex, root: str) -> list[str]:
+    """Every concrete class that implements or extends `root`, however deep, in name order.
+
+    A class names its superclass and its interfaces in its constant pool, so each round reads
+    the classes that mention a name found in the round before: the abstract bases first, then
+    the classes that extend them.
+    """
+    found: set[str] = set()
+    frontier = {root}
+    names = index.names()
+    while frontier:
+        needles = [name.encode() for name in frontier]
+        fresh: set[str] = set()
+        for name in names:
+            if name in found or name == root:
+                continue
+            blob = index.raw(name)
+            if blob is None or not any(needle in blob for needle in needles):
+                continue
+            klass = index.get(name)
+            if klass is not None and (klass.super_name in frontier
+                                      or any(parent in frontier for parent in klass.interfaces)):
+                fresh.add(name)
+        found |= fresh
+        frontier = fresh
+    return sorted(name for name in found if not (index.get(name).access & 0x0600))
+
+
+def _type_class_owner(index: ClassIndex, owner: str, method: str) -> str | None:
+    """The project type class a `TypeClass` getter answers with, None for null or the unknown.
+
+    Such a getter reads the `TYPE_CLASS` constant of the class (or its companion object, in
+    Kotlin) right away: the class of the field it starts with is the answer.
+    """
+    found = index.resolve(owner, method, _TYPE_CLASS_DESCRIPTOR)
+    if found is None:
+        return None
+    where, code = found[0], found[1].code
+    if not code or code[0] != 0xB2:  # aconst_null, or code that is not a plain getter
+        return None
+    klass = index.get(where)
+    field_owner, _name, _descriptor = _field_ref(klass.pool, int.from_bytes(code[1:3], "big"))
+    return field_owner or None
+
+
+def access_managers(index: ClassIndex) -> dict[str, str]:
+    """{the project type class of a manager module: the target class it controls the access of}.
+
+    What the access-control info answers `getTargetType` from: every part of it names a target
+    type class and the type class of the module that manages it, and a part without a manager
+    (the system actions, the records of a data journal, the objects of an entity contract) gives
+    no module a target.
+    """
+    managers: dict[str, str] = {}
+    for part in implementors(index, _ACCESS_INFO_PART):
+        manager = _type_class_owner(index, part, "getManagerTypeClass")
+        target = _type_class_owner(index, part, "getTargetTypeClass")
+        if manager and target:
+            managers[manager] = target
+    return managers
+
+
 def facet_words(car: zipfile.ZipFile) -> tuple[dict[str, str], dict[str, str]]:
     """({English facet word: Russian}, {English type: Russian}) from the facet pages of the help.
 
@@ -1062,6 +1190,9 @@ def element_of(class_name: str, kinds: dict[str, str], words: dict[str, str],
     if not simple.endswith(_TYPE_SUFFIX):
         return None
     stem = simple[:-len(_TYPE_SUFFIX)]
+    for alias, english in _KIND_ALIASES.items():
+        if stem.startswith(alias):
+            stem = english + stem[len(alias):]
     english_kinds = {english: russian for russian, english in kinds.items()}
     candidates = sorted((e for e in english_kinds if stem.startswith(e)), key=len, reverse=True)
     for english in candidates:
@@ -1077,6 +1208,18 @@ def element_of(class_name: str, kinds: dict[str, str], words: dict[str, str],
             if rest in words:
                 return russian, words[rest]
     return None
+
+
+def controls(index, managers: dict[str, str], class_name: str, found: Found) -> bool:
+    """Whether a path past the target test stands for the module of `class_name`.
+
+    It does when the class manages a target (access_managers) and the target passes every test
+    the path made of it; `index` answers the ancestors of the target class.
+    """
+    target = managers.get(class_name)
+    return target is not None and all(
+        required == target or required in index.ancestors(target)
+        for required in found.target_requires)
 
 
 def _merge_modes(spans: list[tuple]) -> tuple[tuple | None, tuple | None] | None:
@@ -1132,17 +1275,28 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
         return frozenset(element[0] for name in project_types if required in index.ancestors(name)
                          for element in [element_of(name, kinds, words, types)] if element)
 
+    managers = access_managers(index)
+    notes.append(f"модулей с целью контроля доступа: {len(managers)}")
+
     table: dict[str, dict[str, dict]] = {}
     spans: dict[tuple[str, str, str], list] = {}
     rows: dict[tuple[str, str, str], dict] = {}
     unmapped: set[str] = set()
+    unknown: set[str] = set()
     for found in interpreter.found:
         for class_name in expand(found.tested):
+            if found.managed and not controls(index, managers, class_name, found):
+                continue
             element = element_of(class_name, kinds, words, types)
             if element is None:
                 unmapped.add(class_name)
                 continue
             kind, facet = element
+            if found.kind is not None:
+                if found.kind[2] not in kinds:
+                    unknown.add(found.kind[2])
+                    continue
+                kind = found.kind[2]
             if kind == COMPONENT_KIND:
                 continue  # the component descriptions list these, per base component
             if any(kind not in kinds_with(required) for required in found.requires):
@@ -1177,5 +1331,7 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
                 del slot["dynamic"]
     for name in sorted(unmapped):
         notes.append(f"тип проекта без вида элемента: {name}")
+    for name in sorted(unknown):
+        notes.append(f"вида по проверке типа нет в таблице видов: {name}")
     ordered = {kind: dict(sorted(facets.items())) for kind, facets in sorted(table.items())}
     return ordered, notes

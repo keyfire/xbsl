@@ -19,10 +19,11 @@ has no check of its own: it imports nothing of the engine (the catalog of messag
 journal are leaves), so it never goes stale itself - and the worker sees what the supervisor
 could not: the plugins, the sources behind an unchanged version.
 
-- A refusal over a replaced engine carries `stale` with `ran: false`: the tool did not run. The
-  supervisor starts a new worker and sends it the same request, and the client gets the answer
-  of the new code instead of the refusal. `version_info` is asked again as well: it only reads.
-  A request goes to a new worker twice at most, then the refusal is passed on.
+- A refusal over a replaced engine - another version on disk, or the engine's code files changed
+  under the same one - carries `stale` with `ran: false`: the tool did not run. The supervisor
+  starts a new worker and sends it the same request, and the client gets the answer of the new
+  code instead of the refusal. `version_info` is asked again as well: it only reads. A request
+  goes to a new worker twice at most, then the refusal is passed on.
 - Any other answer with `stale` - a tool that failed on a mix of the old and the new code, a
   warning about the plugins changed on disk - is passed on as it is: the tool ran and may have
   written files, so it is not repeated. The next request goes to a new worker.
@@ -37,6 +38,12 @@ is closed; a refusal it sends meanwhile goes to the new worker the same way. Aft
 takes over, the client gets `notifications/tools/list_changed`: a new version may bring tools
 and parameters, and the client asks for the list again. For that the answer to the client's
 `initialize` announces `tools.listChanged`.
+
+The replayed `initialize` asks for the protocol version the client asked for, and a new worker
+may agree on another one: an update of the `mcp` package can drop the version the client
+speaks. Nothing changes then - the client keeps the version it was answered, and the new
+worker goes on - but the journal gets a `protocol` event with both versions, and `xbsl mcp-log`
+shows it next to the replacement.
 
 The supervisor ends when the client closes its stdin: the workers get the end of their input
 too, and the supervisor waits for them (SHUTDOWN_GRACE at most). It also ends when the first
@@ -138,6 +145,13 @@ def _error(request_id, message: str) -> bytes:
                   "error": {"code": INTERNAL_ERROR, "message": message}})
 
 
+def _protocol(message: dict) -> str | None:
+    """The protocol version an answer to `initialize` agreed on; None when it names none."""
+    result = message.get("result")
+    version = result.get("protocolVersion") if isinstance(result, dict) else None
+    return version if isinstance(version, str) else None
+
+
 def _answers(result: dict) -> list[dict]:
     """The objects a tool answered with: the structured content and the JSON of its text parts."""
     found = []
@@ -206,8 +220,9 @@ class _Worker:
         self.closed = False
         #: Why a start of this worker failed, in words for the answer to a waiting request.
         self.error = ""
-        #: The change on disk this worker was started for: (reason, on disk). A worker that
-        #: reports the same change again is not replaced over it - a new one would see it too.
+        #: The change on disk this worker was started for: (reason, on disk and the fingerprint
+        #: of the sources). A worker that reports the same change again is not replaced over
+        #: it - a new one would see it too.
         self.cause: tuple[str, str] | None = None
 
 
@@ -230,6 +245,8 @@ class Supervisor:
         self.initialized: bytes | None = None
         #: Whether the client's own `initialize` was answered: the session exists.
         self.session = False
+        #: The protocol version that answer agreed on: the one the client speaks.
+        self.protocol: str | None = None
         #: Whether the client was told `tools.listChanged`, and so hears of every new worker.
         self.announce = False
         self.started = 0
@@ -361,6 +378,12 @@ class Supervisor:
             return
         worker.state = "ready"
         self.failures = 0
+        agreed = _protocol(message)
+        if self.protocol is not None and agreed != self.protocol:
+            # The client goes on speaking the version it was answered: the difference is only
+            # told, for whoever looks into a session that misbehaves after a replacement.
+            mcpjournal.record("protocol", target=worker.process.pid, client=self.protocol,
+                              worker=agreed or "?")
         if self.initialized is not None:
             self._send(worker, self.initialized)
         self._flush()
@@ -370,7 +393,9 @@ class Supervisor:
 
     def _replace(self, worker: _Worker, stale: dict) -> None:
         """Retire the current worker and start a new one; the old one ends when it is idle."""
-        cause = (str(stale.get("reason")), json.dumps(stale.get("on_disk"), sort_keys=True))
+        # A change of the sources keeps the number on disk: its fingerprint names the change.
+        cause = (str(stale.get("reason")), json.dumps(
+            [stale.get("on_disk"), stale.get("fingerprint")], sort_keys=True))
         if worker is not self.worker or worker.cause == cause:
             return  # replaced already, or started for this very change
         self._journal(worker, stale)
@@ -570,6 +595,7 @@ class Supervisor:
         del self.requests[key]
         if key == self.initialize_key and not self.session:
             self.session = True
+            self.protocol = _protocol(message)
             line = self._announced(message) or line
         self._write_client(line)
         if found is not None:

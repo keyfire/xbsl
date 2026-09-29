@@ -30,10 +30,17 @@ and not the project's. The build picks the handler by the access settings of the
 the extractor sees a term read from metadata; the terms it picks from are three constants of the
 distribution, listed in RECORD_SECURITY with their proof. element_rows adds them to a module
 whose slot names that source, and handler_names to the names of the whole data.
+
+Which of them an entity declares follows from its kind (record_security_rows), and whether the
+compiler USES them - and the permissions handler beside them - from its access settings: a
+handler the element declares but its settings leave off is refused with a message of its own
+("Handler X is not used in this project item"). access_slot splits the handlers of such a module
+into the ones the settings use and the ones they leave off.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 
 from xbsl import dataset, terms
@@ -60,6 +67,65 @@ RECORD_SECURITY: tuple[dict, ...] = (
 #: The place a slot names for them in `dynamic`: the handler term of the access-control
 #: metadata of an entity, as the extractor writes it.
 RECORD_SECURITY_SOURCE = "EntityAccessControlMetadata$HandlerMetadata.computeHandlerTerm"
+
+_OBJECTS, _READ, _UPDATE = RECORD_SECURITY
+#: The record-level security handlers each entity kind declares. The access-control metadata of
+#: the entity lists them: an entity with objects takes the permissions for objects (the object
+#: entity producer, `produceDefaultEntityAccessControlMetadata`); a register takes the access keys
+#: for read and for update apart when it computes them separately (the register producer,
+#: `shouldComputeAccessKeysSeparately`: always for an accumulation register, see _PERIODIC_KIND
+#: for an information register); a constants set takes the keys apart, always (its own
+#: producer).
+_RECORD_SECURITY_BY_KIND: dict[str, tuple[dict, ...]] = {
+    "Справочник": (_OBJECTS,),
+    "Документ": (_OBJECTS,),
+    "ПланОбмена": (_OBJECTS,),
+    "ХранилищеНастроек": (_OBJECTS,),
+    "ИнтегрируемоеПриложение": (_OBJECTS,),
+    "РегистрНакопления": (_READ, _UPDATE),
+    "НаборКонстант": (_READ, _UPDATE),
+}
+#: The information register computes the keys apart only when it is periodic (the register
+#: producer asks `isPeriodic`: a periodicity other than the non-periodic one); a non-periodic
+#: register takes the permissions for objects.
+_PERIODIC_KIND = "РегистрСведений"
+#: The kinds whose records never compute permissions for each object: the record type of a
+#: constants set keeps the default of the entity type (`isRlsEnabled()` is false), so the
+#: handlers it declares are never used.
+_NO_PER_OBJECT = frozenset({"НаборКонстант"})
+
+#: The handler the own module of an element with access settings computes permissions in. The
+#: access-control provider of the compiler declares it beside the record-level security handlers
+#: and uses it only when the settings compute some permission (`hasComputedPrivileges()`: a
+#: privilege computed, for each object or not) and are not the standard ones of a settings
+#: storage (`hasDefaultPrivileges()`); the record-level security handlers only when they compute
+#: the permissions for each object (`isRlsEnabled()`) and are not the standard ones either.
+ACCESS_PERMISSIONS = {"ru": "ВычислитьРазрешенияДоступа", "en": "ComputeAccessPermissions"}
+#: The kind the data files the module of the project under - the kind of the project description.
+PROJECT_KIND = "Проект"
+
+
+@dataclass(frozen=True)
+class AccessSettings:
+    """What the access settings of an element say about its access handlers."""
+
+    computed: bool = False     # some privilege computes its permissions, for each object or not
+    per_object: bool = False   # some privilege computes them for each object
+    standard: bool = False     # the standard permissions of a settings storage
+    periodic: bool = False     # a periodic information register
+
+
+def record_security_rows(kind: str, periodic: bool | None = False) -> tuple[dict, ...] | None:
+    """The record-level security handlers an entity of `kind` declares, None for another kind.
+
+    `periodic` matters for an information register only; None there - a periodicity that cannot
+    be told - answers every handler the kind may declare.
+    """
+    if kind == _PERIODIC_KIND:
+        if periodic is None:
+            return RECORD_SECURITY
+        return (_READ, _UPDATE) if periodic else (_OBJECTS,)
+    return _RECORD_SECURITY_BY_KIND.get(kind)
 
 
 def _catalog() -> dict:
@@ -209,6 +275,59 @@ def element_slot(kind: str, module: str) -> tuple[dict, ...] | None:
     if slot is None or slot["dynamic"]:
         return None
     return slot["handlers"]
+
+
+def access_slot(kind: str, module: str, settings: AccessSettings | None
+                ) -> tuple[tuple[dict, ...], tuple[dict, ...]] | None:
+    """(the rows the settings use, the rows they leave off) of a module that takes the
+    record-level security handlers, None for any other module or a kind not known here.
+
+    The own module of an entity is dynamic only for those handlers (RECORD_SECURITY_SOURCE):
+    the kind tells which of them it declares (record_security_rows), and `settings` - read from
+    the description of the element - which of those and of the permissions handler the compiler
+    uses. Without settings (a description that cannot be read) every handler counts as used:
+    only a name the element cannot declare at all is then wrong.
+    """
+    slot = _elements().get(kind, {}).get(module)
+    if slot is None or set(slot["dynamic"]) != {RECORD_SECURITY_SOURCE}:
+        return None
+    periodic = settings.periodic if settings is not None else None
+    security = record_security_rows(kind, periodic)
+    if security is None:
+        return None
+    rows = slot["handlers"]
+    if settings is None:
+        return rows + security, ()
+    computed = settings.computed and not settings.standard
+    per_object = (settings.per_object and not settings.standard
+                  and kind not in _NO_PER_OBJECT)
+    used = tuple(row for row in rows if computed or row["ru"] != ACCESS_PERMISSIONS["ru"])
+    off = tuple(row for row in rows if row not in used)
+    return (used + security, off) if per_object else (used, off + security)
+
+
+def unused_reason(kind: str, row: dict, settings: AccessSettings | None) -> str:
+    """Why the settings leave off the handler of `row` (one access_slot left off): the standard
+    permissions, a kind that never computes permissions for each object, or the value missing
+    from the settings - `computed` for the permissions handler, `per-object` for the rest."""
+    if settings is not None and settings.standard:
+        return "standard"
+    if row["ru"] == ACCESS_PERMISSIONS["ru"]:
+        return "computed"
+    return "never" if kind in _NO_PER_OBJECT else "per-object"
+
+
+def project_rows() -> tuple[dict, ...]:
+    """The handlers the module of the project may override (`Проект.xbsl` beside the project
+    description), () when the data does not list them.
+
+    The compiler declares them for the project of an application only (the project kind of the
+    description, the default one) and not in a mobile application; a library or an extension
+    project declares none.
+    """
+    slot = _elements().get(PROJECT_KIND, {}).get("")
+    return slot["handlers"] if slot is not None and not slot["dynamic"] else ()
+
 
 
 def element_rows(kind: str, module: str) -> tuple[dict, ...]:

@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 264 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 268 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -92,6 +92,9 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Duplicate Id in the project |
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object [docs](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/Catalog/Attributes/Name_ru/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A reference type in a type position without `?`: a reference has no default value, so the compilation fails [details](#a-yaml-ref-needs-nullable) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `yaml/union-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A union type without the empty member in a type position (`String|Number`): a default value is built for a single type only, so the compilation fails [details](#a-yaml-union-needs-nullable) |
+| `yaml/contract-facet-mismatch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The restrictions of an attribute that overrides an entity contract property disagree with those of the property (the string length, the lengths and bounds of a number) - the compilation fails [details](#a-yaml-contract-facet-mismatch) |
+| `yaml/contract-standard-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The length of a standard attribute (`Name`, `Code`, `Number`) disagrees with the `MaxLength` of the entity contract property it overrides - the compilation fails [details](#a-yaml-contract-standard-length) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `=...` expression inside a literal-typed node (`Font: {Type: AbsoluteFont, Size: =...}`) - the platform accepts only a literal there, compute the whole object instead [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
 | `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key declared twice in a `LocalizedStrings` dictionary: the apply rejects the whole project [details](#a-yaml-localization-key-unique) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `yaml/unused-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An interface component placed nowhere and created nowhere: neither as a `Type` value in markup nor by `new` in code. Dead markup ships with the build and the translation [details](#a-yaml-unused-component) |
@@ -124,6 +127,40 @@ not check the `Import` section. The fix removes the extra entry.
 <a id="a-yaml-ref-needs-nullable"></a>**`yaml/ref-needs-nullable`.** Both a field of its own and a
 type argument of a component are written this way: `Goods.Reference`, `Edit<Goods.Reference>`. The
 compilation answers `Default value initialization is not supported`.
+
+<a id="a-yaml-union-needs-nullable"></a>**`yaml/union-needs-nullable`.** The platform builds a
+default value for a single type only; for a set of types without `Undefined` it gives up at once,
+whatever the members are. A probe got `Default value initialization is not supported for types
+...` on an attribute of a catalog and of its tabular section, on a dimension and a resource of a
+register, on a field of a structure, on a property of an interface component and on a property of
+an entity contract. What compiles: the empty member (`String|Number|?`), a `DefaultValue` next to
+the type, a structure field with `Required: True`, a parameter of an event. A property of an entity
+contract has no `DefaultValue` key, so there the empty member is the only way out. A union with a
+reference member is left to `yaml/ref-needs-nullable`, so one position gets one finding. The fix
+appends `|?`.
+
+<a id="a-yaml-contract-facet-mismatch"></a>**`yaml/contract-facet-mismatch`.** An attribute
+overrides the property of the implemented contract that has its name, a table attribute the
+attribute of the contract table, and the compiler holds their restrictions against each other. A
+property without a restriction does not allow one on the attribute ("Restrictions must not be set
+for the attribute that overrides entity contract property"), and a restriction is any key of the
+group: `Multiline` or `LengthControl` alone make the attribute a restricted string. A restricted
+property demands the same restriction ("No restrictions are set ..."), and the values must be
+equal ("... must be equal to 50"). A property with `ReadOnly: True` is softer: it lets an
+unrestricted property's attribute restrict itself and lets a restricted one be stricter, never
+wider ("... cannot be greater than 50"). A number restricted by one key takes the defaults for the
+rest - integer part 10, fractional part 0 - and a bound the property sets and the attribute does
+not is an error of its own. Types must match, and an array or a union of a string with a number
+is left alone. The fix sets an unequal or missing string length to the property's value.
+
+<a id="a-yaml-contract-standard-length"></a>**`yaml/contract-standard-length`.** A standard
+attribute always has a length: `Name` 150, `Code` 7, `Number` of a document 9, unless `Length`
+says otherwise. A contract property of that name without `MaxLength` fails the implementation
+with "The maximum length for property "Name" is not set in entity contract", a different
+`MaxLength` with "... must be equal to 100", and a read-only property only caps the length ("...
+cannot exceed 100"). A numeric code is measured by `IntegerPartLength`. The fix sets `Length` on
+the attribute; a missing length is added in the contract by hand, or the property is made
+read-only with the largest length the implementations need.
 
 <a id="a-yaml-localization-key-unique"></a>**`yaml/localization-key-unique`.** `Strings` and
 `Templates` share one namespace, and a translation file is judged alongside the dictionary. The
@@ -462,7 +499,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Form handler not found in the module [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Handler signature does not match the event [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/bound-handler-annotation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `@Handler` annotation on a method the paired yaml binds to an event, a command or a route: the annotation marks an override, and the compiler refuses it on a bound method [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
-| `code/handler-overrides-nothing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `@Handler` annotation on a method that the paired yaml does not bind and that overrides no handler the module's base declares in the project's compatibility mode: the compiler refuses it. For an interface component the lists come from the component descriptions the distribution ships, for the other modules (an object, a record set, a record, a scheduled job, a command) from the handler providers of the compiler; a module that takes handler names from the element's own description at build time is not judged [details](#d-code-handler-overrides-nothing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
+| `code/handler-overrides-nothing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The `@Handler` annotation on a method that the paired yaml does not bind and that overrides no handler the module's base declares in the project's compatibility mode: the compiler refuses it. For an interface component the lists come from the component descriptions the distribution ships, for the other modules (an object, a record set, a record, a scheduled job, a command) from the handler providers of the compiler; a module that takes handler names from the element's own description at build time is not judged, and the own module of an entity is judged by its access settings [details](#d-code-handler-overrides-nothing) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Handler_ru/) |
 | `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Access to a component the form markup does not declare [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Server method is unavailable to a client handler [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | project | A platform component's `Image` property reaches the server directly or through client methods [details](#d-code-image-binding-server-call) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
@@ -575,6 +612,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `comment/doc-tag-target` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `@see` reference written as a name or a chain of names that leads nowhere, and an `@throws` type neither the project nor the platform declares; the finding lists what the method body throws [details](#b-comment-doc-tags) [docs](https://1cmycloud.com/docs/help/topics/documentation-comments/) |
 | `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A call that binds only to a deprecated form of a platform method, as the platform IDE warns [details](#d-code-deprecated-api) [docs](https://1cmycloud.com/docs/help/topics/update-app-data/) |
 | `code/deprecated-project` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A use bound to a project method, property, constructor, parameter or enumeration value marked deprecated, as the platform IDE warns [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru/) |
+| `code/contract-method-not-abstract` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An ordinary method in the object module or in the module of a row of an entity contract: these modules take abstract methods only, and the compiler refuses any other with "Non-abstract method ... cannot be defined" [details](#d-code-contract-method-not-abstract) |
 
 #### Tier D rules in detail
 
@@ -877,7 +915,7 @@ the documentation.
 <a id="d-code-access-context-read-noop"></a>**`code/access-context-read-noop`.** Everyone may read
 such a type already. With that privilege alone the whole line goes; among others, only it does.
 
-<a id="d-code-handler-overrides-nothing"></a>**`code/handler-overrides-nothing`.** The handlers of an interface component module are listed by the description of each component in the distribution, and a component inherits those of its bases. The other modules have no such description: the compiler declares their handlers in code, one provider class per kind of element, and the extractor reads that code to the terms the names are built from. So the object module of a catalog overrides `BeforeWrite`, `AfterWrite`, `BeforeDelete`, `AfterDelete`, `OnFill`, `OnCreateCopy` and `OnCreateOnBasis`, the record set of a register `BeforeWrite` and `AfterWrite`, the module of a scheduled job `Handler`, and the own module of an element may override `ComputeAccessPermissions`. A module is matched to its element by the file name: `Stock.yaml` pairs with `Stock.xbsl` (the element's own module) and with `Stock.Object.xbsl`, `Stock.RecordSet.xbsl`, `Stock.Record.xbsl`. Some modules take handler names from the element's own description while the project is built: the operations of a processing, the operations of a SOAP client from its WSDL, the record-level security handlers of an entity (`ComputeAccessPermissionsForObjects`, `ComputeAccessKeysForRead`) from its access settings. Any name may be a handler there, and such a module is not judged; nor is a kind the data does not list, and without the lists the rule is silent.
+<a id="d-code-handler-overrides-nothing"></a>**`code/handler-overrides-nothing`.** The handlers of an interface component module are listed by the description of each component in the distribution, and a component inherits those of its bases. The other modules have no such description: the compiler declares their handlers in code, one provider class per kind of element, and the extractor reads that code to the terms the names are built from. So the object module of a catalog overrides `BeforeWrite`, `AfterWrite`, `BeforeDelete`, `AfterDelete`, `OnFill`, `OnCreateCopy` and `OnCreateOnBasis`, the record set of a register `BeforeWrite` and `AfterWrite`, the module of a scheduled job `Handler`, the module of an access key `CheckHasAccessKeys`, and the own module of an element with access settings (a catalog, a document, a register, an HTTP service and the like) `ComputeAccessPermissions`. A module is matched to its element by the file name: `Stock.yaml` pairs with `Stock.xbsl` (the element's own module) and with `Stock.Object.xbsl`, `Stock.RecordSet.xbsl`, `Stock.Record.xbsl`. Some modules take handler names from the element's own description while the project is built: the operations of a processing, the operations of a SOAP client from its WSDL. Any name may be a handler there, and such a module is not judged. The own module of an entity takes one name that way too, the record-level security handler, and is judged all the same. Its kind tells which of those handlers it declares (`ComputeAccessPermissionsForObjects` for a catalog, `ComputeAccessKeysForRead` and `ComputeAccessKeysForUpdate` for an accumulation register or a periodic information register), and its access settings (`AccessControl`) tell which of them and of `ComputeAccessPermissions` the build uses: `ComputeAccessPermissions` once a privilege is `PermissionsComputed` or `PermissionsComputedForEachObject`, the record-level security handler once one is `PermissionsComputedForEachObject`, neither on the standard permissions of a settings storage. A handler the element declares but its settings leave off is refused with a message of its own, `Handler "X" is not used in this project item`, and the finding quotes it. A kind the data does not list is not judged, and without the lists the rule is silent.
 
 <a id="d-code-permission-handlers-need-recalc"></a>**`code/permission-handlers-need-recalc`.** The
 handlers are `ComputeAccessPermissions` and kin. A recompute with a non-entity receiver, the
@@ -1029,6 +1067,15 @@ and `ObjectStorage.Upload(Stream, Size)` next to the current `Upload("file", Byt
 that. The overloads are picked by the compatibility mode of the project, the arguments and their
 known types. A project description that declares no supported mode is read in the newest mode, as
 the platform reads it. The message names the replacement when the documentation does.
+
+<a id="d-code-contract-method-not-abstract"></a>**`code/contract-method-not-abstract`.** An entity contract generates the object
+type `<Contract>.Object` and a row type for each of its tabular sections, and both may have a
+module: `<Contract>.Object.xbsl` and `<Contract>.<Section>.xbsl`. A probe compiled an ordinary
+method in each and got "Non-abstract method ... cannot be defined"; an `abstract method` without a
+body passes. The module is joined to the yaml of its contract across the files of the run, a row
+module by the section the yaml declares. The module of the contract type itself
+(`<Contract>.xbsl`) and static methods are not judged: no probe has compiled an ordinary method
+there, or a static one. A yaml that does not parse leaves the modules of its contract alone.
 
 ## Group details
 

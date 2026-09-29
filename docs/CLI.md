@@ -401,7 +401,7 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 
 ### `xbsl add-field`
 
-add an attribute/dimension/resource/value/property/event/tabular section; see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
+add an item to a section of an object: an attribute, a dimension, a tabular section and more (field_kind lists the kinds); see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
 
 ```bash
 usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--doc DOC]
@@ -414,7 +414,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object to add the field to |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, свойство, событие, табличная-часть |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие, операция, индекс, параметр-запроса, табличная-часть, строка, шаблон |
 | `name` | the field name |
 
 **Options**
@@ -627,7 +627,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object to add the field to |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие, операция, индекс, параметр-запроса, табличная-часть |
 | `name` | the name of the item in the section |
 
 **Options**
@@ -889,7 +889,7 @@ usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--package P
 find the places that name a resource file or a folder: Resource{...} keys, image property values and lookups by a string; the answer is JSON with the file, the range and the line of each place; see also move-resource, which moves a resource and rewrites its keys
 
 ```bash
-usage: xbsl resource-references [-h] root resource_path
+usage: xbsl resource-references [-h] [--limit LIMIT] root resource_path
 ```
 
 **Arguments**
@@ -904,6 +904,7 @@ usage: xbsl resource-references [-h] root resource_path
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
+| `--limit LIMIT` | list at most N places in references; total counts every place (default: 100, as in meta_resource_references) |
 
 ### `xbsl unused-resources`
 

@@ -147,6 +147,17 @@ def test_diff_terms_reports_the_reserved_words_of_the_query_language():
     assert any(i18n.t("datadiff.term.query-reserved") in str(line) for line in lines)
 
 
+def test_diff_terms_reports_the_types_of_the_query_literals():
+    """A literal whose type changes between two builds is a change the typing of query rows
+    follows, so the section is diffed and titled like the others."""
+    old = {"query_reserved_types": {"ИСТИНА": "Булево"}}
+    new = {"query_reserved_types": {"ИСТИНА": "Булево", "НЕОПРЕДЕЛЕНО": "Неопределено"}}
+    diff = datadiff.diff_terms(old, new)
+    assert diff["query_reserved_types"]["added"] == ["НЕОПРЕДЕЛЕНО"]
+    lines = datadiff._section_lines("terms", diff, None)
+    assert any(i18n.t("datadiff.term.query-reserved-types") in str(line) for line in lines)
+
+
 def test_diff_docs_pages_added_removed_retitled():
     old = {"a": ("Один", "type"), "b": ("Два", "type")}
     new = {"b": ("Два-новое", "type"), "c": ("Три", "member")}

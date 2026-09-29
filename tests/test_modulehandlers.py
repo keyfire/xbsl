@@ -287,3 +287,106 @@ def test_without_the_element_section_every_module_is_its_elements_own(data):
     assert modulehandlers.element_module("Склады/Склады.Объект") == ("Склады/Склады.Объект", "")
     assert modulehandlers.element_rows("Справочник", "Объект") == ()
     assert modulehandlers.handler_names() == modulehandlers.all_names()
+
+
+# --- the access settings of an entity pick the handlers the build uses ---------------------
+
+_PERMISSIONS = {"ru": "ВычислитьРазрешенияДоступа", "en": "ComputeAccessPermissions"}
+_CHOICE = {"ru": "ПолучитьЗначенияВыбора", "en": "GetChoiceValues"}
+_SECURITY = {"handlers": [_PERMISSIONS], "dynamic": [modulehandlers.RECORD_SECURITY_SOURCE]}
+_SETTINGS_ELEMENTS = {
+    "Справочник": {"": {"handlers": [_PERMISSIONS, _CHOICE],
+                        "dynamic": [modulehandlers.RECORD_SECURITY_SOURCE]}},
+    "РегистрСведений": {"": _SECURITY},
+    "РегистрНакопления": {"": _SECURITY},
+    "НаборКонстант": {"": _SECURITY},
+    "ХранилищеНастроек": {"": _SECURITY},
+    # A kind this module does not know the record-level security handlers of.
+    "НовыйВид": {"": _SECURITY},
+    "Проект": {"": {"handlers": [{"ru": "ВычислитьСистемныеРазрешенияДоступа",
+                                  "en": "ComputeSystemAccessPermissions"}]}},
+}
+_OBJECTS, _READ, _UPDATE = modulehandlers.RECORD_SECURITY
+_Settings = modulehandlers.AccessSettings
+
+
+@pytest.fixture
+def settings_data(tmp_path):
+    _root(tmp_path, {**_STDLIB, "element_module_handlers": _SETTINGS_ELEMENTS})
+    dataset.set_data_root(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        dataset.set_data_root(None)
+
+
+def _names(rows):
+    return [row["ru"] for row in rows]
+
+
+def test_without_computed_permissions_the_permissions_handler_is_left_off(settings_data):
+    used, off = modulehandlers.access_slot("Справочник", "", _Settings())
+    assert _names(used) == ["ПолучитьЗначенияВыбора"]
+    assert _names(off) == ["ВычислитьРазрешенияДоступа", "ВычислитьРазрешенияДоступаДляОбъектов"]
+    assert modulehandlers.unused_reason("Справочник", off[0], _Settings()) == "computed"
+    assert modulehandlers.unused_reason("Справочник", off[1], _Settings()) == "per-object"
+
+
+def test_computed_permissions_use_the_permissions_handler_alone(settings_data):
+    used, off = modulehandlers.access_slot("Справочник", "", _Settings(computed=True))
+    assert _names(used) == ["ВычислитьРазрешенияДоступа", "ПолучитьЗначенияВыбора"]
+    assert _names(off) == ["ВычислитьРазрешенияДоступаДляОбъектов"]
+
+
+def test_permissions_for_each_object_use_both(settings_data):
+    used, off = modulehandlers.access_slot(
+        "Справочник", "", _Settings(computed=True, per_object=True))
+    assert _names(used) == ["ВычислитьРазрешенияДоступа", "ПолучитьЗначенияВыбора",
+                            "ВычислитьРазрешенияДоступаДляОбъектов"]
+    assert off == ()
+
+
+def test_a_register_takes_its_keys_by_its_periodicity(settings_data):
+    per_object = _Settings(computed=True, per_object=True)
+    periodic = _Settings(computed=True, per_object=True, periodic=True)
+    assert modulehandlers.access_slot("РегистрСведений", "", per_object)[0][1:] == (_OBJECTS,)
+    assert modulehandlers.access_slot("РегистрСведений", "", periodic)[0][1:] == (_READ, _UPDATE)
+    assert modulehandlers.access_slot("РегистрНакопления", "", per_object)[0][1:] == (
+        _READ, _UPDATE)
+    # A periodicity that cannot be told answers every handler the kind may declare.
+    assert modulehandlers.record_security_rows("РегистрСведений", None) == (
+        modulehandlers.RECORD_SECURITY)
+
+
+def test_the_standard_permissions_and_a_constants_set_leave_the_handlers_off(settings_data):
+    standard = _Settings(computed=True, per_object=True, standard=True)
+    used, off = modulehandlers.access_slot("ХранилищеНастроек", "", standard)
+    assert used == () and _names(off) == ["ВычислитьРазрешенияДоступа",
+                                          "ВычислитьРазрешенияДоступаДляОбъектов"]
+    assert modulehandlers.unused_reason("ХранилищеНастроек", off[1], standard) == "standard"
+    used, off = modulehandlers.access_slot("НаборКонстант", "", _Settings(True, True))
+    assert used == (_PERMISSIONS,) and off == (_READ, _UPDATE)
+    assert modulehandlers.unused_reason("НаборКонстант", _READ, _Settings(True, True)) == "never"
+
+
+def test_unreadable_settings_use_every_handler_of_the_kind(settings_data):
+    used, off = modulehandlers.access_slot("Справочник", "", None)
+    assert _names(used) == ["ВычислитьРазрешенияДоступа", "ПолучитьЗначенияВыбора",
+                            "ВычислитьРазрешенияДоступаДляОбъектов"]
+    assert off == ()
+
+
+def test_control_other_modules_are_not_split_by_the_settings(settings_data):
+    """The negative control: a kind not known here, a static slot and no slot answer None."""
+    assert modulehandlers.access_slot("НовыйВид", "", _Settings()) is None
+    assert modulehandlers.access_slot("Проект", "", _Settings()) is None
+    assert modulehandlers.access_slot("Справочник", "Объект", _Settings()) is None
+
+
+def test_the_module_of_the_project_answers_its_handlers(settings_data):
+    assert _names(modulehandlers.project_rows()) == ["ВычислитьСистемныеРазрешенияДоступа"]
+    assert "ComputeSystemAccessPermissions" in modulehandlers.handler_names()
+
+
+def test_control_without_the_project_slot_the_project_has_no_handlers(elements):
+    assert modulehandlers.project_rows() == ()

@@ -32,6 +32,7 @@ from pathlib import Path
 from xbsl import dataset, libs, metamodel, modulehandlers, terms
 from xbsl.lexer import tokens
 from xbsl.engine import SourceFile
+from xbsl.layout import PROJECT_FILES
 from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules._syntax import annotations_before
 from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
@@ -751,8 +752,10 @@ def module_handlers(path: Path, loader, bases: dict[str, str]) -> ModuleHandlers
     other element answers with the handlers the compiler declares for the kind and the module
     (modulehandlers.element_rows): `Склады.xbsl` beside the `Склады.yaml` of a catalog is its
     own module, `Склады.Объект.xbsl` its object module, and a scheduled job overrides `Handler`
-    in its own. The base the answer names is the kind, with the module after a dot. A module
-    without its element, a chain that cannot be told and data without the lists answer None.
+    in its own. The base the answer names is the kind, with the module after a dot. The module
+    of the project - `Проект.xbsl` beside the project description - answers with the handlers of
+    the project (modulehandlers.project_rows). A module without its element, a chain that cannot
+    be told and data without the lists answer None.
     """
     components, elements = modulehandlers.available(), modulehandlers.element_available()
     if not (components or elements) or not path.name.endswith(".xbsl"):
@@ -761,6 +764,11 @@ def module_handlers(path: Path, loader, bases: dict[str, str]) -> ModuleHandlers
     pair = path.with_name(f"{stem}.yaml")
     if not pair.is_file():
         return None
+    if not module and pair.name in PROJECT_FILES:
+        # The module of the project pairs with the project description, which names no kind.
+        rows = modulehandlers.project_rows()
+        return (ModuleHandlers(modulehandlers.PROJECT_KIND, {row["ru"]: row["en"] for row in rows})
+                if rows else None)
     try:
         data, error = _parsed(loader(pair))
     except OSError:

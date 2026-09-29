@@ -2160,6 +2160,30 @@ Id: 1d1f5c60-0000-4000-8000-000000000f33
 Name: Invoices
 VisibilityScope: InProject
 """
+#: A catalog whose access settings compute the permissions of each object, and an access key:
+#: the own module of the catalog takes both access handlers, that of the key its check alone.
+_OVERRIDE_CATALOG_ACCESS_RU = _OVERRIDE_CATALOG_RU + """\
+КонтрольДоступа:
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+"""
+_OVERRIDE_CATALOG_ACCESS_EN = _OVERRIDE_CATALOG_EN + """\
+AccessControl:
+    Permissions:
+        Read: PermissionsComputedForEachObject
+"""
+_OVERRIDE_KEY_RU = """\
+ВидЭлемента: КлючДоступа
+Ид: 1d1f5c60-0000-4000-8000-000000000f36
+Имя: КлючиСкладов
+ОбластьВидимости: ВПроекте
+"""
+_OVERRIDE_KEY_EN = """\
+ElementKind: AccessKey
+Id: 1d1f5c60-0000-4000-8000-000000000f36
+Name: StockKeys
+VisibilityScope: InProject
+"""
 _OVERRIDE_JOB_RU = """\
 ВидЭлемента: ЗапланированноеЗадание
 Ид: 1d1f5c60-0000-4000-8000-000000000f34
@@ -2297,6 +2321,99 @@ _AUTO_BUTTON_FORM_RU = (
     "            {line}\n"
 )
 _AUTO_TOKENS = {"ФормаЗаказа": "OrderForm", "КнопкаЗаказа": "OrderButton"}
+
+
+#: An entity contract with one string property and a catalog implementing it - the pair the
+#: contract restriction rules judge.
+_CONTRACT_RU = """\
+ВидЭлемента: КонтрактСущности
+Ид: 1d1f5c60-0000-4000-8000-000000000f31
+Имя: КонтрактЗаявки
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f32
+{prop}"""
+_CONTRACT_EN = """\
+ElementKind: EntityContract
+Id: 1d1f5c60-0000-4000-8000-000000000f31
+Name: ApplicationContract
+VisibilityScope: InProject
+Properties:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f32
+{prop}"""
+_IMPLEMENTATION_RU = _CATALOG_RU + """\
+НастройкиТипов:
+    Справочник.Объект:
+        Контракты:
+            - КонтрактЗаявки.Объект
+Реквизиты:
+    -
+{attrs}"""
+_IMPLEMENTATION_EN = _CATALOG_EN + """\
+TypeOptions:
+    Catalog.Object:
+        Contracts:
+            - ApplicationContract.Object
+Attributes:
+    -
+{attrs}"""
+_REMARK_ATTR_RU = (
+    "        Имя: Наименование\n    -\n        Ид: 1d1f5c60-0000-4000-8000-000000000f33\n"
+    "        Имя: Пометка\n        Тип: Строка\n"
+)
+_REMARK_ATTR_EN = (
+    "        Name: Name\n    -\n        Id: 1d1f5c60-0000-4000-8000-000000000f33\n"
+    "        Name: Remark\n        Type: String\n"
+)
+_CONTRACT_TOKENS = {
+    "Заявки": "Applications", "КонтрактЗаявки": "ApplicationContract", "Пометка": "Remark",
+}
+_UNION_ATTRIBUTE_RU = """\
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f34
+        Имя: Пометка
+        Тип: Строка|Число{mark}
+"""
+_UNION_ATTRIBUTE_EN = """\
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f34
+        Name: Remark
+        Type: String|Number{mark}
+"""
+
+#: An entity contract with a tabular section: its object module and the module of its row take
+#: abstract methods only. `{method}` is the declaration planted into the module.
+_EXHIBITS_RU = """\
+ВидЭлемента: КонтрактСущности
+Ид: 1d1f5c60-0000-4000-8000-000000000f61
+Имя: Экспонаты
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f62
+        Имя: НазваниеЭкспоната
+        Тип: Строка
+        МаксимальнаяДлина: 100
+ТабличныеЧасти:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f63
+        Имя: МеткиЭкспоната
+        Реквизиты:
+            -
+                Ид: 1d1f5c60-0000-4000-8000-000000000f64
+                Имя: ТекстМетки
+                Тип: Строка
+                МаксимальнаяДлина: 50
+"""
+_EXHIBIT_ORDINARY_RU = "метод ОписаниеЭкспоната(): Строка\n    возврат \"\"\n;\n"
+_EXHIBIT_ABSTRACT_RU = "абстрактный метод ОписаниеЭкспоната(): Строка\n"
+_EXHIBIT_TOKENS = {"Экспонаты": "Exhibits", "НазваниеЭкспоната": "ExhibitTitle",
+                   "МеткиЭкспоната": "ExhibitLabels", "ТекстМетки": "LabelText",
+                   "ОписаниеЭкспоната": "ExhibitDescription"}
 
 
 SEEDS: list[Seed] = [
@@ -5837,6 +5954,45 @@ SEEDS: list[Seed] = [
         needs_section="element_module_handlers",
     ),
     Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the permissions handler in the own module of a catalog without access settings - "
+             "the build declares it and refuses it as not used by the element",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU,
+               "Склады.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN,
+                 "Stock.xbsl": "@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n"},
+        tokens={"Склады": "Stock"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the own module of a catalog that computes the permissions of each object "
+             "overrides both access handlers - the English tree reads the same settings",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_ACCESS_RU,
+               "Склады.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n\n"
+                              "@Обработчик\nметод ВычислитьРазрешенияДоступаДляОбъектов()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_ACCESS_EN,
+                 "Stock.xbsl": "@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n\n"
+                               "@Handler\nmethod ComputeAccessPermissionsForObjects()\n;\n"},
+        tokens={"Склады": "Stock"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="a method of the module of an access key under the handler annotation that is not "
+             "the key check - the only handler the compiler declares there",
+        files={"КлючиСкладов.yaml": _OVERRIDE_KEY_RU,
+               "КлючиСкладов.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа()\n;\n"},
+        english={"StockKeys.yaml": _OVERRIDE_KEY_EN,
+                 "StockKeys.xbsl": "@Handler\nmethod ComputeAccessPermissions()\n;\n"},
+        tokens={"КлючиСкладов": "StockKeys",
+                "ВычислитьРазрешенияДоступа": "ComputeAccessPermissions"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
         rule="code/local-method-cross-component",
         expect=FINDING,
         note="a component method at the default visibility called through an instance from another component",
@@ -6022,6 +6178,18 @@ SEEDS: list[Seed] = [
                  "Stock.xbsl": "method ComputeAccessPermissionsForObjects()\n;\n"},
         tokens={"Склады": "Stock",
                 "ВычислитьРазрешенияДоступаДляОбъектов": "ComputeAccessPermissionsForObjects"},
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=CLEAN,
+        note="the system permissions handler of the module of the project without the "
+             "annotation - the platform calls it by name, in either spelling",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"),
+               "Проект.xbsl": "метод ВычислитьСистемныеРазрешенияДоступа()\n;\n"},
+        english={"Project.yaml": _PROJECT_EN.format(mode="9.0"),
+                 "Project.xbsl": "method ComputeSystemAccessPermissions()\n;\n"},
+        tokens={"ВычислитьСистемныеРазрешенияДоступа": "ComputeSystemAccessPermissions"},
+        needs_section="element_module_handlers",
     ),
     Seed(
         rule="code/unused-method",
@@ -7483,6 +7651,140 @@ SEEDS: list[Seed] = [
         note="a bare Auto in the visibility of a button - a union of Auto and a boolean",
         files={"ФормаЗаказа.yaml": _AUTO_BUTTON_FORM_RU.format(line="Видимость: Авто")},
         tokens=_AUTO_TOKENS,
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=FINDING,
+        note="a union attribute without the empty member has no default value - reported",
+        files={"Заявки.yaml": _CATALOG_RU + _UNION_ATTRIBUTE_RU.format(mark="")},
+        english={"Applications.yaml": _CATALOG_EN + _UNION_ATTRIBUTE_EN.format(mark="")},
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=CLEAN,
+        note="the same union with the empty member compiles",
+        files={"Заявки.yaml": _CATALOG_RU + _UNION_ATTRIBUTE_RU.format(mark="|?")},
+        english={"Applications.yaml": _CATALOG_EN + _UNION_ATTRIBUTE_EN.format(mark="|?")},
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/contract-facet-mismatch",
+        expect=FINDING,
+        note="a length on the attribute of a contract property without one - reported",
+        files={
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(prop="        Имя: Пометка\n        Тип: Строка\n"),
+            "Заявки.yaml": _IMPLEMENTATION_RU.format(
+                attrs=_REMARK_ATTR_RU + "        МаксимальнаяДлина: 50\n"),
+        },
+        english={
+            "ApplicationContract.yaml": _CONTRACT_EN.format(prop="        Name: Remark\n        Type: String\n"),
+            "Applications.yaml": _IMPLEMENTATION_EN.format(
+                attrs=_REMARK_ATTR_EN + "        MaxLength: 50\n"),
+        },
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/contract-facet-mismatch",
+        expect=CLEAN,
+        note="a read-only property caps the length only - a stricter attribute compiles",
+        files={
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(
+                prop="        Имя: Пометка\n        Тип: Строка\n        МаксимальнаяДлина: 50\n"
+                     "        ТолькоЧтение: Истина\n"),
+            "Заявки.yaml": _IMPLEMENTATION_RU.format(
+                attrs=_REMARK_ATTR_RU + "        МаксимальнаяДлина: 40\n"),
+        },
+        english={
+            "ApplicationContract.yaml": _CONTRACT_EN.format(
+                prop="        Name: Remark\n        Type: String\n        MaxLength: 50\n"
+                     "        ReadOnly: True\n"),
+            "Applications.yaml": _IMPLEMENTATION_EN.format(
+                attrs=_REMARK_ATTR_EN + "        MaxLength: 40\n"),
+        },
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/contract-standard-length",
+        expect=FINDING,
+        note="the standard name overrides a contract property without a length - reported",
+        files={
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(prop="        Имя: Наименование\n        Тип: Строка\n"),
+            "Заявки.yaml": _IMPLEMENTATION_RU.format(attrs="        Имя: Наименование\n"),
+        },
+        english={
+            "ApplicationContract.yaml": _CONTRACT_EN.format(prop="        Name: Name\n        Type: String\n"),
+            "Applications.yaml": _IMPLEMENTATION_EN.format(attrs="        Name: Name\n"),
+        },
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/contract-standard-length",
+        expect=CLEAN,
+        note="the property states the standard length - the implementation compiles",
+        files={
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(
+                prop="        Имя: Наименование\n        Тип: Строка\n        МаксимальнаяДлина: 150\n"),
+            "Заявки.yaml": _IMPLEMENTATION_RU.format(attrs="        Имя: Наименование\n"),
+        },
+        english={
+            "ApplicationContract.yaml": _CONTRACT_EN.format(
+                prop="        Name: Name\n        Type: String\n        MaxLength: 150\n"),
+            "Applications.yaml": _IMPLEMENTATION_EN.format(attrs="        Name: Name\n"),
+        },
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=FINDING,
+        note="an ordinary method in the object module of an entity contract - the compiler "
+             "refuses a non-abstract method there",
+        files={"Экспонаты.yaml": _EXHIBITS_RU, "Экспонаты.Объект.xbsl": _EXHIBIT_ORDINARY_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=CLEAN,
+        note="the same method declared abstract in the object module of the entity contract",
+        files={"Экспонаты.yaml": _EXHIBITS_RU, "Экспонаты.Объект.xbsl": _EXHIBIT_ABSTRACT_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=FINDING,
+        note="an ordinary method in the module of a row of an entity contract, recognised by "
+             "the section the yaml declares",
+        files={"Экспонаты.yaml": _EXHIBITS_RU,
+               "Экспонаты.МеткиЭкспоната.xbsl": _EXHIBIT_ORDINARY_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=CLEAN,
+        note="the abstract method in the module of a row of an entity contract",
+        files={"Экспонаты.yaml": _EXHIBITS_RU,
+               "Экспонаты.МеткиЭкспоната.xbsl": _EXHIBIT_ABSTRACT_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="code/undefined-name",
+        expect=CLEAN,
+        note="the module of a row calls a method of the structure type and reads the attribute "
+             "of its section by bare name",
+        files={"Задачи.yaml": _TASKS_RU,
+               "Задачи.Шаги.xbsl": "метод ТекстШага(): Строка\n"
+                                   "    возврат Представление() + Шаг\n;\n"},
+        tokens={**_TASK_TOKENS, "ТекстШага": "StepText"},
+    ),
+    Seed(
+        rule="code/undefined-name",
+        expect=FINDING,
+        note="a bare method of the structure type in the module of a row - the compiler looks "
+             "a bare name up among the values",
+        files={"Задачи.yaml": _TASKS_RU,
+               "Задачи.Шаги.xbsl": "метод ТекстШага(): Строка\n"
+                                   "    возврат Представление\n;\n"},
+        tokens={**_TASK_TOKENS, "ТекстШага": "StepText"},
     ),
 ]
 

@@ -31,9 +31,12 @@ from __future__ import annotations
 
 import bisect
 from dataclasses import dataclass
+from functools import lru_cache
 
-from xbsl import lexer
-from xbsl.typeinfer import ModuleScope, TypeSet, TABULAR_STANDARD_FIELDS, _MISSING_FIELD
+from xbsl import dataset, lexer
+from xbsl.typeinfer import (
+    ModuleScope, TypeSet, TABULAR_STANDARD_FIELDS, _MISSING_FIELD, _UNDEFINED_NAMES,
+)
 
 _WORD_KINDS = ("IDENT", "KEYWORD")
 
@@ -639,6 +642,47 @@ def _path(segments: list, tables: dict[str, _Table], scope: ModuleScope) -> Type
     return TypeSet(got.names, got.undefined, got.null or null)
 
 
+#: The literals of the query language and their types when the data does not list them (a
+#: public checkout, data extracted before the list existed): the rows of the table of the
+#: reserved words on the help page on the syntax of query text that link the page of a type,
+#: as `query_reserved_types` and `query_reserved` of terms.json keep them.
+_LITERAL_TYPES_FALLBACK = {"ИСТИНА": "Булево", "ЛОЖЬ": "Булево", "НЕОПРЕДЕЛЕНО": "Неопределено"}
+_LITERAL_SPELLINGS_FALLBACK = {"ИСТИНА": "TRUE", "ЛОЖЬ": "FALSE", "НЕОПРЕДЕЛЕНО": "UNDEFINED"}
+
+
+@lru_cache(maxsize=1)
+def _literal_types() -> dict[str, TypeSet]:
+    """{a literal of the query language, upper-cased, either spelling: the type it stands for}.
+
+    The data names the type of each literal the documentation links to the page of a type
+    (`query_reserved_types` of terms.json, keyed by the Russian word), and the English spelling
+    of the word is its pair among the reserved words (`query_reserved`). Without the list - the
+    words kept by hand (`_LITERAL_TYPES_FALLBACK`). The empty value is a flag of the set, not a
+    name of it.
+    """
+    data = dataset.load_optional("terms.json") or {}
+    typed = data.get("query_reserved_types")
+    spellings = data.get("query_reserved")
+    if not isinstance(typed, dict) or not typed:
+        typed, spellings = _LITERAL_TYPES_FALLBACK, _LITERAL_SPELLINGS_FALLBACK
+    if not isinstance(spellings, dict):
+        spellings = {}
+    out: dict[str, TypeSet] = {}
+    for word, name in typed.items():
+        if not isinstance(word, str) or not isinstance(name, str) or not name:
+            continue
+        literal = TypeSet(undefined=True) if name in _UNDEFINED_NAMES else TypeSet.of(name)
+        out[word.upper()] = literal
+        english = spellings.get(word)
+        if isinstance(english, str):
+            out[english.upper()] = literal
+    return out
+
+
+dataset.register_reset(_literal_types.cache_clear)
+dataset.register_recheck(_literal_types.cache_clear)
+
+
 def _literal(token) -> TypeSet | None:
     if token.kind == "NUMBER":
         return TypeSet.of("Число")
@@ -646,12 +690,11 @@ def _literal(token) -> TypeSet | None:
         return TypeSet.of("Строка")
     if token.kind in _WORD_KINDS:
         upper = token.value.upper()
-        if upper in ("ИСТИНА", "ЛОЖЬ", "TRUE", "FALSE"):
-            return TypeSet.of("Булево")
-        if upper in ("НЕОПРЕДЕЛЕНО", "UNDEFINED"):
-            return TypeSet(undefined=True)
+        # `NULL` has no Russian spelling and no page of a type - the documentation links it to
+        # the IS NULL expression: it is the Null of a query, a flag of the set.
         if upper == "NULL":
             return TypeSet(null=True)
+        return _literal_types().get(upper)
     return None
 
 

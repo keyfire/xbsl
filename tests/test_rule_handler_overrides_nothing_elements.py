@@ -198,3 +198,168 @@ def test_control_the_row_is_what_keeps_the_override_silent(monkeypatch):
     finally:
         monkeypatch.undo()
         modulehandlers._reset()
+
+
+# --- the own module of an entity: the access settings pick the handlers ---------------------
+
+_PERMISSIONS = {"ru": "ВычислитьРазрешенияДоступа", "en": "ComputeAccessPermissions"}
+_SECURITY_TABLE = {
+    "Справочник": {
+        "": {"handlers": (_PERMISSIONS, {"ru": "ПолучитьЗначенияВыбора", "en": "GetChoiceValues"}),
+             "dynamic": (modulehandlers.RECORD_SECURITY_SOURCE,)},
+    },
+    "РегистрСведений": {
+        "": {"handlers": (_PERMISSIONS,), "dynamic": (modulehandlers.RECORD_SECURITY_SOURCE,)},
+    },
+}
+_OWN = ("@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n\n"
+        "@Обработчик\nметод ВычислитьРазрешенияДоступаДляОбъектов(Объекты: Массив<Склады.Объект>)"
+        "\n;\n\n@Обработчик\nметод ПолучитьЗначенияВыбора()\n;\n")
+_NOT_USED = "is not used in this project item"
+_NOT_FOUND = "A handler associated with method"
+
+
+@pytest.fixture
+def security(monkeypatch):
+    """The own modules of a catalog and of an information register take the security names."""
+    _use(monkeypatch, _SECURITY_TABLE)
+    yield
+    monkeypatch.undo()
+    _reset()
+
+
+def _catalog(access: str, module: str = _OWN):
+    return _lint({"Склады/Склады.yaml": CATALOG_YAML + access, "Склады/Склады.xbsl": module})
+
+
+def _found(diags):
+    return [(d.line, _NOT_USED in d.message, _NOT_FOUND in d.message) for d in diags]
+
+
+@pytest.mark.needs_data
+def test_without_access_settings_the_access_handlers_are_not_used(security):
+    diags = _catalog("")
+    assert _found(diags) == [(1, True, False), (5, True, False)]
+    assert "только когда настройки вычисляют разрешения (РазрешенияВычисляются" \
+        in diags[0].message
+    assert "для каждого объекта" in diags[1].message
+    assert all(d.fix is None for d in diags)
+
+
+@pytest.mark.needs_data
+def test_computed_permissions_use_the_permissions_handler(security):
+    access = "КонтрольДоступа:\n    Разрешения:\n        Чтение: РазрешенияВычисляются\n"
+    assert _found(_catalog(access)) == [(5, True, False)]
+
+
+@pytest.mark.needs_data
+def test_permissions_for_each_object_use_both_handlers(security):
+    access = ("КонтрольДоступа:\n    Разрешения:\n"
+              "        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n")
+    assert _catalog(access) == []
+
+
+@pytest.mark.needs_data
+def test_the_default_counts_only_for_a_privilege_left_out(security):
+    """Every privilege given its own value: the default the settings name is never read."""
+    access = ("КонтрольДоступа:\n    Разрешения:\n"
+              "        ПоУмолчанию: РазрешенияВычисляютсяДляКаждогоОбъекта\n"
+              "        Создание: РазрешеноАдминистраторам\n        Чтение: РазрешеноВсем\n"
+              "        Изменение: РазрешеноАдминистраторам\n"
+              "        Удаление: РазрешеноАдминистраторам\n")
+    assert _found(_catalog(access)) == [(1, True, False), (5, True, False)]
+    left_out = access.replace("        Удаление: РазрешеноАдминистраторам\n", "")
+    assert _catalog(left_out) == []
+
+
+@pytest.mark.needs_data
+def test_a_name_the_entity_cannot_declare_is_not_found(security):
+    access = ("КонтрольДоступа:\n    Разрешения:\n"
+              "        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n")
+    diags = _catalog(access, "@Обработчик\nметод ВычислитьКлючиДоступаДляЧтения()\n;\n")
+    assert _found(diags) == [(1, False, True)]
+    assert "переопределяет только ВычислитьРазрешенияДоступа, ПолучитьЗначенияВыбора, " \
+           "ВычислитьРазрешенияДоступаДляОбъектов" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_a_periodic_register_takes_the_keys_apart(security):
+    register = ("ВидЭлемента: РегистрСведений\nИд: 7b4a9e82-0a5d-4d7e-9c2b-1e5f6a7b8c93\n"
+                "Имя: ОстаткиСкладов\nПериодичность: Месяц\nКонтрольДоступа:\n"
+                "    Разрешения:\n        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n")
+    module = ("@Обработчик\nметод ВычислитьКлючиДоступаДляЧтения()\n;\n\n"
+              "@Обработчик\nметод ВычислитьРазрешенияДоступаДляОбъектов()\n;\n")
+    diags = _lint({"Склады/ОстаткиСкладов.yaml": register,
+                   "Склады/ОстаткиСкладов.xbsl": module})
+    assert _found(diags) == [(5, False, True)]
+    flat = register.replace("Периодичность: Месяц\n", "")
+    diags = _lint({"Склады/ОстаткиСкладов.yaml": flat, "Склады/ОстаткиСкладов.xbsl": module})
+    assert _found(diags) == [(1, False, True)]
+
+
+@pytest.mark.needs_data
+def test_an_english_project_reads_its_settings_and_is_told_in_english(security):
+    i18n.set_lang("en")
+    catalog = ("ElementKind: Catalog\nId: 4d2f7c60-8e3b-4b5c-9a0f-9c3d4e5f6a71\nName: Stock\n"
+               "AccessControl:\n    Permissions:\n        Read: PermissionsComputed\n")
+    module = ("@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n\n"
+              "@Handler\nmethod ComputeAccessPermissionsForObjects()\n;\n")
+    diags = _lint({"Stock/Stock.yaml": catalog, "Stock/Stock.xbsl": module})
+    assert _found(diags) == [(5, True, False)]
+    assert "does not use the ComputeAccessPermissionsForObjects handler" in diags[0].message
+    assert "(PermissionsComputedForEachObject)" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_settings_that_cannot_be_read_use_every_handler_of_the_kind(security):
+    access = "КонтрольДоступа:\n    Разрешения:\n        Чтение: РазрешеноКому-то\n"
+    diags = _catalog(access, _OWN + "\n@Обработчик\nметод Пересчитать()\n;\n")
+    assert _found(diags) == [(13, False, True)]
+
+
+@pytest.mark.needs_data
+def test_control_a_slot_of_another_source_keeps_the_own_module_unjudged(monkeypatch):
+    """The negative control: the same catalog, the slot dynamic by another source."""
+    table = {"Справочник": {"": {"handlers": (_PERMISSIONS,), "dynamic": ("computeHandlerTerm",)}}}
+    _use(monkeypatch, table)
+    try:
+        assert _catalog("") == []
+    finally:
+        monkeypatch.undo()
+        _reset()
+
+
+@pytest.mark.needs_data
+def test_settings_that_leave_every_handler_off_still_judge_the_module(monkeypatch):
+    """A settings storage on the standard permissions and a constants set use no handler."""
+    table = {kind: {"": {"handlers": (_PERMISSIONS,),
+                         "dynamic": (modulehandlers.RECORD_SECURITY_SOURCE,)}}
+             for kind in ("ХранилищеНастроек", "НаборКонстант")}
+    _use(monkeypatch, table)
+    storage = ("ВидЭлемента: ХранилищеНастроек\nИд: 5e3a8c71-9f4c-4c6d-8b1a-0d4e5f6a7b82\n"
+               "Имя: НастройкиСкладов\nКонтрольДоступа:\n    СтандартныеРазрешения: Истина\n"
+               "    Разрешения:\n        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n")
+    constants = ("ВидЭлемента: НаборКонстант\nИд: 6f4b9d82-0a5d-4d7e-9c2b-1e5f6a7b8c93\n"
+                 "Имя: КонстантыСкладов\nКонтрольДоступа:\n    Разрешения:\n"
+                 "        Чтение: РазрешенияВычисляются\n")
+    try:
+        diags = _lint({
+            "Склады/НастройкиСкладов.yaml": storage,
+            "Склады/НастройкиСкладов.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа()\n;\n"
+                                            "\n@Обработчик\nметод Пересчитать()\n;\n",
+            "Склады/КонстантыСкладов.yaml": constants,
+            "Склады/КонстантыСкладов.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа()\n;\n"
+                                            "\n@Обработчик\nметод ВычислитьКлючиДоступаДляЧтения()"
+                                            "\n;\n",
+        })
+        by_file = {(d.path.replace("\\", "/"), d.line): d.message for d in diags}
+        assert sorted(by_file) == [("Склады/КонстантыСкладов.xbsl", 5),
+                                   ("Склады/НастройкиСкладов.xbsl", 1),
+                                   ("Склады/НастройкиСкладов.xbsl", 5)]
+        assert "не вычисляют" in by_file[("Склады/КонстантыСкладов.xbsl", 5)]
+        assert "при стандартных разрешениях" in by_file[("Склады/НастройкиСкладов.xbsl", 1)]
+        nothing = by_file[("Склады/НастройкиСкладов.xbsl", 5)]
+        assert "такого обработчика не объявляет" in nothing and _NOT_FOUND in nothing
+    finally:
+        monkeypatch.undo()
+        _reset()

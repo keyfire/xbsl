@@ -517,6 +517,11 @@ def _mcplog_line(event: dict) -> str:
             text = i18n.t("mcplog.restart", target=event.get("target", "?"), cause=cause)
         else:
             text = i18n.t("mcplog.unknown", event=f"restart {reason}")
+    elif kind == "protocol":
+        # Written by the supervisor: a new worker agreed on another protocol version than the
+        # one the client was answered at the start of its session.
+        text = i18n.t("mcplog.protocol", target=event.get("target", "?"),
+                      worker=event.get("worker", "?"), client=event.get("client", "?"))
     else:
         text = i18n.t("mcplog.unknown", event=kind)
     return f"{event.get('time', '?')}  pid {event.get('pid', '?')}  {text}"
@@ -748,6 +753,10 @@ def _templates_main(argv: list[str]) -> int:
 
 
 def _scaffold_parser() -> argparse.ArgumentParser:
+    # The field kinds the help lists are the operations' own tables; _scaffold_main imports
+    # the module before it parses anything, so the help costs no extra import.
+    from xbsl import scaffold
+
     parser = i18n.ArgumentParser(
         prog="xbsl", description=i18n.t("cli.help.scaf.description")
     )
@@ -787,10 +796,9 @@ def _scaffold_parser() -> argparse.ArgumentParser:
 
     p = command("add-field")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
-    # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose.
-    p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
-                                                 "параметр", "поле", "свойство", "событие",
-                                                 "табличная-часть")))
+    # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose -
+    # taken from the operation itself, so the help names exactly what it takes.
+    p.add_argument("field_kind", help=", ".join(scaffold.ADD_FIELD_KINDS))
     p.add_argument("name", help=i18n.t("cli.help.scaf.af-name"))
     p.add_argument("--type", help=i18n.t("cli.help.scaf.af-type"))
     p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
@@ -800,9 +808,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
 
     p = command("set-field-property")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
-    p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
-                                                 "параметр", "поле", "константа", "свойство",
-                                                 "событие")))
+    p.add_argument("field_kind", help=", ".join(scaffold.SET_PROPERTY_KINDS))
     p.add_argument("name", help=i18n.t("cli.help.scaf.sfp-name"))
     p.add_argument("--prop", action="append", required=True, metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))
@@ -922,6 +928,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p = command("resource-references")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("resource_path", help=i18n.t("cli.help.scaf.mr-path"))
+    p.add_argument("--limit", type=int, default=100,
+                   help=i18n.t("cli.help.scaf.resource-references-limit"))
 
     p = command("unused-resources")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
@@ -1445,7 +1453,8 @@ def _scaffold_main(argv: list[str]) -> int:
             return 0
         elif args.command == "resource-references":
             print(json.dumps(
-                scaffold.resource_references(Path(args.root), Path(args.resource_path)),
+                scaffold.resource_references(Path(args.root), Path(args.resource_path),
+                                             limit=args.limit),
                 ensure_ascii=False,
             ))
             return 0

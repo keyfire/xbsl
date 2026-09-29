@@ -745,6 +745,13 @@ _CORE_MESSAGES = {
         "ru": "процесс завершился с кодом {code}",
         "en": "the process ended with code {code}",
     },
+    "mcplog.protocol": {
+        "ru": "новый процесс сервера {target} согласовал версию протокола {worker}, а клиенту в "
+              "начале сессии ответили {client}: клиент продолжает говорить по {client}",
+        "en": "the new server process {target} agreed on protocol version {worker}, while the "
+              "client was answered {client} at the start of its session: the client goes on "
+              "speaking {client}",
+    },
     "mcplog.unknown": {"ru": "событие {event}", "en": "event {event}"},
     "cli.help.commands.extract": {
         "ru": "сгенерировать данные о языке из дистрибутива Элемента (--dist)",
@@ -1239,12 +1246,14 @@ _CORE_MESSAGES = {
         "en": "report description (JSON: source, rows, columns, measures)",
     },
     "cli.help.scaf.add-field": {
-        "ru": "добавить реквизит/измерение/ресурс/значение/свойство/событие/ТЧ; см. также "
-              "set-field-property – свойства уже существующего элемента, set-localization – "
-              "тексты строки ЛокализованныеСтроки по языкам",
-        "en": "add an attribute/dimension/resource/value/property/event/tabular section; see also "
-              "set-field-property for an item that already exists and set-localization for the "
-              "texts of a LocalizedStrings string per language",
+        "ru": "добавить элемент в секцию объекта: реквизит, измерение, табличную часть и "
+              "другие (виды перечислены у field_kind); см. также set-field-property – "
+              "свойства уже существующего элемента, set-localization – тексты строки "
+              "ЛокализованныеСтроки по языкам",
+        "en": "add an item to a section of an object: an attribute, a dimension, a tabular "
+              "section and more (field_kind lists the kinds); see also set-field-property for "
+              "an item that already exists and set-localization for the texts of a "
+              "LocalizedStrings string per language",
     },
     "cli.help.scaf.add-field-tabular": {
         "ru": "имя табличной части (реквизит добавляется в неё)",
@@ -1597,6 +1606,12 @@ _CORE_MESSAGES = {
     "cli.help.scaf.unused-resources-protected": {
         "ru": "включить отдельно файлы, защищенные вычисляемыми и неопределенными путями",
         "en": "also return files protected by bounded dynamic or uncertain paths",
+    },
+    "cli.help.scaf.resource-references-limit": {
+        "ru": "не более N мест в списке references; total считает все места (по умолчанию 100, "
+              "как у meta_resource_references)",
+        "en": "list at most N places in references; total counts every place (default: 100, "
+              "as in meta_resource_references)",
     },
     "cli.help.scaf.unused-resources-limit": {
         "ru": "не более N записей в каждом возвращаемом списке; итоги всегда полные "

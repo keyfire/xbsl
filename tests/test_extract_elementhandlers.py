@@ -2,15 +2,16 @@
 
 The interpreter itself runs over the classes of a distribution, which a checkout does not
 carry; these tests hold the parts that decide the shape of the data on their own - how a
-project type class names its element and module, how the modes of several paths join, and
-what one value stands for when the paths disagree.
+project type class names its element and module, how the modes of several paths join, what one
+value stands for when the paths disagree, and how the branches of the access-control target and
+of a kind test are told apart.
 """
 
 from xbsl.extract import elementhandlers as eh
 
 _KINDS = {"Справочник": "Catalog", "РегистрСведений": "InformationRegister",
           "ПланОбмена": "ExchangePlan", "ЗапланированноеЗадание": "ScheduledJob",
-          "КлючДоступа": "AccessKey"}
+          "КлючДоступа": "AccessKey", "Проект": "Project"}
 _WORDS = {"Object": "Объект", "RecordSet": "НаборЗаписей", "Record": "Запись"}
 _TYPES = {"Users": "Пользователи"}
 
@@ -60,3 +61,81 @@ def test_paths_that_disagree_keep_what_they_may_hold():
     assert eh._join([first, second]) == ("oneof", (first, second))
     assert eh._join([("list", ()), ("list", (first,))]) == ("list", (first,))
     assert eh._join([None, None]) is None
+
+
+def test_the_application_project_is_the_module_of_the_project():
+    assert _element("acme/prj/ApplicationProjectG5ProjectType") == ("Проект", "")
+    # A library and an extension project keep classes of their own and no kind.
+    assert _element("acme/prj/LibraryProjectG5ProjectType") is None
+
+
+# --- the branches the interpreter tells apart ------------------------------------------------
+
+_ENTITY = "acme/entity/IEntityType"
+_KEY_TEST = next(iter(eh._KIND_TESTS))
+
+
+class _Classes:
+    """The ancestors of a few made-up classes, in place of the classes of a distribution."""
+
+    _PARENTS = {"acme/catalog/CatalogObjectG5ProjectType": frozenset({_ENTITY}),
+                "acme/service/HttpServiceG5ProjectType": frozenset()}
+
+    def get(self, _name):
+        return None
+
+    def ancestors(self, name):
+        return self._PARENTS.get(name, frozenset())
+
+
+def _interpreter():
+    return eh.Interpreter(_Classes())
+
+
+def _path():
+    return eh._Path(0, [], {}, tested="acme/IG5SingletonProjectType")
+
+
+def test_the_target_of_the_module_is_asked_of_the_access_control_info():
+    found = _interpreter()._call("P", _path(), 0xB9, eh._ACCESS_INFO, "getTargetType",
+                                 "(Lx;)Ly;", ["Lx;"], [("param", 1)], None, 0, True, "P")
+    assert found == ("target",)
+
+
+def test_a_path_past_the_target_test_stands_for_the_managers_alone():
+    _continue, fall, jump = _interpreter()._condition(_path(), 0xC7, ("target",), 40, 10)
+    assert jump.managed and not fall.managed  # ifnonnull jumps when there is a target
+
+
+def test_a_test_of_the_target_is_kept_apart_from_the_other_tests():
+    value = ("isinst", ("target",), _ENTITY)
+    _continue, fall, jump = _interpreter()._condition(_path(), 0x99, value, 40, 10)
+    assert fall.target_requires == {_ENTITY} and not fall.requires  # ifeq falls when true
+    assert not jump.target_requires
+
+
+def test_a_kind_test_names_the_kind_it_fails_for():
+    interpreter = _interpreter()
+    term = ("term", "PrivilegeOnAction", "ПравоНаДействие")
+    interpreter.static = lambda owner, name, depth: term
+    _continue, fall, jump = interpreter._condition(_path(), 0x99, ("kindtest", _KEY_TEST), 40, 10)
+    assert jump.kind == term and fall.kind is None
+    jump.tested = "acme/keys/AccessKeyG5ProjectType"
+    interpreter._record(jump, ("term", "ComputeAccessPermissions", "ВычислитьРазрешенияДоступа"))
+    assert interpreter.found[0].kind == term
+
+
+def test_the_managed_path_keeps_the_managers_whose_target_passes_its_tests():
+    managers = {"acme/catalog/CatalogG5ProjectType": "acme/catalog/CatalogObjectG5ProjectType",
+                "acme/service/HttpServiceG5ProjectType": "acme/service/HttpServiceG5ProjectType"}
+    anything = eh.Found("acme/IG5SingletonProjectType", ("term", "A", "А"), None, None,
+                        managed=True)
+    entity = eh.Found("acme/IG5SingletonProjectType", ("dyn", "source"), None, None,
+                      managed=True, target_requires=frozenset({_ENTITY}))
+    classes = _Classes()
+    assert eh.controls(classes, managers, "acme/catalog/CatalogG5ProjectType", anything)
+    assert eh.controls(classes, managers, "acme/service/HttpServiceG5ProjectType", anything)
+    assert eh.controls(classes, managers, "acme/catalog/CatalogG5ProjectType", entity)
+    assert not eh.controls(classes, managers, "acme/service/HttpServiceG5ProjectType", entity)
+    # The control: a module no part names as a manager - a common module - has no target.
+    assert not eh.controls(classes, managers, "acme/common/CommonModuleG5ProjectType", anything)
