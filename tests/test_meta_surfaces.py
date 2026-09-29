@@ -64,6 +64,20 @@ def test_mcp_meta_new_object_register_with_both_captions_lints_clean(mcp_module,
     assert not (tmp_path / "Товары.yaml").exists()
 
 
+@pytest.mark.needs_data  # the captions of a periodic set are read from the metamodel
+def test_mcp_meta_new_object_periodic_constants_set_lints_clean(mcp_module, tmp_path):
+    res = mcp_module.meta_new_object(
+        str(tmp_path), "НаборКонстант", "КурсыДоллара", presentation="Курсы доллара",
+        record_presentation="Курс доллара", periodicity="День",
+    )
+    assert res["lint"] == {"files": 1, "diagnostics": 0}, res["lint"]
+    text = (tmp_path / "КурсыДоллара.yaml").read_text(encoding="utf-8")
+    assert "Периодичность: День\nИнтерфейс:\n    Список:\n" in text
+    refused = mcp_module.meta_new_object(str(tmp_path), "РегистрСведений", "Курсы", periodicity="День")
+    assert "periodicity неприменим" in refused["error"]
+    assert not (tmp_path / "Курсы.yaml").exists()
+
+
 def test_mcp_meta_field_and_info(mcp_module, tmp_path):
     mcp_module.meta_new_object(str(tmp_path), "Справочник", "Товары")
     res = mcp_module.meta_add_field(str(tmp_path / "Товары.yaml"), "реквизит", "Цвет")
@@ -226,6 +240,19 @@ def test_cli_new_object_register_with_both_captions_lints_clean(tmp_path, capsys
     assert code == 2 and "record_presentation неприменим" in out["error"]
 
 
+@pytest.mark.needs_data  # the captions of a periodic set are read from the metamodel
+def test_cli_new_object_periodic_constants_set_lints_clean(tmp_path, capsys):
+    code, out = _run_cli(
+        capsys, "new-object", str(tmp_path), "НаборКонстант", "КурсыДоллара",
+        "--presentation", "Курсы доллара", "--record-presentation", "Курс доллара",
+        "--periodicity", "День",
+    )
+    assert code == 0 and out["lint"]["diagnostics"] == [], out["lint"]
+    code, out = _run_cli(capsys, "new-object", str(tmp_path), "НаборКонстант", "Цены",
+                         "--periodicity", "Неделя")
+    assert code == 2 and "Недопустимая периодичность" in out["error"]
+
+
 def test_cli_dry_run_writes_nothing(tmp_path, capsys):
     code, out = _run_cli(capsys, "new-object", str(tmp_path), "Справочник", "Товары", "--dry-run")
     assert code == 0
@@ -318,6 +345,21 @@ def test_lsp_meta_new_object_writes_the_record_caption(tmp_path):
     })
     content = result["files"][0]["content"]
     assert "    Список:\n        Представление: Курсы\n    Запись:\n        Представление: Курс\n" in content
+
+
+@pytest.mark.needs_data  # the captions of a periodic set are read from the metamodel
+def test_lsp_meta_new_object_writes_the_periodicity(tmp_path):
+    _, features = _server_features()
+    result = features["xbsl/metaNewObject"]({
+        "directory": str(tmp_path), "kind": "НаборКонстант", "name": "КурсыДоллара",
+        "presentation": "Курсы доллара", "recordPresentation": "Курс доллара",
+        "periodicity": "День",
+    })
+    content = result["files"][0]["content"]
+    assert (
+        "Периодичность: День\nИнтерфейс:\n    Список:\n        Представление: Курсы доллара\n"
+        "    Запись:\n        Представление: Курс доллара\n"
+    ) in content
 
 
 def test_lsp_meta_add_field_error_shape(tmp_path):

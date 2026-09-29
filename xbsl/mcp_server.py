@@ -1162,6 +1162,7 @@ def meta_new_object(
     root: str | None = None,
     object_presentation: str | None = None,
     record_presentation: str | None = None,
+    periodicity: str | None = None,
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
@@ -1182,7 +1183,8 @@ def meta_new_object(
     of a string attribute, a caption there fails to compile - the list caption
     `Interface.List.Presentation` (the notes name the object caption beside it), as for a
     register, which has no top-level one; `Interface.Record.Presentation` of a constants set
-    (its top-level Presentation names a constant); `Interface.Presentation` of a processing.
+    (its top-level Presentation names a constant), the list caption of a periodic one;
+    `Interface.Presentation` of a processing.
     Pass it: without one the very first lint of the new file answers naming/presentation.
     object_presentation - the object caption in the singular, `Interface.Object.Presentation`,
     of a kind with the pair of interface captions (a catalog, a document, an exchange plan, a
@@ -1190,8 +1192,13 @@ def meta_new_object(
     refuses it. The tool cannot derive the singular from the plural, and naming/presentation
     asks such a kind for both: given both, the new object lints clean.
     record_presentation - the record caption in the singular, `Interface.Record.Presentation`,
-    of an information register, beside the list caption presentation writes; any other kind
-    refuses it (a constants set takes its record caption as presentation).
+    of an information register or a periodic constants set, beside the list caption
+    presentation writes; any other kind refuses it (a constants set that is not periodic takes
+    its record caption as presentation).
+    periodicity - a constants set only: Day, Month, Quarter or Year, in either language
+    (NonPeriodic writes the default). A periodic set has a list beside its record, so
+    presentation becomes the list caption in the plural and record_presentation the record
+    one in the singular; given both, the new set lints clean.
     base - for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
@@ -1210,6 +1217,7 @@ def meta_new_object(
         scope=scope, environment=environment, access=access,
         routes=routes, report=report_spec, presentation=presentation, base=base,
         object_presentation=object_presentation, record_presentation=record_presentation,
+        periodicity=periodicity,
     )
 
 

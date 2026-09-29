@@ -123,10 +123,14 @@ def _attribute_name_kinds() -> frozenset[str]:
     in the current data. Computed from the metamodel, not hardcoded.
 
     A kind with no Attributes section at all is excluded even when the metamodel types its
-    Presentation as AttributeName - the type is inherited from a shared base and says
-    nothing there. ConstantsSet is such a kind: it holds Constants, its documentation calls
-    the property "Представление набора констант" (a caption), and no value could ever name an
-    attribute it does not have - the check would condemn every constants set in existence.
+    Presentation as AttributeName: no value there could name an attribute the kind does not
+    have, and the check would condemn every element of it. ConstantsSet is such a kind. It
+    holds Constants, and its help page says the property names the constant whose value
+    presents an instance of the set. The build takes any value there - a phrase, the name of
+    a constant of any type - and a probe found nothing that reads it: the commands and the
+    form titles of the automatic interface, the presentation of the record and the title of a
+    full-text search result stay the same whatever is written. A wrong value costs nothing, so
+    it is not judged here; the captions of the set are naming/presentation's business.
     """
     return frozenset(
         vid for vid in metamodel.kinds()

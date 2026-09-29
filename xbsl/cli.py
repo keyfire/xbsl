@@ -800,6 +800,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                    help=i18n.t("cli.help.scaf.no-object-presentation"))
     p.add_argument("--record-presentation",
                    help=i18n.t("cli.help.scaf.no-record-presentation"))
+    p.add_argument("--periodicity", help=i18n.t("cli.help.scaf.no-periodicity"))
     p.add_argument("--base", help=i18n.t("cli.help.scaf.no-base"))
 
     p = command("add-field")
@@ -1216,6 +1217,7 @@ def _scaffold_main(argv: list[str]) -> int:
                 report=json.loads(args.report) if args.report else None,
                 object_presentation=args.object_presentation,
                 record_presentation=args.record_presentation,
+                periodicity=args.periodicity,
             )
         elif args.command == "add-field":
             result = scaffold.op_add_field(

@@ -72,6 +72,9 @@ one from the other, and `naming/presentation` asks for both, so an object create
 clean. Any other kind refuses `--object-presentation`. An information register pairs its list
 caption with the record one, `--record-presentation` (MCP `record_presentation`), which no other
 kind takes. A constants set has one caption, the record one, and `--presentation` writes it.
+`--periodicity` (MCP `periodicity`) makes a constants set periodic - `Day`, `Month`, `Quarter` or
+`Year` - and a periodic set has a list beside its record, so it is captioned the way an
+information register is: `--presentation` for the list, `--record-presentation` for the record.
 
 A property the kind is born with goes in only where the compatibility mode of the project knows
 it. An access key is born computed (`ManualGrant: False`, with the stub of its handler): a project

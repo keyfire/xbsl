@@ -1345,15 +1345,16 @@ _CORE_MESSAGES = {
     "cli.help.scaf.no-presentation": {
         "ru": "заголовок элемента: пишется туда, где его держит вид – в Представление или, у "
               "справочника, документа, регистра, набора констант и обработки, в раздел "
-              "Интерфейс; у справочника, документа и регистра это заголовок списка, а заголовок "
-              "объекта задает --object-presentation, заголовок записи регистра сведений – "
+              "Интерфейс; у справочника, документа, регистра и периодического набора констант "
+              "это заголовок списка, а заголовок объекта задает --object-presentation, "
+              "заголовок записи регистра сведений и периодического набора – "
               "--record-presentation (без заголовка первый же линт дает naming/presentation)",
         "en": "the element caption: written where the kind keeps it - into Presentation or, "
               "for a catalog, a document, a register, a constants set and a processing, into "
-              "the Interface section; for a catalog, a document and a register it is the list "
-              "caption, and --object-presentation gives the object one, --record-presentation "
-              "the record one of an information register (without a caption the very first "
-              "lint answers naming/presentation)",
+              "the Interface section; for a catalog, a document, a register and a periodic "
+              "constants set it is the list caption, and --object-presentation gives the object "
+              "one, --record-presentation the record one of an information register or a "
+              "periodic set (without a caption the very first lint answers naming/presentation)",
     },
     "cli.help.scaf.no-object-presentation": {
         "ru": "заголовок объекта в единственном числе: пишется в Интерфейс.Объект.Представление "
@@ -1365,13 +1366,22 @@ _CORE_MESSAGES = {
     },
     "cli.help.scaf.no-record-presentation": {
         "ru": "заголовок записи в единственном числе: пишется в Интерфейс.Запись.Представление "
-              "регистра сведений, другой вид его не принимает (у набора констант заголовок "
-              "записи пишет --presentation); вместе с --presentation новый регистр проходит "
-              "naming/presentation",
+              "регистра сведений и периодического набора констант, другой вид его не принимает "
+              "(у непериодического набора заголовок записи пишет --presentation); вместе с "
+              "--presentation новый регистр или набор проходит naming/presentation",
         "en": "the record caption in the singular: written into Interface.Record.Presentation "
-              "of an information register, any other kind refuses it (the record caption of a "
-              "constants set is what --presentation writes); with --presentation the new "
-              "register passes naming/presentation",
+              "of an information register or a periodic constants set, any other kind refuses "
+              "it (the record caption of a set that is not periodic is what --presentation "
+              "writes); with --presentation the new register or set passes naming/presentation",
+    },
+    "cli.help.scaf.no-periodicity": {
+        "ru": "периодичность набора констант: День, Месяц, Квартал или Год (Непериодический – "
+              "значение по умолчанию); у периодического набора есть список, поэтому "
+              "--presentation пишет заголовок списка, а --record-presentation – заголовок "
+              "записи; другой вид параметр не принимает",
+        "en": "the periodicity of a constants set: Day, Month, Quarter or Year (NonPeriodic is "
+              "the default); a periodic set has a list, so --presentation writes the list "
+              "caption and --record-presentation the record one; any other kind refuses it",
     },
     "cli.help.scaf.no-base": {
         "ru": "базовый тип компонента интерфейса (Группа, ФормаОбъекта<Товар.Объект>); "

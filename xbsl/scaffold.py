@@ -2298,6 +2298,44 @@ _TOP_CAPTION: tuple[str, ...] = ("Представление",)
 #: caption of a constants set.
 _RECORD_CAPTION: tuple[str, ...] = ("Интерфейс", "Запись", "Представление")
 
+#: Where the list caption is written.
+_LIST_CAPTION: tuple[str, ...] = ("Интерфейс", "Список", "Представление")
+
+#: The kind that takes a periodicity, and the values it takes, as the help page of the kind
+#: lists them: the metamodel types the property with an enumeration it gives no values for.
+#: The English spellings come from the term dictionary.
+_PERIODIC_KIND = "НаборКонстант"
+_NON_PERIODIC = "Непериодический"
+CONSTANTS_SET_PERIODICITIES: tuple[str, ...] = (_NON_PERIODIC, "День", "Месяц", "Квартал", "Год")
+
+
+def _periodicities_named() -> str:
+    """The periodicities for a refusal, each with its English spelling when the data has one."""
+    return ", ".join(
+        value if (english := _spelled(value, "en", "enums")) == value else f"{value} ({english})"
+        for value in CONSTANTS_SET_PERIODICITIES
+    )
+
+
+def constants_set_periodicity(kind: str, value: str) -> str:
+    """The periodicity of a constants set named in either language, spelled the Russian way.
+
+    Case does not matter. A kind other than the constants set, or a value it does not take, is
+    refused: the tool writes no periodicity it could not also caption.
+    """
+    if kind != _PERIODIC_KIND:
+        raise ScaffoldError(
+            f"Параметр periodicity неприменим к виду {kind}: периодичность инструмент задает "
+            f"только у вида {_PERIODIC_KIND}"
+        )
+    wanted = value.strip().casefold()
+    for period in CONSTANTS_SET_PERIODICITIES:
+        if wanted in (period.casefold(), _spelled(period, "en", "enums").casefold()):
+            return period
+    raise ScaffoldError(
+        f"Недопустимая периодичность набора констант '{value}'; доступны: {_periodicities_named()}"
+    )
+
 
 def _block_props(record: dict | None) -> dict[str, dict]:
     """The properties of the class a block property of the metamodel is typed with."""
@@ -2305,7 +2343,7 @@ def _block_props(record: dict | None) -> dict[str, dict]:
     return metamodel.properties_of_class(cls) if isinstance(cls, str) else {}
 
 
-def caption_path(kind: str) -> tuple[str, ...]:
+def caption_path(kind: str, periodic: bool = False) -> tuple[str, ...]:
     """Where the caption of an element of `kind` is written: the keys from the root down.
 
     The top-level Presentation means two different things, and the metamodel says which: a
@@ -2322,8 +2360,10 @@ def caption_path(kind: str) -> tuple[str, ...]:
     A constants set names a CONSTANT there (the help page of the kind: the constant whose
     value presents the record), and the commands that open its forms carry the name of the
     set until its interface captions them (the help topic on a constants set in the
-    interface). Its form is the record one - a list exists for a periodic set alone, and the
-    tool creates none - so its caption is `Interface.Record.Presentation`.
+    interface). Its form is the record one, so its caption is `Interface.Record.Presentation`
+    - unless the set is `periodic`: a list exists for a periodic set alone, and then the set
+    is captioned the way an information register is, the list in the plural and the record
+    in the singular beside it (record_caption_path).
 
     Without the metamodel the top-level key is answered - what the tool wrote before it could
     tell; a kind with no caption anywhere is refused.
@@ -2337,9 +2377,11 @@ def caption_path(kind: str) -> tuple[str, ...]:
     ui = _block_props(props.get("Интерфейс"))
     if top is not None and "Реквизиты" not in props:
         # A field name with no attributes to name - the constants set, see above.
+        if periodic and "Представление" in _block_props(ui.get("Список")):
+            return _LIST_CAPTION
         return _RECORD_CAPTION if "Представление" in _block_props(ui.get("Запись")) else _TOP_CAPTION
     if "Представление" in _block_props(ui.get("Список")):
-        return ("Интерфейс", "Список", "Представление")
+        return _LIST_CAPTION
     if "Представление" in ui:
         return ("Интерфейс", "Представление")
     raise ScaffoldError(f"У вида {kind} нет свойства Представление")
@@ -2372,20 +2414,34 @@ def _has_object_caption(kind: str) -> bool:
     return all("Представление" in _block_props(ui.get(block)) for block in ("Список", "Объект"))
 
 
-def _has_record_caption(kind: str) -> bool:
+def _has_record_caption(kind: str, periodic: bool = False) -> bool:
     """Whether `kind` takes a record caption BESIDE the list one: its interface carries both,
-    and its own caption (caption_path) is the list one - an information register. A constants
-    set carries both as well, but its caption is the record one already."""
+    and its own caption (caption_path) is the list one - an information register, and a
+    `periodic` constants set. A constants set that is not periodic carries both as well, but
+    its caption is the record one already."""
     ui = _block_props(metamodel.properties(kind).get("Интерфейс"))
     if not all("Представление" in _block_props(ui.get(block)) for block in ("Список", "Запись")):
         return False
     try:
-        return caption_path(kind) != _RECORD_CAPTION
+        return caption_path(kind, periodic) != _RECORD_CAPTION
     except ScaffoldError:
         return False
 
 
-def object_caption_path(kind: str) -> tuple[str, ...]:
+#: How a refusal names the parameter that makes a constants set periodic.
+_PERIODICITY_PARAMETER = "параметр periodicity, в командной строке --periodicity"
+
+
+def _record_caption_takers() -> str:
+    """The kinds that take a record caption beside the list one, for a refusal: the kinds that
+    do so as they are, and the constants set once it is periodic."""
+    takers = sorted(k for k in KIND_SPECS if _has_record_caption(k))
+    if _PERIODIC_KIND in KIND_SPECS and _has_record_caption(_PERIODIC_KIND, periodic=True):
+        takers.append(f"{_PERIODIC_KIND} с периодичностью ({_PERIODICITY_PARAMETER})")
+    return ", ".join(takers)
+
+
+def object_caption_path(kind: str, periodic: bool = False) -> tuple[str, ...]:
     """Where the object caption of an element of `kind` is written: `Interface.Object.Presentation`.
 
     Only a kind whose interface carries the pair of captions takes it - the list caption in the
@@ -2395,7 +2451,7 @@ def object_caption_path(kind: str) -> tuple[str, ...]:
     other kind is refused: its caption is one, or its singular caption names something else
     (the record of an information register, see record_caption_path). Without the metamodel
     the path is answered unchecked - the caller asked for it, and there is nothing to judge it
-    by.
+    by. `periodic` only shapes the tail of a refusal (caption_path).
     """
     if not metamodel.available() or _has_object_caption(kind):
         return _OBJECT_CAPTION
@@ -2403,39 +2459,39 @@ def object_caption_path(kind: str) -> tuple[str, ...]:
         f"У вида {kind} нет заголовка объекта (Интерфейс.Объект.Представление) – параметр "
         "object_presentation неприменим; его принимают виды с парой заголовков в интерфейсе: "
         + ", ".join(sorted(k for k in KIND_SPECS if _has_object_caption(k)))
-        + _other_captions(kind, "Объект")
+        + _other_captions(kind, "Объект", periodic)
     )
 
 
-def record_caption_path(kind: str) -> tuple[str, ...]:
+def record_caption_path(kind: str, periodic: bool = False) -> tuple[str, ...]:
     """Where the record caption of an element of `kind` is written: `Interface.Record.Presentation`.
 
     Taken by a kind whose own caption is the list one and whose interface carries the record
     caption beside it - an information register, where the list caption is written in the
     plural and the record one in the singular (the help topic on a register in the interface:
     the first names the command that opens the list, the second the one that creates a
-    record). naming/presentation asks such a kind for both. A constants set is refused - its
-    record caption is its caption, written by presentation - and so is any other kind; without
-    the metamodel the path is answered unchecked, as object_caption_path does.
+    record), and a `periodic` constants set, captioned the same way. naming/presentation asks
+    such a kind for both. A constants set that is not periodic is refused - its record caption
+    is its caption, written by presentation - and so is any other kind; without the metamodel
+    the path is answered unchecked, as object_caption_path does.
     """
-    if not metamodel.available() or _has_record_caption(kind):
+    if not metamodel.available() or _has_record_caption(kind, periodic):
         return _RECORD_CAPTION
     raise ScaffoldError(
         f"У вида {kind} нет заголовка записи рядом с заголовком списка "
         "(Интерфейс.Запись.Представление) – параметр record_presentation неприменим; его "
-        "принимают: " + ", ".join(sorted(k for k in KIND_SPECS if _has_record_caption(k)))
-        + _other_captions(kind, "Запись")
+        "принимают: " + _record_caption_takers() + _other_captions(kind, "Запись", periodic)
     )
 
 
-def _other_captions(kind: str, refused: str) -> str:
+def _other_captions(kind: str, refused: str, periodic: bool = False) -> str:
     """The tail of a refusal: what writes the captions `kind` does have.
 
     `refused` is the block the caller asked for. The element caption is named with the
     parameter that writes it, and so is a singular caption that another parameter writes.
     """
     try:
-        own = caption_path(kind)
+        own = caption_path(kind, periodic)
     except ScaffoldError:
         return ""  # the kind has no caption at all - presentation is refused too
     tail = ". Заголовок элемента задает параметр presentation"
@@ -2446,7 +2502,7 @@ def _other_captions(kind: str, refused: str) -> str:
         if key == refused or path == own:
             continue
         writer = _SINGULAR_PARAMETERS.get(key) if (
-            _has_object_caption(kind) if key == "Объект" else _has_record_caption(kind)
+            _has_object_caption(kind) if key == "Объект" else _has_record_caption(kind, periodic)
         ) else None
         tail += (f"; заголовок в единственном числе у вида {kind} – {'.'.join(path)}, "
                  + (f"его пишет {writer}" if writer else "его инструмент не пишет"))
@@ -2476,11 +2532,14 @@ def _caption_note(kind: str, path: tuple[str, ...], singular_written: tuple[str,
                 )
     elif path == _RECORD_CAPTION:
         note += (" – так называются форма записи и команда, которая ее открывает; список есть "
-                 "только у периодического набора, и его заголовок задается в "
-                 "Интерфейс.Список.Представление")
+                 f"только у периодического набора ({_PERIODICITY_PARAMETER}), и тогда заголовок "
+                 "элемента ложится в Интерфейс.Список.Представление, а заголовок записи пишет "
+                 f"{_RECORD_CAPTION_PARAMETER}")
     if (props.get("Представление") or {}).get("type") == "AttributeName":
+        # The help calls the constant's value the presentation of the record, yet a probe
+        # found no command, form title or search result that shows it - hence "by the help".
         field = ("строкового реквизита, которым платформа обозначает элемент" if "Реквизиты" in props
-                 else "константы, значение которой платформа показывает как представление записи")
+                 else "константы, значение которой по справке представляет запись")
         note += f". Представление верхнего уровня у вида {kind} – не заголовок, а имя {field}"
     return note
 
@@ -2562,6 +2621,7 @@ def op_new_object(
     base: str | None = None,
     object_presentation: str | None = None,
     record_presentation: str | None = None,
+    periodicity: str | None = None,
 ) -> ScaffoldResult:
     """Create a configuration object: Имя.yaml (+ Имя.xbsl for kinds with a module).
 
@@ -2579,6 +2639,11 @@ def op_new_object(
     is the same for the record caption of an information register (`Interface.Record.Presentation`,
     see record_caption_path). A kind without such a caption refuses the parameter. Given the
     pair, the new element passes naming/presentation.
+
+    periodicity - the periodicity of a constants set (constants_set_periodicity), written
+    right after the header. A periodic set has a list beside its record, so it is captioned
+    the way an information register is: presentation goes to the list caption and
+    record_presentation to the record one. Any other kind refuses the parameter.
 
     Properties the kind is born with (KindSpec.extra) are written only where the compatibility
     mode of the project knows them (_lines_for_mode); a property left out is named in the notes.
@@ -2617,12 +2682,14 @@ def op_new_object(
             )
         access = method
 
-    caption = caption_path(kind) if presentation else None
+    period = constants_set_periodicity(kind, periodicity) if periodicity else None
+    periodic = period not in (None, _NON_PERIODIC)
+    caption = caption_path(kind, periodic) if presentation else None
     # Checked before the kinds with a generator of their own: none of them has the pair. The
     # metamodel refuses them in object_caption_path and record_caption_path; without it they
     # are refused here, since their generators would drop the caption without a word.
-    object_caption = object_caption_path(kind) if object_presentation else None
-    record_caption = record_caption_path(kind) if record_presentation else None
+    object_caption = object_caption_path(kind, periodic) if object_presentation else None
+    record_caption = record_caption_path(kind, periodic) if record_presentation else None
     for singular, path, parameter in (("объекта", object_caption, "object_presentation"),
                                       ("записи", record_caption, "record_presentation")):
         if path and kind in ("HttpСервис", "SoapСервис", "Отчет"):
@@ -2698,6 +2765,10 @@ def op_new_object(
                 result.notes.append(_singular_caption_note(kind, singular_path))
     if captions:
         extra = _caption_lines(*captions) + extra
+    if period:
+        # Right after the header and before the interface section, the order the platform
+        # serializes a constants set in (the metamodel priorities).
+        extra = [f"Периодичность: {_spelled(period, lang, 'enums')}"] + extra
     content = new_object_yaml(
         kind, new_uuid(), name, scope or spec.scope, extra, lang,
         presentation=top_caption,

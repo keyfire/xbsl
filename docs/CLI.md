@@ -374,7 +374,8 @@ create a configuration object (yaml + a module by kind); see also add-field for 
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
                        [--object-presentation OBJECT_PRESENTATION]
-                       [--record-presentation RECORD_PRESENTATION] [--base BASE] [--dry-run]
+                       [--record-presentation RECORD_PRESENTATION] [--periodicity PERIODICITY]
+                       [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -396,9 +397,10 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | the access method, in either language (e.g. PermitEveryone): for HttpService it goes to Permissions.Call, for data objects to Permissions.Default (individual rights are set by set-access) |
 | `--routes ROUTES` | HttpService routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | the element caption: written where the kind keeps it - into Presentation or, for a catalog, a document, a register, a constants set and a processing, into the Interface section; for a catalog, a document and a register it is the list caption, and `--object-presentation` gives the object one, `--record-presentation` the record one of an information register (without a caption the very first lint answers naming/presentation) |
+| `--presentation PRESENTATION` | the element caption: written where the kind keeps it - into Presentation or, for a catalog, a document, a register, a constants set and a processing, into the Interface section; for a catalog, a document, a register and a periodic constants set it is the list caption, and `--object-presentation` gives the object one, `--record-presentation` the record one of an information register or a periodic set (without a caption the very first lint answers naming/presentation) |
 | `--object-presentation OBJECT_PRESENTATION` | the object caption in the singular: written into Interface.Object.Presentation of a catalog, a document, an exchange plan and a settings storage, any other kind refuses it; with `--presentation` the new object passes naming/presentation |
-| `--record-presentation RECORD_PRESENTATION` | the record caption in the singular: written into Interface.Record.Presentation of an information register, any other kind refuses it (the record caption of a constants set is what `--presentation` writes); with `--presentation` the new register passes naming/presentation |
+| `--record-presentation RECORD_PRESENTATION` | the record caption in the singular: written into Interface.Record.Presentation of an information register or a periodic constants set, any other kind refuses it (the record caption of a set that is not periodic is what `--presentation` writes); with `--presentation` the new register or set passes naming/presentation |
+| `--periodicity PERIODICITY` | the periodicity of a constants set: Day, Month, Quarter or Year (NonPeriodic is the default); a periodic set has a list, so `--presentation` writes the list caption and `--record-presentation` the record one; any other kind refuses it |
 | `--base BASE` | the base type of an interface component (Group, ObjectForm&lt;Goods.Object&gt;); the InterfaceComponent kind only |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 

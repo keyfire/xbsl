@@ -374,7 +374,8 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
                        [--object-presentation OBJECT_PRESENTATION]
-                       [--record-presentation RECORD_PRESENTATION] [--base BASE] [--dry-run]
+                       [--record-presentation RECORD_PRESENTATION] [--periodicity PERIODICITY]
+                       [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -396,9 +397,10 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | способ доступа, русским или английским именем (РазрешеноВсем или PermitEveryone): у HttpСервис пишется в Разрешения.Вызов, у объектов данных – в Разрешения.ПоУмолчанию (отдельные права ставит set-access) |
 | `--routes ROUTES` | маршруты HttpСервис: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | описание отчёта (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра, набора констант и обработки, в раздел Интерфейс; у справочника, документа и регистра это заголовок списка, а заголовок объекта задает `--object-presentation`, заголовок записи регистра сведений – `--record-presentation` (без заголовка первый же линт дает naming/presentation) |
+| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра, набора констант и обработки, в раздел Интерфейс; у справочника, документа, регистра и периодического набора констант это заголовок списка, а заголовок объекта задает `--object-presentation`, заголовок записи регистра сведений и периодического набора – `--record-presentation` (без заголовка первый же линт дает naming/presentation) |
 | `--object-presentation OBJECT_PRESENTATION` | заголовок объекта в единственном числе: пишется в Интерфейс.Объект.Представление справочника, документа, плана обмена и хранилища настроек, другой вид его не принимает; вместе с `--presentation` новый объект проходит naming/presentation |
-| `--record-presentation RECORD_PRESENTATION` | заголовок записи в единственном числе: пишется в Интерфейс.Запись.Представление регистра сведений, другой вид его не принимает (у набора констант заголовок записи пишет `--presentation`); вместе с `--presentation` новый регистр проходит naming/presentation |
+| `--record-presentation RECORD_PRESENTATION` | заголовок записи в единственном числе: пишется в Интерфейс.Запись.Представление регистра сведений и периодического набора констант, другой вид его не принимает (у непериодического набора заголовок записи пишет `--presentation`); вместе с `--presentation` новый регистр или набор проходит naming/presentation |
+| `--periodicity PERIODICITY` | периодичность набора констант: День, Месяц, Квартал или Год (Непериодический – значение по умолчанию); у периодического набора есть список, поэтому `--presentation` пишет заголовок списка, а `--record-presentation` – заголовок записи; другой вид параметр не принимает |
 | `--base BASE` | базовый тип компонента интерфейса (Группа, ФормаОбъекта&lt;Товар.Объект&gt;); только для вида КомпонентИнтерфейса |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
