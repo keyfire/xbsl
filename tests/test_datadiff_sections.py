@@ -130,15 +130,8 @@ def _report(root: Path, capsys, *options: str) -> str:
     return capsys.readouterr().out
 
 
-def _changed(**edits) -> dict:
-    """A copy of the files with some sections replaced: {"stdlib.json": {"bases": {...}}}."""
-    files = copy.deepcopy(FILES)
-    for name, sections in edits.items():
-        files[name.replace("_", ".", 1) if name.endswith("_json") else name].update(sections)
-    return files
-
-
 def _stdlib(**sections) -> dict:
+    """A copy of the catalog with some sections replaced."""
     new = copy.deepcopy(STDLIB)
     new.update(sections)
     return new
