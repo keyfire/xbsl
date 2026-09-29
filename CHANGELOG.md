@@ -18,16 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
-
-### Fixed
-
-- **`xbsl-mcp` runs the supervisor after `self-update` too.** The update replaces the package
-  but not the command stubs, and a stub made by an older release kept starting the bare server.
-  Such a stub now hands its process over to the supervisor before the engine loads, and
-  `self-update --stop-holders` tells a supervisor from an old server by its worker. ([#162](https://github.com/keyfire/xbsl/pull/162))
-
-## 2026-09-29 – 0.121.0, 0.122.0
+## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1
 
 ### Added
 
@@ -186,6 +177,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`xbsl-mcp` runs the supervisor after `self-update` too.** The update replaces the package
+  but not the command stubs, and a stub made by an older release kept starting the bare server.
+  Such a stub now hands its process over to the supervisor before the engine loads, and
+  `self-update --stop-holders` tells a supervisor from an old server by its worker. ([#162](https://github.com/keyfire/xbsl/pull/162))
 - **Re-wrapping a translated paragraph no longer glues a documentation tag to the line above.** A
   tag now always starts a new paragraph. ([#153](https://github.com/keyfire/xbsl/pull/153))
 - **`comment/emphasis-caps` no longer takes the first word of a tag's text for stress.** The text
