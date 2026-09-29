@@ -25,6 +25,14 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **The cards of the help no longer run together.** The links of a card grid used to merge into one
+  line, and an example lost the icon that told a right one from a wrong one. The help now lists link
+  cards, labels right and wrong examples, and keeps the code fragment of a card as code. ([#165](https://github.com/keyfire/xbsl/pull/165))
+
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
 ### Added
