@@ -1102,10 +1102,10 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
       other caption, and 2.1 wants the presentation of every top-level element filled;
     - a constants set captions the record, and the list too when it is periodic: its list form
       exists for a periodic set alone. Its top-level property names the constant whose value
-      presents the record; a probe build took any value there, a phrase included, and the
-      commands keep the name of the set until the interface captions them (the help topic on
-      a constants set in the interface) - so a filled top-level property does not count, and
-      the message says why.
+      presents the record; a probe build took any value there, a phrase included, and nothing
+      in the automatic interface read it: the commands and the forms keep the name of the set
+      until the interface captions them (the help topic on a constants set in the interface) -
+      so a filled top-level property does not count, and the message says why.
 
     Without a caption the element name stands on the commands that open and create its forms.
     The deprecation mark applies where the value is a text: to the top-level text of a

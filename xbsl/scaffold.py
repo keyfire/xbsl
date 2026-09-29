@@ -2479,8 +2479,10 @@ def _caption_note(kind: str, path: tuple[str, ...], singular_written: tuple[str,
                  "только у периодического набора, и его заголовок задается в "
                  "Интерфейс.Список.Представление")
     if (props.get("Представление") or {}).get("type") == "AttributeName":
+        # The help calls the constant's value the presentation of the record, yet a probe
+        # found no command, form title or search result that shows it - hence "by the help".
         field = ("строкового реквизита, которым платформа обозначает элемент" if "Реквизиты" in props
-                 else "константы, значение которой платформа показывает как представление записи")
+                 else "константы, значение которой по справке представляет запись")
         note += f". Представление верхнего уровня у вида {kind} – не заголовок, а имя {field}"
     return note
 
