@@ -182,15 +182,19 @@ def _stamp(path: Path) -> int | None:
 _READS: dict[tuple[str, str, str], tuple[int, int] | None] = {}
 
 
-def data_path(root: str, version: str, name: str) -> Path:
-    """The file of a reading: `<root>/<version>/<name>`, or `<root>/<name>` for the index."""
-    return Path(root) / version / name if version else Path(root) / name
+def data_path(root: str, version: str, name: str) -> str:
+    """The file of a reading: `<root>/<version>/<name>`, or `<root>/<name>` for the index.
+
+    A string rather than a Path: the freshness check builds one per file read before every
+    call of a tool, and a Path costs several times the join.
+    """
+    return os.path.join(root, version, name) if version else os.path.join(root, name)
 
 
-def file_mark(path: Path) -> tuple[int, int] | None:
+def file_mark(path: str | os.PathLike[str]) -> tuple[int, int] | None:
     """(size, modification time) of a file as the disk holds it now; None when it is not there."""
     try:
-        stat = path.stat()
+        stat = os.stat(path)
     except OSError:
         return None
     return stat.st_size, stat.st_mtime_ns
