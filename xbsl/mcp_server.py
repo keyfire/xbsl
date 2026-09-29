@@ -1308,7 +1308,9 @@ def meta_set_field_property(
     in the project's own); Name is refused - renaming is meta_rename_object, which updates the
     references too. Values take the shapes meta_add_field takes: a nested block as a dict or
     dotted keys replaces whatever stands under that key whole; a scalar over an existing
-    block is refused rather than flattened into it.
+    block is refused rather than flattened into it. A "Тип" is read like the `type` of
+    meta_add_field: markup escapes (`&lt;`, `&gt;`) undone, platform names written in the
+    language of the file, a built-in item held to the types its class allows.
     """
     base = _base(root)
     return _meta(

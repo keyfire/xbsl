@@ -41,7 +41,22 @@ permissions handler of a catalog without access settings, a refusal of its own -
 not used in this project item" - and took it once a privilege computed its permissions; so a
 handler the element declares but its settings leave off gets that message, and a name it cannot
 declare at all the usual one. A description whose settings cannot be read counts every handler
-of the kind as used.
+of the kind as used. The own module of an HTTP service, a SOAP service and a processing declares
+the permissions handler alone, and the build uses it by the same test of their access settings
+(the handler provider of access control sets `enabled` by it for every module with an
+access-control target); below the mode the settings of a processing came in, the build does not
+read them, and the handler is not judged there.
+
+Three more answers of the compiler the rule follows. A module the data lists with no handler at
+all - a common module, a data journal, localized strings, a fragment of the command interface,
+a global client event - declares nothing, and any name under the annotation is refused there.
+The object module of a catalog, a document, an exchange plan and an integrable application
+declares `OnCreateOnBasis` once for each type the description lists under `CreateOnBasis`
+(modulehandlers.PER_ITEM_PROPERTIES): without the list the handler is not found, and the message
+says which property is missing. The module of the project (`Проект.xbsl` beside the project
+description) declares `ComputeSystemAccessPermissions` in the project of an application alone;
+the module of a library or an extension project declares nothing (`ProjectKind` of the
+description, see modulehandlers.project_slot).
 
 A handler may be there in some compatibility modes only (`from` and `to` of its row, a
 half-open range - see modulehandlers.declared_in): the web chat handler of a client
@@ -77,6 +92,7 @@ from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.layout import PROJECT_FILES
 from xbsl.lexer import linemap
+from xbsl.rules.component_since import _version
 from xbsl.rules.handlers import _IDENT_RE, _event_names, _handler_pair_stem
 from xbsl.rules.unused_methods import platform_handlers
 from xbsl.rules.yaml_schema import (
@@ -192,6 +208,16 @@ MESSAGES = {
               "build refuses it: \"A handler associated with method \"{name}\" is not "
               "found\". If the method is called from the module, remove the annotation.",
     },
+    f"{OVERRIDE_RULE}.element-per-item": {
+        "ru": "Метод '{name}' помечен @{annotation}, но {module} объявляет обработчик {handler} "
+              "только для типов, которые перечисляет свойство {property} описания элемента, а "
+              "оно не перечисляет ни одного. Сборка откажет: \"A handler associated with method "
+              "\"{name}\" is not found\".",
+        "en": "Method '{name}' carries @{annotation}, but {module} declares the {handler} "
+              "handler only for the types the {property} property of the element description "
+              "lists, and it lists none. The build refuses it: \"A handler associated with "
+              "method \"{name}\" is not found\".",
+    },
     f"{OVERRIDE_RULE}.element-unused": {
         "ru": "Метод '{name}' помечен @{annotation}, но {module} обработчик {handler} при этих "
               "настройках доступа не использует: {reason}. Сборка откажет: \"Handler "
@@ -229,6 +255,10 @@ MESSAGES = {
     f"{OVERRIDE_RULE}.facet-module": {
         "ru": "модуль {kind}.{module}",
         "en": "the {kind}.{module} module",
+    },
+    f"{OVERRIDE_RULE}.project-module": {
+        "ru": "модуль проекта вида {kind}",
+        "en": "the module of a project of kind {kind}",
     },
     f"{OVERRIDE_RULE}.until": {
         "ru": "только в режимах ниже {until}",
@@ -410,8 +440,9 @@ def _component_fact(source: SourceFile) -> dict | None:
 
 
 def _element_fact(source: SourceFile) -> dict | None:
-    """What the reduce needs of the description of any other element: its kind, bound names
-    and, for an entity, what its access settings say (see _access_settings)."""
+    """What the reduce needs of the description of any other element: its kind, bound names,
+    for an element with access settings what they say (see _access_settings), and which of the
+    collections some handler is declared once per item of it fills (see _given)."""
     if not _HAVE_YAML:
         return None
     kind = object_kind_fast(source)
@@ -424,11 +455,43 @@ def _element_fact(source: SourceFile) -> dict | None:
         "kind": kind,
         "bound": sorted(bound["bound"]) if bound else [],
     }
-    if modulehandlers.record_security_rows(kind, None) is not None:
+    if modulehandlers.record_security_rows(kind, None) is not None or _access_control(kind):
         data, error = _parsed(source)
         settings = _access_settings(data, kind) if error is None else None
         fact["access"] = list(astuple(settings)) if settings is not None else None
+    properties = modulehandlers.per_item_properties()
+    if properties:
+        given = _given(source, kind, properties)
+        fact["given"] = sorted(given) if given is not None else None
     return fact
+
+
+def _access_control(kind: str) -> dict:
+    """The access settings property of the kind (`AccessControl`), {} for a kind without one."""
+    return metamodel.properties(kind).get("КонтрольДоступа") or {}
+
+
+def _given(source: SourceFile, kind: str, properties: frozenset[str]) -> set[str] | None:
+    """The properties among `properties` the description fills with at least one item; None
+    when the description cannot be read that far. A property the text never names is empty,
+    and the file is not parsed for it."""
+    def spellings(prop: str) -> set[str]:
+        english = (metamodel.properties(kind).get(prop) or {}).get("en")
+        return {*terms.key_forms(prop), *([english] if english else [])}
+
+    named = [prop for prop in properties if any(key in source.text for key in spellings(prop))]
+    if not named:
+        return set()
+    data, error = _parsed(source)
+    if error is not None or not isinstance(data, dict):
+        return None
+    given = set()
+    for prop in named:
+        value = value_of(data, prop, kind)
+        if (isinstance(value, (list, dict)) and value) or (isinstance(value, str)
+                                                            and value.strip()):
+            given.add(prop)
+    return given
 
 
 #: The values of a privilege that compute its permissions, for each object or not (the
@@ -516,12 +579,43 @@ def _override_mapper(source: SourceFile) -> dict | None:
     if source.kind == "yaml":
         if PurePosixPath(source.rel.replace("\\", "/")).name in PROJECT_FILES:
             # The folder of the project and the mode it declares: the fact the project typing
-            # takes from the description, read once per source for every rule that asks.
-            return typeinfer.project_fact(source)
+            # takes from the description, read once per source for every rule that asks. The
+            # module of the project pairs with the description, and its kind picks the handlers.
+            fact = typeinfer.project_fact(source)
+            if fact is None or not elements \
+                    or object_kind_fast(source) not in (None, modulehandlers.PROJECT_KIND):
+                return fact  # an element that merely bears the name is no project description
+            return {**fact, "stem": _handler_pair_stem(source.rel),
+                    "project_kind": _project_kind(source)}
         if object_kind_fast(source) == _COMPONENT_KIND:
             return _component_fact(source) if components else None
         return _element_fact(source) if elements else None
     return None
+
+
+def _project_kind(source: SourceFile) -> str | None:
+    """The kind of the project a description declares (`ProjectKind`) in the Russian spelling:
+    the application when it names none, None for a value the enumeration does not have or a
+    description that cannot be read."""
+    data, error = _parsed(source)
+    if error is not None or not isinstance(data, dict):
+        return None
+    written = value_of(data, "ВидПроекта", modulehandlers.PROJECT_KIND)
+    if written is None:
+        return modulehandlers.APPLICATION_PROJECT
+    if not isinstance(written, str):
+        return None
+    known = metamodel.enum_values("ProjectKindEnum") or (
+        modulehandlers.APPLICATION_PROJECT, *sorted(modulehandlers.OTHER_PROJECTS))
+    for russian in known:
+        if written.strip() in (russian, terms.common_english(russian)):
+            return russian
+    return None
+
+
+def _in_language(russian: str) -> str:
+    """A value of the enumerations as the reader's language spells it."""
+    return (terms.common_english(russian) or russian) if _language() == "en" else russian
 
 
 def _mode_shown(mode: tuple[int, ...], assumed: bool) -> str:
@@ -565,13 +659,19 @@ def handler_overrides_nothing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         return heads[0] if len(heads) == 1 else ""
 
     elements = {fact["stem"]: fact for fact in facts.values() if fact["k"] == "e"}
+    projects = {fact["stem"]: fact for fact in facts.values()
+                if fact["k"] == "project" and "stem" in fact}
     modes = typeinfer.project_modes(facts)
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
         component = by_stem.get(fact["stem"])
         if component is None:
-            yield from _element_overrides(rel, fact, elements, modes)
+            project = projects.get(fact["stem"])
+            if project is not None:
+                yield from _project_overrides(rel, fact, project, modes)
+            else:
+                yield from _element_overrides(rel, fact, elements, modes)
             continue
         base = modulehandlers.platform_base(component["head"], project_base)
         rows = modulehandlers.rows_of(base) if base else ()
@@ -625,21 +725,60 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
     element = elements.get(stem)
     if element is None:
         return
-    rows = modulehandlers.element_slot(element["kind"], module)
-    settings = None
-    off: tuple[dict, ...] = ()
-    if rows is None:
-        # The own module of an entity takes the record-level security handlers: the kind says
-        # which it declares, the access settings which of them the build uses.
-        access = element.get("access")
-        settings = modulehandlers.AccessSettings(*access) if access else None
-        split = modulehandlers.access_slot(element["kind"], module, settings)
-        if split is not None:
-            rows, off = split
-    if not rows and not off:
-        return  # nothing known of the module, or names taken at build time: not judged
-    unused = {name: row for row in off for name in (row["ru"], row["en"])}
+    kind = element["kind"]
     mode, assumed = modes.get(rel, (None, False))
+    access = element.get("access")
+    settings = modulehandlers.AccessSettings(*access) if access else None
+    since = _version(_access_control(kind).get("since"))
+    if since and mode is not None and mode < since:
+        # Below the mode the settings came in, the build does not read them: which handler it
+        # uses is not told here, and every handler counts as used.
+        settings = None
+    # The own module of an entity takes the record-level security handlers, and that of an
+    # element with access settings the permissions handler: the settings say which the build
+    # uses. Any other module takes the rows of its slot.
+    split = modulehandlers.access_slot(kind, module, settings, controlled="access" in element)
+    if split is not None:
+        rows, off = split
+    else:
+        rows, off = modulehandlers.element_slot(kind, module), ()
+        if rows is None:
+            return  # nothing known of the module, or names taken at build time: not judged
+    given = element.get("given")
+    rows, absent = modulehandlers.per_item_split(
+        rows, frozenset(given) if given is not None else None)
+    where = (i18n.t(f"{OVERRIDE_RULE}.facet-module", kind=kind, module=module)
+             if module else i18n.t(f"{OVERRIDE_RULE}.own-module", kind=kind))
+    # The yaml binds the methods of the element's own module, not those of its other modules.
+    bound = set() if module else set(element["bound"])
+    yield from _judged(rel, fact, rows, where, bound, mode, assumed,
+                       off=off, absent=absent, kind=kind, settings=settings)
+
+
+def _project_overrides(rel: str, fact: dict, project: dict,
+                       modes: dict) -> Iterable[Diagnostic]:
+    """The findings of the module of the project: its kind picks the handlers (project_slot)."""
+    project_kind = project.get("project_kind")
+    rows = modulehandlers.project_slot(project_kind) if project_kind else None
+    if rows is None:
+        return  # the data knows no module of the project, or the kind is not one it has
+    mode, assumed = modes.get(rel, (None, False))
+    where = i18n.t(f"{OVERRIDE_RULE}.project-module", kind=_in_language(project_kind))
+    yield from _judged(rel, fact, rows, where, set(), mode, assumed)
+
+
+def _judged(rel: str, fact: dict, rows: tuple[dict, ...], where: str, bound: set[str],
+            mode: tuple[int, ...] | None, assumed: bool, *, off: tuple[dict, ...] = (),
+            absent: tuple[dict, ...] = (), kind: str = "",
+            settings: modulehandlers.AccessSettings | None = None) -> Iterable[Diagnostic]:
+    """The findings of the annotated methods of one module against what it declares.
+
+    `rows` are the handlers the module declares, `off` those its access settings leave off, and
+    `absent` those declared once per item of a collection the description leaves empty. A module
+    that declares nothing at all is judged too: every name is wrong there.
+    """
+    unused = {name: row for row in off for name in (row["ru"], row["en"])}
+    missing = {name: row for row in absent for name in (row["ru"], row["en"])}
     present: dict[str, dict] = {}
     elsewhere: dict[str, dict] = {}
     shown: list[dict] = []
@@ -649,10 +788,6 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
             present.update(dict.fromkeys((row["ru"], row["en"]), row))
         else:
             elsewhere.update(dict.fromkeys((row["ru"], row["en"]), row))
-    where = (i18n.t(f"{OVERRIDE_RULE}.facet-module", kind=element["kind"], module=module)
-             if module else i18n.t(f"{OVERRIDE_RULE}.own-module", kind=element["kind"]))
-    # The yaml binds the methods of the element's own module, not those of its other modules.
-    bound = set() if module else set(element["bound"])
     for method in fact["annotated"]:
         name = method["name"]
         if name in bound or name in present:
@@ -660,11 +795,20 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
         fields = {"name": name, "annotation": method["annotation"], "module": where}
         left_off = unused.get(name)
         if left_off is not None:
-            reason = modulehandlers.unused_reason(element["kind"], left_off, settings)
+            reason = modulehandlers.unused_reason(kind, left_off, settings)
             yield Diagnostic(
                 rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
                 i18n.t(f"{OVERRIDE_RULE}.element-unused", handler=left_off[_language()],
                        reason=i18n.t(f"{OVERRIDE_RULE}.unused-{reason}"), **fields),
+            )
+            continue
+        per_item = missing.get(name)
+        if per_item is not None:
+            prop = modulehandlers.per_item_property(per_item) or ""
+            yield Diagnostic(
+                rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                i18n.t(f"{OVERRIDE_RULE}.element-per-item", handler=per_item[_language()],
+                       property=_property_shown(kind, prop), **fields),
             )
             continue
         other = elsewhere.get(name)
@@ -683,7 +827,8 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
                        similar=present[near[0]][_language()], **fields),
             )
             continue
-        # Settings that leave every handler off leave nothing to list.
+        # A module that declares nothing, or settings that leave every handler off, leave
+        # nothing to list.
         message = (i18n.t(f"{OVERRIDE_RULE}.element-found",
                           handlers=", ".join(row[_language()] for row in shown), **fields)
                    if shown else i18n.t(f"{OVERRIDE_RULE}.element-nothing", **fields))
@@ -691,3 +836,11 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
             rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR, message,
             fix=TextEdit(method["start"], method["end"], ""),
         )
+
+
+def _property_shown(kind: str, prop: str) -> str:
+    """A property of an element description as the reader's language names it."""
+    if _language() != "en":
+        return prop
+    return ((metamodel.properties(kind).get(prop) or {}).get("en")
+            or terms.common_english(prop) or prop)

@@ -35,7 +35,15 @@ Which of them an entity declares follows from its kind (record_security_rows), a
 compiler USES them - and the permissions handler beside them - from its access settings: a
 handler the element declares but its settings leave off is refused with a message of its own
 ("Handler X is not used in this project item"). access_slot splits the handlers of such a module
-into the ones the settings use and the ones they leave off.
+into the ones the settings use and the ones they leave off. An HTTP service, a SOAP service and
+a processing have access settings too, and their own module takes the permissions handler by
+them the same way.
+
+A slot with no handlers at all is a module the compiler knows and declares nothing for - a
+common module: every name is wrong there. A row with `per` is declared once per item of a
+collection the element's description fills, and not at all when the description leaves it
+empty (PER_ITEM_PROPERTIES, per_item_split). The module of the project declares its handler in
+the project of an application alone (project_rows).
 """
 
 from __future__ import annotations
@@ -103,6 +111,28 @@ _NO_PER_OBJECT = frozenset({"НаборКонстант"})
 ACCESS_PERMISSIONS = {"ru": "ВычислитьРазрешенияДоступа", "en": "ComputeAccessPermissions"}
 #: The kind the data files the module of the project under - the kind of the project description.
 PROJECT_KIND = "Проект"
+#: The project kind (`ProjectKind` of the description, the application when it names none) whose
+#: module declares the handler of the project. The handler provider of the project description
+#: tests the project type of an application (`ApplicationProjectG5ProjectType`) and nothing else;
+#: a library and an extension have project types of their own, and no provider declares anything
+#: for them - nor does the access-control provider, which gives a project no access-control
+#: target. The system privilege the handler computes exists in an application only as well: its
+#: access settings are produced for the project kind `APPLICATION` alone.
+APPLICATION_PROJECT = "Приложение"
+#: The values of `ProjectKind` besides the application, in the Russian spelling.
+OTHER_PROJECTS = frozenset({"Библиотека", "Расширение"})
+
+#: {the collection a row is declared once per item of (`per`): the property of the element
+#: description that fills it}. The extractor names the collection by the getter a language model
+#: fills its field from (elementhandlers._field_source): the model of an object entity keeps the
+#: types to create the object on basis of, read by `RuntimeEntityMetadata.createOnBasisSources`,
+#: and declares `OnCreateOnBasis` once for each of them. The producer of that metadata takes the
+#: list from the design-time adapter of the element, `getCreateOnBasisSources`, and the adapters
+#: of a catalog, a document, an exchange plan and an integrable application return the
+#: `CreateOnBasis` list of the description (an empty one when it has none), each with creation on
+#: basis supported unconditionally. A description without the list gets no such handler, and a
+#: probe on a server refused `OnCreateOnBasis` there as a handler that is not found.
+PER_ITEM_PROPERTIES = {"RuntimeEntityMetadata.createOnBasisSources": "СозданиеНаОсновании"}
 
 
 @dataclass(frozen=True)
@@ -277,19 +307,31 @@ def element_slot(kind: str, module: str) -> tuple[dict, ...] | None:
     return slot["handlers"]
 
 
-def access_slot(kind: str, module: str, settings: AccessSettings | None
-                ) -> tuple[tuple[dict, ...], tuple[dict, ...]] | None:
-    """(the rows the settings use, the rows they leave off) of a module that takes the
-    record-level security handlers, None for any other module or a kind not known here.
+def access_slot(kind: str, module: str, settings: AccessSettings | None,
+                controlled: bool = False) -> tuple[tuple[dict, ...], tuple[dict, ...]] | None:
+    """(the rows the settings use, the rows they leave off) of a module whose handlers the
+    access settings of its element pick, None for any other module or a kind not known here.
 
-    The own module of an entity is dynamic only for those handlers (RECORD_SECURITY_SOURCE):
-    the kind tells which of them it declares (record_security_rows), and `settings` - read from
-    the description of the element - which of those and of the permissions handler the compiler
-    uses. Without settings (a description that cannot be read) every handler counts as used:
-    only a name the element cannot declare at all is then wrong.
+    The own module of an entity is dynamic only for the record-level security handlers
+    (RECORD_SECURITY_SOURCE): the kind tells which of them it declares (record_security_rows),
+    and `settings` - read from the description of the element - which of those and of the
+    permissions handler the compiler uses. The own module of another element whose description
+    has access settings (`controlled`: an HTTP service, a SOAP service, a processing) declares
+    the permissions handler alone, and the compiler uses it by the same test of the settings.
+    Without settings (a description that cannot be read) every handler counts as used: only a
+    name the element cannot declare at all is then wrong.
     """
     slot = _elements().get(kind, {}).get(module)
-    if slot is None or set(slot["dynamic"]) != {RECORD_SECURITY_SOURCE}:
+    if slot is None:
+        return None
+    if not slot["dynamic"] and controlled and not module:
+        rows = slot["handlers"]
+        if settings is None:
+            return rows, ()
+        computed = settings.computed and not settings.standard
+        used = tuple(row for row in rows if computed or row["ru"] != ACCESS_PERMISSIONS["ru"])
+        return used, tuple(row for row in rows if row not in used)
+    if set(slot["dynamic"]) != {RECORD_SECURITY_SOURCE}:
         return None
     periodic = settings.periodic if settings is not None else None
     security = record_security_rows(kind, periodic)
@@ -323,10 +365,59 @@ def project_rows() -> tuple[dict, ...]:
 
     The compiler declares them for the project of an application only (the project kind of the
     description, the default one) and not in a mobile application; a library or an extension
-    project declares none.
+    project declares none (see project_slot).
     """
     slot = _elements().get(PROJECT_KIND, {}).get("")
     return slot["handlers"] if slot is not None and not slot["dynamic"] else ()
+
+
+def project_slot(project_kind: str) -> tuple[dict, ...] | None:
+    """The handler rows of the module of a project of `project_kind`, None when not to judge.
+
+    The data lists the module of an application project; the other project kinds declare
+    nothing (see APPLICATION_PROJECT), which is known only while the data knows the module of
+    the project at all. A value the enumeration does not have gives None.
+    """
+    slot = _elements().get(PROJECT_KIND, {}).get("")
+    if slot is None or slot["dynamic"]:
+        return None
+    if project_kind == APPLICATION_PROJECT:
+        return slot["handlers"]
+    return () if project_kind in OTHER_PROJECTS else None
+
+
+def per_item_split(rows: tuple[dict, ...], given: frozenset[str] | None
+                   ) -> tuple[tuple[dict, ...], tuple[dict, ...]]:
+    """(the rows the module declares, the rows it declares none of) by the description.
+
+    A row with `per` is declared once per item of the property PER_ITEM_PROPERTIES names for
+    it; `given` holds the properties the description fills with at least one item. None - a
+    description that cannot be read - declares every row, and so does a `per` the table does
+    not know: only what is proven absent is taken away.
+    """
+    if given is None:
+        return rows, ()
+    declared, absent = [], []
+    for row in rows:
+        prop = PER_ITEM_PROPERTIES.get(str(row.get("per") or ""))
+        (absent if prop is not None and prop not in given else declared).append(row)
+    return tuple(declared), tuple(absent)
+
+
+def per_item_property(row: dict) -> str | None:
+    """The property of the description a row is declared once per item of, None for a row
+    declared unconditionally or by a collection PER_ITEM_PROPERTIES does not know."""
+    return PER_ITEM_PROPERTIES.get(str(row.get("per") or ""))
+
+
+@lru_cache(maxsize=1)
+def per_item_properties() -> frozenset[str]:
+    """The properties some row of the data is declared once per item of: what a description
+    has to say for the rule to tell those rows apart."""
+    return frozenset(
+        prop for modules in _elements().values() for slot in modules.values()
+        for row in slot["handlers"] for prop in [per_item_property(row)] if prop
+    )
 
 
 
@@ -412,6 +503,7 @@ def _reset() -> None:
     element_names.cache_clear()
     handler_names.cache_clear()
     module_words.cache_clear()
+    per_item_properties.cache_clear()
 
 
 dataset.register_reset(_reset)

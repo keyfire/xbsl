@@ -199,3 +199,115 @@ def test_standard_code_and_document_number():
     # A developer attribute of that name (it has an `Id`) is not the standard one.
     developer = _catalog(f"Ид: {_ID.format(9)}\nИмя: Код\nТип: Строка")
     assert _run(_contract("Имя: Код\nТип: Строка"), developer, _STANDARD) == []
+
+
+def test_a_numeric_code_is_measured_by_the_integer_part():
+    # The probe answered each of these for a catalog with a numeric `Code`: no integer part in
+    # the contract, an unequal one, a read-only one exceeded - and the default 7 of the code
+    # met a property of 7, and an equal length, in silence.
+    number = "Имя: Код\nТип: Число"
+    d = _run(_contract(number), _catalog(number), _STANDARD)
+    assert len(d) == 1 and "The integer part for property" in d[0].message and " 7," in d[0].message
+    d = _run(_contract(number + "\nДлинаЦелойЧасти: 12"), _catalog(number + "\nДлина: 10"),
+             _STANDARD)
+    assert len(d) == 1 and "must be equal to 12" in d[0].message
+    d = _run(_contract(number + "\nДлинаЦелойЧасти: 12\nТолькоЧтение: Истина"),
+             _catalog(number + "\nДлина: 15"), _STANDARD)
+    assert len(d) == 1 and "cannot exceed 12" in d[0].message
+    assert _run(_contract(number + "\nДлинаЦелойЧасти: 12"), _catalog(number + "\nДлина: 12"),
+                _STANDARD) == []
+    assert _run(_contract(number + "\nДлинаЦелойЧасти: 7"), _catalog(number), _STANDARD) == []
+
+
+# --- a property of a base contract -----------------------------------------------------------
+
+
+def _derived(name: str, base: str, prop: str = "", tables: str = "") -> str:
+    """A contract that names `base` as its base contract, with its own property if any."""
+    options = ("НастройкиТипов:\n    КонтрактСущности.Объект:\n        Контракты:\n"
+               f"            - {base}.Объект\n")
+    body = "".join(f"        {line}\n" for line in prop.split("\n")) if prop else ""
+    props = f"Свойства:\n    -\n        Ид: {_ID.format(8)}\n{body}" if prop else ""
+    return (f"ВидЭлемента: КонтрактСущности\nИд: {_ID.format(7)}\nИмя: {name}\n"
+            f"ОбластьВидимости: ВПроекте\n{options}{props}{tables}")
+
+
+def _inherited(base_prop: str, attr: str, rule: str = _FACETS, derived_prop: str = ""):
+    """The catalog implements `КонтрактНаследника`, whose base is `КонтрактЦены`."""
+    return _run(_contract(base_prop), _catalog(attr, contract="КонтрактНаследника"), rule,
+                extra={"КонтрактНаследника.yaml": _derived("КонтрактНаследника", "КонтрактЦены",
+                                                           derived_prop)})
+
+
+def test_a_property_of_the_base_contract_is_held_against_the_attribute():
+    # The probe got "... must be equal to 50" naming the base - the contract that declares
+    # the property.
+    base = "Имя: Значение\nТип: Строка\nМаксимальнаяДлина: 50"
+    d = _inherited(base, _attr("Тип: Строка\nМаксимальнаяДлина: 30"))
+    assert len(d) == 1 and "must be equal to 50" in d[0].message
+    assert "'КонтрактЦены'" in d[0].message
+    # The control: the length the base asks for compiles.
+    assert _inherited(base, _attr("Тип: Строка\nМаксимальнаяДлина: 50")) == []
+
+
+def test_the_base_of_the_base_is_read_too():
+    # The probe named the first contract of a chain of three.
+    middle = _derived("КонтрактСредний", "КонтрактЦены")
+    top = _derived("КонтрактВерхний", "КонтрактСредний")
+    catalog = _catalog(_attr("Тип: Строка\nМаксимальнаяДлина: 10"), contract="КонтрактВерхний")
+    d = _run(_contract("Имя: Значение\nТип: Строка\nМаксимальнаяДлина: 20"), catalog,
+             extra={"КонтрактСредний.yaml": middle, "КонтрактВерхний.yaml": top})
+    assert len(d) == 1 and "must be equal to 20" in d[0].message
+    assert "'КонтрактЦены'" in d[0].message
+
+
+def test_a_property_declared_again_in_the_derived_contract_wins():
+    # The base is read-only with 50, the derived contract asks 40: the probe held 45 against the
+    # derived value and named the derived contract.
+    base = "Имя: Значение\nТип: Строка\nМаксимальнаяДлина: 50\nТолькоЧтение: Истина"
+    derived = "Имя: Значение\nТип: Строка\nМаксимальнаяДлина: 40"
+    d = _inherited(base, _attr("Тип: Строка\nМаксимальнаяДлина: 45"), derived_prop=derived)
+    assert len(d) == 1 and "must be equal to 40" in d[0].message
+    assert "'КонтрактНаследника'" in d[0].message
+    assert _inherited(base, _attr("Тип: Строка\nМаксимальнаяДлина: 40"),
+                      derived_prop=derived) == []
+
+
+def test_a_table_of_the_base_contract_is_gathered_into_the_derived_one():
+    # The probe held the attribute of the table against the base in both shapes: a derived
+    # contract without the table, and one with a table of the same name adding an attribute.
+    table = ("ТабличныеЧасти:\n    -\n        Ид: {}\n        Имя: Строки\n        Реквизиты:\n"
+             "            -\n                Ид: {}\n                Имя: {}\n"
+             "                Тип: Строка\n{}")
+    base = _contract("", tables=table.format(_ID.format(5), _ID.format(6), "Текст",
+                                             "                МаксимальнаяДлина: 20\n"))
+    catalog = _catalog("Имя: Наименование", contract="КонтрактНаследника", tables=table.format(
+        _ID.format(9), _ID.format(0), "Текст", "                МаксимальнаяДлина: 10\n"))
+    for own in ("", table.format(_ID.format(1), _ID.format(2), "Метка", "")):
+        d = _run(base, catalog, extra={
+            "КонтрактНаследника.yaml": _derived("КонтрактНаследника", "КонтрактЦены", tables=own)})
+        assert len(d) == 1 and "'Строки.Текст'" in d[0].message and "'КонтрактЦены'" in d[0].message
+
+
+def test_a_standard_attribute_meets_the_property_of_the_base():
+    # The probe: "The maximum length for property "Name" is not set in entity contract" naming
+    # the base.
+    d = _inherited("Имя: Наименование\nТип: Строка", "Имя: Наименование", _STANDARD)
+    assert len(d) == 1 and "'КонтрактЦены'" in d[0].message
+    assert _inherited("Имя: Наименование\nТип: Строка\nМаксимальнаяДлина: 150",
+                      "Имя: Наименование", _STANDARD) == []
+
+
+def test_a_base_outside_the_project_and_a_cycle_add_nothing():
+    # A base the run does not describe (a library) is not guessed at, and two contracts naming
+    # each other end where the cycle closes.
+    catalog = _catalog(_attr("Тип: Строка\nМаксимальнаяДлина: 30"), contract="КонтрактНаследника")
+    lone = _derived("КонтрактНаследника", "КонтрактБиблиотеки")
+    assert _run(_contract("Имя: Прочее\nТип: Строка"), catalog,
+                extra={"КонтрактНаследника.yaml": lone}) == []
+    first = _derived("КонтрактНаследника", "КонтрактВторой",
+                     "Имя: Значение\nТип: Строка\nМаксимальнаяДлина: 50")
+    second = _derived("КонтрактВторой", "КонтрактНаследника").replace(_ID.format(7), _ID.format(6))
+    d = _run(_contract("Имя: Прочее\nТип: Строка"), catalog,
+             extra={"КонтрактНаследника.yaml": first, "КонтрактВторой.yaml": second})
+    assert len(d) == 1 and "must be equal to 50" in d[0].message

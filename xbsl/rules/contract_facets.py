@@ -34,12 +34,29 @@ attribute ... that overrides the property of entity contract ... must be equal t
 read-only property only caps it ("... cannot exceed 100"). The probe reproduced all three on a
 catalog and the first one on `Code` and on the `Number` of a document.
 
+A contract may name base contracts
+(`TypeOptions: EntityContract.Object: Contracts: - <Base>.Object`) and then has their properties
+as well; a table of the contract gathers the attributes of the tables of the same name in its
+bases. The compiler holds an implementation against an inherited
+property the same way, and a probe showed how: an attribute against a property of the base (and
+of the base of the base) got "... must be equal to 50" naming the contract that DECLARES the
+property, the standard `Name` of the implementation got "... is not set in entity contract"
+naming the base, and a property the derived contract declares again wins over the one of its
+base - the attribute was held against the derived value. The rules follow the same order: the
+contract's own properties first, then those of its bases, nearest first, and the message names
+the contract the property comes from.
+
+Only an entity contract takes part. An information register cannot implement one - the probe
+got "Invalid type of contract ...; a type contract is expected" - and a type contract has no
+restrictions to compare: the dimensions and resources of a register and the attributes of a
+catalog that implement one compiled with any length.
+
 Narrowing, to keep the zero-false-positive bar: the attribute and the property must declare the
 same type (a type mismatch is another error of its own); an array type (the restrictions then
 belong to the items) and a union of a string with a number (the compiler's notion of a set
 restriction is shared between the two there) are left alone; a contract is found by its short
-name and skipped when two contracts of the project share it; only the direct properties of the
-contract are compared - a property inherited from a base contract is not read.
+name and skipped when two contracts of the project share it, and a base the project does not
+describe (a library, an ambiguous name) contributes nothing.
 
 Quick fixes where the cure is mechanical: an unequal or too wide string length of an attribute
 is set to the property's value, a missing one is added after `Type`, and a length of a standard
@@ -418,7 +435,8 @@ def _mapper(source: SourceFile) -> dict | None:
                     for item in _items(table_entries, "Реквизиты")
                 ) if m
             }
-        return {"contract": {"name": name, "props": props, "tables": tables}}
+        return {"contract": {"name": name, "props": props, "tables": tables,
+                             "bases": _contract_names(top)}}
     contracts = _contract_names(top)
     if not contracts:
         return None
@@ -586,6 +604,37 @@ def _contract_index(facts: dict[str, dict]) -> dict[str, dict]:
     return {name: contract for name, contract in seen.items() if contract is not None}
 
 
+def _effective(contracts: dict[str, dict], name: str) -> tuple[dict, dict]:
+    """The properties and table attributes a contract has, its bases' included.
+
+    Both answer {name: (property, the contract that declares it)}, the tables by table name.
+    The contract's own declaration comes first, then its bases in the order it lists them, each
+    with its own bases behind it; the first declaration of a name wins, so a property the
+    contract declares again hides the one of its base. A base the index lacks adds nothing, and
+    a cycle ends where it closes.
+    """
+    props: dict[str, tuple[dict, str]] = {}
+    tables: dict[str, dict[str, tuple[dict, str]]] = {}
+    seen: set[str] = set()
+
+    def visit(current: str) -> None:
+        contract = contracts.get(current)
+        if contract is None or current in seen:
+            return
+        seen.add(current)
+        for prop_name, prop in contract["props"].items():
+            props.setdefault(prop_name, (prop, current))
+        for table_name, attrs in contract["tables"].items():
+            table = tables.setdefault(table_name, {})
+            for attr_name, prop in attrs.items():
+                table.setdefault(attr_name, (prop, current))
+        for base in contract.get("bases", ()):
+            visit(base)
+
+    visit(name)
+    return props, tables
+
+
 @rule(
     "yaml/contract-facet-mismatch", "yaml/contract-facet-mismatch.title", "A",
     scope="project", severity=Severity.ERROR, mapper=_mapper,
@@ -600,31 +649,31 @@ def contract_facet_mismatch(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             continue
         standard = _standard_names()
         for contract_name in impl["contracts"]:
-            contract = contracts.get(contract_name)
-            if contract is None:
+            if contract_name not in contracts:
                 continue
+            props, tables = _effective(contracts, contract_name)
             pairs = []
             for attr in impl["attrs"]:
                 if not attr["typed"] or (not attr["id"] and attr["name"] in standard):
                     continue
-                prop = contract["props"].get(attr["name"])
-                if prop is not None:
-                    pairs.append((attr, prop, attr["name"]))
+                found = props.get(attr["name"])
+                if found is not None:
+                    pairs.append((attr, *found, attr["name"]))
             for table_name, attrs in impl["tables"].items():
-                table = contract["tables"].get(table_name)
+                table = tables.get(table_name)
                 if table is None:
                     continue
                 for attr in attrs:
-                    prop = table.get(attr["name"])
-                    if prop is not None and attr["typed"]:
-                        pairs.append((attr, prop, f"{table_name}.{attr['name']}"))
-            for attr, prop, label in pairs:
+                    found = table.get(attr["name"])
+                    if found is not None and attr["typed"]:
+                        pairs.append((attr, *found, f"{table_name}.{attr['name']}"))
+            for attr, prop, owner, label in pairs:
                 for msg, key, args, fix in _facet_findings(attr, prop):
                     line, col = _position(attr, key)
                     yield Diagnostic(
                         rel, line, col, "yaml/contract-facet-mismatch", Severity.ERROR,
                         i18n.t(f"yaml/contract-facet-mismatch.{msg}", attr=label,
-                               contract=contract_name, **args),
+                               contract=owner, **args),
                         fix=fix,
                     )
 
@@ -661,9 +710,11 @@ def contract_standard_length(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             length_text = attr.get("length", (None, None))[1]
             length_value = _number(length_text) if length_text is not None else None
             length = int(length_value) if length_value is not None else default_length
-            for contract_name in impl["contracts"]:
-                contract = contracts.get(contract_name)
-                prop = contract["props"].get(attr["name"]) if contract else None
+            for implemented in impl["contracts"]:
+                if implemented not in contracts:
+                    continue
+                prop, contract_name = _effective(contracts, implemented)[0].get(
+                    attr["name"], (None, implemented))
                 if prop is None or prop["types"] != types:
                     continue
                 string = types == ("Строка",)

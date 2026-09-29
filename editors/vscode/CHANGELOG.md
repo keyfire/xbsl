@@ -13,66 +13,46 @@
 
 ### Added
 
-- **The `code/sequential-server-calls` finding links to the documentation.** Its code in the
-  Problems panel opens the page about passing execution from the client to the server. ([#147](https://github.com/keyfire/xbsl/pull/147))
-- **The `code/bound-handler-annotation` finding links to the documentation.** Its code in the
-  Problems panel opens the page of the annotation. ([#148](https://github.com/keyfire/xbsl/pull/148))
-- **The `code/url-data-scheme` finding links to the documentation.** Its code in the Problems panel
-  opens the page of the Url type. ([#148](https://github.com/keyfire/xbsl/pull/148))
-- **The `yaml/dynlist-filter-computed-alias` finding links to the documentation.** Its code in the
-  Problems panel opens the section about filtering on the dynamic list page. ([#151](https://github.com/keyfire/xbsl/pull/151))
-- **The `code/handler-overrides-nothing` finding links to the documentation.** Its code in the
-  Problems panel opens the page of the annotation. ([#152](https://github.com/keyfire/xbsl/pull/152))
-- **The findings of `comment/doc-marker` and `comment/doc-tag-*` link to the documentation.**
-  Their code in the Problems panel opens the section about documentation comments of a module.
-  ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **Documentation comments in the editor.** The hover of a project method shows a section per
-  kind of tag; the signature help shows the text of the `@parameter` tag for the argument being
-  written; inside a `///` line `@` offers the tags, the parameters the block has not described
-  yet and, on an empty line above a declaration, the block the environment's template writes;
-  the tag word and the name after it are colored the way a JSDoc tag is. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **The `yaml/dynlist-scroll-without-loading` finding links to the documentation.** Its code in
-  the Problems panel opens the section about navigation on the page of the list component. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **The warning about the language server's code changed on disk has a Restart button.** It
-  used to name the command to run; now a click on the button restarts the server. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **The context menu of an object creates the modules it lacks.** **Create module (xbsl)**,
-  **Create object module (.Object.xbsl)** and, for a register or a constants set, the modules
-  of a record, a record set and a record key. The items follow the kind, the way the **+** in
-  the project view of the environment does, and a kind without modules gets none; the
-  modules of the record types that exist open from the same menu. ([#155](https://github.com/keyfire/xbsl/pull/155))
-- **Add property... and Add event... on a form in the metadata tree.** The context menu of a
-  form, owned or common, and of any other interface component adds the component's own property
-  or event: a name (a taken one is refused in the prompt) and a type from a pick or typed in;
-  the yaml opens on the new item. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The object module of an entity contract in the metadata tree.** A probe confirmed the
-  module, abstract methods alone, together with the module of a global client event. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The `yaml/standard-field-length` finding links to the documentation again.** Its code in
-  the Problems panel opens the length of a catalog's `Name` in the reference of project element
-  properties. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The context menu of a tabular section opens and creates the module of its row.** A catalog
-  or a document offers **Create row module (Object.TabularSection.xbsl)**: an empty
-  `Name.Section.xbsl` beside the description, opened right away; once the file is there, the
-  item becomes **Open row module**. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **More findings link to the documentation.** In the Problems panel, the codes of
+  `code/sequential-server-calls`, `code/bound-handler-annotation`, `code/url-data-scheme`,
+  `code/handler-overrides-nothing`, `yaml/dynlist-filter-computed-alias`,
+  `yaml/dynlist-scroll-without-loading`, `comment/doc-marker` and `comment/doc-tag-*` open the
+  matching page.
+  ([#147](https://github.com/keyfire/xbsl/pull/147), [#148](https://github.com/keyfire/xbsl/pull/148), [#151](https://github.com/keyfire/xbsl/pull/151), [#152](https://github.com/keyfire/xbsl/pull/152), [#153](https://github.com/keyfire/xbsl/pull/153), [#154](https://github.com/keyfire/xbsl/pull/154))
+- **The editor supports documentation comment tags.** Hovering a project method shows its tags
+  grouped by kind, and signature help shows the `@parameter` text of the current argument. In a
+  `///` line, `@` offers tags and parameters not yet described, and above a declaration it offers
+  the whole block. Tags are colored as in JSDoc. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **The warning that the language server's code changed on disk has a Restart button.** It used to
+  name a command to run by hand. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **The context menu of an object creates the modules it lacks.** The items follow the object's
+  kind, as with the **+** button of the 1C:Element IDE. For a register or a constants set these are
+  the record, record set and record key modules, and for an entity contract the object module.
+  ([#155](https://github.com/keyfire/xbsl/pull/155), [#156](https://github.com/keyfire/xbsl/pull/156))
+- **Forms and other interface components get "Add property..." and "Add event..." in the metadata
+  tree.** Both ask for a name and a type, refuse a name that is taken and open the yaml on the new
+  item. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The context menu of a tabular section creates the module of its row.** For a catalog or a
+  document, "Create row module" adds an empty module next to the description and opens it. Once it
+  exists, the item becomes "Open row module". ([#157](https://github.com/keyfire/xbsl/pull/157))
 
 ### Changed
 
-- **The documentation comment section of the properties panel folds.** It is folded while the
-  node has no comment and open when it has one, like the groups of properties below it: the
-  toolbar and the field took a good part of the panel even with nothing to show. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **The documentation comment section of the properties panel folds like the property groups below
+  it.** It starts folded while the node has no comment. An empty toolbar and field used to take up a
+  good part of the panel. ([#155](https://github.com/keyfire/xbsl/pull/155))
 - **Two findings open the exact key in the property references.** `yaml/event-needs-importance`
-  opens the `FromConstructor` value of the event importance, and `yaml/event-property-type` the
+  opens the `FromConstructor` value of an event's importance, and `yaml/event-property-type` the
   `Type` of an event property. ([#156](https://github.com/keyfire/xbsl/pull/156))
 
 ### Fixed
 
-- **Twenty findings lead to documentation pages that exist again.** The help of the default
-  data version no longer has their old pages, and the code in the Problems panel led to a
-  missing page; the naming rules now open the names standards, the rest the pages on data
-  deletion, enumerations and the event log and the reference of lists and table columns.
-  `style/exception-prefix` and `yaml/standard-field-length` link nowhere: no page states their
-  requirement. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **The object module of a project written in English opens from the tree.** The tree looked
-  for `Name.Объект.xbsl` only, so `Name.Object.xbsl` had no *Open object module*. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **Twenty findings lead to existing documentation pages again.** The help of the default data
+  version no longer has their old pages. `yaml/standard-field-length` now opens the property
+  reference, and `style/exception-prefix` has no link, since no page states its requirement.
+  ([#154](https://github.com/keyfire/xbsl/pull/154), [#156](https://github.com/keyfire/xbsl/pull/156))
+- **The tree opens the object module of a project in English.** It looked only for
+  `Name.Объект.xbsl`, not `Name.Object.xbsl`. ([#155](https://github.com/keyfire/xbsl/pull/155))
 
 ## 0.77.0
 

@@ -1,11 +1,12 @@
-"""code/contract-method-not-abstract: the object and row modules of an entity contract.
+"""code/contract-method-not-abstract: the modules of an entity contract.
 
-An entity contract generates an object type and a row type for each of its tabular sections, and
-a probe compiled a module for both: an ordinary method got "Non-abstract method ... cannot be
-defined" in each, and the row module compiled once the method was gone. The rule joins a module
-to the yaml of its contract through the facts of the run, so the modules are judged the same way
-read from memory and from the disk. The module of the contract type itself, a static method and
-the modules of every other kind stay silent.
+An entity contract generates the contract type, an object type and a row type for each of its
+tabular sections, and the probes compiled a module for each: an ordinary method got "Non-abstract
+method ... cannot be defined" in all three, and so did a static method and a handler with a body
+in the object module; the row module compiled once the method was gone, and an abstract method
+compiled in the module of the contract. The rule joins a module to the yaml of its contract
+through the facts of the run, so the modules are judged the same way read from memory and from
+the disk. The modules of every other kind stay silent.
 """
 
 import pytest
@@ -126,14 +127,25 @@ def test_abstract_methods_are_what_the_modules_take(module):
 def test_the_modules_of_another_kind_are_not_judged(kind):
     # The control of the whole rule: the same files, only the kind of the element differs.
     owner = _CONTRACT.replace("КонтрактСущности", kind).replace("Свойства:", "Реквизиты:")
-    for module in ("Экспонаты.Объект.xbsl", "Экспонаты.Метки.xbsl"):
+    for module in ("Экспонаты.xbsl", "Экспонаты.Объект.xbsl", "Экспонаты.Метки.xbsl"):
         assert _lint({"Экспонаты.yaml": owner, module: _ORDINARY}) == [], module
 
 
-def test_the_module_of_the_contract_type_is_not_judged():
-    # The help page puts the abstract methods of the contract into this module; an ordinary one
-    # there has not been compiled by any probe.
-    assert _lint({"Экспонаты.yaml": _CONTRACT, "Экспонаты.xbsl": _ORDINARY}) == []
+def test_the_module_of_the_contract_type_is_judged_too():
+    # The help page puts the abstract methods of the contract into this module, and the probe
+    # refused an ordinary one there the same way.
+    found = _lint({"Экспонаты.yaml": _CONTRACT, "Экспонаты.xbsl": _ORDINARY})
+    assert [(d.path, d.line, d.col) for d in found] == [("Экспонаты.xbsl", 1, 7)]
+    assert "'Экспонаты'" in found[0].message and "абстрактный метод" in found[0].message
+    # The control: the abstract method compiled there.
+    assert _lint({"Экспонаты.yaml": _CONTRACT, "Экспонаты.xbsl": _ABSTRACT}) == []
+
+
+def test_the_module_of_the_contract_type_in_english():
+    ordinary = 'method Description(): String\n    return ""\n;\n'
+    assert len(_lint({"Exhibits.yaml": _CONTRACT_EN, "Exhibits.xbsl": ordinary})) == 1
+    abstract = "abstract method Description(): String\n"
+    assert _lint({"Exhibits.yaml": _CONTRACT_EN, "Exhibits.xbsl": abstract}) == []
 
 
 def test_a_module_named_after_no_section_is_not_judged():
@@ -141,10 +153,24 @@ def test_a_module_named_after_no_section_is_not_judged():
     assert _lint({"Экспонаты.yaml": _CONTRACT, "Экспонаты.Прочее.xbsl": _ORDINARY}) == []
 
 
-def test_a_static_method_is_not_judged():
-    # The probe compiled an instance method; a static one has not been tried.
+@pytest.mark.parametrize("module", ["Экспонаты.xbsl", "Экспонаты.Объект.xbsl",
+                                    "Экспонаты.Метки.xbsl"])
+def test_a_static_method_is_reported_and_advised_to_move_out(module):
+    # The probe refused a static method in each of the three modules ("Non-abstract method ...
+    # cannot be defined"); declaring it abstract is no way out, so the advice is to move it.
     static = "статический " + _ORDINARY
-    assert _lint({"Экспонаты.yaml": _CONTRACT, "Экспонаты.Объект.xbsl": static}) == []
+    found = _lint({"Экспонаты.yaml": _CONTRACT, module: static})
+    assert [(d.path, d.line, d.col) for d in found] == [(module, 1, 19)]
+    assert "общий модуль" in found[0].message and "абстрактный метод" not in found[0].message
+
+
+def test_a_handler_with_a_body_is_reported_in_the_object_module():
+    # `BeforeWrite` is a handler the object module of a contract declares, and the probe still
+    # refused it with a body.
+    handler = ("@Обработчик\nметод ПередЗаписью(До: Экспонаты.Данные, "
+               "ПараметрыЗаписи: Экспонаты.ПараметрыЗаписи)\n;\n")
+    found = _lint({"Экспонаты.yaml": _CONTRACT, "Экспонаты.Объект.xbsl": handler})
+    assert [(d.line, d.col) for d in found] == [(2, 7)]
 
 
 def test_the_methods_of_a_structure_inside_the_module_are_its_own():

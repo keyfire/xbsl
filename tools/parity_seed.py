@@ -2160,6 +2160,52 @@ Id: 1d1f5c60-0000-4000-8000-000000000f33
 Name: Invoices
 VisibilityScope: InProject
 """
+#: The same document created on basis of another one of its kind: only then does its object
+#: module declare the create-on-basis handler, once per type the list names.
+_OVERRIDE_DOCUMENT_BASIS_RU = _OVERRIDE_DOCUMENT_RU + "СозданиеНаОсновании:\n    - Накладные.Ссылка\n"
+_OVERRIDE_DOCUMENT_BASIS_EN = _OVERRIDE_DOCUMENT_EN + "CreateOnBasis:\n    - Invoices.Reference\n"
+#: An HTTP service: its own module declares the permissions handler alone, used by its access
+#: settings the way an entity uses it.
+_OVERRIDE_SERVICE_RU = """\
+ВидЭлемента: HttpСервис
+Ид: 1d1f5c60-0000-4000-8000-000000000f38
+Имя: СкладыApi
+"""
+_OVERRIDE_SERVICE_EN = """\
+ElementKind: HttpService
+Id: 1d1f5c60-0000-4000-8000-000000000f38
+Name: StockApi
+"""
+_OVERRIDE_SERVICE_ACCESS_RU = _OVERRIDE_SERVICE_RU + """\
+КонтрольДоступа:
+    Разрешения:
+        Вызов: РазрешенияВычисляются
+"""
+_OVERRIDE_SERVICE_ACCESS_EN = _OVERRIDE_SERVICE_EN + """\
+AccessControl:
+    Permissions:
+        Call: PermissionsComputed
+"""
+#: A project of the kind the description names: the module of an application declares the
+#: system permissions handler, that of a library declares nothing.
+_OVERRIDE_PROJECT_RU = """\
+Ид: 1d1f5c60-0000-4000-8000-000000000f39
+Поставщик: acme
+Имя: Проба
+Версия: 1.0.0
+ВидПроекта: {kind}
+"""
+_OVERRIDE_PROJECT_EN = """\
+Id: 1d1f5c60-0000-4000-8000-000000000f39
+Vendor: acme
+Name: Probe
+Version: 1.0.0
+ProjectKind: {kind}
+"""
+_OVERRIDE_SYSTEM_RU = ("@Обработчик\nметод ВычислитьСистемныеРазрешенияДоступа()"
+                       ": Массив<РазрешениеДоступа>\n;\n")
+_OVERRIDE_SYSTEM_EN = ("@Handler\nmethod ComputeSystemAccessPermissions()"
+                       ": Array<AccessPermission>\n;\n")
 #: A catalog whose access settings compute the permissions of each object, and an access key:
 #: the own module of the catalog takes both access handlers, that of the key its check alone.
 _OVERRIDE_CATALOG_ACCESS_RU = _OVERRIDE_CATALOG_RU + """\
@@ -2414,6 +2460,40 @@ _EXHIBIT_ABSTRACT_RU = "абстрактный метод ОписаниеЭкс
 _EXHIBIT_TOKENS = {"Экспонаты": "Exhibits", "НазваниеЭкспоната": "ExhibitTitle",
                    "МеткиЭкспоната": "ExhibitLabels", "ТекстМетки": "LabelText",
                    "ОписаниеЭкспоната": "ExhibitDescription"}
+#: A contract whose only property comes from its base - the contract of the pair above.
+_DERIVED_CONTRACT_RU = """\
+ВидЭлемента: КонтрактСущности
+Ид: 1d1f5c60-0000-4000-8000-000000000f35
+Имя: КонтрактЗаявкиРасширенный
+ОбластьВидимости: ВПроекте
+НастройкиТипов:
+    КонтрактСущности.Объект:
+        Контракты:
+            - КонтрактЗаявки.Объект
+"""
+_DERIVED_CONTRACT_EN = """\
+ElementKind: EntityContract
+Id: 1d1f5c60-0000-4000-8000-000000000f35
+Name: ExtendedApplicationContract
+VisibilityScope: InProject
+TypeOptions:
+    EntityContract.Object:
+        Contracts:
+            - ApplicationContract.Object
+"""
+#: A structure element with one field: its module extends the structure type.
+_POINT_RU = """\
+ВидЭлемента: Структура
+Ид: 1d1f5c60-0000-4000-8000-000000000f37
+Имя: Точка
+ОбластьВидимости: ВПроекте
+Окружение: КлиентИСервер
+Поля:
+    -
+        Имя: Абсцисса
+        Тип: Число
+"""
+_POINT_TOKENS = {"Точка": "Point", "Абсцисса": "Abscissa", "Проверить": "Check"}
 
 
 SEEDS: list[Seed] = [
@@ -5930,15 +6010,27 @@ SEEDS: list[Seed] = [
     Seed(
         rule="code/handler-overrides-nothing",
         expect=CLEAN,
-        note="the object module of a document overrides the create-on-basis handler, and the "
-             "dictionary spells it otherwise - the translated tree keeps the platform's word, "
-             "the entry is reported as a dictionary defect",
+        note="the object module of a document created on basis of another one overrides the "
+             "create-on-basis handler, and the dictionary spells it otherwise - the translated "
+             "tree keeps the platform's word, the entry is reported as a dictionary defect",
+        files={"Накладные.yaml": _OVERRIDE_DOCUMENT_BASIS_RU,
+               "Накладные.Объект.xbsl": "@Обработчик\nметод ПриСозданииНаОсновании(Основание: Объект)\n;\n"},
+        english={"Invoices.yaml": _OVERRIDE_DOCUMENT_BASIS_EN,
+                 "Invoices.Object.xbsl": "@Handler\nmethod OnCreateOnBasis(Basis: Object)\n;\n"},
+        tokens={"Накладные": "Invoices", "Основание": "Basis",
+                "ПриСозданииНаОсновании": "OnCreateFromBasis"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the create-on-basis handler of a document whose description lists no basis - "
+             "the compiler declares it once per listed type, so here not at all",
         files={"Накладные.yaml": _OVERRIDE_DOCUMENT_RU,
                "Накладные.Объект.xbsl": "@Обработчик\nметод ПриСозданииНаОсновании(Основание: Объект)\n;\n"},
         english={"Invoices.yaml": _OVERRIDE_DOCUMENT_EN,
                  "Invoices.Object.xbsl": "@Handler\nmethod OnCreateOnBasis(Basis: Object)\n;\n"},
-        tokens={"Накладные": "Invoices", "Основание": "Basis",
-                "ПриСозданииНаОсновании": "OnCreateFromBasis"},
+        tokens={"Накладные": "Invoices", "Основание": "Basis"},
         needs_section="element_module_handlers",
     ),
     Seed(
@@ -5990,6 +6082,65 @@ SEEDS: list[Seed] = [
                  "StockKeys.xbsl": "@Handler\nmethod ComputeAccessPermissions()\n;\n"},
         tokens={"КлючиСкладов": "StockKeys",
                 "ВычислитьРазрешенияДоступа": "ComputeAccessPermissions"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the handler annotation in a common module - the compiler declares no handler "
+             "there, so any name is not found",
+        files={"Вычисления.yaml": _COMMON_MODULE_RU,
+               "Вычисления.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n"},
+        english={"Calculations.yaml": _COMMON_MODULE_EN,
+                 "Calculations.xbsl": "@Handler\nmethod BeforeWrite()\n;\n"},
+        tokens={"Вычисления": "Calculations"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the permissions handler of an HTTP service without access settings - declared, "
+             "and refused as not used by the element",
+        files={"СкладыApi.yaml": _OVERRIDE_SERVICE_RU,
+               "СкладыApi.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n"},
+        english={"StockApi.yaml": _OVERRIDE_SERVICE_EN,
+                 "StockApi.xbsl": "@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n"},
+        tokens={"СкладыApi": "StockApi"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the same handler once the call of the service computes its permissions - the "
+             "English tree reads the same settings",
+        files={"СкладыApi.yaml": _OVERRIDE_SERVICE_ACCESS_RU,
+               "СкладыApi.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n"},
+        english={"StockApi.yaml": _OVERRIDE_SERVICE_ACCESS_EN,
+                 "StockApi.xbsl": "@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n"},
+        tokens={"СкладыApi": "StockApi"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=FINDING,
+        note="the system permissions handler in the module of a library project - only the "
+             "project of an application declares it",
+        files={"Проект.yaml": _OVERRIDE_PROJECT_RU.format(kind="Библиотека"),
+               "Проект.xbsl": _OVERRIDE_SYSTEM_RU},
+        english={"Project.yaml": _OVERRIDE_PROJECT_EN.format(kind="Library"),
+                 "Project.xbsl": _OVERRIDE_SYSTEM_EN},
+        tokens={"Проба": "Probe"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/handler-overrides-nothing",
+        expect=CLEAN,
+        note="the same handler in the module of an application project",
+        files={"Проект.yaml": _OVERRIDE_PROJECT_RU.format(kind="Приложение"),
+               "Проект.xbsl": _OVERRIDE_SYSTEM_RU},
+        english={"Project.yaml": _OVERRIDE_PROJECT_EN.format(kind="Application"),
+                 "Project.xbsl": _OVERRIDE_SYSTEM_EN},
+        tokens={"Проба": "Probe"},
         needs_section="element_module_handlers",
     ),
     Seed(
@@ -7785,6 +7936,146 @@ SEEDS: list[Seed] = [
                "Задачи.Шаги.xbsl": "метод ТекстШага(): Строка\n"
                                    "    возврат Представление\n;\n"},
         tokens={**_TASK_TOKENS, "ТекстШага": "StepText"},
+    ),
+    Seed(
+        rule="code/undefined-name",
+        expect=FINDING,
+        note="a bare method of the object type in the object module - the probe refused a bare "
+             "Write there as it did in a row",
+        files={"Задачи.yaml": _TASKS_RU,
+               "Задачи.Объект.xbsl": "метод Проверить()\n    знч Всего = Записать\n;\n"},
+        tokens=_TASK_TOKENS,
+    ),
+    Seed(
+        rule="code/undefined-name",
+        expect=CLEAN,
+        note="the same method of the object type called, and a property read bare",
+        files={"Задачи.yaml": _TASKS_RU,
+               "Задачи.Объект.xbsl": "метод Проверить()\n    Записать()\n"
+                                     "    знч Всего = Ссылка\n;\n"},
+        tokens=_TASK_TOKENS,
+    ),
+    Seed(
+        rule="code/undefined-name",
+        expect=FINDING,
+        note="a bare method of the structure type in the module of a structure element",
+        files={"Точка.yaml": _POINT_RU,
+               "Точка.xbsl": "метод Проверить(): Строка\n    возврат Представление\n;\n"},
+        tokens=_POINT_TOKENS,
+    ),
+    Seed(
+        rule="code/undefined-name",
+        expect=CLEAN,
+        note="the module of a structure element calls the method and reads its field bare",
+        files={"Точка.yaml": _POINT_RU,
+               "Точка.xbsl": "метод Проверить(): Строка\n"
+                             "    возврат Представление() + Абсцисса.ВСтроку()\n;\n"},
+        tokens=_POINT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=FINDING,
+        note="an ordinary method in the module of the entity contract type itself",
+        files={"Экспонаты.yaml": _EXHIBITS_RU, "Экспонаты.xbsl": _EXHIBIT_ORDINARY_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=CLEAN,
+        note="an abstract method in the module of the entity contract type",
+        files={"Экспонаты.yaml": _EXHIBITS_RU, "Экспонаты.xbsl": _EXHIBIT_ABSTRACT_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="code/contract-method-not-abstract",
+        expect=FINDING,
+        note="a static method in the object module of an entity contract",
+        files={"Экспонаты.yaml": _EXHIBITS_RU,
+               "Экспонаты.Объект.xbsl": "статический " + _EXHIBIT_ORDINARY_RU},
+        tokens=_EXHIBIT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/contract-facet-mismatch",
+        expect=FINDING,
+        note="the attribute is held against the property of the base contract",
+        files={
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(
+                prop="        Имя: Пометка\n        Тип: Строка\n        МаксимальнаяДлина: 50\n"),
+            "КонтрактЗаявкиРасширенный.yaml": _DERIVED_CONTRACT_RU,
+            "Заявки.yaml": _IMPLEMENTATION_RU.replace("КонтрактЗаявки.", "КонтрактЗаявкиРасширенный.")
+            .format(attrs=_REMARK_ATTR_RU + "        МаксимальнаяДлина: 30\n"),
+        },
+        english={
+            "ApplicationContract.yaml": _CONTRACT_EN.format(
+                prop="        Name: Remark\n        Type: String\n        MaxLength: 50\n"),
+            "ExtendedApplicationContract.yaml": _DERIVED_CONTRACT_EN,
+            "Applications.yaml": _IMPLEMENTATION_EN.replace(
+                "ApplicationContract.", "ExtendedApplicationContract.")
+            .format(attrs=_REMARK_ATTR_EN + "        MaxLength: 30\n"),
+        },
+        tokens={**_CONTRACT_TOKENS, "КонтрактЗаявкиРасширенный": "ExtendedApplicationContract"},
+    ),
+    Seed(
+        rule="yaml/contract-facet-mismatch",
+        expect=CLEAN,
+        note="the length the base contract asks for compiles",
+        files={
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(
+                prop="        Имя: Пометка\n        Тип: Строка\n        МаксимальнаяДлина: 50\n"),
+            "КонтрактЗаявкиРасширенный.yaml": _DERIVED_CONTRACT_RU,
+            "Заявки.yaml": _IMPLEMENTATION_RU.replace("КонтрактЗаявки.", "КонтрактЗаявкиРасширенный.")
+            .format(attrs=_REMARK_ATTR_RU + "        МаксимальнаяДлина: 50\n"),
+        },
+        english={
+            "ApplicationContract.yaml": _CONTRACT_EN.format(
+                prop="        Name: Remark\n        Type: String\n        MaxLength: 50\n"),
+            "ExtendedApplicationContract.yaml": _DERIVED_CONTRACT_EN,
+            "Applications.yaml": _IMPLEMENTATION_EN.replace(
+                "ApplicationContract.", "ExtendedApplicationContract.")
+            .format(attrs=_REMARK_ATTR_EN + "        MaxLength: 50\n"),
+        },
+        tokens={**_CONTRACT_TOKENS, "КонтрактЗаявкиРасширенный": "ExtendedApplicationContract"},
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=FINDING,
+        note="an input field around a union without the empty member - the build asks a default "
+             "of its data type",
+        files={"ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n"
+                                   "        Тип: ПолеВвода<Строка|Число>\n        Имя: Отметка\n"},
+        english={"ApplicationForm.yaml": _FORM_EN + "    Content:\n"
+                                         "        Type: Edit<String|Number>\n        Name: Mark\n"},
+        tokens={**_FORM_TOKENS, "Отметка": "Mark"},
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=CLEAN,
+        note="the same input field with the empty member in the union",
+        files={"ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n"
+                                   "        Тип: ПолеВвода<Строка|Число|?>\n        Имя: Отметка\n"},
+        english={"ApplicationForm.yaml": _FORM_EN + "    Content:\n"
+                                         "        Type: Edit<String|Number|?>\n        Name: Mark\n"},
+        tokens={**_FORM_TOKENS, "Отметка": "Mark"},
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=FINDING,
+        note="a write parameter of a union type without the empty member",
+        files={"Заявки.yaml": _CATALOG_RU + "ПараметрыЗаписи:\n    -\n        Имя: Пометка\n"
+                                            "        Тип: Строка|Число\n"},
+        english={"Applications.yaml": _CATALOG_EN + "WriteParameters:\n    -\n        Name: Remark\n"
+                                                    "        Type: String|Number\n"},
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=CLEAN,
+        note="a property of a type contract compiles as a union",
+        files={"Отмечаемое.yaml": "ВидЭлемента: КонтрактТипа\n"
+                                  "Ид: 1d1f5c60-0000-4000-8000-000000000f36\nИмя: Отмечаемое\n"
+                                  "ОбластьВидимости: ВПроекте\nОкружение: Сервер\nСвойства:\n"
+                                  "    -\n        Имя: Пометка\n        Тип: Строка|Число\n"},
+        tokens={"Отмечаемое": "Markable", "Пометка": "Remark"},
     ),
 ]
 

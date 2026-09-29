@@ -13,7 +13,8 @@ Each name is checked twice - the setting on and the setting off - and the module
 name the platform gives under no setting at all, so a scope that simply went blind would fail.
 
 The scope of an object module that does not depend on a setting is in
-test_rule_undefined_name_bilingual.py.
+test_rule_undefined_name_bilingual.py. That a method of the object type answers only to a call
+is checked here too, in a section of its own.
 """
 
 import pytest
@@ -28,8 +29,9 @@ _RULE = "code/undefined-name"
 #: What the extractor reads off the template pages, trimmed to the names under test.
 _GENERATED = {
     "Справочник.Объект": {
-        "properties": ["МоментПометкиУдаления", "ПометкаУдаления", "Родитель", "Ссылка"],
-        "methods": ["Записать", "ЭтоНовый"],
+        "properties": ["МоментПометкиУдаления", "ПометкаУдаления", "Представление", "Родитель",
+                       "Ссылка"],
+        "methods": ["Записать", "Представление", "СоздатьКопию", "ЭтоНовый"],
     },
     "Документ.Объект": {
         "properties": ["МоментПометкиУдаления", "ПометкаУдаления", "Ссылка"],
@@ -82,6 +84,16 @@ def _names(files: dict[str, str]) -> list[str]:
 def _module(*reads: str) -> str:
     """An object module reading the given names, one per line, plus a name nothing gives."""
     body = "".join(f"    знч Прочитано{n} = {name}\n" for n, name in enumerate(reads))
+    return "метод Проверить()\n" + body + "    знч Контроль = НетТакогоИмени\n;\n"
+
+
+def _calling(*calls: str) -> str:
+    """An object module calling the given methods, plus a name nothing gives.
+
+    A method of the object type answers only to a call: read as a value it is not a name of
+    the module at all (the probe got "Variable ... is not defined" for `Write` and `IsNew`).
+    """
+    body = "".join(f"    {name}()\n" for name in calls)
     return "метод Проверить()\n" + body + "    знч Контроль = НетТакогоИмени\n;\n"
 
 
@@ -142,27 +154,27 @@ def test_the_attributes_of_the_element_win_over_the_gate():
 def test_a_key_granted_by_hand_grants_and_revokes():
     files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-000000000007",
                                  "РучнаяВыдача: Истина"),
-             "Ключи.Объект.xbsl": _module("Выдать", "Отозвать")}
+             "Ключи.Объект.xbsl": _calling("Выдать", "Отозвать")}
     assert _names(files) == ["НетТакогоИмени"]
 
 
 def test_a_key_granted_by_hand_does_not_recompute():
     files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-000000000008",
                                  "РучнаяВыдача: Истина"),
-             "Ключи.Объект.xbsl": _module("Пересчитать")}
+             "Ключи.Объект.xbsl": _calling("Пересчитать")}
     assert _names(files) == ["НетТакогоИмени", "Пересчитать"]
 
 
 def test_a_computed_key_recomputes():
     """`ManualGrant` defaults to `False` - a key that says nothing is the computed flavour."""
     files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-000000000009"),
-             "Ключи.Объект.xbsl": _module("Пересчитать")}
+             "Ключи.Объект.xbsl": _calling("Пересчитать")}
     assert _names(files) == ["НетТакогоИмени"]
 
 
 def test_a_computed_key_neither_grants_nor_revokes():
     files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-00000000000a"),
-             "Ключи.Объект.xbsl": _module("Выдать", "Отозвать")}
+             "Ключи.Объект.xbsl": _calling("Выдать", "Отозвать")}
     assert _names(files) == ["Выдать", "НетТакогоИмени", "Отозвать"]
 
 
@@ -187,6 +199,60 @@ def test_a_kind_without_the_setting_keeps_the_name():
                                      "a1000000-0000-4000-8000-00000000000c"),
              "Настройки.Объект.xbsl": _module("ПометкаУдаления")}
     assert _names(files) == ["НетТакогоИмени"]
+
+
+# --- a method of the object type answers only to a call -------------------------------------
+#
+# A probe on a stand read `Write`, `Delete`, `IsNew` and `CreateCopy` as values in the object
+# module of a catalog and got "Variable ... is not defined" for each, while `Write()` compiled
+# and `Reference`, `DeletionMark` and `Presentation` were read bare - the compiler looks a bare
+# name up among the values, and a method is not one.
+
+_CATALOG = _yaml("Справочник", "Метки", "a1000000-0000-4000-8000-00000000000d")
+
+
+def test_a_bare_method_of_the_object_type_is_reported_with_the_call_to_write():
+    found = _found({"Метки.yaml": _CATALOG,
+                    "Метки.Объект.xbsl": _module("Записать", "ЭтоНовый", "СоздатьКопию")})
+    by_name = {d.message.split("'")[1]: d.message for d in found}
+    assert sorted(by_name) == ["Записать", "НетТакогоИмени", "СоздатьКопию", "ЭтоНовый"]
+    assert "'Записать()'" in by_name["Записать"] and "'ЭтоНовый()'" in by_name["ЭтоНовый"]
+
+
+def test_the_same_methods_called_and_the_properties_read_bare_are_clean():
+    # The control of the test above: the same names with the parentheses.
+    assert _names({"Метки.yaml": _CATALOG,
+                   "Метки.Объект.xbsl": _calling("Записать", "ЭтоНовый", "СоздатьКопию")}) == [
+        "НетТакогоИмени"]
+    assert _names({"Метки.yaml": _CATALOG,
+                   "Метки.Объект.xbsl": _module("Ссылка", "ПометкаУдаления")}) == [
+        "НетТакогоИмени"]
+
+
+def test_a_name_the_type_has_both_ways_stays_a_value():
+    # `Presentation` is a property of the object type and a method at once: read bare, it
+    # compiled.
+    assert _names({"Метки.yaml": _CATALOG,
+                   "Метки.Объект.xbsl": _module("Представление")}) == ["НетТакогоИмени"]
+
+
+def test_the_fallback_table_calls_write_and_delete():
+    """A kind the generated members say nothing about gets the fallback table, split the same
+    way: `Reference` and `DeletionMark` are read, `Write` and `Delete` are called."""
+    files = {"Настройки.yaml": _yaml("ХранилищеНастроек", "Настройки",
+                                     "a1000000-0000-4000-8000-00000000000e")}
+    files["Настройки.Объект.xbsl"] = _module("Ссылка", "Записать", "Удалить")
+    assert _names(files) == ["Записать", "НетТакогоИмени", "Удалить"]
+    files["Настройки.Объект.xbsl"] = _calling("Записать", "Удалить")
+    assert _names(files) == ["НетТакогоИмени"]
+
+
+def test_an_english_object_module_gets_the_same_split():
+    yaml = ("ElementKind: Catalog\nId: a1000000-0000-4000-8000-00000000000f\nName: Tags\n"
+            "VisibilityScope: InProject\n")
+    module = ("method Check()\n    var Read = Write\n    Write()\n    var Link = Reference\n"
+              "    var Control = NoSuchName\n;\n")
+    assert _names({"Tags.yaml": yaml, "Tags.Object.xbsl": module}) == ["NoSuchName", "Write"]
 
 
 # --- the same two flavours in the MANAGER module --------------------------------------------

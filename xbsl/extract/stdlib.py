@@ -2030,7 +2030,9 @@ def main(argv=None) -> int:
         # the element and the module ("" - the element's own, "Объект", "НаборЗаписей",
         # "Запись"): {kind: {module: {"handlers": rows, "dynamic": sources}}}. A module with
         # `dynamic` takes some handler names from the element's own description at build time
-        # and is not to be judged (see elementhandlers). Older datasets omit the section.
+        # and is not to be judged, a row with `per` is declared once per item of a collection
+        # the description fills, and a module with no rows declares nothing (see
+        # elementhandlers). Older datasets omit the section.
         **({"element_module_handlers": element_handlers} if element_handlers else {}),
         "type_members": {k: _members_json(v) for k, v in sorted(own_types.items())},
         # Global context: members of Стд and its first-level packages, available by bare name.

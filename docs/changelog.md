@@ -29,304 +29,203 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
-- **Five rules check the tags of a documentation comment against what the environment shows.**
-  The environment reads a `///` block with regular expressions and is stricter than it looks: a
-  tag on the first line becomes the description, a misspelled tag word loses its line, a name
-  ends at an underscore or a dot, a parameter the method no longer has is described all the
-  same. `comment/doc-tag-unknown` reports a line that starts with `@` and is no tag, and respells
-  `@param`, `@return`, `@throw`, `@exception` and a tag word in capitals.
-  `comment/doc-tag-layout` reports a tag on the first line, a paragraph after the tags, no blank
-  line before them (the fix inserts it), the kinds out of the order of the hover, a tag without
-  text and a dash other than a hyphen after a name (the fix puts a hyphen).
-  `comment/doc-tag-param` checks the names against the signature and asks for every parameter
-  or none. `comment/doc-tag-result` reports a result tag above a method with no result or twice,
-  and an exception type the environment cuts at a dot. `comment/doc-tag-target` reports an
-  `@see` reference or an `@throws` type that exists nowhere in the project or the platform. The
-  rules judge only a block that has tags and are on by default. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **The language server reads the tags of a documentation comment.** The hover of a project
-  method shows a section per kind of tag, as the environment's own card does; the new signature
-  help shows, for the argument being written, the text of its `@parameter` tag; inside a `///`
-  line the completion offers the tags, the parameters the block has not described yet and, on
-  an empty line above a declaration, the block the environment's template writes. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **`add-field` and `meta_add_field` add a property to an interface component.** A component's
-  `Properties` used to be refused as "no extendable sections"; the property kind now writes a
-  name and a type there, without `Id`, and a missing section goes after `Inherits`, in front of
-  `Events`. The new `doc` parameter (`--doc`) writes the description of an item as its
-  documentation comment – the `##` lines at its head. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`xbsl fold-comments --compact` prints a short report.** A dry run over a whole tree printed
-  every move and the diff of every file. With `--compact` the text counts the moves per file and
-  lists the ambiguous ones, and `--format json` gives the short report `meta_fold_comments`
-  gives with `compact`. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **A stale MCP server names the CLI command of the refused call.** When the engine on disk
-  changes under a running server, the refusal of `lint_paths`, `lint_source`, `baseline_prune`,
-  `list_rules`, `meta_fold_comments` and the `translate_*` tools carries `cli`: the same call as
-  a shell command the server's interpreter runs on the new code. The text of `lint_source` and
-  inline `translate_set` edits go to a temporary file the command reads (`cli_note`). ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`yaml/hierarchy-bare-value` catches a bare mode word in the hierarchy of a dynamic list.**
-  A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` fails the apply - a probe on a live
-  server answered that the type of the value is not specified. The fix writes the typed node
-  `{Type: HierarchyMode, Value: Disabled}` in the language of the file, and takes `Auto` out.
+- **Five rules check documentation comment tags the way the development environment reads them.**
+  The environment is strict and silently drops a line with a misspelled tag. All five are on by
+  default and skip blocks without tags: `comment/doc-tag-unknown`, `comment/doc-tag-layout`,
+  `comment/doc-tag-param`, `comment/doc-tag-result` and `comment/doc-tag-target`. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **The language server supports the tags of a documentation comment.** The hover splits a method's
+  description by tag, like the environment's own card. New signature help shows the `@parameter`
+  text of the argument being typed. Inside a `///` line, completion offers tags and parameters not
+  yet described, and above a declaration it inserts a whole block. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`add-field` and `meta_add_field` add properties and events to an interface component.** The
+  command used to answer that the component had nothing it could extend. It refuses a taken name.
+  The new `--doc` option writes the item's description as `##` documentation comment lines. ([#154](https://github.com/keyfire/xbsl/pull/154), [#156](https://github.com/keyfire/xbsl/pull/156))
+- **`xbsl fold-comments --compact` prints a short report.** Without the flag, a dry run over a whole
+  tree printed every move and the full diff of every file. The short report counts moves per file
+  and lists only the ambiguous ones, in `--format json` too. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **A stale MCP server's refusal includes the CLI command for the same call.** When the engine on
+  disk changes under a running server, that command runs the call on the new code. The linter,
+  dictionary and `meta_*` tools all return it. ([#154](https://github.com/keyfire/xbsl/pull/154), [#157](https://github.com/keyfire/xbsl/pull/157))
+- **`yaml/hierarchy-bare-value` catches an untyped mode word in the hierarchy of a dynamic list.**
+  The server will not apply a build with a bare `Disabled`, `Default` or `Auto` in `UsedHierarchy`.
+  The fix writes a typed node like `{Type: HierarchyMode, Value: Disabled}` and removes `Auto`.
   ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The translator warns about a short pair in a comment with new lines.** A phrase pair is
-  keyed by one comment line, and a line of one or two words means what its comment makes of it.
-  When a comment has gaps and a short line of it was translated by a pair of the dictionary, the
-  plain report warns `short-pair` at that line, and the gaps of the comment carry `neighbors`
-  under `--gaps` and in `translate_gaps`. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`code/handler-overrides-nothing` judges the modules of other elements.** The object module
-  of a catalog, a document, an exchange plan or a settings storage, the record set and record
-  modules of registers, and the modules of a scheduled job, an access key, client work
-  parameters and commands. The compiler declares their handlers in code, and the stdlib
-  extractor now reads that code into a new `element_module_handlers` section. A module that
-  takes handler names from the element's own description at build time is not judged. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`add-field` writes an event of an interface component.** The `событие` kind writes a name
-  and the event type (`ComponentEvent` when omitted) into the component's own `Events`, with
-  `--doc` and a refusal of a taken name; a missing section goes right after `Properties`. CLI,
-  MCP `meta_add_field` and LSP `xbsl/metaAddField` take it. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The documentation index takes the property references of the help.** The extractor
-  collects the panels of project element properties, interface component properties and the
-  integration process schema; the links other pages make to them no longer lead nowhere. A
-  symbol lookup (`docs_symbol`, the hover, the documentation panel) keeps answering with the
-  page of the type or the member. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`xbsl-mcp-supervisor`: the MCP session outlives an update of the engine.** The new command
-  runs the MCP server as a worker behind a supervisor that holds the client's stdio. When the
-  worker refuses a call because the engine on disk was replaced, the supervisor starts a new
-  worker, repeats the client's `initialize` handshake to it and sends it the same call: the agent
-  gets the answer of the new code instead of the refusal, and the client needs no restart. An
-  answer saying the tool ran is passed on as it is, and the next call goes to a new worker. A
-  worker that ended or was stopped by `self-update --stop-holders` is replaced at the next call,
-  and the call it was running gets an error. After a replacement the client gets
-  `notifications/tools/list_changed`. The supervisor loads no engine and does not hold the
-  package for `self-update`; `xbsl mcp-log` names every replaced process. It is opt-in:
-  `claude mcp add xbsl -- xbsl-mcp-supervisor`, and `xbsl-mcp` is unchanged. The `stale` record
-  of a refusal carries `ran`: `false` when the tool did not run. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The refusal of a stale server names the command of the `meta_*` readers too.**
-  `meta_project_info`, `meta_object_info`, `meta_localization_info`, `meta_component_tree`,
-  `meta_resource_references` and `meta_unused_resources` carry `cli` like the linter and the
-  dictionary tools, with the same filters and the paths resolved against the call's `root`.
-  `xbsl form-tree` of a whole form now carries `componentProperties`, as the MCP tool and the
-  editor already did. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **`yaml/component-member-unique` (tier A, error): one name among the own properties and
-  events of an interface component.** The build refuses it ("Property name ... is not unique",
-  "Event name ... is not unique"), as a probe on a live server confirmed, and `add-field` no
-  longer writes such a name. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **`yaml/auto-bare-value` (tier D, error): a bare `Auto` in a property typed Auto or String.**
-  A button caption, the presentation of a dynamic list filter or of a sort: probes on a live
-  server failed the apply with "the type of the value is not specified" in all four places,
-  the same way as a bare word in `UsedHierarchy`, which `yaml/hierarchy-bare-value` keeps. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The glossary of the help is a panel of the documentation index.** The 108 links of the
-  property references and 3 of the query language section now open their terms. A glossary
-  term never answers a symbol lookup (`docs_symbol`, the hover, the documentation panel): its
-  titles are ordinary words, like the names of variables and members. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The reserved words of the query language come from the help.** The `terms` step extracts
-  the table of the query syntax page into `terms.json` (`query_reserved`,
-  `query_reserved_english_only`), and `data-diff` reports them. The translator and
-  `comment/emphasis-caps` read them from the data and keep their own lists only for data
-  without these keys; the findings do not change. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **`yaml/union-needs-nullable` (tier A, error): a union type without the empty member has no
-  default value.** `String|Number` in the type of an attribute, a register field, a structure
-  field, a component property or a contract property fails the build with "Default value
-  initialization is not supported for types ..."; a probe on a live server confirmed every
-  place. A default value or `Required: True` lets it pass. The quick fix appends `|?`; a union with
-  a reference stays with `yaml/ref-needs-nullable`. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **`yaml/contract-facet-mismatch` (tier A, error): the restrictions of an attribute that
-  overrides an entity contract property must agree with the property.** An extra restriction, a
-  missing one, an unequal value, or a value wider than a read-only property allows: the compiler
-  refuses each of them, as probes confirmed for strings and numbers and for the tables of a
-  contract. The quick fix sets the string length. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **`yaml/contract-standard-length` (tier A, error): a standard attribute that overrides a
-  contract property needs the property's `MaxLength`.** `Name`, `Code` and a document's `Number`
-  always have a length (150, 7 and 9 by default), so a contract property without one fails the
-  build with "The maximum length for property ... is not set in entity contract"; the quick fix
-  sets `Length` on the attribute. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **`code/contract-method-not-abstract` (tier D, error): an ordinary method in the object module
-  or a row module of an entity contract.** Such a module takes abstract methods only - a probe got
-  "Non-abstract method ... cannot be defined" in both. The module of the contract type itself and
-  static methods are not judged. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **The types of the query language literals come from the help.** The `terms` step reads the
-  links of the reserved words table into `query_reserved_types`, `data-diff` reports the section,
-  and the typing of query rows keeps its own list for a checkout without the data. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **`resource-references --limit`** caps the list of places like `meta_resource_references`, 100
-  by default; `total` still counts every place. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The translator warns about a short pair in a comment that has new lines.** The meaning of a one-
+  or two-word line depends on the rest of its comment. When a comment has untranslated lines and a
+  dictionary pair translated one of its short lines, the report marks that line `short-pair`. For
+  each gap, `--gaps` and `translate_gaps` show the lines around it. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/handler-overrides-nothing` checks the modules of other elements.** Handler lists used to
+  exist only for interface components. The engine now also takes from the compiler's code the
+  handlers of object, register, scheduled job, access key and command modules. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **The documentation index now includes the property references and the glossary of the help.**
+  Links to them from other pages used to lead nowhere and now open the right page or term. Glossary
+  terms stay out of symbol lookup, which still answers with the page of a type or member. ([#156](https://github.com/keyfire/xbsl/pull/156), [#157](https://github.com/keyfire/xbsl/pull/157))
+- **`xbsl-mcp-supervisor` keeps an MCP session alive across an engine update.** The command holds
+  the client connection and runs the server as a separate process. When the engine on disk changes,
+  it starts a new process and repeats the call there, so the client needs no restart. Turn it on
+  explicitly with `claude mcp add xbsl -- xbsl-mcp-supervisor`. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`xbsl form-tree` for a whole form now returns `componentProperties` too**, as the MCP tool and
+  the editor already did. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **New `yaml/component-member-unique` reports a name repeated among an interface component's own
+  properties and events.** The build rejects such a name, so this tier A rule raises an error.
+  ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **New `yaml/auto-bare-value` catches an untyped `Auto` in a property that takes either `Auto` or a
+  string.** This happens in a button caption and in the presentation of a dynamic list filter or
+  sort. The server will not apply such a build, and this tier D rule treats it as an error. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The engine now takes the reserved words of the query language and the types of its literals from
+  the help.** The `terms` step extracts them into the data, and `data-diff` shows what changed.
+  `comment/emphasis-caps`, the translator and query typing read them from there and fall back on
+  their old lists without the data. ([#157](https://github.com/keyfire/xbsl/pull/157), [#158](https://github.com/keyfire/xbsl/pull/158))
+- **New `yaml/union-needs-nullable` catches a union type without the empty member.** The build
+  cannot give a type like `String|Number` a default value. This tier A rule raises an error, and the
+  quick fix appends `|?`. An explicit default or `Required: True` also clears it. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **Two new rules check an attribute against the entity contract property it overrides.**
+  `yaml/contract-facet-mismatch` requires the same restrictions, and `yaml/contract-standard-length`
+  requires `MaxLength` on a property that `Name`, `Code` or `Number` overrides. The build rejects a
+  mismatch, so both tier A rules report an error. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **New `code/contract-method-not-abstract` catches an ordinary method in the object or row module
+  of an entity contract.** Such a module takes only abstract methods, so this tier D rule reports an
+  error. The module of the contract type itself and static methods are not checked. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`resource-references --limit` caps the list of places the way `meta_resource_references` does.**
+  The default is 100 places, and `total` still counts all of them. ([#158](https://github.com/keyfire/xbsl/pull/158))
 
 ### Changed
 
-- **The translator translates a documentation tag line by its parts.** Without a pair for the
-  whole line, the tag word becomes the English one, the name after `@parameter` or `@throws` is
-  translated the way the code translates it, and only the text after the name goes to the
-  dictionary. A parameter renamed in the tokens section now moves in the tag together with the
-  signature; a pair for the whole line still wins, so an existing dictionary translates as
-  before. `--unused` keeps a pair written for the text of a tag, and `--drift` checks the name
-  and the tag word of a pair written for a whole tag line. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **`comment/unknown-name` leaves the names an `@see` or an `@throws` tag points at to
-  `comment/doc-tag-target`**, which resolves them strictly and says which one is missing. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **`yaml/list-scroll-without-loading` takes the hierarchy of a dynamic list into account.** A
-  hierarchical dynamic list always loads on scroll, so the rule judges a dynamic list only when
-  it is flat: declared `UsedHierarchy: {Type: HierarchyMode, Value: Disabled}` in the file or –
-  through the new project rule `yaml/dynlist-scroll-without-loading` – left to a main table
-  without a hierarchy: a catalog that declares none, a document, a register. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`code/handler-overrides-nothing` judges a handler in the project's compatibility mode.** A
-  handler the component description limits to some modes counts only where the mode admits it:
-  the web chat handler of a client application (`GetWebChatUserData`) is gone from mode 8.0 on,
-  and an override of it in a project of that mode or newer is now reported, the message naming
-  both modes. A project description without a mode is read in the newest mode, as the platform
-  reads it. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`lint_paths` with `select` gives the CI record in one line.** A question about a couple of
-  rules got, on top of its findings, the whole `as_ci` block of about two kilobytes. With
-  `select` the block shrinks to a line, as with `compact`, and `as_ci_full` still gives it
-  whole. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **The language server's warning about code changed on disk has a Restart button.** The
-  warning used to be text naming the command. Now it is a request with a button, and a click
-  asks the editor to restart the server with the `xbsl/restartRequested` notification. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`lint_paths` with `compact` counts the info findings instead of listing them.** A project
-  keeps a few info findings on purpose, and every answer of a session repeated their lines -
-  about two and a half kilobytes for five of them. `info_hint` gives their number and rules,
-  they do not count towards the limit of ten, and `list_info` lists them with the rest. ([#155](https://github.com/keyfire/xbsl/pull/155))
-- **`yaml/dynlist-filter-computed-alias` also catches a filter by the alias of a renamed column
-  or of a path.** A probe showed the apply refuses both as an unknown field, and takes a column
-  of the same name silently instead. The message names the cure - the path itself in `Field`.
-  ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The two list scroll rules leave a scalar in `UsedHierarchy` alone.** A probe showed a
-  qualified word such as `HierarchyMode.Disabled` is read as the name of a hierarchy, and a bare
-  mode word fails the apply (now `yaml/hierarchy-bare-value`); only the typed node declares a
-  list flat. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`code/deprecated-api` and `code/contract-parameter-name` read a project without a
-  compatibility mode the way the platform does.** A description with no mode, an unknown one or
-  one below the oldest supported is read in the newest mode, as `code/handler-overrides-nothing`
-  already did; one reading of the mode serves the three rules. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`comment/emphasis-caps`: CASE with WHEN marks a cited query, not CASE alone.** The head of a
-  statement that changes a temporary table (`INSERT INTO Table (`, `UPDATE Table SET`, `DELETE
-  FROM Table WHERE`) is a cited query by its shape; TRUE, FALSE, UNDEFINED and TEMP are words of
-  a query, a literal after a comparison sign is syntax, and without the keyword table the rule
-  falls back on its former list of words. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **A component property takes its default value and the rest of its keys.** `DefaultValue`,
-  `StoredData` and `Contextual` were refused by `add-field` and `set-field-property`: the items
-  of a component are now resolved against its descriptor, the set the documentation lists. The
-  default type is written in the language of the file. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **The warning of a stale MCP server about its plugins carries the CLI command too.** A tool
-  that ran on the plugins loaded at start names in `stale.cli` the command that answers by the
-  plugins on disk. The folders of refused calls older than a day are swept by the next server.
-  ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`code/unused-method` takes the names of the handlers the platform calls from the data.** The
-  handler lists of the component modules and of the modules of other elements, in both
-  spellings, so an unannotated override written in English (`BeforeWrite`, `Handler`) is no
-  longer reported as dead. The record-level security handlers, which the build names after the
-  access settings, stay a short list in the code. The object form handlers ending in `Object`
-  (`BeforeWriteObject` and its kin) left the guard: they are the names of mode 5.0, renamed in
-  6.0, the oldest supported mode. Without the data the rule falls back on the former list. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The translator spells an override in the module of any element the platform's way.**
-  `BeforeWrite` and `OnCreateOnBasis` in the object module of a catalog, `Handler` in a
-  scheduled job, `CheckHasAccessKeys` in an access key, the record-level security handlers in
-  the module of an entity. A dictionary entry that spells one otherwise is reported as a
-  dictionary defect, as it already was for components. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **`yaml/property-since-compat` reads the compatibility mode the way the platform does**, through
-  the helper the code rules share. A description that declares no supported mode (none, a value
-  that names no mode, one below the oldest supported such as 5.0) is judged in the newest mode,
-  and the message says the mode is assumed. A project in mode 5.0 used to get a finding for
-  every property newer than 5.0. The visibility of a resources folder without a descriptor
-  follows the same reading: in such a project the folder is private, as in the newest mode. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The MCP server refuses a call when the engine's code changed under the same version.** A pull
-  of an editable checkout between two releases used to show only after a tool failed, so the first
-  call ran on a mix of old and new code. Before every call the server now compares the engine's
-  code with the code it started with (a stat of a few folders per call, the files read again when
-  a folder changed or every five seconds) and refuses with `stale.reason: sources`, `ran: false`
-  and a `fingerprint`. `xbsl-mcp-supervisor` answers the same call from a new worker and tells two
-  pulls of one version apart by that fingerprint; the plugins keep their own check and still answer
-  with a warning. The supervisor also writes down another protocol version agreed by a new worker. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **The spelling hint of `code/undefined-name` is the closest name of the whole scope.** The names
-  of the module, the element, the project and the global names compete, a tie goes to the nearer
-  group, and a name is never offered as its own hint. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **Scaffolding quotes a value only where YAML needs it.** `EventWithData<String>` or an
-  `https://...` default is written bare by every command, as the sources of the distribution write
-  them, and a boolean given as a word is written in the words of the file: `True`/`False` in an
-  English file, the Russian pair in a Russian one, the `DefaultValue` of a `Boolean` item included.
-  The help of `add-field` and `set-field-property` names every kind the commands take. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **`new-object ConstantsSet` creates the set with a placeholder constant:** an empty set does not
-  compile ("Empty constant sets are not supported"); the first constant added with `add-field`
-  takes its place. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **`code/handler-overrides-nothing` judges the own module of an entity.** The kind tells which
-  record-level security handler it declares, and the access settings (`AccessControl`) tell
-  which of them and of `ComputeAccessPermissions` the build uses. A handler the settings leave off
-  gets the compiler's own words "Handler ... is not used in this project item"; an unknown name
-  keeps the "not found" message. The module of an access key overrides `CheckHasAccessKeys`
-  alone and is judged too, as a probe on a live server confirmed. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **The handler table of element modules no longer gives `ComputeAccessPermissions` to modules
-  without an access-control target** (a common module, commands, client work parameters, a data
-  journal, an access key): the extractor now models the target the way the compiler finds it. The
-  action privilege gets `ComputeAccessPermissions`, and the project module
-  `ComputeSystemAccessPermissions`, which `code/unused-method` and the translator now know. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The translator translates a tag line in parts.** The tag word and the name after it are
+  translated the same way as in the code, and only the text after the name goes to the dictionary. A
+  renamed parameter therefore changes in the tag along with the signature. A pair for the whole line
+  still comes first, so an existing dictionary gives the same translation. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **Names in `@see` and `@throws` tags are now checked only by `comment/doc-tag-target`.**
+  `comment/unknown-name` skips them: the new rule resolves them more strictly and names the missing
+  one. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **The list scroll rules take the hierarchy of a dynamic list into account.** A hierarchical list
+  always loads on scroll. So `yaml/list-scroll-without-loading` checks a dynamic list only when a
+  `{Type: HierarchyMode, Value: Disabled}` node declares it flat. A list over a table without a
+  hierarchy is checked by the new rule `yaml/dynlist-scroll-without-loading`. ([#154](https://github.com/keyfire/xbsl/pull/154), [#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/handler-overrides-nothing` takes the project's compatibility mode into account.** When the
+  component description allows a handler only in some modes, the rule counts it only where it
+  exists. For example, the web chat handler `GetWebChatUserData` is gone since mode 8.0, so
+  overriding it in such a project is now reported. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`lint_paths` answers are shorter.** With `select` the `as_ci` block shrinks to one line, and
+  with `compact` the info findings are only counted. Each used to add two kilobytes or more to every
+  answer. `as_ci_full` and `list_info` still give the full view. ([#154](https://github.com/keyfire/xbsl/pull/154), [#155](https://github.com/keyfire/xbsl/pull/155))
+- **The language server's warning about code changed on disk has a Restart button.** The warning
+  used to only name the command. Clicking the button sends the editor the `xbsl/restartRequested`
+  notification, and the editor restarts the server. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`yaml/dynlist-filter-computed-alias` also catches a filter by the alias of a renamed column or a
+  path.** The server rejects such a filter as an unknown field, or silently uses a column with the
+  same name. The message suggests putting the path itself in `Field`. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **Rules read the project's compatibility mode the way the platform does.** When the description
+  names no supported mode, the rules assume the newest one. `code/deprecated-api`,
+  `code/contract-parameter-name` and `yaml/property-since-compat` now work this way too. A project
+  in mode 5.0 no longer gets a finding for every property newer than 5.0. ([#156](https://github.com/keyfire/xbsl/pull/156), [#157](https://github.com/keyfire/xbsl/pull/157))
+- **`comment/emphasis-caps` tells a cited query from stress more accurately.** `CASE` marks a query
+  only together with `WHEN`. The head of a statement that changes a temporary table, literals like
+  `TRUE` and a value after a comparison sign also count as query text. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **A component property now takes a default value and its other keys.** `add-field` and
+  `set-field-property` used to reject `DefaultValue`, `StoredData` and `Contextual`. The commands
+  now take the allowed keys from the component's descriptor. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **A stale MCP server's warning about its plugins also includes the CLI command.** That command
+  answers with the plugins currently on disk. At its next start the server removes the temporary
+  folders of such commands that are more than a day old. ([#156](https://github.com/keyfire/xbsl/pull/156))
+- **`code/unused-method` reads from the data which handlers the platform calls.** An unannotated
+  override spelled in English, like `BeforeWrite`, is no longer reported as unused. Names like
+  `BeforeWriteObject` lost their exemption: object forms used them in mode 5.0, and the oldest
+  supported mode is 6.0. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The translator spells an overridden handler in the module of any element the way the platform
+  does.** This used to work only for components and now covers catalogs, scheduled jobs, access keys
+  and entities. A dictionary entry that spells one differently is reported as a dictionary defect.
+  ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The MCP server refuses a call when the engine's code changed under the same version.** The
+  server used to notice a `git pull` into an editable install only after a tool failed, and the
+  first call ran on a mix of old and new code. It now checks the code before every call, and
+  `xbsl-mcp-supervisor` answers the same call from a new process. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`code/undefined-name` suggests the closest name from the whole scope.** Names of the module, the
+  element, the project and global names all compete, and a tie goes to the nearer group. The
+  misspelled name itself is never suggested. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **Scaffolding quotes a value only where YAML requires it.** Every command writes
+  `EventWithData<String>` or an `https://...` address without quotes, as the distribution's sources
+  do. A boolean given as a word is written in the file's language. The help of `add-field` and
+  `set-field-property` lists every kind they accept. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`new-object ConstantsSet` creates the set with a placeholder constant.** An empty set does not
+  compile. The first constant added with `add-field` takes the placeholder's place. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`code/handler-overrides-nothing` checks the modules of an entity and an access key against the
+  access settings.** A handler that the `AccessControl` settings do not use gets the same message
+  the compiler gives. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`ComputeAccessPermissions` is no longer listed as a handler of modules without an access-control
+  target**, such as a common module or commands. The project module gets
+  `ComputeSystemAccessPermissions`, which `code/unused-method` and the translator now recognize.
+  ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`code/handler-overrides-nothing` covers more modules.** It now judges modules the compiler
+  gives no handlers at all, `OnCreateOnBasis` by the `CreateOnBasis` list, services and
+  processings by their access settings, and the project module by the kind of the project. ([#159](https://github.com/keyfire/xbsl/pull/159))
+- **Spelling hints of `code/undefined-name` follow the position of the name.** A call is offered
+  something that can be called, a bare name a value or a type. A short name is offered only a
+  candidate one edit away, so `Close(...)` no longer gets `Cos`. ([#159](https://github.com/keyfire/xbsl/pull/159))
+- **The entity contract rules read base contracts.** `yaml/contract-facet-mismatch` and
+  `yaml/contract-standard-length` check an implementation against the properties a contract
+  inherits, as the compiler does, and name the contract that declares the property. ([#159](https://github.com/keyfire/xbsl/pull/159))
 
 ### Fixed
 
-- **The re-wrap of a translated paragraph glued a documentation tag to the line above.** A tag
-  now starts a paragraph of its own. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **`comment/emphasis-caps` took the first word of a tag's text for a stress** - a preposition
-  in capitals after `@parameter Name - `. The text of a tag starts a sentence. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **`translation/english-shape` and the English half of `comment/emphasis-caps` reported an
-  abbreviation of the project as a stress** when the re-wrap of a paragraph put it on another
-  line than its Russian half. An abbreviation the dictionary declares as a token (`SO`) is no
-  stress on any line. ([#153](https://github.com/keyfire/xbsl/pull/153))
-- **`--as-ci` with a source file instead of a pipeline file failed as a pipeline that does not
-  parse.** A project source is never a pipeline file: the refusal says so and gives the command
-  that works, as it already did for a folder. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`translate --unused --since` missed a new dictionary file outside the git index.** Such a
-  file is not in `git diff`, and the answer said `dictionary_files: 0`. Compared with the working
-  tree, the file now counts whole – every pair in it was written by the change; a range `A..B`
-  does not take such files. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`comment/emphasis-caps` takes the words of a cited query from the platform's keyword
-  table.** Its own lists lacked 35 Russian and 44 English keywords (CASE, ORDER BY, DESC,
-  INSERT...), so a query cited without a marker word, and its English line in the dictionary,
-  read as stress. Only the split into markers and ordinary words is kept by hand; the same
-  words stressed in prose are still reported. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`yaml/list-scroll-without-loading` no longer fails on a list whose row type is written with
-  a namespace.** ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **A refused `docs_search` no longer ends in a validation error of the MCP SDK.** Its declared
-  answer admitted only a list, so the refusal of a stale server reached the agent as an error
-  instead of text. ([#154](https://github.com/keyfire/xbsl/pull/154))
-- **`translate --set` wrote the value of a phrase with its padding.** A continuation line of a
-  list came with its indent on both sides: the key was trimmed, the value was not, and the
-  padded value overwrote a pair the dictionary already had. The value loses its padding too,
-  and a rewrite that changes only the whitespace of a value is marked `whitespace_only` in
-  `rewritten` and named so in the text report. ([#155](https://github.com/keyfire/xbsl/pull/155))
-- **`structure/xbsl-pair` recognizes the module of a tabular section row** (`Goods.Items.xbsl`
-  beside `Goods.yaml` that declares the section), and `code/undefined-name` no longer reports
-  the attributes of the row there. ([#156](https://github.com/keyfire/xbsl/pull/156))
-- **`code/undefined-name` judges the module of a tabular section row by the scope of the row.**
-  The module (`Goods.Items.xbsl` beside `Goods.yaml` that declares the section) used to be
-  skipped whole, so a misspelled name there reached the compiler. Its scope now is the
-  attributes of the section, the members every structure type has, the methods of the module
-  and the global names; a name of the owner or of its other sections is reported. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **On Python 3.10 the command of a refused MCP call no longer runs a folder named `xbsl` where
-  the shell stands.** That interpreter has no `-P`, so each run of the line now stands in a
-  subshell that first changes into the server's private temporary folder; the `PYTHONPATH` of an
-  editable checkout stays, and the agent's shell does not move. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **Scaffolding writes a boolean an MCP call passes as `true`/`false` in the words of the file:**
-  `True`/`False` in an English file, as the English sources of the distribution write it, not the
-  Russian words. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The query keyword table of the rules and the platform spellings of the translator read the
-  data as optional** and note their own miss: an editor or an MCP server started without the data
-  picks the tables up once the data is installed. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The help of `set-field-property` names the kinds `свойство` and `событие`**, and that of
-  `add-field` names `событие`. The command reference no longer tears a command name that the help
-  wraps at its hyphen (`set- localization`). ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **`new-object --presentation` writes the caption where the kind keeps it.** The top-level
-  `Presentation` of a catalog, a document, an exchange plan, an integrable application and a
-  settings storage names an attribute, and a caption written there failed to compile; they now
-  get `Interface.List.Presentation`. A register and a processing take the option too, and a
-  command no longer gets two `Presentation` keys. `naming/presentation` no longer calls the
-  top-level `Presentation` of such a kind a caption: its message points at
-  `Interface.List.Presentation` and `Interface.Object.Presentation`, and a caption written
-  there satisfies the rule. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **The ui schema extractor reads `stdlib.json` of the version it builds**, not of the default
-  one, and warns when the data root has none: the retired components used to be left out
-  without a word. ([#157](https://github.com/keyfire/xbsl/pull/157))
-- **`code/undefined-name` accepts a method of the row type in a tabular section row module only as
-  a call.** A probe compiled `Presentation()` and refused a bare `Presentation`; the finding now
-  says to add the parentheses. `structure/xbsl-pair` recognizes a row module by the declaration of
-  the section alone. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **The `cli` command of `lint_source` reads a relative `filename` where the tool does**, made
-  absolute against the server's working directory, on any Python version. ([#158](https://github.com/keyfire/xbsl/pull/158))
-- **The resources read the compatibility mode of an English project without the term data**: one
-  reader of the declared mode serves the resources and the project rules. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **Re-wrapping a translated paragraph no longer glues a documentation tag to the line above.** A
+  tag now always starts a new paragraph. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`comment/emphasis-caps` no longer takes the first word of a tag's text for stress.** The text
+  after `@parameter Name - ` starts a sentence, so a short word there may be capitalized. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`translation/english-shape` and `comment/emphasis-caps` on English lines no longer report a
+  project abbreviation as stress.** It happened when re-wrapping moved the abbreviation to another
+  line. Once the dictionary declares an abbreviation as a token, neither rule treats it as stress on
+  any line. ([#153](https://github.com/keyfire/xbsl/pull/153))
+- **`--as-ci` given a project source instead of a pipeline file no longer fails as an unparsable
+  pipeline.** The refusal explains that this is not a pipeline file and suggests a command that
+  works, as it already did for a folder. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`translate --unused --since` now includes a new dictionary file that is not in the git index
+  yet.** Such a file is missing from `git diff`, so the answer used to say `dictionary_files: 0`.
+  Compared with the working tree, the whole file now counts as new. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`comment/emphasis-caps` takes the words of a cited query from the platform's keyword table.**
+  Its own lists lacked dozens of keywords, so a query cited without a marker word read as stress.
+  The same words stressed in prose are still reported. ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`yaml/list-scroll-without-loading` no longer crashes on a list whose row type is written with a
+  namespace.** ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **A refused `docs_search` no longer turns into an MCP SDK validation error.** Its declared answer
+  allowed only a list, so a stale server's refusal reached the agent as an error instead of text.
+  ([#154](https://github.com/keyfire/xbsl/pull/154))
+- **`translate --set` no longer writes a phrase value with its padding.** Only the key used to be
+  trimmed, and the padded value overwrote a pair the dictionary already had. A rewrite that changes
+  only whitespace is now marked `whitespace_only`. ([#155](https://github.com/keyfire/xbsl/pull/155))
+- **The module of a tabular section row is checked against the row's scope.** `structure/xbsl-pair`
+  recognizes a module like `Goods.Items.xbsl`, and `code/undefined-name` accepts the row's
+  attributes there and catches typos. A method of the row type is accepted only as a call with
+  parentheses. ([#156](https://github.com/keyfire/xbsl/pull/156), [#157](https://github.com/keyfire/xbsl/pull/157), [#158](https://github.com/keyfire/xbsl/pull/158))
+- **The command in the `cli` field no longer depends on the shell's current directory.** Python 3.10
+  has no `-P` flag, so the command could run a local folder named `xbsl` instead of the engine. It
+  now starts from the server's temporary folder. A relative `filename` of `lint_source` resolves
+  against the server's working directory. ([#157](https://github.com/keyfire/xbsl/pull/157), [#158](https://github.com/keyfire/xbsl/pull/158))
+- **Scaffolding writes `true` and `false` from an MCP call in the words of the file.** An English
+  file used to get the Russian words and now gets `True` and `False`, matching the English sources
+  of the distribution. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **An editor or MCP server started without the data picks it up once the data is installed.** This
+  covers the query keyword table of the rules and the platform spellings of the translator. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The help of `set-field-property` and `add-field` names the `свойство` and `событие` kinds.** The
+  command reference no longer splits a command name that the help wrapped at a hyphen. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`new-object --presentation` writes the caption where the object kind keeps it.** For a catalog,
+  a document and similar kinds, the top-level `Presentation` names an attribute, so a caption there
+  failed to compile. It now goes to `Interface.List.Presentation`, and `naming/presentation` accepts
+  it there. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The `uischema` step reads the `stdlib.json` of the version it builds.** It used to read the
+  default version, and retired components went missing without a word. The step now warns when the
+  file is absent. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The engine reads an English project's compatibility mode for resources even without the term
+  data.** Resources and project rules now read the declared mode the same way. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **A method of an object answers only to a call.** In the module of a `Structure` element and in
+  an object module, a bare `Presentation`, `Write` or `IsNew` is now reported: the compiler refuses
+  it and accepts only the call. ([#159](https://github.com/keyfire/xbsl/pull/159))
+- **`yaml/union-needs-nullable` quotes the right refusal.** It now also catches an input field
+  around a union type and no longer reports a property of a type contract, which compiles. ([#159](https://github.com/keyfire/xbsl/pull/159))
+- **`code/contract-method-not-abstract` also judges the contract module itself and static
+  methods.** The compiler refuses both. ([#159](https://github.com/keyfire/xbsl/pull/159))
+- **`set-field-property` reads a `Type` the way `add-field` reads `--type`.** Markup escapes are
+  undone and platform names follow the language of the file. ([#159](https://github.com/keyfire/xbsl/pull/159))
 
 ## 2026-09-27 – 0.120.0
 

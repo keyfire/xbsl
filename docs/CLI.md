@@ -422,7 +422,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--type TYPE` | the field type (default String, ComponentEvent for a component event; a standard attribute takes its class default) |
+| `--type TYPE` | the field type (default String, ComponentEvent for a component event; a standard attribute takes its class default); for the kind строка or шаблон the text in the default language, the key itself when omitted |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
 | `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address; a nested block by a dotted key: Autonumbering.Prefix=RQ |
 | `--doc DOC` | the field description – its documentation comment: the ## lines at the head of the item, which the development environment shows and keeps |
@@ -626,7 +626,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 
 | Option | Description |
 |---|---|
-| `yaml_path` | the yaml of the object to add the field to |
+| `yaml_path` | the yaml of the object whose item gets the properties |
 | `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие, операция, индекс, параметр-запроса, табличная-часть |
 | `name` | the name of the item in the section |
 
@@ -636,7 +636,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address; a nested block by a dotted key: Autonumbering.Prefix=RQ |
-| `--tabular TABULAR` | tabular section name (the attribute is added into it) |
+| `--tabular TABULAR` | tabular section name (the attribute is in it) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl rename-object`
