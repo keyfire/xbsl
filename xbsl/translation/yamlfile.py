@@ -5,7 +5,10 @@ span edits like the code side - formatting, order and comments stay put. The met
 drives the walk: the class of every node names its keys' English spellings and TYPES its
 values, and the value's type decides what happens to it:
 
-- `Term` / `AttributeName`   - an identifier of the project: the dictionary;
+- `Term` / `BslHandler`      - an identifier of the project (a handler is a method of the
+  module): the dictionary;
+- `AttributeName`            - a field of the element: the dictionary, and a field every
+  object has by the entity object that declares it;
 - `kind: type`               - a type expression: platform types, facets, project names;
 - `kind: enum` / an enum class - an enumeration value, translated within its enumeration;
 - `kind: boolean`            - "Истина" -> `True`;
@@ -250,6 +253,32 @@ def _identifier_value(node, resolver, report, edits, scope: str = "", *,
         report.note_text_kept(value, line, col)
         return
     _set_scalar(node, translate_expression(value, resolver, report, at=_at(node), scope=scope), edits)
+
+
+#: The type every object of an entity is, whatever its kind: its members are the fields an
+#: element has without declaring them, the reference among them.
+_ENTITY_OBJECT = "EntityObject"
+
+
+def _field_name_value(node, resolver, report, edits) -> None:
+    """A value naming a FIELD of the element (`AttributeName`): the list the permissions of an
+    object are computed by, the fields of an index, the presentation field.
+
+    A field the project declares is the project's name, and the dictionary spells it. A field
+    every object has is a member of the entity object, and its owner spells it: the reference
+    is `Reference` there, while the flat tables call the same word `Link` after a dot and
+    nothing at all on its own - the translated list kept the Russian word and named no field
+    of the element. An entry of the dictionary still answers first, as it does in the code.
+    """
+    value = node.value
+    if (isinstance(value, str) and _IDENT_CHAIN_RE.fullmatch(value) and "." not in value
+            and has_cyrillic(value) and value not in resolver.project_names
+            and resolver.dictionary.token(value) is None):
+        member = platform_map.member_of(_ENTITY_OBJECT, value)
+        if member:
+            _set_scalar(node, member, edits)
+            return
+    _identifier_value(node, resolver, report, edits)
 
 
 def _dollar_ref(node, resolver, report, edits) -> bool:
@@ -667,6 +696,8 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                     # so `Накладные.Ссылка` is `Invoices.Reference`; read as a name, the item
                     # came out as the property `Invoices.Link`, which names no type at all.
                     _type_scalar(item, resolver, report, edits)
+                elif item_cls == "AttributeName":
+                    _field_name_value(item, resolver, report, edits)
                 else:
                     _identifier_value(item, resolver, report, edits)
         return
@@ -707,7 +738,13 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
     if _is_enum_class(declared):
         _enum_scalar(vnode, declared, resolver, report, edits)
         return
-    if declared in ("Term", "AttributeName"):
+    if declared == "AttributeName":
+        _field_name_value(vnode, resolver, report, edits)
+        return
+    if declared in ("Term", "BslHandler"):
+        # A handler names a method of the element's module - the method of a SOAP operation,
+        # the one serving any verb of a route - and the module renames that method: left as
+        # data, the reference named a method the translated module no longer has.
         _identifier_value(vnode, resolver, report, edits)
         return
     if declared == "UUID":

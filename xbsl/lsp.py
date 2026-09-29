@@ -1700,6 +1700,7 @@ def _make_server() -> "LanguageServer":
             routes=_opt_str(params, "routes"),
             presentation=_opt_str(params, "presentation"),
             object_presentation=_opt_str(params, "objectPresentation"),
+            record_presentation=_opt_str(params, "recordPresentation"),
         )
 
     def _props_param(params: object) -> dict[str, str]:

@@ -2559,6 +2559,17 @@ _PRICES_NAMED_RU = _PRICES_RU + "Представление: Наименова�
 _PRICES_LIST_CAPTION_RU = "Интерфейс:\n    Список:\n        Представление: Цены\n"
 _PRICES_OBJECT_CAPTION_RU = "    Объект:\n        Представление: Цена\n"
 
+# An information register captions its list and its record in the interface section, a
+# constants set its record, and a deprecated element marks every caption (naming/presentation).
+_RATES_RU = "ВидЭлемента: РегистрСведений\nИд: 1d1f5c60-0000-4000-8000-000000000fb1\nИмя: {name}\n"
+_RATES_CAPTIONS_RU = (
+    "Интерфейс:\n    Список:\n        Представление: {list}\n"
+    "    Запись:\n        Представление: {record}\n"
+)
+_RATES_TOKENS = {"Курсы": "Rates", "УстарелоКурсы": "DeprecatedRates"}
+_SETTINGS_RU = "ВидЭлемента: НаборКонстант\nИд: 1d1f5c60-0000-4000-8000-000000000fb2\nИмя: Настройки\n"
+_SETTINGS_TOKENS = {"Настройки": "Settings"}
+
 
 #: A form whose module reads a module constant from a method compiled for the server
 #: (code/constant-unavailable): a component module lives in the client environment, and so
@@ -2683,6 +2694,147 @@ Attributes:
         MaxLength: 50
 """
 _LISTED_CATALOG_TOKENS = {"Склады": "Stock", "Ответственный": "Keeper"}
+
+
+#: A form whose module declares a structure without an environment annotation and creates it
+#: in a method compiled for the server (code/module-type-unavailable): the type lives where
+#: the module does, on the client.
+_TYPE_MODULE_RU = """\
+{annotations}структура ДанныеЗаявки
+    пер Заявитель: Строка = ""
+;
+
+@НаСервере @ДоступноСКлиента
+статический метод СобратьДанные()
+    знч Данные = новый ДанныеЗаявки()
+;
+"""
+_TYPE_MODULE_EN = """\
+{annotations}structure ApplicationData
+    var Applicant: String = ""
+;
+
+@OnServer @AvailableFromClient
+static method CollectData()
+    val Data = new ApplicationData()
+;
+"""
+_TYPE_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "ДанныеЗаявки": "ApplicationData",
+                "Заявитель": "Applicant", "СобратьДанные": "CollectData", "Данные": "Data"}
+#: A common module of both environments and a server one reading its constant by the qualified
+#: name (code/qualified-member-unavailable).
+_SHARED_MODULE_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000fa8
+Имя: ОбщиеЗаявки
+ОбластьВидимости: ВПроекте
+Окружение: КлиентИСервер
+"""
+_SHARED_MODULE_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000fa8
+Name: SharedApplications
+VisibilityScope: InProject
+Environment: ClientAndServer
+"""
+_QUALIFIED_READER_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000fa9
+Имя: ЗаявкиНаСервере
+ОбластьВидимости: ВПроекте
+Окружение: Сервер
+"""
+_QUALIFIED_READER_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000fa9
+Name: ApplicationsOnServer
+VisibilityScope: InProject
+Environment: Server
+"""
+_SHARED_CONSTANT_RU = '@ВПроекте {annotations}\nконст ПРЕФИКС_ЗАЯВКИ = "З-"\n'
+_SHARED_CONSTANT_EN = '@InProject {annotations}\nconst APPLICATION_PREFIX = "З-"\n'
+_SHARED_READER_RU = """\
+метод СобратьКод(): Строка
+    возврат ОбщиеЗаявки.ПРЕФИКС_ЗАЯВКИ
+;
+"""
+_SHARED_READER_EN = """\
+method BuildCode(): String
+    return SharedApplications.APPLICATION_PREFIX
+;
+"""
+_SHARED_TOKENS = {"ОбщиеЗаявки": "SharedApplications", "ЗаявкиНаСервере": "ApplicationsOnServer",
+                  "ПРЕФИКС_ЗАЯВКИ": "APPLICATION_PREFIX", "СобратьКод": "BuildCode"}
+#: An HTTP service and its root address (yaml/root-url-cyrillic); the address is a value the
+#: translator leaves as it is.
+_ROOT_URL_SERVICE_RU = """\
+ВидЭлемента: HttpСервис
+Ид: 1d1f5c60-0000-4000-8000-000000000faa
+Имя: СервисЗаявок
+ОбластьВидимости: ВПроекте
+КорневойUrl: {root}
+"""
+_ROOT_URL_SERVICE_EN = """\
+ElementKind: HttpService
+Id: 1d1f5c60-0000-4000-8000-000000000faa
+Name: ApplicationService
+VisibilityScope: InProject
+RootUrl: {root}
+"""
+_ROOT_URL_TOKENS = {"СервисЗаявок": "ApplicationService"}
+#: A document computing the permissions of each object by the fields it lists
+#: (yaml/compute-permissions-by-unknown): the number counts only when declared.
+_LISTED_DOCUMENT_RU = """\
+ВидЭлемента: Документ
+Ид: 1d1f5c60-0000-4000-8000-000000000fab
+Имя: Поступления
+ОбластьВидимости: ВПроекте
+КонтрольДоступа:
+    РасчетРазрешенийПо: [Номер]
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+Реквизиты:
+    -
+        Имя: Дата
+        Тип: ДатаВремя
+"""
+_LISTED_DOCUMENT_EN = """\
+ElementKind: Document
+Id: 1d1f5c60-0000-4000-8000-000000000fab
+Name: Receipts
+VisibilityScope: InProject
+AccessControl:
+    ComputePermissionsBy: [Number]
+    Permissions:
+        Read: PermissionsComputedForEachObject
+Attributes:
+    -
+        Name: Date
+        Type: DateTime
+"""
+_LISTED_DOCUMENT_TOKENS = {"Поступления": "Receipts"}
+#: An exchange plan and a settings storage listing the fields they have without a declaration.
+_LISTED_KIND_RU = """\
+ВидЭлемента: {kind}
+Ид: 1d1f5c60-0000-4000-8000-000000000fac
+Имя: Узлы
+ОбластьВидимости: ВПроекте
+КонтрольДоступа:
+    РасчетРазрешенийПо: [{listed}]
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+"""
+_LISTED_KIND_EN = """\
+ElementKind: {kind}
+Id: 1d1f5c60-0000-4000-8000-000000000fac
+Name: Nodes
+VisibilityScope: InProject
+AccessControl:
+    ComputePermissionsBy: [{listed}]
+    Permissions:
+        Read: PermissionsComputedForEachObject
+"""
+_LISTED_KIND_TOKENS = {"Узлы": "Nodes"}
 
 
 SEEDS: list[Seed] = [
@@ -6911,6 +7063,58 @@ SEEDS: list[Seed] = [
         tokens=_PRICES_TOKENS,
     ),
     Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="an information register with the list caption alone: the standard wants the "
+             "record captioned too, in the singular - the record block read in both spellings",
+        files={"Курсы.yaml": _RATES_RU.format(name="Курсы")
+               + "Интерфейс:\n    Список:\n        Представление: Курсы валют\n"},
+        tokens=_RATES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same register with both interface captions, the list and the record",
+        files={"Курсы.yaml": _RATES_RU.format(name="Курсы")
+               + _RATES_CAPTIONS_RU.format(list="Курсы валют", record="Курс валюты")},
+        tokens=_RATES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a constants set with a phrase in its top-level presentation alone: that property "
+             "names a constant, and the record caption is missing",
+        files={"Настройки.yaml": _SETTINGS_RU + "Представление: Настройки приложения\n"},
+        tokens=_SETTINGS_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same constants set with its record caption in the interface",
+        files={"Настройки.yaml": _SETTINGS_RU
+               + "Интерфейс:\n    Запись:\n        Представление: Настройки приложения\n"},
+        tokens=_SETTINGS_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a deprecated register whose record caption lacks the mark - the deprecation "
+             "prefix of the name read in both spellings",
+        files={"УстарелоКурсы.yaml": _RATES_RU.format(name="УстарелоКурсы")
+               + _RATES_CAPTIONS_RU.format(list="(не используется) Курсы валют",
+                                           record="Курс валюты")},
+        tokens=_RATES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same deprecated register with both captions marked",
+        files={"УстарелоКурсы.yaml": _RATES_RU.format(name="УстарелоКурсы")
+               + _RATES_CAPTIONS_RU.format(list="(не используется) Курсы валют",
+                                           record="(не используется) Курс валюты")},
+        tokens=_RATES_TOKENS,
+    ),
+    Seed(
         rule="yaml/id-required",
         expect=FINDING,
         note="an element declared without its identifier",
@@ -8536,6 +8740,137 @@ SEEDS: list[Seed] = [
                "Заявки.xbsl": "метод Проба()\n;\n"},
         tokens={"Заявки": "Applications", "Проба": "Probe"},
         needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/module-type-unavailable",
+        expect=FINDING,
+        note="a structure of a form module without an environment annotation, created by a "
+             "server method of the same module - the type exists on the client alone",
+        files={"КарточкаЗаявки.yaml": _CONST_CARD_RU,
+               "КарточкаЗаявки.xbsl": _TYPE_MODULE_RU.format(annotations="")},
+        english={"ApplicationCard.yaml": _CONST_CARD_EN,
+                 "ApplicationCard.xbsl": _TYPE_MODULE_EN.format(annotations="")},
+        tokens=_TYPE_TOKENS,
+    ),
+    Seed(
+        rule="code/module-type-unavailable",
+        expect=CLEAN,
+        note="the same structure annotated for both environments",
+        files={"КарточкаЗаявки.yaml": _CONST_CARD_RU,
+               "КарточкаЗаявки.xbsl": _TYPE_MODULE_RU.format(
+                   annotations="@НаСервере @НаКлиенте\n")},
+        english={"ApplicationCard.yaml": _CONST_CARD_EN,
+                 "ApplicationCard.xbsl": _TYPE_MODULE_EN.format(
+                     annotations="@OnServer @OnClient\n")},
+        tokens=_TYPE_TOKENS,
+    ),
+    Seed(
+        rule="code/qualified-member-unavailable",
+        expect=FINDING,
+        note="a server common module reads by the qualified name a constant a common module of "
+             "both environments declares for the client alone",
+        files={"ОбщиеЗаявки.yaml": _SHARED_MODULE_RU,
+               "ОбщиеЗаявки.xbsl": _SHARED_CONSTANT_RU.format(annotations="@НаКлиенте"),
+               "ЗаявкиНаСервере.yaml": _QUALIFIED_READER_RU,
+               "ЗаявкиНаСервере.xbsl": _SHARED_READER_RU},
+        english={"SharedApplications.yaml": _SHARED_MODULE_EN,
+                 "SharedApplications.xbsl": _SHARED_CONSTANT_EN.format(annotations="@OnClient"),
+                 "ApplicationsOnServer.yaml": _QUALIFIED_READER_EN,
+                 "ApplicationsOnServer.xbsl": _SHARED_READER_EN},
+        tokens=_SHARED_TOKENS,
+    ),
+    Seed(
+        rule="code/qualified-member-unavailable",
+        expect=CLEAN,
+        note="the same constant declared for both environments",
+        files={"ОбщиеЗаявки.yaml": _SHARED_MODULE_RU,
+               "ОбщиеЗаявки.xbsl": _SHARED_CONSTANT_RU.format(annotations="@НаСервере @НаКлиенте"),
+               "ЗаявкиНаСервере.yaml": _QUALIFIED_READER_RU,
+               "ЗаявкиНаСервере.xbsl": _SHARED_READER_RU},
+        english={"SharedApplications.yaml": _SHARED_MODULE_EN,
+                 "SharedApplications.xbsl": _SHARED_CONSTANT_EN.format(
+                     annotations="@OnServer @OnClient"),
+                 "ApplicationsOnServer.yaml": _QUALIFIED_READER_EN,
+                 "ApplicationsOnServer.xbsl": _SHARED_READER_EN},
+        tokens=_SHARED_TOKENS,
+    ),
+    Seed(
+        rule="yaml/root-url-cyrillic",
+        expect=FINDING,
+        note="an HTTP service whose root address is written in Cyrillic - no request reaches it",
+        files={"СервисЗаявок.yaml": _ROOT_URL_SERVICE_RU.format(root="/заявки")},
+        english={"ApplicationService.yaml": _ROOT_URL_SERVICE_EN.format(root="/заявки")},
+        tokens=_ROOT_URL_TOKENS,
+    ),
+    Seed(
+        rule="yaml/root-url-cyrillic",
+        expect=CLEAN,
+        note="the same service with a Latin root address",
+        files={"СервисЗаявок.yaml": _ROOT_URL_SERVICE_RU.format(root="/zayavki")},
+        english={"ApplicationService.yaml": _ROOT_URL_SERVICE_EN.format(root="/zayavki")},
+        tokens=_ROOT_URL_TOKENS,
+    ),
+    Seed(
+        rule="yaml/soap-handler-name",
+        expect=FINDING,
+        note="a handler name with a percent sign, which the build refuses between Latin letters",
+        files={"СервисЗаявок.yaml": _SOAP_SERVICE_RU.format(handler="Accept%Application")},
+        english={"ApplicationService.yaml": _SOAP_SERVICE_EN.format(
+            handler="Accept%Application")},
+        tokens=_SOAP_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=FINDING,
+        note="the list names the deletion mark, a computed field the apply of the build fails on",
+        files={"Склады.yaml": _LISTED_CATALOG_RU.format(listed="ПометкаУдаления")},
+        english={"Stock.yaml": _LISTED_CATALOG_EN.format(listed="DeletionMark")},
+        tokens=_LISTED_CATALOG_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=CLEAN,
+        note="the list names the moment of the deletion mark, which the build takes",
+        files={"Склады.yaml": _LISTED_CATALOG_RU.format(listed="МоментПометкиУдаления")},
+        english={"Stock.yaml": _LISTED_CATALOG_EN.format(listed="DeletionMarkInstant")},
+        tokens=_LISTED_CATALOG_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=FINDING,
+        note="the list names the number a document does not declare",
+        files={"Поступления.yaml": _LISTED_DOCUMENT_RU},
+        english={"Receipts.yaml": _LISTED_DOCUMENT_EN},
+        tokens=_LISTED_DOCUMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=CLEAN,
+        note="the same document declaring the number",
+        files={"Поступления.yaml": _LISTED_DOCUMENT_RU + "    -\n        Имя: Номер\n"},
+        english={"Receipts.yaml": _LISTED_DOCUMENT_EN + "    -\n        Name: Number\n"},
+        tokens=_LISTED_DOCUMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=CLEAN,
+        note="an exchange plan lists the code, the number of the sent message and this node, "
+             "the fields every node has",
+        files={"Узлы.yaml": _LISTED_KIND_RU.format(
+            kind="ПланОбмена", listed="Код, НомерОтправленного, ЭтотУзел")},
+        english={"Nodes.yaml": _LISTED_KIND_EN.format(
+            kind="ExchangePlan", listed="Code, SentNumber, ThisNode")},
+        tokens=_LISTED_KIND_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=CLEAN,
+        note="a settings storage lists the user and the object key, its system attributes",
+        files={"Узлы.yaml": _LISTED_KIND_RU.format(
+            kind="ХранилищеНастроек", listed="Пользователь, КлючОбъекта")},
+        english={"Nodes.yaml": _LISTED_KIND_EN.format(
+            kind="SettingsStorage", listed="User, ObjectKey")},
+        tokens=_LISTED_KIND_TOKENS,
     ),
 ]
 

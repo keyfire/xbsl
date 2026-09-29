@@ -9,6 +9,9 @@
 - **Еще три правила ведут в документацию:** `code/constant-unavailable`,
   `yaml/document-date-required` и `yaml/soap-handler-name` открывают свои страницы из панели
   "Проблемы". ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **Еще два правила ведут в документацию:** `code/module-type-unavailable` и
+  `code/qualified-member-unavailable` открывают страницу об исполнении модуля из панели
+  "Проблемы". ([#164](https://github.com/keyfire/xbsl/pull/164))
 
 ## 0.78.0
 

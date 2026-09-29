@@ -69,7 +69,14 @@ document, an exchange plan and a settings storage keep two captions in the `Inte
 `--presentation` is the list caption, in the plural, and `--object-presentation` the object
 caption, in the singular (MCP `presentation` and `object_presentation`). The tool cannot derive
 one from the other, and `naming/presentation` asks for both, so an object created with both lints
-clean. Any other kind refuses `--object-presentation`.
+clean. Any other kind refuses `--object-presentation`. An information register pairs its list
+caption with the record one, `--record-presentation` (MCP `record_presentation`), which no other
+kind takes. A constants set has one caption, the record one, and `--presentation` writes it.
+
+A property the kind is born with goes in only where the compatibility mode of the project knows
+it. An access key is born computed (`ManualGrant: False`, with the stub of its handler): a project
+in the newest mode refuses a key that does not choose its flavour, and a mode that predates the
+property gets the key without the line and a note saying why.
 
 `project-info` answers narrowly. `--kind`, `--subsystem` and `--package` narrow the list of objects,
 `--brief` leaves the lists out and keeps the counts, and `--project` walks only the named project -

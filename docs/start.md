@@ -31,6 +31,11 @@ xbsl self-update            # upgrade to the latest PyPI version
 `xbsl-lsp.exe`, held by the VS Code LSP server, or `xbsl-mcp.exe`, held by an agent. The command
 leaves busy stubs alone, and they call the new code the next time they start. Restart the
 long-living processes yourself after the update. `--version X.Y.Z` installs a specific version.
+When a running process keeps the package itself busy, the command names it by pid and command
+line and refuses. The previous installation stays in place. `--stop-holders` stops the servers
+first: the LSP server, the worker of the MCP supervisor, the web server. A running xbsl command
+of another session, a lint or a scaffolding call, is left alone, so wait for it to finish.
+`--stop-holders=all` stops it too, and it ends without a result.
 In an editable install from a clone the command refuses: `git pull` updates that one.
 
 For a release published minutes ago, both PyPI lists of releases may still name the previous
