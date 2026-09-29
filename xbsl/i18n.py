@@ -723,6 +723,12 @@ _CORE_MESSAGES = {
         "en": "the plugins on disk changed after the server started: {changes} (call {tool}); "
               "the tools answer with a warning until a restart",
     },
+    "mcplog.stale.data": {
+        "ru": "данные платформы на диске изменились после запуска сервера: {changes} (вызов "
+              "{tool}); инструменты отвечают отказом до перезапуска",
+        "en": "the platform data on disk changed after the server started: {changes} (call "
+              "{tool}); the tools refuse until a restart",
+    },
     "mcplog.stale.error": {"ru": "ошибка: {error}", "en": "error: {error}"},
     # Written by the supervisor (xbsl/mcp_supervisor.py) when it retires a worker.
     "mcplog.restart": {
@@ -740,6 +746,10 @@ _CORE_MESSAGES = {
     "mcplog.restart.plugins": {
         "ru": "надстройки на диске сменились",
         "en": "the plugins on disk changed",
+    },
+    "mcplog.restart.data": {
+        "ru": "данные платформы на диске изменились",
+        "en": "the platform data on disk changed",
     },
     "mcplog.restart.exited": {
         "ru": "процесс завершился с кодом {code}",

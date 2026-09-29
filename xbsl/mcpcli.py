@@ -64,9 +64,9 @@ from xbsl import engine, freshness, i18n, plugins
 MESSAGES = {
     "mcpcli.same-call": {
         "ru": "Тот же вызов без перезапуска – команда из поля cli: новый процесс того же "
-              "интерпретатора загрузит код движка, который сейчас на диске",
+              "интерпретатора загрузит код движка и данные платформы, которые сейчас на диске",
         "en": "The same call without a restart is the command in `cli`: a new process of the "
-              "same interpreter loads the engine code that is on disk now",
+              "same interpreter loads the engine code and the platform data that are on disk now",
     },
     "mcpcli.same-call-plugins": {
         "ru": "Ответ по надстройкам с диска без перезапуска – команда из поля cli",

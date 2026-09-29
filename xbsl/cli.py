@@ -497,9 +497,10 @@ def _mcplog_line(event: dict) -> str:
     elif kind == "stale":
         # Written by the server that found the engine on disk replaced under it
         # (xbsl/freshness.py): a version on disk it refuses over, plugins it answers with a
-        # warning over, or sources changed under a failing call.
+        # warning over, sources changed under a failing call, or data files it read that
+        # changed since.
         reason = event.get("reason")
-        key = f"mcplog.stale.{reason}" if reason in ("sources", "plugins") else (
+        key = f"mcplog.stale.{reason}" if reason in ("sources", "plugins", "data") else (
             "mcplog.stale.version")
         error = event.get("error")
         changes = ""
@@ -508,6 +509,10 @@ def _mcplog_line(event: dict) -> str:
 
             changes = freshness.plugin_changes(event.get("changed") or []) or (
                 f"{event.get('loaded', '?')} -> {event.get('on_disk', '?')}")
+        elif reason == "data":
+            from xbsl import freshness
+
+            changes = freshness.data_changes(event) or "?"
         text = i18n.t(key, loaded=event.get("loaded", "?"), on_disk=event.get("on_disk", "?"),
                       tool=event.get("tool", "?"), changes=changes)
         if error:
@@ -515,7 +520,7 @@ def _mcplog_line(event: dict) -> str:
     elif kind == "restart":
         # Written by the supervisor (xbsl/mcp_supervisor.py): the worker it retires and why.
         reason = event.get("reason")
-        if reason in ("version", "sources", "plugins", "exited"):
+        if reason in ("version", "sources", "plugins", "data", "exited"):
             cause = i18n.t(f"mcplog.restart.{reason}", loaded=event.get("loaded", "?"),
                            on_disk=event.get("on_disk", "?"), code=event.get("code", "?"))
             text = i18n.t("mcplog.restart", target=event.get("target", "?"), cause=cause)
