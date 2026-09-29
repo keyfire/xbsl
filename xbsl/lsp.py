@@ -1701,6 +1701,7 @@ def _make_server() -> "LanguageServer":
             presentation=_opt_str(params, "presentation"),
             object_presentation=_opt_str(params, "objectPresentation"),
             record_presentation=_opt_str(params, "recordPresentation"),
+            periodicity=_opt_str(params, "periodicity"),
         )
 
     def _props_param(params: object) -> dict[str, str]:

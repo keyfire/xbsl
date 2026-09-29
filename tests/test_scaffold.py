@@ -3557,6 +3557,109 @@ def test_new_object_record_caption_only_for_an_information_register(tmp_path, ki
 
 
 @pytest.mark.needs_data
+def test_new_object_periodic_constants_set_with_both_captions_passes_the_naming_rule(tmp_path):
+    """A periodic constants set has a list beside its record, and naming/presentation asks it
+    for both captions: presentation writes the list one in the plural, record_presentation the
+    record one in the singular, the way an information register is captioned."""
+    result = scaffold.op_new_object(
+        tmp_path, "НаборКонстант", "КурсыДоллара", presentation="Курсы доллара",
+        record_presentation="Курс доллара", periodicity="День",
+    )
+    apply_result(result)
+    text = (tmp_path / "КурсыДоллара.yaml").read_text(encoding="utf-8")
+    # The periodicity right after the header, the interface section after it.
+    assert (
+        "ОбластьВидимости: ВПодсистеме\nПериодичность: День\nИнтерфейс:\n"
+        "    Список:\n        Представление: Курсы доллара\n"
+        "    Запись:\n        Представление: Курс доллара\n"
+    ) in text
+    assert _valid_yaml(text)["Константы"]  # the starter constant stays
+    assert xbsl.engine.run([tmp_path / "КурсыДоллара.yaml"], select={"naming/presentation"}) == []
+    assert "заголовок записи – в Интерфейс.Запись.Представление" in result.notes[0]
+
+
+@pytest.mark.needs_data
+def test_new_object_periodic_constants_set_list_caption_names_the_record_parameter(tmp_path):
+    result = scaffold.op_new_object(
+        tmp_path, "НаборКонстант", "Цены", presentation="Цены", periodicity="Месяц",
+    )
+    apply_result(result)
+    data = _valid_yaml((tmp_path / "Цены.yaml").read_text(encoding="utf-8"))
+    assert data["Интерфейс"] == {"Список": {"Представление": "Цены"}}
+    assert "--record-presentation" in result.notes[0]
+    found = xbsl.engine.run([tmp_path / "Цены.yaml"], select={"naming/presentation"})
+    assert len(found) == 1 and "нет заголовка записи" in found[0].message
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("given, written", [
+    ("День", "День"), ("  квартал ", "Квартал"), ("Year", "Год"), ("month", "Месяц"),
+])
+def test_new_object_periodicity_in_either_spelling(tmp_path, given, written):
+    apply_result(scaffold.op_new_object(tmp_path, "НаборКонстант", "Курсы", periodicity=given))
+    assert _valid_yaml((tmp_path / "Курсы.yaml").read_text(encoding="utf-8"))["Периодичность"] == written
+
+
+@pytest.mark.needs_data
+def test_new_object_non_periodic_constants_set_keeps_its_record_caption(tmp_path):
+    # Written as asked, and the caption stays the record one: there is no list to caption.
+    apply_result(scaffold.op_new_object(
+        tmp_path, "НаборКонстант", "Настройки", presentation="Настройки",
+        periodicity="Непериодический",
+    ))
+    data = _valid_yaml((tmp_path / "Настройки.yaml").read_text(encoding="utf-8"))
+    assert data["Периодичность"] == "Непериодический"
+    assert data["Интерфейс"] == {"Запись": {"Представление": "Настройки"}}
+    assert xbsl.engine.run([tmp_path / "Настройки.yaml"], select={"naming/presentation"}) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("kind, value, refusal", [
+    ("НаборКонстант", "Неделя", "Недопустимая периодичность набора констант 'Неделя'"),
+    ("РегистрСведений", "День", "periodicity неприменим к виду РегистрСведений"),
+    ("Справочник", "День", "periodicity неприменим к виду Справочник"),
+])
+def test_new_object_periodicity_refused(tmp_path, kind, value, refusal):
+    with pytest.raises(ScaffoldError, match=refusal) as info:
+        scaffold.op_new_object(tmp_path, kind, "Курсы", periodicity=value)
+    if kind == "НаборКонстант":
+        # The refusal lists what the set takes, each value with its English spelling.
+        assert "День (Day), Месяц (Month), Квартал (Quarter), Год (Year)" in str(info.value)
+    assert not (tmp_path / "Курсы.yaml").exists()
+
+
+@pytest.mark.needs_data
+def test_new_object_record_caption_of_a_set_names_the_periodicity(tmp_path):
+    """A set that is not periodic refuses record_presentation - its record caption is its own
+    - and the refusal says the periodic one takes it."""
+    with pytest.raises(ScaffoldError, match="record_presentation неприменим") as info:
+        scaffold.op_new_object(tmp_path, "НаборКонстант", "Настройки", record_presentation="Настройка")
+    assert "НаборКонстант с периодичностью" in str(info.value)
+    assert "--periodicity" in str(info.value)
+
+
+@pytest.mark.needs_data
+def test_new_object_periodic_constants_set_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    apply_result(scaffold.op_new_object(
+        subsystem, "ConstantsSet", "DollarRates", presentation="Dollar rates",
+        record_presentation="Dollar rate", periodicity="Day",
+    ))
+    data = _valid_yaml((subsystem / "DollarRates.yaml").read_text(encoding="utf-8"))
+    assert data["Periodicity"] == "Day"
+    assert data["Interface"] == {"List": {"Presentation": "Dollar rates"},
+                                 "Record": {"Presentation": "Dollar rate"}}
+    assert xbsl.engine.run([subsystem / "DollarRates.yaml"], select={"naming/presentation"}) == []
+
+
+def test_constants_set_periodicity_without_the_data():
+    # The Russian values are the tool's own table and need no data; case does not matter.
+    assert scaffold.constants_set_periodicity("НаборКонстант", " МЕСЯЦ ") == "Месяц"
+    with pytest.raises(ScaffoldError, match="неприменим к виду Документ"):
+        scaffold.constants_set_periodicity("Документ", "День")
+
+
+@pytest.mark.needs_data
 def test_new_object_record_caption_in_an_english_project(tmp_path):
     subsystem = _make_english_project(tmp_path)
     apply_result(scaffold.op_new_object(

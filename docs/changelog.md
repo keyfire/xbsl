@@ -27,6 +27,14 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **`new-object --periodicity` creates a periodic constants set.** It takes `Day`, `Month`,
+  `Quarter` or `Year`, in either language. Such a set has a list beside its record, so
+  `--presentation` writes the list caption and `--record-presentation` the record one, and the
+  new set passes `naming/presentation`. MCP `meta_new_object` and the language server call it
+  `periodicity`.
+
 ### Fixed
 
 - **The cards of the help no longer run together.** The links of a card grid used to merge into one
