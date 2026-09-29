@@ -864,19 +864,26 @@ _CORE_MESSAGES = {
     },
     # -- the supervisor of the MCP server (mcp_supervisor.py) --
     "cli.help.mcp-supervisor.description": {
-        "ru": "Супервизор сервера MCP xbsl (stdio): держит соединение клиента, запускает сервер "
-              "рабочим процессом и заменяет этот процесс, когда движок на диске сменился.",
-        "en": "The supervisor of the xbsl MCP server (stdio): it keeps the client's connection, "
-              "runs the server as a worker process and replaces that process when the engine "
-              "on disk changes.",
+        "ru": "Сервер MCP xbsl (stdio) за супервизором: супервизор держит соединение клиента, "
+              "запускает сервер рабочим процессом и заменяет этот процесс, когда движок на "
+              "диске сменился, поэтому сессия переживает обновление.",
+        "en": "The xbsl MCP server (stdio) behind a supervisor: the supervisor keeps the "
+              "client's connection, runs the server as a worker process and replaces that "
+              "process when the engine on disk changes, so a session outlives an update.",
     },
     "cli.help.mcp-supervisor.epilog": {
-        "ru": "Рабочий процесс – сервер xbsl-mcp того же интерпретатора; другую команду можно "
-              "назвать после --.\n"
-              "Регистрация в Claude Code: claude mcp add xbsl -- xbsl-mcp-supervisor",
-        "en": "The worker process is the xbsl-mcp server of the same interpreter; another "
-              "command can be named after --.\n"
-              "Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp-supervisor",
+        "ru": "Рабочий процесс – python -m xbsl.mcp_server того же интерпретатора; другую "
+              "команду можно назвать после --.\n"
+              "Регистрация в Claude Code: claude mcp add xbsl -- xbsl-mcp",
+        "en": "The worker process is python -m xbsl.mcp_server on the same interpreter; "
+              "another command can be named after --.\n"
+              "Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp",
+    },
+    "cli.help.mcp-supervisor.no-supervisor": {
+        "ru": "запустить сам сервер в этом процессе, без супервизора (сессия не переживет "
+              "обновление движка)",
+        "en": "run the server itself in this process, without the supervisor (the session "
+              "does not outlive an update of the engine)",
     },
     "supervisor.worker-ended": {
         "ru": "Процесс сервера MCP xbsl завершился во время вызова (код выхода {code}), "

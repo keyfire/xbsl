@@ -24,6 +24,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -320,6 +321,42 @@ def test_self_update_stops_the_worker_and_leaves_the_supervisor():
     assert not selfupdate.is_holder(
         "python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-mcp-supervisor.exe")
     assert not selfupdate.is_holder("python3", "/usr/bin/python3 -m xbsl.mcp_supervisor")
+
+
+def test_xbsl_mcp_is_the_supervisor_and_a_holder_only_as_the_bare_server():
+    """`xbsl-mcp` starts the supervisor by default: stopping it would end the session it keeps.
+
+    With `--no-supervisor` the same command runs the server in its own process, which holds
+    the package like any server - self-update has to count it."""
+    assert not selfupdate.is_holder("xbsl-mcp.exe", r"C:\venv\Scripts\xbsl-mcp.exe")
+    assert not selfupdate.is_holder("python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-mcp.exe")
+    assert not selfupdate.is_holder("xbsllint-mcp.exe", r"C:\venv\Scripts\xbsllint-mcp.exe")
+    assert not selfupdate.is_holder("python3", "/usr/bin/python3 /venv/bin/xbsl-mcp")
+    assert selfupdate.is_holder("xbsl-mcp.exe", r"C:\venv\Scripts\xbsl-mcp.exe --no-supervisor")
+    assert selfupdate.is_holder(
+        "python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-mcp.exe --no-supervisor")
+    assert selfupdate.is_holder("python3", "/usr/bin/python3 -m xbsl.mcp_supervisor --no-supervisor")
+    # the other commands of the package stay holders by name
+    assert selfupdate.is_holder("xbsl-lsp.exe", r"C:\venv\Scripts\xbsl-lsp.exe")
+    assert selfupdate.is_holder("python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-lsp.exe")
+
+
+def test_xbsl_mcp_names_the_supervisor_in_the_package():
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'xbsl-mcp = "xbsl.mcp_supervisor:main"' in text
+    assert 'xbsllint-mcp = "xbsl.mcp_supervisor:main"' in text
+
+
+def test_no_supervisor_runs_the_bare_server_in_this_process(monkeypatch):
+    """The flag hands the process over to the server's own entry, with no flags left for it."""
+    calls = []
+    fake = types.ModuleType("xbsl.mcp_server")
+    fake.main = lambda: calls.append(list(sys.argv))
+    monkeypatch.setitem(sys.modules, "xbsl.mcp_server", fake)
+    monkeypatch.setattr("xbsl.mcp_server", fake, raising=False)
+    monkeypatch.setattr(sys, "argv", ["xbsl-mcp", "--no-supervisor"])
+    mcp_supervisor.main()
+    assert calls == [["xbsl-mcp"]]
 
 
 def test_the_mcp_journal_tells_a_replacement_in_words(capsys):

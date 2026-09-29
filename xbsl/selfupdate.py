@@ -84,6 +84,11 @@ _HOLDER_EXECUTABLES = frozenset({
 # (a project path, a baseline file) without holding anything - and such a process must
 # never be offered for stopping. Caught live: the client of the agent itself matched.
 _HOLDER_MODULES = ("xbsl.mcp_server", "xbsl.lsp", "xbsl.web", "xbsllint.mcp_server")
+# `xbsl-mcp` runs the supervisor (xbsl/mcp_supervisor.py), which holds nothing of the package:
+# it is a holder only when started with `--no-supervisor`, as the bare server.
+_SUPERVISOR_EXECUTABLES = frozenset({"xbsl-mcp", "xbsllint-mcp"})
+_SUPERVISOR_MODULE = "xbsl.mcp_supervisor"
+_NO_SUPERVISOR = "--no-supervisor"
 _INTERPRETERS = ("python", "python3", "pythonw", "py", "pypy", "pypy3")
 
 
@@ -467,15 +472,27 @@ def is_holder(name: str, command_line: str) -> bool:
     is not a missed holder but an offer to kill someone else's process.
     """
     stem = Path((name or "").strip()).stem.lower()
+    lowered = (command_line or "").lower()
     if stem in _HOLDER_EXECUTABLES:
+        # `xbsl-mcp` is the supervisor of the server: it loads no engine and is not stopped -
+        # the session it keeps is the point of it. Its worker (`-m xbsl.mcp_server`) and a bare
+        # server (`--no-supervisor`) hold the package and are.
+        if stem in _SUPERVISOR_EXECUTABLES:
+            return _NO_SUPERVISOR in lowered
         return True
     if stem not in _INTERPRETERS:
         return False
-    lowered = (command_line or "").lower()
     if any(f"-m {module}" in lowered for module in _HOLDER_MODULES):
         return True
+    if f"-m {_SUPERVISOR_MODULE}" in lowered:
+        return _NO_SUPERVISOR in lowered
     # A console script started by its path (`.../Scripts/xbsl-lsp.exe`, `.../bin/xbsl-mcp`).
-    return any(f"{script}.exe" in lowered or lowered.endswith(script) for script in _HOLDER_EXECUTABLES)
+    for script in _HOLDER_EXECUTABLES:
+        if f"{script}.exe" in lowered or lowered.endswith(script):
+            if script in _SUPERVISOR_EXECUTABLES:
+                return _NO_SUPERVISOR in lowered
+            return True
+    return False
 
 
 def _process_listing() -> list[tuple[int, int, str, str]]:

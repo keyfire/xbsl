@@ -637,13 +637,29 @@ class Supervisor:
             self._client_end()
 
 
+#: The flag that runs the bare server in this process instead of the supervisor. `self-update`
+#: counts such a process as a holder of the package, and a supervisor as none.
+NO_SUPERVISOR = "--no-supervisor"
+
+
 def _parser() -> argparse.ArgumentParser:
-    return i18n.ArgumentParser(
-        prog="xbsl-mcp-supervisor",
+    parser = i18n.ArgumentParser(
+        prog="xbsl-mcp",
         description=i18n.t("cli.help.mcp-supervisor.description"),
         epilog=i18n.t("cli.help.mcp-supervisor.epilog"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument(NO_SUPERVISOR, action="store_true",
+                        help=i18n.t("cli.help.mcp-supervisor.no-supervisor"))
+    return parser
+
+
+def _bare_server() -> None:
+    """The server itself in this process: the engine is imported only here, on request."""
+    sys.argv = [sys.argv[0] if sys.argv else "xbsl-mcp"]
+    from xbsl import mcp_server
+
+    mcp_server.main()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -652,7 +668,10 @@ def main(argv: list[str] | None = None) -> None:
     if "--" in arguments:
         at = arguments.index("--")
         arguments, command = arguments[:at], arguments[at + 1:]
-    _parser().parse_args(arguments)
+    options = _parser().parse_args(arguments)
+    if options.no_supervisor:
+        _bare_server()
+        return
     supervisor = Supervisor(command or worker_command(), sys.stdin.buffer, sys.stdout.buffer)
     try:
         code = supervisor.run()

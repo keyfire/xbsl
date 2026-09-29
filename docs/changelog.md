@@ -25,6 +25,15 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Changed
+
+- **`xbsl-mcp` runs the server behind its supervisor by default.** An MCP session now outlives
+  an update of the engine without restarting the client. `xbsl-mcp --no-supervisor` or
+  `python -m xbsl.mcp_server` runs the bare server, and `self-update` stops only the worker and
+  such a server, never the supervisor. ([#161](https://github.com/keyfire/xbsl/pull/161))
+
 ## 2026-09-29 – 0.121.0
 
 ### Added

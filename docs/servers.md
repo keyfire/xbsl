@@ -224,22 +224,22 @@ the `xbsl/meta*` LSP requests.
 
 ### A supervisor that replaces the server
 
-`xbsl-mcp-supervisor`, from the same `[mcp]` extra, keeps the client's session through an update.
-It holds the stdio the client speaks over and runs the server as a worker process behind it:
-`python -m xbsl.mcp_server` on the same interpreter, with its stderr going to the client's log.
-It remembers the client's `initialize`, and when a worker has to go, it starts a new one and
-repeats that handshake to it. The client goes on talking to what looks like the same server and
-needs no restart.
+`xbsl-mcp` runs the server behind a supervisor, which keeps the client's session through an
+update. The supervisor holds the stdio the client speaks over and runs the server as a worker
+process behind it: `python -m xbsl.mcp_server` on the same interpreter, with its stderr going to
+the client's log. It remembers the client's `initialize`, and when a worker has to go, it starts
+a new one and repeats that handshake to it. The client goes on talking to what looks like the
+same server and needs no restart.
 
 ```sh
-claude mcp add xbsl -- xbsl-mcp-supervisor
+claude mcp add xbsl -- xbsl-mcp
 ```
 
-Another client takes the same command in place of `xbsl-mcp`, with no arguments;
-`python -m xbsl.mcp_supervisor` works too. `xbsl-mcp` stays the plain server, and nothing
-changes for a client that keeps it. The supervisor is opt-in: it costs one more small process
-and one more hop per message, and the choice between the two is made where the client is
-configured.
+`python -m xbsl.mcp_supervisor` is the same command, and `xbsl-mcp-supervisor` stays as another
+name for it. The supervisor costs one more small process and one more hop per message. A client
+that wants the bare server starts `xbsl-mcp --no-supervisor`, which runs it in the same process,
+or `python -m xbsl.mcp_server`; then an update of the engine ends in a refusal that asks for a
+restart, as described above.
 
 The worker decides when it has to go, and the supervisor reads that from its answers:
 
@@ -258,7 +258,8 @@ The worker decides when it has to go, and the supervisor reads that from its ans
   written by then. A request that only reads goes to the new worker.
 
 The supervisor itself loads no engine and keeps no file of the package open. `self-update` does
-not count it as a holder and does not stop it, and it never runs old code of its own. An old
+not count it as a holder and does not stop it, and it never runs old code of its own; the holders
+are the worker and a server started with `--no-supervisor`. An old
 worker is not killed in the middle of a call: it gets no new calls, finishes the ones it has and
 then ends. After a new worker takes over, the client is told that the tools list changed and asks
 for it again, so the tools and parameters an update brings are there without a restart. `xbsl
