@@ -99,15 +99,16 @@ and LSP:
 
 ```sh
 xbsl new-object vendor/App/Main Catalog Goods            # the kind in either language
-xbsl add-field vendor/App/Main/Goods.yaml <section> Color --type <type>
+xbsl add-field vendor/App/Main/Goods.yaml <item-kind> Color --type String  # kinds: add-field --help
 xbsl add-form . --name Goods                            # object + list forms, registered
 xbsl rename-object . Goods Products                     # rename files + update references
 ```
 
 The platform is bilingual: an element kind has an English name and a Russian one for the same
 thing, and the tool takes either spelling. It resolves the kinds through the term dictionary
-extracted from your distribution. Section names of `add-field` still go in the project's own
-language, and `xbsl new-object --help` lists the kinds it can create.
+extracted from your distribution. The item kind of `add-field` (an attribute, a tabular section
+and so on) is a word of the tool itself, the same in a project of either language:
+`xbsl add-field --help` lists them, and `xbsl new-object --help` lists the kinds it can create.
 
 All subcommands with their options –
 [the guide](https://github.com/keyfire/xbsl/blob/main/docs/scaffolding.md#metadata-scaffolding).

@@ -1169,9 +1169,11 @@ _CORE_MESSAGES = {
     },
     "cli.help.scaf.af-type": {
         "ru": "тип поля (по умолчанию Строка, у события компонента СобытиеКомпонента; "
-              "у стандартного реквизита – тип его класса)",
+              "у стандартного реквизита – тип его класса); у вида строка или шаблон – текст "
+              "на языке по умолчанию, без него текстом становится сам ключ",
         "en": "the field type (default String, ComponentEvent for a component event; "
-              "a standard attribute takes its class default)",
+              "a standard attribute takes its class default); for the kind строка or шаблон "
+              "the text in the default language, the key itself when omitted",
     },
     "cli.help.scaf.af-doc": {
         "ru": "описание поля – документирующий комментарий: строки ## в начале элемента, "
@@ -1284,6 +1286,14 @@ _CORE_MESSAGES = {
     "cli.help.scaf.sfp-name": {
         "ru": "имя элемента в секции",
         "en": "the name of the item in the section",
+    },
+    "cli.help.scaf.sfp-yaml": {
+        "ru": "yaml объекта, элементу которого задаются свойства",
+        "en": "the yaml of the object whose item gets the properties",
+    },
+    "cli.help.scaf.sfp-tabular": {
+        "ru": "имя табличной части, в которой лежит реквизит",
+        "en": "tabular section name (the attribute is in it)",
     },
     "cli.help.scaf.no-presentation": {
         "ru": "заголовок элемента: пишется туда, где его держит вид – в Представление или, у "

@@ -43,6 +43,17 @@ value that carries the term it was built from), lists of those, lambdas passed t
 the tested type and the compatibility mode. Every other value is unknown, a condition on an
 unknown value is explored both ways, and a loop body runs at most twice. A branch the
 interpreter cannot finish within its budget makes its module dynamic rather than incomplete.
+
+Two more facts shape a slot. A module the providers are asked about and declare nothing for -
+a path tested its type, and every handler on that path is for other modules (a common module
+past the access-control target test) - keeps an EMPTY slot: the compiler checks every module
+against the handlers of its type, so any name is wrong there. And a handler built in a loop over
+a collection the element's own description fills at build time is declared once per item of
+that collection, and not at all when it is empty: the object module of a catalog declares
+`OnCreateOnBasis` once for each type its description lists for creation on basis. The
+interpreter follows such a loop over a field of a model and names the collection by the getter
+the constructors of the model fill that field from (see _field_source); the row keeps it under
+`per`, unless another path declares the same handler outside the loop.
 """
 
 from __future__ import annotations
@@ -129,6 +140,16 @@ _MAX_STEPS = 400000
 #   ("modetest", op, "8.0")             the result of a mode comparison
 #   ("instance", class)                 the `INSTANCE` singleton of a class
 #   ("int", n)                          a small integer constant
+#   ("coll", source)                    a collection a field of a model holds, see _field_source
+#   ("each", source) / ("hasnext", source)  its iterator and the test of its next item
+#
+# A method description built in a loop over such a collection carries its source third:
+# ("meth", name, source).
+
+#: The field types a loop may run over.
+_COLLECTION_DESCRIPTORS = frozenset({
+    "Ljava/util/Collection;", "Ljava/util/List;", "Ljava/util/Set;", "Ljava/lang/Iterable;",
+})
 
 
 def _is_term(value) -> bool:
@@ -350,6 +371,7 @@ class Found:
     managed: bool = False  # past the test for an access-control target (see access_managers)
     target_requires: frozenset = frozenset()  # instanceof tests of that target
     kind: tuple | None = None  # the term of the kind a kind test chose (see _KIND_TESTS)
+    per: str | None = None  # the collection the handler is declared once per item of
 
 
 @dataclass
@@ -366,16 +388,17 @@ class _Path:
     managed: bool = False
     target_requires: frozenset = frozenset()
     kind: tuple | None = None
+    per: str | None = None  # inside a loop over the items of this collection
 
     def fork(self, pc: int) -> _Path:
         return _Path(pc, list(self.stack), dict(self.locals), dict(self.visits), self.tested,
                      self.low, self.high, self.requires, dict(self.lists), self.managed,
-                     self.target_requires, self.kind)
+                     self.target_requires, self.kind, self.per)
 
     def branch(self) -> _Path:
         """A fresh start on the facts of this branch: a helper or a lambda runs on it."""
         return _Path(0, [], {}, {}, self.tested, self.low, self.high, self.requires, {},
-                     self.managed, self.target_requires, self.kind)
+                     self.managed, self.target_requires, self.kind, self.per)
 
 
 def _mode_key(text: str) -> tuple[int, ...]:
@@ -392,6 +415,7 @@ class Interpreter:
         self._statics: dict[str, dict[str, object]] = {}
         self._initializing: dict[str, dict[str, list]] = {}
         self._summaries: dict[tuple, object] = {}
+        self._sources: dict[tuple[str, str], str] = {}
         self._serial = 0
         self._modes: list[tuple[int, ...]] | None = None
 
@@ -714,8 +738,11 @@ class Interpreter:
         if op == 0xB4:
             ref = u2()
             pop()
-            _field_owner, _name, descriptor = _field_ref(pool, ref)
-            stack.append(("wide",) if _is_wide(descriptor) else None)
+            field_owner, name, descriptor = _field_ref(pool, ref)
+            if descriptor in _COLLECTION_DESCRIPTORS:
+                stack.append(("coll", self._field_source(field_owner, name)))
+            else:
+                stack.append(("wide",) if _is_wide(descriptor) else None)
             return advance(2)
         if op == 0xB5:
             pop(2)
@@ -780,6 +807,11 @@ class Interpreter:
         if op in (0x99, 0x9A) and isinstance(value, tuple):
             # ifeq jumps when the test is false, ifne when it is true.
             true, false = (fall, jump) if op == 0x99 else (jump, fall)
+            if value[0] == "hasnext":
+                # The body of a loop over a collection of the description: what it declares,
+                # it declares once per item. The loop over, the path is outside it again.
+                true.per, false.per = value[1], None
+                return (False, fall, jump)
             if value[0] == "kindtest":
                 term = self.static(*_KIND_TESTS[value[1]], 0)
                 if isinstance(term, tuple) and term[0] == "term":
@@ -862,7 +894,7 @@ class Interpreter:
         if f"{simple}.{callee}".endswith(_SINK) or called_is(callee_owner, callee, _SINK):
             if record and provider:
                 for meth in _meths(args[0] if args else None) or [("meth", ("dyn", "unknown"))]:
-                    self._record(path, meth[1])
+                    self._record(path, meth[1], meth[2] if len(meth) > 2 else path.per)
             return args[0] if args else None
         # Terms built of their two spellings.
         if callee_owner == _TERM_CLASS and result_kind == _TERM_DESCRIPTOR:
@@ -902,8 +934,15 @@ class Interpreter:
                 value = ("list", path.lists.get(value[1], ()))
             added = tuple(value[1]) if callee == "addAll" and isinstance(value, tuple) \
                 and value[0] in ("list", "stream") else (value,)
+            if path.per:
+                added = tuple(_per_item(item, path.per) for item in added)
             path.lists[receiver[1]] = items + tuple(item for item in added if item is not None)
             return None
+        # A loop over a collection a model holds: its iterator, and the test of the next item.
+        if callee == "iterator" and isinstance(receiver, tuple) and receiver[0] == "coll":
+            return ("each", receiver[1])
+        if callee == "hasNext" and isinstance(receiver, tuple) and receiver[0] == "each":
+            return ("hasnext", receiver[1])
         listed = receiver
         if isinstance(listed, tuple) and listed[0] == "listref":
             listed = ("list", path.lists.get(listed[1], ()))
@@ -1000,15 +1039,94 @@ class Interpreter:
                   provider=provider, start=start)
         return _join(returned) if returned else None
 
-    def _record(self, path: _Path, name) -> None:
+    def _record(self, path: _Path, name, per: str | None = None) -> None:
         if path.tested is None:
             return
         self.found.append(Found(path.tested, name, path.low, path.high, path.requires,
-                                path.managed, path.target_requires, path.kind))
+                                path.managed, path.target_requires, path.kind, per))
+
+    # -- the collections of a model --------------------------------------------------------
+    def _field_source(self, owner: str, name: str) -> str:
+        """What a collection field of a model holds: the getter its constructors fill it from.
+
+        A language model keeps what it was built from in fields - the object module of a
+        catalog asks its model for the types the description lists for creation on basis, and
+        the model took them from the runtime metadata of the element in its constructor
+        (`basisTypes = metadata.createOnBasisSources()`). The instruction right before the
+        store is that call; the getter, `Class.method`, names the collection. A field filled
+        otherwise (from a parameter of the constructor) is named by itself, `Class.field`.
+        """
+        key = (owner, name)
+        if key not in self._sources:
+            self._sources[key] = _filled_from(self.index, owner, name) \
+                or f"{owner.rsplit('/', 1)[-1]}.{name}"
+        return self._sources[key]
 
 
 def called_is(owner: str, name: str, suffix: str) -> bool:
     return f"{owner}.{name}".endswith(suffix)
+
+
+def _per_item(value, source: str):
+    """A method description added in a loop over `source`: declared once per item of it."""
+    if isinstance(value, tuple) and value[0] == "meth" and len(value) == 2:
+        return ("meth", value[1], source)
+    return value
+
+
+_PUTFIELD = 0xB5
+_INVOKES = (0xB6, 0xB7, 0xB8, 0xB9)
+
+
+def _filled_from(index, owner: str, name: str) -> str | None:
+    """`Class.method` of the call whose result a constructor of `owner` stores into `name`."""
+    klass = index.get(owner)
+    if klass is None:
+        return None
+    for method in klass.methods:
+        if method.name != "<init>" or not method.code:
+            continue
+        previous: tuple[int, int] | None = None
+        for opcode, operand in _instructions(method.code):
+            if opcode == _PUTFIELD and previous is not None and previous[0] in _INVOKES:
+                stored_owner, stored, _descriptor = _field_ref(klass.pool, operand)
+                if (stored_owner, stored) == (owner, name):
+                    called = classcode.called_method(klass.pool, previous[1]) or ""
+                    called_owner, _dot, called_name = called.rpartition(".")
+                    if called_owner and called_name:
+                        return f"{called_owner.rsplit('/', 1)[-1]}.{called_name}"
+            previous = (opcode, operand)
+    return None
+
+
+def _instructions(code: bytes):
+    """(opcode, its first two operand bytes as a number, or -1) of every instruction, in order.
+
+    The lengths are those of the class reader (classcode); a switch is padded to four bytes and
+    `wide` doubles the operand of the instruction it widens.
+    """
+    at = 0
+    while at < len(code):
+        opcode = code[at]
+        if opcode in (0xAA, 0xAB):  # tableswitch, lookupswitch
+            base = at + 1
+            while base % 4:
+                base += 1
+            if opcode == 0xAA:
+                low = int.from_bytes(code[base + 4:base + 8], "big", signed=True)
+                high = int.from_bytes(code[base + 8:base + 12], "big", signed=True)
+                at = base + 12 + 4 * (high - low + 1)
+            else:
+                at = base + 8 + 8 * int.from_bytes(code[base + 4:base + 8], "big")
+            yield opcode, -1
+            continue
+        if opcode == 0xC4:  # wide
+            yield opcode, -1
+            at += 6 if code[at + 1] == 0x84 else 4
+            continue
+        size = classcode._OPERAND_BYTES[opcode]
+        yield opcode, int.from_bytes(code[at + 1:at + 3], "big") if size >= 2 else -1
+        at += 1 + size
 
 
 def _raise(path: _Path, mode) -> None:
@@ -1238,6 +1356,16 @@ def _merge_modes(spans: list[tuple]) -> tuple[tuple | None, tuple | None] | None
     return low, high
 
 
+def _per_of(sources: set) -> str | None:
+    """The collection a handler is declared once per item of, from the `per` of its paths.
+
+    Every path in a loop over one collection: that collection. A path that declares the handler
+    outside such a loop (None among them), or loops over two collections, leaves it
+    unconditional - a doubt keeps the handler declared.
+    """
+    return next(iter(sources)) if len(sources) == 1 and None not in sources else None
+
+
 def _mode_text(mode: tuple | None) -> str:
     return ".".join(str(part) for part in mode) if mode else ""
 
@@ -1247,8 +1375,11 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
 
     `kinds` is the kind table of the distribution (Russian kind: English). A row is
     {"ru", "en"} plus `from`/`to` when the handler is declared in some compatibility modes
-    only (a half-open range, as the component descriptions write it). `dynamic` names the
-    places a handler name is read from at build time; a module with it is not to be judged.
+    only (a half-open range, as the component descriptions write it), and `per` when it is
+    declared once per item of a collection the description fills (the getter it is read by,
+    see _field_source). `dynamic` names the places a handler name is read from at build time; a
+    module with it is not to be judged. A module the providers declare nothing for has an empty
+    list of handlers.
     """
     index = ClassIndex(car)
     words, types = facet_words(car)
@@ -1281,15 +1412,17 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
     table: dict[str, dict[str, dict]] = {}
     spans: dict[tuple[str, str, str], list] = {}
     rows: dict[tuple[str, str, str], dict] = {}
+    pers: dict[tuple[str, str, str], set] = {}
     unmapped: set[str] = set()
     unknown: set[str] = set()
     for found in interpreter.found:
         for class_name in expand(found.tested):
-            if found.managed and not controls(index, managers, class_name, found):
-                continue
+            # A path past the access-control target test declares for the managers alone.
+            applies = not found.managed or controls(index, managers, class_name, found)
             element = element_of(class_name, kinds, words, types)
             if element is None:
-                unmapped.add(class_name)
+                if applies:
+                    unmapped.add(class_name)
                 continue
             kind, facet = element
             if found.kind is not None:
@@ -1299,9 +1432,13 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
                 kind = found.kind[2]
             if kind == COMPONENT_KIND:
                 continue  # the component descriptions list these, per base component
+            # The providers are asked about this module: it keeps its slot, empty when no path
+            # declares anything for it (see the module docstring).
+            slot = table.setdefault(kind, {}).setdefault(facet, {"handlers": [], "dynamic": []})
+            if not applies:
+                continue
             if any(kind not in kinds_with(required) for required in found.requires):
                 continue
-            slot = table.setdefault(kind, {}).setdefault(facet, {"handlers": [], "dynamic": []})
             if found.name[0] != "term":
                 source = found.name[1].rsplit("/", 1)[-1]
                 if source not in slot["dynamic"]:
@@ -1311,6 +1448,7 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
             key = (kind, facet, russian)
             spans.setdefault(key, []).append((found.low, found.high))
             rows.setdefault(key, {"ru": russian, "en": english})
+            pers.setdefault(key, set()).add(found.per)
     for provider in sorted(interpreter.incomplete):
         notes.append(f"провайдер не пройден до конца, его модули динамические: {provider}")
     for (kind, facet, russian), row in rows.items():
@@ -1322,6 +1460,9 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
                 entry["from"] = _mode_text(low)
             if high is not None:
                 entry["to"] = _mode_text(high)
+        per = _per_of(pers[(kind, facet, russian)])
+        if per is not None:
+            entry["per"] = per
         table[kind][facet]["handlers"].append(entry)
     for kind in table:
         for facet in table[kind]:

@@ -2861,11 +2861,11 @@ def _item_type(
 ) -> str | None:
     """The `Type` of a new item, or None when the item carries no `Type` line at all.
 
-    A regular item takes the caller's type, and the default of its kind when none was given:
-    `String`, or `ComponentEvent` for an event of an interface component. The default is
-    written in the language of the file, the way a type the caller passes is. A BUILT-IN item of
-    a collection dispatched by name (the `Number` and `Date` of a document, the `Code`,
-    `Name` and `Owner` of a catalog) is judged by its own class instead - the class
+    A regular item takes the caller's type, read by _given_type, and the default of its kind
+    when none was given: `String`, or `ComponentEvent` for an event of an interface component.
+    The default is written in the language of the file, the way a type the caller passes is. A
+    BUILT-IN item of a collection dispatched by name (the `Number` and `Date` of a document, the
+    `Code`, `Name` and `Owner` of a catalog) is judged by its own class instead - the class
     metadata_schema answers with for that name:
 
     - a class that declares no `Type` (`Name`) gets no `Type` line: the platform fixes the
@@ -2878,29 +2878,14 @@ def _item_type(
       explicit type and says so.
     """
     if type_:
-        # The type arrives from a CLIENT (MCP, the editor), so it can carry markup escapes
-        # and the spelling of another language - the two traps the component base had. The
-        # value of a mapping section (a localized string) never reaches here: that branch
-        # returns earlier, and there `&` and `;` are legal text.
-        type_ = typed_in(_type_expression(type_, "типа элемента", _FIELD_TYPE_EXPRESSION), lang)
+        return _given_type(kind, path, type_, lang)
     cls = metamodel.item_class(kind, path) if metamodel.available() else None
     if not cls or not metamodel.dispatch_name(cls):
-        return type_ or spelled_type(default, lang)
+        return spelled_type(default, lang)
     label = _item_label(cls, path)
     record = metamodel.properties_of_class(cls).get("Тип")
     if record is None:
-        if type_:
-            raise ScaffoldError(
-                f"У {label} нет свойства Тип – тип этого реквизита задан платформой"
-            )
         return None
-    options = record.get("options")
-    if type_:
-        if options and _russian_type(type_) not in options:
-            raise ScaffoldError(
-                f"Тип '{type_}' не подходит для {label}; допустимы: {', '.join(options)}"
-            )
-        return type_
     default = record.get("default")
     if default:
         # The metamodel records the default as a qualified platform type (`Стд::Строка`,
@@ -2910,6 +2895,37 @@ def _item_type(
         f"Для {label} нужен явный тип: платформа не задаёт его по умолчанию "
         "(например, Тип ссылки справочника-владельца)"
     )
+
+
+def _given_type(
+    kind: str, path: tuple[tuple[str, str | None], ...], type_: str, lang: str,
+) -> str:
+    """A type the caller gave an item, as it goes into the file - for add-field and
+    set-field-property alike.
+
+    The type arrives from a CLIENT (MCP, the editor, the command line), so it can carry markup
+    escapes and the spelling of another language - the two traps the component base had: the
+    escapes are undone and the platform names are written in the language of the file. A
+    BUILT-IN item is judged by its own class (see _item_type): a class without `Type` refuses
+    one, a closed set refuses a type outside it. The value of a mapping section (a localized
+    string) never reaches here: there `&` and `;` are legal text.
+    """
+    type_ = typed_in(_type_expression(type_, "типа элемента", _FIELD_TYPE_EXPRESSION), lang)
+    cls = metamodel.item_class(kind, path) if metamodel.available() else None
+    if not cls or not metamodel.dispatch_name(cls):
+        return type_
+    label = _item_label(cls, path)
+    record = metamodel.properties_of_class(cls).get("Тип")
+    if record is None:
+        raise ScaffoldError(
+            f"У {label} нет свойства Тип – тип этого реквизита задан платформой"
+        )
+    options = record.get("options")
+    if options and _russian_type(type_) not in options:
+        raise ScaffoldError(
+            f"Тип '{type_}' не подходит для {label}; допустимы: {', '.join(options)}"
+        )
+    return type_
 
 
 def _reconciled_type(lines: list[str], resolved: str | None) -> list[str]:
@@ -3236,8 +3252,10 @@ def op_set_field_property(
     be written by hand.
 
     The values are judged the way op_add_field judges them (a built-in item by its own class,
-    a nested block by the block's class). A block given for a key replaces whatever stands
-    under that key whole; a scalar over an existing block is refused rather than flattened.
+    a nested block by the block's class), and a `Type` goes through the reading of its `type`:
+    markup escapes undone, platform names in the language of the file (_given_type). A block
+    given for a key replaces whatever stands under that key whole; a scalar over an existing
+    block is refused rather than flattened.
     """
     yaml_path = Path(yaml_path)
     if not props:
@@ -3289,6 +3307,13 @@ def op_set_field_property(
     # Name is refused like in op_add_field: renaming is op_rename_object's business (it
     # updates the references), and a silent rename here would leave them dangling.
     checked = _checked_props(props, kind, path, ("Имя",), lang)
+    # A type is read the way the `type` of add-field is (_given_type), so the same value never
+    # reaches the file two ways: `Массив&lt;Число&gt;` from a client that escapes the brackets
+    # used to be written as it came. Without the data the key keeps the spelling it was given.
+    for key in ("Тип", "Type"):
+        given = checked.get(key)
+        if isinstance(given, str):
+            checked[key] = _given_type(kind, path, given, lang)
     end, field_indent = _item_block_span(text, offset)
     block = text[offset:end]
     indent = " " * field_indent

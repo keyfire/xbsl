@@ -15,10 +15,14 @@ Scope model (per the platform semantics):
 - the module of a tabular-section row type (`Товары.Позиции.xbsl`) has the scope of the row:
   the attributes the section declares in the yaml of its owner and what every structure type
   has, never the attributes of the owner itself (see _row_owner); a method of the structure
-  type answers only as the callee of a call (see _row_type_scope).
+  type answers only as the callee of a call (see _row_type_scope). The module of a `Structure`
+  element and the object module of an entity (`Товары.Объект.xbsl`) split their type the same
+  way: its properties are read bare, its methods (`Write`, `IsNew`) only called.
 
 A spelling hint is the closest name of the whole scope - the module, the element, the project
-and the global names compete, and a tie goes to the nearer group (see _ScopeHints).
+and the global names compete, and a tie goes to the nearer group. A call is offered what can be
+called, a bare name what holds a value, and a short name only a candidate one edit away (see
+_ScopeHints and _SHORT_NAME).
 
 Only the ROOT of a member chain is checked (`Х` in `Х.Поле[0].Метод()`): member names need
 type inference (stage 3). Qualified roots (`Подсистема::Имя`) and method references are
@@ -133,13 +137,18 @@ _UNDOCUMENTED = frozenset({
 # hand - the members of a catalog object are not those of a settings storage - and this table
 # covers what it does not: an older dataset, and a kind whose object type the help omits.
 #
-# The probe and the documentation disagree on one name. The probe read IsNew as absent; the
-# help lists `IsNew` among the methods of the object type, and a product in production calls
-# it by a bare name in five modules. Two sources against one, so the data wins - and if the
-# probe is right after all, the finding comes back on regeneration rather than silently.
+# The probe and the documentation seemed to disagree on one name: the probe read IsNew as
+# absent, while the help lists `IsNew` among the methods of the object type and a product in
+# production calls it by a bare name. A later probe reconciled them - a method of the object
+# type answers only to a CALL. Read as a value, `IsNew`, `CreateCopy`, `Write` and `Delete` all
+# got "Variable ... is not defined", while `Write()` compiled and the properties
+# (`Reference`, `DeletionMark`, `Presentation`) were read bare. So the methods go to the calls
+# of the scope (_ENTITY_CALLS below, and the methods of the generated object type).
 _ENTITY_COMMON = frozenset({
     "Ссылка", "ПометкаУдаления", "Записать", "Удалить",
 })
+#: The names of _ENTITY_COMMON that are methods: they answer only as the callee of a call.
+_ENTITY_CALLS = frozenset({"Записать", "Удалить"})
 
 #: The tail of the generated type an object module belongs to: `<Имя>.Объект.xbsl` is the
 #: module of `<Имя>.Объект`, so its members sit under `<вид>.Объект` in generated_members.
@@ -280,8 +289,9 @@ def _row_type_scope(object_members: dict, manager_members: dict) -> tuple[set[st
     tell the two apart. There every member stays a bare name, as before: narrowing blindly
     would cost errors on code that compiles, widening only a missed finding.
 
-    The module of a `Structure` element keeps every member as a bare name: no probe has
-    compiled a bare method name there yet.
+    The module of a `Structure` element gets the same split: a probe compiled such a module
+    with a bare `Presentation`, `ToString` and `GetType` and got "Variable ... is not defined"
+    for each, while the calls compiled.
     """
     entry = manager_members.get(_ROW_TYPE_KIND)
     names = set(object_members.get(_ROW_TYPE_KIND, ()))
@@ -487,6 +497,8 @@ def _undef_mapper(source: SourceFile) -> dict | None:
     findings, hint_pool = _module_candidates(module, static)
     if not findings:
         return None
+    methods = {m.name for m in module.members if isinstance(m, P.Method)}
+    values, callables = _declared_values(module)
     lm = linemap(source)
     cands = [
         (*lm.linecol(offset), name, sign, call)
@@ -501,7 +513,12 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         # A module that may extend the row type of a tabular section (see _row_owner).
         "row": None if obj else _row_candidate(fname),
         "cands": cands,
-        "pool": hint_pool,
+        # The hint for a bare name is looked for among the values of the module, the hint for a
+        # call among what it can call: its methods and the values that hold a function (see
+        # _ScopeHints). A name can be both: a method `Контракт` returns what its callers keep in
+        # a variable `Контракт`.
+        "pool": [name for name in hint_pool if name not in methods or name in values],
+        "callables": sorted(methods | callables),
     }
 
 
@@ -558,14 +575,17 @@ def _module_candidates(
     return out, sorted(hint_pool)
 
 
-def _collect_declared(module: P.Module, pool: set[str]) -> None:
+def _collect_declared(module: P.Module, pool: set[str], callables: set[str] | None = None) -> None:
     """All names declared in statement bodies (пер/знч/исп, loop and catch variables) -
-    the hint pool for the survivors; scoping does not matter for a spelling hint."""
+    the hint pool for the survivors; scoping does not matter for a spelling hint. `callables`
+    also receives the variables that hold a function (_holds_callable)."""
 
     def body(stmts: list[P.Stmt]) -> None:
         for st in stmts:
             if isinstance(st, P.VarDecl):
                 pool.add(st.name)
+                if callables is not None and _holds_callable(st.type, st.init):
+                    callables.add(st.name)
             elif isinstance(st, P.If):
                 for _cond, b in st.branches:
                     body(b)
@@ -600,6 +620,40 @@ def _collect_declared(module: P.Module, pool: set[str]) -> None:
         elif isinstance(m, P.Enum):
             for sub in m.methods:
                 body(sub.body)
+
+
+def _holds_callable(type_: P.TypeRef | None, init: P.Expr | None = None) -> bool:
+    """A value that is called like a method: of a function type (`Проверка: (Строка)->Булево`),
+    or set to a lambda or a method reference."""
+    return (type_ is not None and "->" in type_.text) or isinstance(init, (P.Lambda, P.MethodRef))
+
+
+def _declared_values(module: P.Module) -> tuple[set[str], set[str]]:
+    """(values, callables): the names a module declares as values - its fields, structures and
+    enumerations, the fields of its structures, the parameters of every method and what the
+    bodies declare - and those of them that hold a function (_holds_callable)."""
+    names = {m.name for m in module.members if isinstance(m, (P.Structure, P.Enum, P.ObjectField))}
+    callables = {m.name for m in module.members
+                 if isinstance(m, P.ObjectField) and _holds_callable(m.type, m.init)}
+    methods: list[P.Method] = []
+    for m in module.members:
+        if isinstance(m, P.Method):
+            methods.append(m)
+        elif isinstance(m, P.Structure):
+            for sub in m.members:
+                if isinstance(sub, P.ObjectField):
+                    names.add(sub.name)
+                    if _holds_callable(sub.type, sub.init):
+                        callables.add(sub.name)
+                elif isinstance(sub, P.Method):
+                    methods.append(sub)
+        elif isinstance(m, P.Enum):
+            methods.extend(m.methods)
+    for method in methods:
+        names.update(p.name for p in method.params)
+        callables.update(p.name for p in method.params if _holds_callable(p.type))
+    _collect_declared(module, names, callables)
+    return names, callables
 
 
 # On by default (severity error - the compiler rejects such code) since the stdlib
@@ -665,15 +719,25 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 # An entity module: the attributes of the object, plus what the platform gives
                 # the object type of this kind (the template page of `<вид>.Объект`), plus the
                 # probe-confirmed table for a dataset or a kind the pages say nothing about.
+                # A method of the type answers only to a call (see _ENTITY_COMMON); a name the
+                # type has both ways (`Presentation`) stays a value.
                 given = generated_members.get(f"{kind}.{_OBJECT_FACET}") or {}
-                names = (set(_ENTITY_COMMON)
-                         | set(given.get("properties", ())) | set(given.get("methods", ())))
+                values = set(_ENTITY_COMMON - _ENTITY_CALLS) | set(given.get("properties", ()))
+                methods = (set(_ENTITY_CALLS) | set(given.get("methods", ()))) - values
                 # Withheld BEFORE the spellings are added, or the English form of a name the
                 # element does not have would stay in scope on its own.
-                extras = set(pair["sections"]) | _both_spellings(
-                    names - set(pair["withheld"][_OBJECT_SCOPE]))
+                withheld = set(pair["withheld"][_OBJECT_SCOPE])
+                extras = set(pair["sections"]) | _both_spellings(values - withheld)
+                calls = _both_spellings(methods - withheld)
             elif kind == "КомпонентИнтерфейса":
                 extras = _component_scope_facts(pair, by_name, type_members, set())
+            elif kind == _ROW_TYPE_KIND:
+                # The module of a structure element extends the same structure type as the
+                # module of a row, and the probe answered the same there: `Presentation()`
+                # compiled, a bare `Presentation`, `ToString` and `GetType` got "Variable
+                # ... is not defined". The fields of the element are values.
+                extras = set(pair["sections"]) | row_names
+                calls = row_calls
             else:
                 # A manager module of a data kind, or a common module: the yaml fields plus the
                 # manager members, less what this element's settings switch off - the manager of
@@ -682,7 +746,12 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                          | set(dataset.manager_member_names(manager_members.get(kind))))
                 extras = set(pair["sections"]) | _both_spellings(
                     names - set(pair["withheld"][_MANAGER_SCOPE]))
-        scope = hints.module(fact.get("pool") or (), extras, calls)
+        # What the yaml declares is offered to either position: an attribute is a value, while
+        # an event of a component is raised by a call (see _ScopeHints).
+        declared = (set(owner["rows"][fact["row"][1]]) if owner is not None
+                    else set(pair["sections"]) if pair is not None else set())
+        scope = hints.module(fact.get("pool") or (), fact.get("callables") or (), extras, calls,
+                             declared)
         for line, col, name, sign, call in fact["cands"]:
             if name in project_names or name in extras or call and name in calls:
                 continue
@@ -943,7 +1012,7 @@ def _least_shared(total: int) -> int:
     return shared
 
 
-def _closest_in(name: str, table: _Table) -> tuple[float, str] | None:
+def _closest_in(name: str, table: _Table, one_edit: bool = False) -> tuple[float, str] | None:
     """The best (ratio, candidate) of a table, the one difflib.get_close_matches would pick.
 
     difflib scores the same candidates and orders them the same way: the ratio first, then the
@@ -955,6 +1024,11 @@ def _closest_in(name: str, table: _Table) -> tuple[float, str] | None:
 
     The name itself is no hint: declared out of reach (a local of another method), it would
     only be offered back to the reader.
+
+    `one_edit` takes only a candidate one edit away - a character missing, extra, changed or
+    swapped with its neighbour: every character of the longer of the two but one is matched
+    (see _SHORT_NAME). The check is made on each candidate, not on the winner, so a closer
+    candidate two edits away does not hide the one a single typo away.
     """
     length = len(name)
     chars = set(name)
@@ -967,6 +1041,8 @@ def _closest_in(name: str, table: _Table) -> tuple[float, str] | None:
     low = int(length * _HINT_CUTOFF / (2 - _HINT_CUTOFF))
     high = int(length * (2 - _HINT_CUTOFF) / _HINT_CUTOFF) + 1
     for size in range(max(low, 1), high + 1):
+        if one_edit and abs(size - length) > 1:
+            continue  # one edit changes the length by one at most
         bucket = table.get(size)
         if not bucket:
             continue
@@ -982,22 +1058,77 @@ def _closest_in(name: str, table: _Table) -> tuple[float, str] | None:
             if matcher.quick_ratio() < _HINT_CUTOFF:
                 continue
             score = matcher.ratio()
-            if score >= _HINT_CUTOFF and (best is None or (score, candidate) > best):
+            if score < _HINT_CUTOFF:
+                continue
+            # The ratio is twice the matched characters over both lengths.
+            if one_edit and round(score * (length + size) / 2) < max(length, size) - 1:
+                continue
+            if best is None or (score, candidate) > best:
                 best = (score, candidate)
     return best
 
 
+#: The longest name that is offered only a candidate one edit away (see _closest_in). The ratio of
+#: two short names moves in coarse steps, and the cutoff lets two edits and more through: `Close`
+#: and the function `Cos` score exactly 0.75, `Header` and `Handler` 0.77. Over the whole scope a
+#: short word almost always has such a neighbour, while a typo in a short name is a single edit.
+_SHORT_NAME = 7
+
+
+def _stdlib_catalog() -> dict:
+    """The stdlib catalog, empty without the data."""
+    try:
+        return dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return {}
+
+
 @lru_cache(maxsize=1)
-def _global_table() -> _Table:
-    return _hint_table(_static_globals() or ())
+def _global_functions() -> frozenset[str]:
+    """The global names that are called: the functions of the global context (`Message`, `Cos`).
+
+    The catalog keeps the global context in one list; what the list shares with the type names
+    (`HttpClient`) is reached as a value.
+    """
+    catalog = _stdlib_catalog()
+    return frozenset(set(catalog.get("globals", ())) - set(catalog.get("names", ())))
+
+
+@lru_cache(maxsize=1)
+def _member_kinds() -> tuple[frozenset[str], frozenset[str]]:
+    """(the methods, the properties) among the members of the platform types, both spellings.
+
+    Only what the catalog documents as one kind and never as the other is counted: a name that
+    is both (`Presentation` is a property of an object and a method of every type) belongs to
+    neither set and is offered in either position.
+    """
+    methods: set[str] = set()
+    properties: set[str] = set()
+    catalog = _stdlib_catalog()
+    for section in ("type_members", "generated_members", "manager_members"):
+        for entry in (catalog.get(section) or {}).values():
+            if isinstance(entry, dict):
+                methods.update(entry.get("methods") or ())
+                properties.update(entry.get("properties") or ())
+    methods, properties = _both_spellings(methods), _both_spellings(properties)
+    return frozenset(methods - properties), frozenset(properties - methods)
+
+
+@lru_cache(maxsize=2)
+def _global_table(call: bool) -> _Table:
+    functions = _global_functions()
+    names = _static_globals() or set()
+    return _hint_table(names & functions if call else names - functions)
 
 
 @lru_cache(maxsize=4096)
-def _closest_global(name: str) -> tuple[float, str] | None:
+def _closest_global(name: str, call: bool) -> tuple[float, str] | None:
     """The best global candidate of a name - the same for every module, so kept per name."""
-    return _closest_in(name, _global_table())
+    return _closest_in(name, _global_table(call), len(name) <= _SHORT_NAME)
 
 
+dataset.register_reset(_global_functions.cache_clear)
+dataset.register_reset(_member_kinds.cache_clear)
 dataset.register_reset(_global_table.cache_clear)
 dataset.register_reset(_closest_global.cache_clear)
 
@@ -1015,40 +1146,69 @@ class _ScopeHints:
     was one letter away from (`Пасажир` got the parameter `Пассажиры` rather than the attribute
     `Пассажир`), and a misspelled global name got no hint at all.
 
+    The position of the name narrows the candidates. A call (`Имя(...)`) is offered what can be
+    called: the methods of the module and of the element and the functions of the global
+    context - an object is created with `новый`, so a type never stands there. A bare name is
+    offered what stands for a value: the variables, parameters, fields, structures and
+    enumerations of the module, the attributes and properties of the element, the objects of
+    the project, the platform types. Over the whole scope a variable used to be offered to a
+    call and a method to a bare name, a hint that would not compile either. The methods the
+    scope reaches only as callees (`calls`) compete for a bare name too, in the form of the call:
+    for them the missing parentheses are the mistake the rule already names.
+
+    The yaml of the element names attributes and properties next to the events of a component,
+    which its module raises by a call, so what the yaml declares is offered in both positions.
+    For the members of the platform types the documented kind decides (_member_kinds), and a
+    name of both kinds or of none is offered in both, as every name used to be.
+
     The table of the project names is the same for every module and is built once per run
     (`project`); the global names are ranked per name, once per process (_closest_global).
     """
 
-    def __init__(self, project: Callable[[], _Table], pool: Iterable[str], extras: set[str],
-                 calls: set[str]) -> None:
+    def __init__(self, project: Callable[[], _Table], pool: Iterable[str],
+                 callables: Iterable[str], extras: set[str], calls: set[str],
+                 declared: set[str]) -> None:
         self._project = project
-        self._names = (pool, extras, calls)
-        self._tables: tuple[_Table, _Table, _Table] | None = None
+        self._names = (pool, callables, extras, calls, declared)
+        self._tables: dict[bool, tuple[tuple[int, _Table, str], ...]] | None = None
         self._memo: dict[tuple[str, bool], str | None] = {}
+
+    def _groups(self) -> dict[bool, tuple[tuple[int, _Table, str], ...]]:
+        """(rank, table, tail) of every group but the global one, for a call and a bare name."""
+        pool, callables, extras, calls, declared = self._names
+        method_only, property_only = _member_kinds()
+        element_calls = {n for n in extras if n in declared or n not in property_only}
+        element_values = {n for n in extras if n in declared or n not in method_only}
+        calls_table = _hint_table(calls)
+        return {
+            True: ((_MODULE_RANK, _hint_table(callables), ""),
+                   (_ELEMENT_RANK, _hint_table(element_calls), ""),
+                   (_ELEMENT_RANK, calls_table, "")),
+            False: ((_MODULE_RANK, _hint_table(pool), ""),
+                    (_ELEMENT_RANK, _hint_table(element_values), ""),
+                    (_ELEMENT_RANK, calls_table, "()"),
+                    (_PROJECT_RANK, self._project(), "")),
+        }
 
     def closest(self, name: str, call: bool) -> str | None:
         """The hint for a name, or None.
 
-        A method that answers only to a call competes as well; offered for a bare name, it
+        A method that answers only to a call competes for a bare name as well; offered there, it
         comes with its parentheses, so the hint is the code to write.
         """
         key = (name, call)
         if key in self._memo:
             return self._memo[key]
         if self._tables is None:
-            pool, extras, calls = self._names
-            self._tables = (_hint_table(pool), _hint_table(extras), _hint_table(calls))
-        pool_table, extras_table, calls_table = self._tables
-        groups = ((_MODULE_RANK, pool_table, ""), (_ELEMENT_RANK, extras_table, ""),
-                  (_ELEMENT_RANK, calls_table, "" if call else "()"),
-                  (_PROJECT_RANK, self._project(), ""))
+            self._tables = self._groups()
+        one_edit = len(name) <= _SHORT_NAME
         best: tuple[float, int, str] | None = None
         written = ""
-        for rank, table, tail in groups:
-            found = _closest_in(name, table)
+        for rank, table, tail in self._tables[call]:
+            found = _closest_in(name, table, one_edit)
             if found is not None and (best is None or (found[0], -rank, found[1]) > best):
                 best, written = (found[0], -rank, found[1]), found[1] + tail
-        found = _closest_global(name)
+        found = _closest_global(name, call)
         if found is not None and (best is None or (found[0], -_GLOBAL_RANK, found[1]) > best):
             best, written = (found[0], -_GLOBAL_RANK, found[1]), found[1]
         self._memo[key] = written or None
@@ -1067,5 +1227,6 @@ class _Hints:
             self._project_table = _hint_table(self._project_names)
         return self._project_table
 
-    def module(self, pool: Iterable[str], extras: set[str], calls: set[str]) -> _ScopeHints:
-        return _ScopeHints(self._project, pool, extras, calls)
+    def module(self, pool: Iterable[str], callables: Iterable[str], extras: set[str],
+               calls: set[str], declared: set[str]) -> _ScopeHints:
+        return _ScopeHints(self._project, pool, callables, extras, calls, declared)

@@ -390,3 +390,85 @@ def test_the_module_of_the_project_answers_its_handlers(settings_data):
 
 def test_control_without_the_project_slot_the_project_has_no_handlers(elements):
     assert modulehandlers.project_rows() == ()
+
+
+# --- an empty slot, a row declared per item, the kind of the project ---------------------------
+
+_ON_BASIS = {"ru": "ПриСозданииНаОсновании", "en": "OnCreateOnBasis",
+             "per": "RuntimeEntityMetadata.createOnBasisSources"}
+_MORE_ELEMENTS = {
+    **_SETTINGS_ELEMENTS,
+    "Справочник": {
+        **_SETTINGS_ELEMENTS["Справочник"],
+        "Объект": {"handlers": [{"ru": "ПередЗаписью", "en": "BeforeWrite"}, _ON_BASIS]},
+    },
+    # A service with access settings: the permissions handler alone, no name taken at build time.
+    "HttpСервис": {"": {"handlers": [_PERMISSIONS]}},
+    # A common module: the compiler declares nothing for it.
+    "ОбщийМодуль": {"": {"handlers": []}},
+}
+
+
+@pytest.fixture
+def more_data(tmp_path):
+    _root(tmp_path, {**_STDLIB, "element_module_handlers": _MORE_ELEMENTS})
+    dataset.set_data_root(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_a_module_that_declares_nothing_answers_an_empty_slot(more_data):
+    assert modulehandlers.element_slot("ОбщийМодуль", "") == ()
+    # The control: a kind the data does not list is still not answered at all.
+    assert modulehandlers.element_slot("ЛокализованныеСтроки", "") is None
+
+
+def test_a_controlled_module_takes_the_permissions_handler_by_its_settings(more_data):
+    used, off = modulehandlers.access_slot("HttpСервис", "", _Settings(), controlled=True)
+    assert used == () and _names(off) == ["ВычислитьРазрешенияДоступа"]
+    assert modulehandlers.unused_reason("HttpСервис", off[0], _Settings()) == "computed"
+    used, off = modulehandlers.access_slot("HttpСервис", "", _Settings(computed=True),
+                                           controlled=True)
+    assert _names(used) == ["ВычислитьРазрешенияДоступа"] and off == ()
+    # Settings that cannot be read use the handler.
+    assert modulehandlers.access_slot("HttpСервис", "", None, controlled=True) == (
+        (_PERMISSIONS,), ())
+
+
+def test_control_a_module_without_access_settings_is_not_split(more_data):
+    """The negative control: the same slot of an element whose description has no settings."""
+    assert modulehandlers.access_slot("HttpСервис", "", _Settings()) is None
+    assert modulehandlers.access_slot("Справочник", "Объект", _Settings(),
+                                      controlled=True) is None
+
+
+def test_a_row_declared_per_item_needs_its_property(more_data):
+    rows = modulehandlers.element_slot("Справочник", "Объект")
+    declared, absent = modulehandlers.per_item_split(rows, frozenset())
+    assert _names(declared) == ["ПередЗаписью"] and _names(absent) == ["ПриСозданииНаОсновании"]
+    assert modulehandlers.per_item_property(absent[0]) == "СозданиеНаОсновании"
+    declared, absent = modulehandlers.per_item_split(rows, frozenset({"СозданиеНаОсновании"}))
+    assert _names(declared) == ["ПередЗаписью", "ПриСозданииНаОсновании"] and absent == ()
+    assert modulehandlers.per_item_properties() == {"СозданиеНаОсновании"}
+
+
+def test_control_an_unread_description_or_an_unknown_collection_declares_the_row(more_data):
+    rows = modulehandlers.element_slot("Справочник", "Объект")
+    assert modulehandlers.per_item_split(rows, None) == (rows, ())
+    unknown = ({**_ON_BASIS, "per": "SomeModel.items"},)
+    assert modulehandlers.per_item_split(unknown, frozenset()) == (unknown, ())
+
+
+def test_the_module_of_the_project_by_the_kind_of_the_project(more_data):
+    assert _names(modulehandlers.project_slot("Приложение")) == [
+        "ВычислитьСистемныеРазрешенияДоступа"]
+    assert modulehandlers.project_slot("Библиотека") == ()
+    assert modulehandlers.project_slot("Расширение") == ()
+    assert modulehandlers.project_slot("НовыйВидПроекта") is None
+
+
+def test_control_without_the_project_slot_no_project_kind_is_judged(elements):
+    assert modulehandlers.project_slot("Библиотека") is None
+    assert modulehandlers.project_slot("Приложение") is None

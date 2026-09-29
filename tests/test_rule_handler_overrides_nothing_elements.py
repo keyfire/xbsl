@@ -363,3 +363,210 @@ def test_settings_that_leave_every_handler_off_still_judge_the_module(monkeypatc
     finally:
         monkeypatch.undo()
         _reset()
+
+
+# --- a module that declares nothing, a handler per item, a service, the project --------------
+
+_ON_BASIS = {"ru": "ПриСозданииНаОсновании", "en": "OnCreateOnBasis",
+             "per": "RuntimeEntityMetadata.createOnBasisSources"}
+_SYSTEM = {"ru": "ВычислитьСистемныеРазрешенияДоступа", "en": "ComputeSystemAccessPermissions"}
+_MORE_TABLE = {
+    "Справочник": {"Объект": {"handlers": (*_OBJECT_ROWS, _ON_BASIS), "dynamic": ()}},
+    "ОбщийМодуль": {"": {"handlers": (), "dynamic": ()}},
+    "HttpСервис": {"": {"handlers": (_PERMISSIONS,), "dynamic": ()}},
+    "SoapСервис": {"": {"handlers": (_PERMISSIONS,), "dynamic": ()}},
+    "Обработка": {"": {"handlers": (_PERMISSIONS,), "dynamic": ()}},
+    "Проект": {"": {"handlers": (_SYSTEM,), "dynamic": ()}},
+}
+
+
+@pytest.fixture
+def more(monkeypatch):
+    """Empty, per-item, service and project slots in place of the data section."""
+    _use(monkeypatch, _MORE_TABLE)
+    yield
+    monkeypatch.undo()
+    _reset()
+
+
+COMMON_YAML = ("ВидЭлемента: ОбщийМодуль\nИд: 2b7e4c10-3d5f-4a6b-8c7d-9e0f1a2b3c4d\n"
+               "Имя: РасчетыСкладов\n")
+
+
+@pytest.mark.needs_data
+def test_any_handler_of_a_module_that_declares_nothing_is_not_found(more):
+    diags = _lint({"Склады/РасчетыСкладов.yaml": COMMON_YAML,
+                   "Склады/РасчетыСкладов.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n"})
+    assert _found(diags) == [(1, False, True)]
+    assert "модуль элемента вида ОбщийМодуль такого обработчика не объявляет" \
+        in diags[0].message
+    assert diags[0].fix is not None
+
+
+@pytest.mark.needs_data
+def test_control_a_module_the_data_does_not_list_stays_unjudged(monkeypatch):
+    """The negative control: the same common module once the empty slot is gone."""
+    table = {kind: modules for kind, modules in _MORE_TABLE.items() if kind != "ОбщийМодуль"}
+    _use(monkeypatch, table)
+    try:
+        assert _lint({"Склады/РасчетыСкладов.yaml": COMMON_YAML,
+                      "Склады/РасчетыСкладов.xbsl": "@Обработчик\nметод ПередЗаписью()\n;\n"}) == []
+    finally:
+        monkeypatch.undo()
+        _reset()
+
+
+_BASIS = "@Обработчик\nметод ПриСозданииНаОсновании(Основание: ПоступленияТоваров.Ссылка)\n;\n"
+
+
+@pytest.mark.needs_data
+def test_on_create_on_basis_needs_the_types_of_the_description(more):
+    diags = _object(_BASIS)
+    assert _found(diags) == [(1, False, True)]
+    assert "объявляет обработчик ПриСозданииНаОсновании только для типов, которые " \
+           "перечисляет свойство СозданиеНаОсновании" in diags[0].message
+    assert diags[0].fix is None  # the description lacks the list, not the method its mark
+    given = CATALOG_YAML + "СозданиеНаОсновании:\n    - ПоступленияТоваров.Ссылка\n"
+    assert _lint({"Склады/Склады.yaml": given, "Склады/Склады.Объект.xbsl": _BASIS}) == []
+    empty = CATALOG_YAML + "СозданиеНаОсновании: []\n"
+    assert len(_lint({"Склады/Склады.yaml": empty, "Склады/Склады.Объект.xbsl": _BASIS})) == 1
+
+
+@pytest.mark.needs_data
+def test_an_english_description_lists_its_types_too(more):
+    i18n.set_lang("en")
+    catalog = "ElementKind: Catalog\nId: 4d2f7c60-8e3b-4b5c-9a0f-9c3d4e5f6a71\nName: Stock\n"
+    module = "@Handler\nmethod OnCreateOnBasis(Basis: Receipts.Ref)\n;\n"
+    diags = _lint({"Stock/Stock.yaml": catalog, "Stock/Stock.Object.xbsl": module})
+    assert len(diags) == 1
+    assert "declares the OnCreateOnBasis handler only for the types the CreateOnBasis property" \
+        in diags[0].message
+    listed = catalog + "CreateOnBasis:\n    - Receipts.Ref\n"
+    assert _lint({"Stock/Stock.yaml": listed, "Stock/Stock.Object.xbsl": module}) == []
+
+
+@pytest.mark.needs_data
+def test_control_an_unconditional_row_keeps_on_create_on_basis_silent(monkeypatch):
+    """The negative control: the same row without `per` is declared whatever the description."""
+    plain = {"ru": _ON_BASIS["ru"], "en": _ON_BASIS["en"]}
+    _use(monkeypatch, {"Справочник": {"Объект": {"handlers": (*_OBJECT_ROWS, plain),
+                                                 "dynamic": ()}}})
+    try:
+        assert _object(_BASIS) == []
+    finally:
+        monkeypatch.undo()
+        _reset()
+
+
+SERVICE_YAML = ("ВидЭлемента: HttpСервис\nИд: 9d6c1a04-2c7f-4f90-9e4d-3a7b8c9d0e15\n"
+                "Имя: СкладыApi\n")
+_COMPUTE = "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n"
+
+
+def _service(access: str, yaml: str = SERVICE_YAML, files: dict | None = None):
+    stem = "Склады/" + yaml.split("Имя: ", 1)[1].split("\n", 1)[0]
+    return _lint({f"{stem}.yaml": yaml + access, f"{stem}.xbsl": _COMPUTE, **(files or {})})
+
+
+@pytest.mark.needs_data
+def test_a_service_uses_the_permissions_handler_by_its_settings(more):
+    diags = _service("")
+    assert _found(diags) == [(1, True, False)]
+    assert "только когда настройки вычисляют разрешения" in diags[0].message
+    assert diags[0].fix is None
+    call = "КонтрольДоступа:\n    Разрешения:\n        Вызов: РазрешенияВычисляются\n"
+    assert _service(call) == []
+    default = "КонтрольДоступа:\n    Разрешения:\n        ПоУмолчанию: РазрешенияВычисляются\n"
+    assert _service(default) == []
+    others = ("КонтрольДоступа:\n    Разрешения:\n        ПоУмолчанию: РазрешенияВычисляются\n"
+              "        Вызов: РазрешеноВсем\n")
+    assert _found(_service(others)) == [(1, True, False)]
+
+
+@pytest.mark.needs_data
+def test_a_soap_service_and_a_processing_take_the_same_test(more):
+    soap = SERVICE_YAML.replace("HttpСервис", "SoapСервис").replace("СкладыApi", "СкладыSoap")
+    assert _found(_service("", soap)) == [(1, True, False)]
+    processing = ("ВидЭлемента: Обработка\nИд: 8c5b0f93-1b6e-4e8f-8d3c-2f6a7b8c9d04\n"
+                  "Имя: ПересчетСкладов\n")
+    project = "Ид: 1d1f5c60-0000-4000-8000-000000000f1e\nИмя: Склад\n"
+    # A project that states no mode is read in the newest one, where the settings are read.
+    assert _found(_service("", processing, {"Проект.yaml": project})) == [(1, True, False)]
+    # Below the mode its settings came in, the build does not read them: not judged.
+    old = project + "РежимСовместимости: 9.0\n"
+    assert _service("", processing, {"Проект.yaml": old}) == []
+
+
+@pytest.mark.needs_data
+def test_control_a_service_without_the_permissions_row_is_judged_as_a_plain_module(monkeypatch):
+    """The negative control: a slot without the permissions handler leaves nothing to split."""
+    _use(monkeypatch, {"HttpСервис": {"": {"handlers": (), "dynamic": ()}}})
+    try:
+        assert _found(_service("")) == [(1, False, True)]
+    finally:
+        monkeypatch.undo()
+        _reset()
+
+
+PROJECT_YAML = "Ид: 1d1f5c60-0000-4000-8000-000000000f1e\nПоставщик: acme\nИмя: Склад\n"
+_SYSTEM_MODULE = ("@Обработчик\nметод ВычислитьСистемныеРазрешенияДоступа()"
+                  ": Массив<РазрешениеДоступа>\n;\n")
+
+
+def _project(kind: str = "", module: str = _SYSTEM_MODULE):
+    yaml = PROJECT_YAML + (f"ВидПроекта: {kind}\n" if kind else "")
+    return _lint({"Проект.yaml": yaml, "Проект.xbsl": module})
+
+
+@pytest.mark.needs_data
+def test_the_module_of_an_application_overrides_the_system_permissions(more):
+    assert _project() == []
+    assert _project("Приложение") == []
+    diags = _project(module="@Обработчик\nметод Пересчитать()\n;\n")
+    assert _found(diags) == [(1, False, True)]
+    assert "модуль проекта вида Приложение переопределяет только " \
+           "ВычислитьСистемныеРазрешенияДоступа" in diags[0].message
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("kind", ["Библиотека", "Расширение"])
+def test_the_module_of_a_library_or_an_extension_declares_nothing(more, kind):
+    diags = _project(kind)
+    assert _found(diags) == [(1, False, True)]
+    assert f"модуль проекта вида {kind} такого обработчика не объявляет" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_an_english_library_is_told_in_english(more):
+    i18n.set_lang("en")
+    yaml = "Id: 1d1f5c60-0000-4000-8000-000000000f1e\nVendor: acme\nName: Stock\n" \
+           "ProjectKind: Library\n"
+    module = "@Handler\nmethod ComputeSystemAccessPermissions(): Array<AccessPermission>\n;\n"
+    diags = _lint({"Project.yaml": yaml, "Project.xbsl": module})
+    assert len(diags) == 1
+    assert "the module of a project of kind Library declares no such handler" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_control_the_project_is_not_judged_without_its_slot_or_with_an_unknown_kind(monkeypatch):
+    """The negative controls: data without the module of the project, a kind it does not have."""
+    _use(monkeypatch, {kind: modules for kind, modules in _MORE_TABLE.items() if kind != "Проект"})
+    try:
+        assert _project("Библиотека") == []
+    finally:
+        monkeypatch.undo()
+        _reset()
+    _use(monkeypatch, _MORE_TABLE)
+    try:
+        assert _project("Сервис") == []
+    finally:
+        monkeypatch.undo()
+        _reset()
+
+
+@pytest.mark.needs_data
+def test_control_an_element_named_like_the_project_is_no_project_module(more):
+    """The negative control: a catalog that bears the name of the project description."""
+    catalog = "ВидЭлемента: Справочник\nИд: 3c8f5d21-4e6a-4b7c-9d8e-0f1a2b3c4d5e\nИмя: Проект\n"
+    assert _lint({"Склады/Проект.yaml": catalog,
+                  "Склады/Проект.xbsl": "@Обработчик\nметод Пересчитать()\n;\n"}) == []

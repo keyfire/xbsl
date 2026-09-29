@@ -807,12 +807,12 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--doc", help=i18n.t("cli.help.scaf.af-doc"))
 
     p = command("set-field-property")
-    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
+    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.sfp-yaml"))
     p.add_argument("field_kind", help=", ".join(scaffold.SET_PROPERTY_KINDS))
     p.add_argument("name", help=i18n.t("cli.help.scaf.sfp-name"))
     p.add_argument("--prop", action="append", required=True, metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))
-    p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
+    p.add_argument("--tabular", help=i18n.t("cli.help.scaf.sfp-tabular"))
 
     p = command("add-route")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.ar-yaml"))

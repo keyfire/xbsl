@@ -78,6 +78,10 @@ variable, or the `default` field of the index. `--version` shows what is availab
 arrives when you re-run `xbsl extract` with a new `--dist`. The index makes the newest version the
 default, and regenerating an old version does not move the default back.
 
+A combined set that a data package may build from several versions is not produced by
+`xbsl extract`. If the package has one, rebuild it after the versions it is based on are
+regenerated: otherwise it keeps the data of the previous run.
+
 `xbsl data-diff [old] [new]` shows what changed in the platform between two data versions. With
 no arguments it compares the default version against the closest older one. The report covers
 stdlib types and members, metamodel properties, components and their properties, terms and

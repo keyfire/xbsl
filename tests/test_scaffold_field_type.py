@@ -68,3 +68,70 @@ def test_the_value_of_a_localized_string_is_not_read_as_a_type(tmp_path):
     value = "Условия и сроки; читайте внимательно"
     result = scaffold.op_add_field(path, "строка", "Условия", type_=value)
     assert yaml.safe_load(result.changes[0].content)["Строки"]["Условия"] == value
+
+
+# The same type set later, on an item that already exists: set-field-property reads it the way
+# add-field reads its `type` - it used to write `Тип: Массив&lt;Число&gt;` as it came.
+
+_GOODS = (
+    "ElementKind: Catalog\n"
+    "Id: 20d26596-68fd-42d6-aef9-1eab5d73c845\n"
+    "Name: Goods\n"
+    "Attributes:\n"
+    "    -\n"
+    "        Id: 11111111-1111-1111-1111-111111111112\n"
+    "        Name: Note\n"
+    "        Type: String\n"
+)
+
+
+def _set(tmp_path, source, name, props, file_name="Товар.yaml"):
+    path = tmp_path / file_name
+    path.write_bytes(source.encode("utf-8"))  # the line breaks as written, on any system
+    result = scaffold.op_set_field_property(path, "реквизит", name, props)
+    return result.changes[0].content
+
+
+def test_set_field_property_reads_an_escaped_type_in_a_russian_file(tmp_path):
+    text = _set(tmp_path, _CATALOG, "Заметка", {"Тип": "Массив&lt;Число&gt;"})
+    assert "        Тип: Массив<Число>\n" in text and "&lt;" not in text
+
+
+@pytest.mark.needs_data
+def test_set_field_property_spells_the_type_in_the_language_of_the_file(tmp_path):
+    russian = _set(tmp_path, _CATALOG, "Заметка", {"Type": "Array&lt;Number&gt;"})
+    assert "        Тип: Массив<Число>\n" in russian
+    english = _set(tmp_path, _GOODS, "Note", {"Тип": "Массив&lt;Число&gt;"}, "Goods.yaml")
+    assert "        Type: Array<Number>\n" in english and "Тип" not in english
+
+
+def test_set_field_property_refuses_what_is_not_a_type(tmp_path):
+    with pytest.raises(scaffold.ScaffoldError, match="типа элемента"):
+        _set(tmp_path, _CATALOG, "Заметка", {"Тип": 'Массив&amp;lt;Строка"'})
+
+
+@pytest.mark.parametrize("given", [
+    "Массив&lt;Число&gt;", "Строка|Число|?", "Товар.Ссылка",
+    pytest.param("Map&lt;String, Number&gt;", marks=pytest.mark.needs_data),
+])
+def test_add_field_and_set_field_property_write_one_type_the_same_way(tmp_path, given):
+    added = _added(tmp_path, "Поле", given)["Поле"]
+    changed = yaml.safe_load(_set(tmp_path, _CATALOG, "Заметка", {"Тип": given}))
+    assert {item["Имя"]: item["Тип"] for item in changed["Реквизиты"]}["Заметка"] == added
+
+
+@pytest.mark.needs_data
+def test_set_field_property_holds_a_built_in_to_its_closed_set(tmp_path):
+    document = (
+        "ВидЭлемента: Документ\n"
+        "Ид: 20d26596-68fd-42d6-aef9-1eab5d73c846\n"
+        "Имя: Заявки\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Имя: Номер\n"
+        "        Тип: Строка\n"
+    )
+    with pytest.raises(scaffold.ScaffoldError, match="допустимы: Строка, Число"):
+        _set(tmp_path, document, "Номер", {"Тип": "Булево"}, "Заявки.yaml")
+    text = _set(tmp_path, document, "Номер", {"Type": "Number"}, "Заявки.yaml")
+    assert "        Имя: Номер\n        Тип: Число\n" in text

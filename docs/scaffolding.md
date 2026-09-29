@@ -29,7 +29,7 @@ deliberately absent.
 ```sh
 xbsl new-project . vendor App                          # descriptor + module + a subsystem
 xbsl new-object <subsystem-dir> <kind> <name>          # kind: Catalog, Document, Enum, ... (--help spells them)
-xbsl add-field <object>.yaml <section> <field> --type <type>
+xbsl add-field <object>.yaml <item-kind> <name> --type <type>  # item kind: реквизит, ... (--help lists them)
 xbsl add-form . --name <object>                        # object + list forms, registered
 xbsl add-form . --name <object> --forms list-cards     # list form as a card grid
 xbsl new-object <subsystem-dir> <http-service-kind> <name> --routes "GET /, POST /, GET /{id}"
@@ -52,12 +52,14 @@ xbsl project-info .                                    # projects, subsystems, o
 xbsl project-info . --package <package>                # the objects of one package
 ```
 
-The kind, the section, the annotations, the access methods and every identifier reach the CLI in
-the spelling the platform uses for the project's development language. The prose of this page
-names them by their English equivalents - `Catalog`, `Attributes`, `OnServer`,
-`PermitAuthenticated` - which is why the examples above use placeholders.
-`xbsl new-object --help` lists the kinds a project can hold, spelled the way the command wants
-them.
+The object kind is taken in either spelling, and `xbsl new-object --help` lists the kinds a
+project can hold. The item kind of `add-field` and `set-field-property` is a word of the tool
+itself, the same in a project of either language: `реквизит`, `табличная-часть`, `строка` and
+the rest that `xbsl add-field --help` lists. The annotations and every identifier reach the CLI
+in the spelling the platform uses for the project's development language, and the access
+methods and rights of `set-access` in their Russian names. The prose of this page names them by
+their English equivalents - `Catalog`, `Attributes`, `OnServer`, `PermitAuthenticated` - which
+is why the examples above use placeholders.
 
 `project-info` answers narrowly. `--kind`, `--subsystem` and `--package` narrow the list of objects,
 `--brief` leaves the lists out and keeps the counts, and `--project` walks only the named project -
@@ -149,12 +151,14 @@ holds already carrying that very text - keeps its bytes and its mtime and stays 
 it reports. MCP `meta_set_localization` takes the same
 `entries`, `dry_run` and `full_text`.
 
-`add-field --kind строка` (`meta_add_field`) adds the key. It lands in the element and is echoed
-into the translations that already exist, with the default-language text, so none of them is left
-a key short. The note names `set-localization`, which is what writes the text of a translation. A
-call on the translation file itself is refused, because that file carries neither a kind nor the
-sections of an element. The refusal names the element the file belongs to and the same
-`set-localization`. It used to read "the kind ? has no section for it".
+`add-field <strings>.yaml строка <key>` (`meta_add_field` with the kind `строка`) adds the key,
+and `--type` carries its text in the default language - the key itself when omitted. The key
+lands in the element and is echoed into the translations that already exist, with the
+default-language text, so none of them is left a key short. The note names `set-localization`,
+which is what writes the text of a translation. A call on the translation file itself is
+refused, because that file carries neither a kind nor the sections of an element. The refusal
+names the element the file belongs to and the same `set-localization`. It used to read "the
+kind ? has no section for it".
 
 `add-dependency` attaches a library: it writes the `Libraries` section of the project descriptor
 with `Name`, `Vendor` and `Version`. The version here is the library's **release** version. A

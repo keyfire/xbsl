@@ -215,17 +215,31 @@ def test_the_standard_fields_of_a_section_table_are_not_names_of_its_row(name):
     }) == [name]
 
 
-def test_the_module_of_a_structure_element_keeps_the_members_as_names():
-    # The row took its members from the structure type, but no probe has compiled a bare method
-    # name in the module of a `Structure` element, so that module keeps them as they were.
-    structure = (
-        "ВидЭлемента: Структура\nИд: 1d1f5c60-0000-4000-8000-00000000f021\nИмя: Точка\n"
-        "ОбластьВидимости: ВПроекте\nПоля:\n    -\n        Имя: Икс\n        Тип: Число\n"
-    )
+_STRUCTURE = (
+    "ВидЭлемента: Структура\nИд: 1d1f5c60-0000-4000-8000-00000000f021\nИмя: Точка\n"
+    "ОбластьВидимости: ВПроекте\nПоля:\n    -\n        Имя: Икс\n        Тип: Число\n"
+)
+
+
+@pytest.mark.parametrize("name", ["Представление", "ВСтроку", "ПолучитьТип"])
+def test_the_module_of_a_structure_element_calls_the_methods_of_its_type(name):
+    # The module of a `Structure` element extends the same structure type, and the probe
+    # answered there as in a row: each of the three bare got "Variable ... is not defined".
+    found = _lint({"Точка.yaml": _STRUCTURE, "Точка.xbsl": _method(f"возврат {name}", "Строка")})
+    assert [d.line for d in found] == [3]
+    assert f"'{name}()'" in found[0].message
+
+
+def test_the_module_of_a_structure_element_reads_its_fields_and_calls_the_methods():
+    # The control of the test above: the calls compiled, and a field is a value.
     assert _lint({
-        "Точка.yaml": structure,
-        "Точка.xbsl": _method("возврат Представление", "Строка"),
+        "Точка.yaml": _STRUCTURE,
+        "Точка.xbsl": _method('возврат Представление() + ВСтроку() + Икс.ВСтроку()', "Строка"),
     }) == []
+    named = _STRUCTURE.replace("Имя: Икс\n        Тип: Число",
+                               "Имя: Представление\n        Тип: Строка")
+    assert _lint({"Точка.yaml": named,
+                  "Точка.xbsl": _method("возврат Представление", "Строка")}) == []
 
 
 def test_data_that_does_not_split_the_members_keeps_every_member_a_name():
