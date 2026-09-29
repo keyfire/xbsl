@@ -186,6 +186,46 @@ def _is_term_pair(en: str, ru: str) -> bool:
     return bool(_EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru))
 
 
+def _annotated_pairs(blob: bytes) -> list[tuple[str, str]]:
+    """[(English, Russian)] of every annotation of an EMF package that states both spellings.
+
+    A generated package describes the yaml model of an element kind, and its annotations name
+    the properties and the standard attributes in both languages under the keys `ru` and `en`
+    (classcode.annotation_details) - the keys, not the order, say which spelling is which.
+    """
+    return [
+        (details["en"], details["ru"])
+        for details in classcode.annotation_details(blob)
+        if "en" in details and "ru" in details and _is_term_pair(details["en"], details["ru"])
+    ]
+
+
+def _checked_by_annotations(blob: bytes, pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The neighbourhood reading of an EMF package, each pair checked against its annotations.
+
+    The annotations of a package mostly write the Russian spelling first, and the pool keeps the
+    strings in that order, so the neighbour of a Russian name is the English name of the
+    PREVIOUS annotation: the standard attributes of an exchange plan came out shifted by one -
+    this node read as `ReceivedNumber`, the name as `ThisNode` - and each word got a second
+    spelling that no receiver answers to. The neighbourhood still finds the words of the class;
+    the annotation that states a word gives its English. A pair the annotations confirm stays,
+    one they contradict takes the spelling they state, and a word they do not state - a default
+    value that stands next to a class name - is no pair at all. So is a word the package states
+    two ways (two properties of one Russian name) when the neighbour is neither of them.
+    """
+    stated: dict[str, set[str]] = defaultdict(set)
+    for english, russian in _annotated_pairs(blob):
+        stated[russian].add(english)
+    checked: list[tuple[str, str]] = []
+    for english, russian in pairs:
+        spellings = stated.get(russian, set())
+        if english in spellings:
+            checked.append((english, russian))
+        elif len(spellings) == 1:
+            checked.append((next(iter(spellings)), russian))
+    return checked
+
+
 def _declared_type(
     simple: str, blob: bytes, found: list[tuple[str, str, str]] | None = None,
 ) -> tuple[str, str, dict[str, str]] | None:
@@ -320,6 +360,8 @@ def _scan_meta_objects(
                 if _EN_NAME_RE.match(en) and en not in _CLASS_FILE_NAMES
                 and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru)
             ]
+            if classcode.super_class(data) == classcode.EMF_PACKAGE:
+                pairs = _checked_by_annotations(data, pairs)
             if inner == _QUERY_TERMS_CLASS:
                 # In the query parser's own class a keyword the platform has NO English
                 # spelling for is followed by a transliteration of itself, and adjacency reads

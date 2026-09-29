@@ -44,6 +44,7 @@ _LDC, _LDC_W = 0x12, 0x13
 _INVOKE = (0xB6, 0xB7, 0xB8, 0xB9)  # virtual, special, static, interface
 _INVOKESPECIAL = 0xB7
 _NEW = 0xBB
+_ANEWARRAY, _AASTORE = 0xBD, 0x53
 _GETSTATIC, _PUTSTATIC = 0xB2, 0xB3
 _ACONST_NULL = 0x01
 _ALOAD, _ASTORE = 0x19, 0x3A
@@ -160,6 +161,17 @@ def own_class(blob: bytes) -> str | None:
     return text(pool, int.from_bytes(blob[position + 2:position + 4], "big"))
 
 
+def super_class(blob: bytes) -> str | None:
+    """The internal name of the class the class extends, or None for what is not a class file."""
+    if blob[:4] != b"\xca\xfe\xba\xbe" or len(blob) < 10:
+        return None
+    try:
+        pool, position = constant_pool(blob)
+    except (IndexError, UnicodeDecodeError):
+        return None
+    return text(pool, int.from_bytes(blob[position + 4:position + 6], "big"))
+
+
 def referenced_classes(blob: bytes) -> set[str]:
     """The internal names of every class the constant pool refers to, the class itself included.
 
@@ -218,17 +230,17 @@ def _method_code(blob: bytes, pool: dict[int, tuple[int, object]], position: int
 def _walk(code: bytes) -> Iterator[tuple[int, int]]:
     """(opcode, operand) of every instruction of one method, in order.
 
-    The operand is the constant pool index of `ldc`, `ldc_w`, a call, a static field access and
-    `new`, the local variable of `aload`/`astore` (the short forms included, the widened ones
-    too), and -1 for anything else. The walk has to know the length of every instruction, a
-    switch among them, or it reads operand bytes as code from there on.
+    The operand is the constant pool index of `ldc`, `ldc_w`, a call, a static field access,
+    `new` and `anewarray`, the local variable of `aload`/`astore` (the short forms included, the
+    widened ones too), and -1 for anything else. The walk has to know the length of every
+    instruction, a switch among them, or it reads operand bytes as code from there on.
     """
     at = 0
     while at < len(code):
         opcode = code[at]
         if opcode == _LDC or opcode in (_ALOAD, _ASTORE):
             yield opcode, code[at + 1]
-        elif opcode in (_LDC_W, _GETSTATIC, _PUTSTATIC, _NEW) or opcode in _INVOKE:
+        elif opcode in (_LDC_W, _GETSTATIC, _PUTSTATIC, _NEW, _ANEWARRAY) or opcode in _INVOKE:
             yield opcode, int.from_bytes(code[at + 1:at + 3], "big")
         elif opcode in _ALOAD_N:
             yield _ALOAD, opcode - _ALOAD_N.start
@@ -374,6 +386,55 @@ def declared_members(blob: bytes) -> dict[str, str]:
     pairs = dict(by_kind[PROPERTY_FACTORY])
     pairs.update(by_kind[METHOD_FACTORY])
     return pairs
+
+
+#: The base class of a generated EMF package - the class that builds a model in code.
+EMF_PACKAGE = "org/eclipse/emf/ecore/impl/EPackageImpl"
+#: The method of such a package that attaches an annotation to an element of the model.
+ANNOTATION_CALL = "addAnnotation"
+_STRING_CLASS = "java/lang/String"
+
+
+def annotation_details(blob: bytes) -> list[dict[str, str]]:
+    """[{detail key: value}] of every annotation the class adds to its model, in code order.
+
+    A generated EMF package attaches an annotation with one call, `addAnnotation(element,
+    source, details)`, and the details are a string array of keys and values in turn: `ru`, the
+    Russian spelling of a name, `en`, the English one. The array is read element by element, as
+    the code stores it: the value of a slot is the constant pushed right before the store, so a
+    null value, or one the code computes, is dropped together with its key and cannot shift the
+    keys after it.
+    The source is not part of the details, and it is not pushed as a constant every time anyway -
+    the code keeps it in a local after the first use. An array of another type, such as the
+    references some annotations carry, is not the details either.
+    """
+    pool, position = constant_pool(blob)
+    found: list[dict[str, str]] = []
+    for code in _method_code(blob, pool, position):
+        # The string arrays built since the previous annotation; the last one is its details.
+        arrays: list[list[str | None]] = []
+        filling: list[str | None] | None = None
+        previous: tuple[int, int] = (-1, -1)
+        for opcode, operand in _walk(code):
+            if opcode == _ANEWARRAY:
+                filling = [] if text(pool, operand) == _STRING_CLASS else None
+                if filling is not None:
+                    arrays.append(filling)
+            elif opcode == _AASTORE and filling is not None:
+                stored = previous[0] in (_LDC, _LDC_W)
+                filling.append(text(pool, previous[1]) if stored else None)
+            elif opcode in _INVOKE:
+                owner_and_name = called_method(pool, operand) or ""
+                if owner_and_name.rpartition(".")[2] == ANNOTATION_CALL:
+                    if arrays:
+                        items = arrays[-1]
+                        found.append({
+                            key: value for key, value in zip(items[0::2], items[1::2])
+                            if key is not None and value is not None
+                        })
+                    arrays, filling = [], None
+            previous = (opcode, operand)
+    return found
 
 
 #: How a declaration of the platform says that a member is deprecated: an annotation object is

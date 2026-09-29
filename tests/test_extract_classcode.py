@@ -310,3 +310,133 @@ def test_the_class_names_itself_and_the_classes_it_refers_to():
     assert classcode.own_class(blob) == "demo/acme/AcmeRightG5Type"
     assert "demo/acme/AcmeRightG5Enum" in classcode.referenced_classes(blob)
     assert classcode.own_class(b"\xca\xfe") is None
+
+
+# --- the annotations of a generated EMF package ---------------------------------------------
+
+
+EMF_OWNER = "demo/model/impl/DemoPackageImpl"
+_ANNOTATE = "(Lorg/eclipse/emf/ecore/ENamedElement;Ljava/lang/String;[Ljava/lang/String;)V"
+_URI = "demo/emf/URI"
+
+
+class _InternedPool(_Pool):
+    """The pool a compiler writes: one entry per distinct string, in the order of first use."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.interned: dict[str, int] = {}
+
+    def string(self, value: str) -> int:
+        if value not in self.interned:
+            self.interned[value] = super().string(value)
+        return self.interned[value]
+
+
+def _index(position: int) -> bytes:
+    """The instruction that pushes an array index: `iconst_<n>` up to five, `bipush` beyond."""
+    return bytes([0x03 + position]) if position <= 5 else bytes([0x10, position])
+
+
+def _package_of(annotations: list[list], base: str = classcode.EMF_PACKAGE,
+                source: str = "", references: bool = False) -> bytes:
+    """A package class whose single method adds each annotation, the way EMF generates it.
+
+    An annotation is the list of its details, keys and values in turn; an item is a string the
+    code pushes by `ldc`, None for `aconst_null`, or ("static", name) for a value read from a
+    static field. `source`, when given, is pushed before the first array, as the first
+    annotation of a source pushes it. `references` adds an array of another type after each
+    details array, the way an annotation with references is built. The pool is interned: every
+    string stands once, where the code first mentions it - the layout that misleads the
+    neighbourhood reading.
+    """
+    pool = _InternedPool()
+    code_name = pool.text("Code")
+    string_class = pool.klass("java/lang/String")
+    uri_class = pool.klass(_URI)
+    annotate = pool.method(EMF_OWNER, classcode.ANNOTATION_CALL, _ANNOTATE)
+    create_uri = pool.method(_URI, "createURI", "(Ljava/lang/String;)L" + _URI + ";")
+    body = bytearray()
+    for number, details in enumerate(annotations):
+        body += bytes([0x2A, 0x01])                                   # aload_0, aconst_null
+        if source and not number:
+            body += bytes([0x13]) + struct.pack(">H", pool.string(source))
+        body += _index(len(details))
+        body += bytes([0xBD]) + struct.pack(">H", string_class)        # anewarray String
+        for position, item in enumerate(details):
+            body += bytes([0x59]) + _index(position)                  # dup, the index
+            if item is None:
+                body += bytes([0x01])                                 # aconst_null
+            elif isinstance(item, tuple):
+                body += bytes([0xB2]) + struct.pack(">H", _field(pool, EMF_OWNER, item[1]))
+            else:
+                body += bytes([0x13]) + struct.pack(">H", pool.string(item))
+            body += bytes([0x53])                                     # aastore
+        if references:
+            body += _index(1) + bytes([0xBD]) + struct.pack(">H", uri_class)
+            body += bytes([0x59]) + _index(0)
+            body += bytes([0x13]) + struct.pack(">H", pool.string("demo://model"))
+            body += bytes([0xB8]) + struct.pack(">H", create_uri)     # invokestatic
+            body += bytes([0x53])
+        body += bytes([0xB6]) + struct.pack(">H", annotate)           # invokevirtual
+    body += bytes([0xB1])  # return
+    code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
+    this_class = pool.klass(EMF_OWNER)
+    super_class = pool.klass(base)
+    method = struct.pack(">HHHH", 0, pool.text("createAnnotations"), pool.text("()V"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0)
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+#: The standard attributes of an exchange plan node as its package annotates them - the Russian
+#: spelling first, as most annotations of the distribution are written.
+NODE_ANNOTATIONS = [
+    ["ru", "НомерОтправленного", "en", "SentNumber"],
+    ["ru", "НомерПринятого", "en", "ReceivedNumber"],
+    ["ru", "ЭтотУзел", "en", "ThisNode"],
+]
+
+
+def test_the_details_of_an_annotation_are_read_by_their_keys():
+    blob = _package_of(NODE_ANNOTATIONS + [["en", "Attribute", "ru", "Реквизит"]],
+                       source="demo://presentation")
+
+    assert classcode.annotation_details(blob) == [
+        {"ru": "НомерОтправленного", "en": "SentNumber"},
+        {"ru": "НомерПринятого", "en": "ReceivedNumber"},
+        {"ru": "ЭтотУзел", "en": "ThisNode"},
+        {"en": "Attribute", "ru": "Реквизит"},
+    ]
+
+
+def test_a_value_the_code_does_not_push_as_a_constant_drops_its_key_alone():
+    """A null value, or one read from a field, has no constant to read: the key goes with it,
+    and the keys after it keep their values."""
+    blob = _package_of([
+        ["ru", "Файлы", "en", None, "from", "8.0"],
+        ["ru", ("static", "NAME_RU"), "en", "Files"],
+    ])
+
+    assert classcode.annotation_details(blob) == [
+        {"ru": "Файлы", "from": "8.0"},
+        {"en": "Files"},
+    ]
+
+
+def test_an_array_of_references_is_not_the_details():
+    blob = _package_of([["ru", "Код", "en", "Code"]], references=True)
+
+    assert classcode.annotation_details(blob) == [{"ru": "Код", "en": "Code"}]
+
+
+def test_the_package_names_the_class_it_extends():
+    assert classcode.super_class(_package_of(NODE_ANNOTATIONS)) == classcode.EMF_PACKAGE
+    assert classcode.super_class(_class_of([])) == "java/lang/Object"
+    assert classcode.super_class(b"\xca\xfe") is None

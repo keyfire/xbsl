@@ -216,6 +216,77 @@ def test_the_common_table_comes_back_sorted_by_the_russian_key():
     assert list(common.keys()) == sorted(common.keys())
 
 
+# --- a generated EMF package states its pairs in annotations --------------------------------
+
+
+def _scan_classes(classes: dict[str, bytes]):
+    """_scan_meta_objects over one platform jar holding the given classes."""
+    import io
+    import zipfile
+
+    from xbsl.extract.terms import _scan_meta_objects
+
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as z:
+        for name, blob in classes.items():
+            z.writestr(name, blob)
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
+    return _scan_meta_objects(zipfile.ZipFile(car))
+
+
+def test_the_pairs_of_an_emf_package_are_spelled_as_its_annotations_state_them():
+    """The annotations write the Russian spelling first, and the pool keeps that order: read
+    by adjacency, the English of one annotation met the Russian of the next, and this node of an
+    exchange plan got `ReceivedNumber`. The same class under another base is read by adjacency
+    alone, and shows the shift."""
+    from test_extract_classcode import EMF_OWNER, NODE_ANNOTATIONS, _package_of
+
+    name = EMF_OWNER + ".class"
+    members, common, _types = _scan_classes({name: _package_of(NODE_ANNOTATIONS)})
+    shifted, _common, _types = _scan_classes(
+        {name: _package_of(NODE_ANNOTATIONS, base="java/lang/Object")})
+
+    assert members["DemoPackageImpl"] == {
+        "НомерПринятого": "ReceivedNumber", "ЭтотУзел": "ThisNode",
+    }
+    assert common["ЭтотУзел"] == "ThisNode"
+    assert shifted["DemoPackageImpl"] == {
+        "НомерПринятого": "SentNumber", "ЭтотУзел": "ReceivedNumber",
+    }
+
+
+def test_a_word_no_annotation_of_the_package_pairs_is_no_pair():
+    """A property the package annotates in Russian alone stands next to the English name of
+    the previous annotation, and the neighbourhood took that name for its spelling."""
+    from test_extract_classcode import EMF_OWNER, _package_of
+
+    annotations = [["ru", "Тип", "en", "Type"], ["ru", "Длина"]]
+    members, common, _types = _scan_classes({EMF_OWNER + ".class": _package_of(annotations)})
+    neighbours, _common, _types = _scan_classes(
+        {EMF_OWNER + ".class": _package_of(annotations, base="java/lang/Object")})
+
+    assert "DemoPackageImpl" not in members
+    assert "Длина" not in common
+    assert neighbours["DemoPackageImpl"] == {"Длина": "Type"}
+
+
+def test_a_word_the_package_states_two_ways_keeps_only_a_neighbour_it_states():
+    """Two properties of one Russian name: the neighbour that is one of the stated spellings
+    stays, a third one is dropped - the package cannot say which of the two it would be."""
+    from test_extract_classcode import EMF_OWNER, _package_of
+
+    two_ways = [["ru", "Метрика", "en", "Metric"], ["ru", "Метрика", "en", "UpdatingMetric"]]
+    confirmed, _common, _types = _scan_classes({EMF_OWNER + ".class": _package_of(
+        [["ru", "Узел", "en", "Node"], ["en", "Metric", "ru", "Метрика"], two_ways[1]])})
+    stranger, _common, _types = _scan_classes({EMF_OWNER + ".class": _package_of(
+        [["ru", "ПараметрМетрики", "en", "MetricParameter"], *two_ways])})
+
+    assert confirmed["DemoPackageImpl"] == {"Метрика": "Metric"}
+    assert "DemoPackageImpl" not in stranger
+
+
 # --- the kind table: the fullest copy of the serializer enum, not the first ---------------
 
 

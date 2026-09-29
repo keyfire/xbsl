@@ -56,6 +56,9 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The translator spells the standard attributes of an exchange plan in `ComputePermissionsBy`.**
   The number of the sent message and this node stayed Russian in the list, so the English exchange
   plan named fields its object does not have. Now the kind spells them: `SentNumber`, `ThisNode`.
+- **`xbsl extract` no longer pairs a name of an element model with its neighbour.** Such a class
+  writes the Russian name first, and this node of an exchange plan read as `ReceivedNumber`; a dozen
+  words of the compiler dictionary were wrong as well. Run `xbsl extract --dist ... --only terms`.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
