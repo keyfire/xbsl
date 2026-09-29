@@ -105,6 +105,9 @@ _DECLARES_MEMBERS_RE = re.compile(rb"CtMeta(Method|Prop)Builder")
 #: A class states TERMS - a type and its members as pairs stored into named static fields
 #: (classcode.declared_terms) - only if it references one of the term factories.
 _DECLARES_TERMS_RE = re.compile(rb"Term|QNames")
+#: A class extends the EMF package only if its pool names that class - the same cheap test,
+#: taken before the class file is read for its base (see _checked_by_annotations).
+_EMF_PACKAGE_MARK = classcode.EMF_PACKAGE.encode()
 #: Jars of the platform itself - the only ones that can hold such classes.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
@@ -360,7 +363,7 @@ def _scan_meta_objects(
                 if _EN_NAME_RE.match(en) and en not in _CLASS_FILE_NAMES
                 and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru)
             ]
-            if classcode.super_class(data) == classcode.EMF_PACKAGE:
+            if _EMF_PACKAGE_MARK in data and classcode.super_class(data) == classcode.EMF_PACKAGE:
                 pairs = _checked_by_annotations(data, pairs)
             if inner == _QUERY_TERMS_CLASS:
                 # In the query parser's own class a keyword the platform has NO English
