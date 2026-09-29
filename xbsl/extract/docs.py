@@ -87,6 +87,28 @@ _CODE_SLOT_RE = re.compile(r"\x00(\d+)\x00")  # placeholder of a stashed code bl
 # silently corrupting both the text and the index (e.g. "Аннот\x00ации"); cut them out on input.
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f​‌‍﻿­]")
 
+# Card grids (`docs-cards`): the site lays them out with CSS, and unwrapped they run together - the
+# links of a grid into one word, a card header into the text after it - while the icon that marks an
+# example as right or wrong is an image the extraction drops. Link cards become a list, the icon of an
+# example becomes a label, the header of any other card becomes a paragraph of its own.
+_LINK_CARD_RE = re.compile(
+    r'<div class="docs-card"><a class="docs-card__wrapping-link" href="([^"]*)">(.*?)</a></div>', re.S
+)
+_CARD_HEADER_RE = re.compile(r'<div class="docs-card__header">(.*?)</div>', re.S)
+_CARD_LIST_RE = re.compile(r'<div class="docs-cards(?: [^"]*)?">((?:\s*<li>.*?</li>)+)\s*</div>', re.S)
+_VERDICT_ICON_RE = re.compile(r'<img\b[^>]*\bsrc="[^"]*/(in)?correct-32\.svg"[^>]*>')
+# A code fragment of a card: one div per line, the indentation given as a left padding of 20px a step.
+_FRAGMENT_RE = re.compile(
+    r'<div class="docs-card__code-fragment">'
+    r'(?:<div class="docs-card__code-fragment-vertical-line[^"]*"></div>)?'
+    r'<div class="docs-card__code-fragment-content">'
+    r'((?:<div class="docs-card__code-fragment-line"[^>]*>.*?</div>)*)</div></div>',
+    re.S,
+)
+_FRAGMENT_LINE_RE = re.compile(
+    r'<div class="docs-card__code-fragment-line"(?: style="padding-left:(\d+)px")?>(.*?)</div>', re.S
+)
+
 _QUALIFIED_RE = re.compile(r"<code>(Стд(?:::[^<]+)*)</code>")
 #: Reference (type/member) pages, told from the guide topics by their path in the site.
 _REFERENCE_PREFIX = "stdlib/"
@@ -133,6 +155,49 @@ def _rewrite_img(m: re.Match) -> str:
     return ""
 
 
+def _flat(html: str) -> str:
+    """Markup reduced to its text on one line (tags dropped, whitespace collapsed)."""
+    return _WS_RE.sub(" ", _TAG_RE.sub(" ", html)).strip()
+
+
+def _fragment_code(content: str) -> str:
+    """The lines of a card's code fragment as a code block, a padding step of 20px = four spaces."""
+    lines = [
+        " " * (4 * (int(pad or 0) // 20)) + unescape(_TAG_RE.sub("", text))
+        for pad, text in _FRAGMENT_LINE_RE.findall(content)
+    ]
+    return "<pre><code>" + escape("\n".join(lines)) + "</code></pre>"
+
+
+def _cards(region: str, keep_code) -> str:
+    """Card grids as markup that stays readable once the wrappers are unwrapped (see _LINK_CARD_RE).
+
+    `keep_code` stashes a finished code block and returns its placeholder, so that the whitespace
+    normalization of the region does not flatten the lines of a card's code fragment.
+    """
+
+    def link_card(m: re.Match) -> str:
+        # A link card -> a list item: the header is the link, the rest of the card follows a dash.
+        href, inner = m.group(1), m.group(2)
+        codes = "".join(keep_code(_fragment_code(f.group(1))) for f in _FRAGMENT_RE.finditer(inner))
+        inner = _FRAGMENT_RE.sub(" ", inner)
+        header = _CARD_HEADER_RE.search(inner)
+        title = _flat(header.group(1)) if header else ""
+        rest = _flat(_CARD_HEADER_RE.sub(" ", inner, count=1)) if header else _flat(inner)
+        if not title:
+            title, rest = rest, ""
+        item = f'<a href="{href}">{title}</a>' + (f" – {rest}" if rest else "")
+        return f"<li>{item}{codes}</li>"
+
+    region = _LINK_CARD_RE.sub(link_card, region)
+    region = _FRAGMENT_RE.sub(lambda f: keep_code(_fragment_code(f.group(1))), region)
+    region = _CARD_LIST_RE.sub(r"<ul>\1</ul>", region)
+    region = _VERDICT_ICON_RE.sub(
+        lambda m: f"<p><strong>{'Неправильно' if m.group(1) else 'Правильно'}:</strong></p>", region
+    )
+    return _CARD_HEADER_RE.sub(r"<p><strong>\1</strong></p>", region)
+
+
 def _clean(raw: str) -> tuple[str, str]:
     """Cleaned content-block HTML and flat text for the index (both empty if there is no block)."""
     start = raw.find(_REGION_START)
@@ -145,11 +210,12 @@ def _clean(raw: str) -> tuple[str, str]:
     # eats the newlines and indentation inside examples (vital for YAML). Restored at the very end.
     codes: list[str] = []
 
-    def _stash(m: re.Match) -> str:
-        codes.append(_flatten_pre(m))
+    def _keep(block: str) -> str:
+        codes.append(block)
         return f"\x00{len(codes) - 1}\x00"
 
-    region = _PRE_RE.sub(_stash, region)
+    region = _PRE_RE.sub(lambda m: _keep(_flatten_pre(m)), region)
+    region = _cards(region, _keep)                  # before the images: a verdict icon is an image
     region = _COMMENT_RE.sub("", region)
     region = _SVG_RE.sub("", region)
     region = _IMG_RE.sub(_rewrite_img, region)      # keep the image (src -> asset id)

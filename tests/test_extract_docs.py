@@ -92,6 +92,79 @@ def test_text_has_no_tags():
     assert "Массив" in text and "знч Х = 1" in text
 
 
+def _cards_html(body: str) -> str:
+    """The cleaned html of a content block that holds `body`."""
+    return ex._clean(f'<article><div class="theme-doc-markdown markdown">{body}</div></article>')[0]
+
+
+LINK_CARDS = (
+    '<h3 id="d">Данные</h3><div class="docs-cards">'
+    '<div class="docs-card"><a class="docs-card__wrapping-link" href="/docs/help/topics/tasks/">'
+    '<div class="docs-card__container"><div class="docs-card__icon-container">'
+    '<img src="/docs/help/img/gray/Catalog_gray.svg" class="docs-card__icon" /></div>'
+    '<div class="docs-card__header">Задачи</div></div></a></div>'
+    '<div class="docs-card"><a class="docs-card__wrapping-link" href="/docs/help/topics/steps/">'
+    '<div class="docs-card__container"><div class="docs-card__header">Шаги</div>'
+    "<p>Шаги задачи по порядку</div></a></div></div>"
+)
+
+
+def test_link_cards_become_a_list():
+    # Unwrapped, the cards of a grid ran together into one word ("ЗадачиШаги").
+    html = _cards_html(LINK_CARDS)
+    assert (
+        '<ul><li><a href="#topics/tasks">Задачи</a></li>'
+        '<li><a href="#topics/steps">Шаги</a> – Шаги задачи по порядку</li></ul>'
+    ) in html
+    assert "ЗадачиШаги" not in html and "<img" not in html
+
+
+def test_code_fragment_of_a_link_card_stays_code():
+    # The lines of a fragment are divs with a left padding of 20px a step; flattened, they ran into
+    # the description of the card.
+    body = (
+        '<div class="docs-cards cards-with-code"><div class="docs-card">'
+        '<a class="docs-card__wrapping-link" href="/docs/help/topics/tasks/"><div class="docs-card__container">'
+        '<div class="docs-card__header">Задачи</div><div class="docs-card__code-fragment">'
+        '<div class="docs-card__code-fragment-vertical-line docs-card__code-fragment-vertical-line_orange"></div>'
+        '<div class="docs-card__code-fragment-content">'
+        '<div class="docs-card__code-fragment-line" style="padding-left:0px">если Готово</div>'
+        '<div class="docs-card__code-fragment-line" style="padding-left:20px">Закрыть()</div>'
+        '</div></div><p>Как закрыть задачу</div></a></div></div>'
+    )
+    html = _cards_html(body)
+    assert (
+        '<ul><li><a href="#topics/tasks">Задачи</a> – Как закрыть задачу'
+        "<pre><code>если Готово\n    Закрыть()</code></pre></li></ul>"
+    ) in html
+
+
+def test_example_cards_keep_the_verdict():
+    # The only mark of a right or a wrong example is its icon, an image the extraction drops.
+    body = (
+        '<div class="docs-cards"><div class="docs-card"><div class="docs-card__container">'
+        '<div class="docs-card__icon-container"><img src="/docs/help/img/correct-32.svg" '
+        'class="docs-card__icon" /></div><pre class="prism-code"><code>А = 1</code></pre></div></div>'
+        '<div class="docs-card"><div class="docs-card__container">'
+        '<div class="docs-card__icon-container"><img src="/docs/help/img/incorrect-32.svg" '
+        'class="docs-card__icon" /></div><pre class="prism-code"><code>А = 2</code></pre></div></div></div>'
+    )
+    html = _cards_html(body)
+    assert html.index("<strong>Правильно:</strong>") < html.index("А = 1")
+    assert html.index("А = 1") < html.index("<strong>Неправильно:</strong>") < html.index("А = 2")
+
+
+def test_card_header_stays_apart_from_its_text():
+    body = (
+        '<div class="docs-cards"><div class="docs-card"><div class="docs-card__container">'
+        '<div class="docs-card__header">Заголовок</div><p>Текст карточки</div></div></div>'
+    )
+    html = _cards_html(body)
+    assert "<p><strong>Заголовок</strong></p>" in html
+    assert "ЗаголовокТекст" not in ex._clean(
+        f'<article><div class="theme-doc-markdown markdown">{body}</div></article>')[1]
+
+
 def test_no_content_block_returns_none():
     assert ex._record("x/index.html", "<html><body>нет разметки</body></html>", ORIGIN) is None
 
