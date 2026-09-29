@@ -2571,6 +2571,12 @@ _RATES_TOKENS = {"Курсы": "Rates", "УстарелоКурсы": "Deprecate
 _SETTINGS_RU = "ВидЭлемента: НаборКонстант\nИд: 1d1f5c60-0000-4000-8000-000000000fb2\nИмя: Настройки\n"
 _SETTINGS_TOKENS = {"Настройки": "Settings"}
 
+# A processing captions its interface section itself, with no block around the caption
+# (naming/presentation).
+_IMPORT_RU = "ВидЭлемента: Обработка\nИд: 1d1f5c60-0000-4000-8000-000000000fb3\nИмя: {name}\n"
+_IMPORT_CAPTION_RU = "Интерфейс:\n    Представление: {caption}\n"
+_IMPORT_TOKENS = {"ЗагрузкаЦен": "PriceImport", "УстарелоЗагрузкаЦен": "DeprecatedPriceImport"}
+
 
 #: A form whose module reads a module constant from a method compiled for the server
 #: (code/constant-unavailable): a component module lives in the client environment, and so
@@ -7115,6 +7121,30 @@ SEEDS: list[Seed] = [
                + _RATES_CAPTIONS_RU.format(list="(не используется) Курсы валют",
                                            record="(не используется) Курс валюты")},
         tokens=_RATES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a processing whose interface section carries no caption of its own",
+        files={"ЗагрузкаЦен.yaml": _IMPORT_RU.format(name="ЗагрузкаЦен")
+               + "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Истина\n"},
+        tokens=_IMPORT_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same processing captioned by its interface section",
+        files={"ЗагрузкаЦен.yaml": _IMPORT_RU.format(name="ЗагрузкаЦен")
+               + _IMPORT_CAPTION_RU.format(caption="Загрузка цен")},
+        tokens=_IMPORT_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a deprecated processing whose section caption lacks the mark",
+        files={"УстарелоЗагрузкаЦен.yaml": _IMPORT_RU.format(name="УстарелоЗагрузкаЦен")
+               + _IMPORT_CAPTION_RU.format(caption="Загрузка цен")},
+        tokens=_IMPORT_TOKENS,
     ),
     Seed(
         rule="yaml/id-required",

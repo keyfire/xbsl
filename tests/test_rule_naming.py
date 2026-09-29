@@ -680,6 +680,56 @@ def test_presentation_non_periodic_constants_set_has_no_list_to_caption(periodic
     assert _lint(_PRESENTATION, "НаборКонстант", "Настройки", tail) == []
 
 
+_PROCESSING_CAPTION = "Интерфейс:\n    Представление: Загрузка цен\n"
+
+
+@pytest.mark.needs_data
+def test_presentation_processing_is_captioned_by_its_interface_section():
+    """2.1 names processings among the top-level elements. A processing has no top-level
+    property: its caption is the interface section's own, and it names both the form and the
+    command that opens it."""
+    d = _lint(_PRESENTATION, "Обработка", "ЗагрузкаЦен")
+    assert len(d) == 1
+    assert d[0].message.startswith(
+        "У элемента вида 'Обработка' нет заголовка в интерфейсе: Интерфейс.Представление – "
+    )
+    assert "верхнего уровня" not in d[0].message
+    assert _lint(_PRESENTATION, "Обработка", "ЗагрузкаЦен", _PROCESSING_CAPTION) == []
+    # The negative control: a section that names no caption satisfies nothing.
+    bare = "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Истина\n    Форма: ЗагрузкаЦенФорма\n"
+    assert len(_lint(_PRESENTATION, "Обработка", "ЗагрузкаЦен", bare)) == 1
+
+
+@pytest.mark.needs_data
+def test_presentation_processing_in_an_english_file():
+    head = f"ElementKind: Processing\nId: {_ID}\nName: PriceImport\n"
+
+    def lint(tail=""):
+        return engine.run_sources([engine.load_text("PriceImport.yaml", head + tail)],
+                                  select={_PRESENTATION})
+
+    assert lint("Interface:\n    Presentation: Price import\n") == []
+    assert len(lint()) == 1
+    i18n.set_lang("en")
+    d = lint("Interface:\n    IncludeInAutoInterface: True\n")
+    assert len(d) == 1
+    assert d[0].message.startswith(
+        "The element of kind 'Processing' has no caption in the interface: "
+        "Interface.Presentation - "
+    )
+
+
+@pytest.mark.needs_data
+def test_presentation_deprecated_processing_marks_its_caption():
+    d = _lint(_PRESENTATION, "Обработка", "УстарелоЗагрузкаЦен", _PROCESSING_CAPTION)
+    assert len(d) == 1
+    assert "заголовок Интерфейс.Представление не начинается с '(не используется)'" in d[0].message
+    # Reported at the caption itself, the fifth line of the description.
+    assert (d[0].line, d[0].col) == (5, 20)
+    marked = _PROCESSING_CAPTION.replace("Загрузка цен", "(не используется) Загрузка цен")
+    assert _lint(_PRESENTATION, "Обработка", "УстарелоЗагрузкаЦен", marked) == []
+
+
 @pytest.mark.needs_data
 def test_presentation_register_captions_in_an_english_file():
     head = f"ElementKind: InformationRegister\nId: {_ID}\nName: Prices\n"

@@ -17,8 +17,9 @@ What is checked (clauses of the standard):
 - 2.1 the element has its presentation filled in - a kind captioned in its interface section
   needs the captions the section carries: a catalog, a document and their kin the list and
   the object, an information register the list and the record (2.3), a constants set the
-  record, an accumulation register the list - and for a deprecated one the presentation and
-  every caption start with "(не используется)" (naming/presentation);
+  record, an accumulation register the list, a processing the section itself - and for a
+  deprecated one the presentation and every caption start with "(не используется)"
+  (naming/presentation);
 - section 3: the grammatical number of the name by element kind (naming/number) and the
   mandatory prefixes of certain kinds (naming/prefix-by-kind).
 
@@ -216,6 +217,12 @@ MESSAGES = {
         "en": "The element of kind '{vid}' has no record caption in the interface: {rec} - the "
               "record form and the command that opens it, in the singular. Without it the "
               "command carries the element name.",
+    },
+    "naming/presentation.missing-interface": {
+        "ru": "У элемента вида '{vid}' нет заголовка в интерфейсе: {own} – так называются форма "
+              "и команда, которая ее открывает. Без него обе называются именем элемента.",
+        "en": "The element of kind '{vid}' has no caption in the interface: {own} - it names "
+              "the form and the command that opens it. Without it both carry the element name.",
     },
     "naming/presentation.constant-field": {
         "ru": "{prop} верхнего уровня заголовка не заменяет: у набора констант в нем "
@@ -920,12 +927,15 @@ _CAPTION_BLOCKS = ("Список", "Объект", "Запись")
 _LIST_CAPTION = "Интерфейс.Список.Представление"
 _OBJECT_CAPTION = "Интерфейс.Объект.Представление"
 _RECORD_CAPTION = "Интерфейс.Запись.Представление"
+#: The caption of the section itself, with no block around it: a processing has one form and
+#: one command, and the metamodel gives its section a `Presentation` of its own.
+_OWN_CAPTION = "Интерфейс.Представление"
 
 #: The message for each (captions owed, captions left empty): the pair of a catalog and its
 #: kin (the list and the object) - where the top-level property is an attribute name, and the
 #: messages say it is none of them - the pair of an information register and a periodic
-#: constants set (the list and the record), the lone record caption of a constants set and
-#: the lone list caption of the list-only kinds.
+#: constants set (the list and the record), the lone record caption of a constants set, the
+#: lone list caption of the list-only kinds and the section caption of a processing.
 _MISSING_CAPTIONS = {
     ((_LIST_CAPTION, _OBJECT_CAPTION), (_LIST_CAPTION, _OBJECT_CAPTION)):
         "naming/presentation.missing-captions",
@@ -938,6 +948,7 @@ _MISSING_CAPTIONS = {
     ((_LIST_CAPTION, _RECORD_CAPTION), (_RECORD_CAPTION,)): "naming/presentation.missing-record",
     ((_LIST_CAPTION,), (_LIST_CAPTION,)): "naming/presentation.missing-list",
     ((_RECORD_CAPTION,), (_RECORD_CAPTION,)): "naming/presentation.missing-record",
+    ((_OWN_CAPTION,), (_OWN_CAPTION,)): "naming/presentation.missing-interface",
 }
 
 #: The message for one caption left empty, for a set of captions the table above does not
@@ -946,6 +957,7 @@ _MISSING_CAPTION = {
     _LIST_CAPTION: "naming/presentation.missing-list",
     _OBJECT_CAPTION: "naming/presentation.missing-object-caption",
     _RECORD_CAPTION: "naming/presentation.missing-record",
+    _OWN_CAPTION: "naming/presentation.missing-interface",
 }
 
 #: The kind whose list exists only when it is periodic: the list form of a constants set is
@@ -959,14 +971,17 @@ _DEPRECATED_MARK = "(не используется)"
 
 @lru_cache(maxsize=None)
 def _interface_captions(vid: str) -> tuple[str, ...]:
-    """The captions the interface section of `vid` declares, in _CAPTION_BLOCKS order.
+    """The captions the interface section of `vid` declares: the section's own first, then the
+    blocks in _CAPTION_BLOCKS order.
 
     Read from the metamodel: the class of the section names its blocks, and a block with a
-    `Presentation` of its own carries a caption. () for a kind without such a section.
+    `Presentation` of its own carries a caption. A section whose class holds `Presentation`
+    directly is captioned itself (_OWN_CAPTION). () for a kind without such a section.
     """
     record = metamodel.properties(vid).get("Интерфейс") or {}
     blocks = metamodel.properties_of_class(record["type"]) if record.get("type") else {}
-    return tuple(
+    own = (_OWN_CAPTION,) if "Представление" in blocks else ()
+    return own + tuple(
         f"Интерфейс.{block}.Представление" for block in _CAPTION_BLOCKS
         if "Представление" in metamodel.properties_of_class((blocks.get(block) or {}).get("type") or "")
     )
@@ -1062,7 +1077,7 @@ def _interface_findings(source: SourceFile, ref: NameRef | None, vid: str, data,
                 if prop is not None and "Реквизиты" not in metamodel.properties(vid)
                 and _filled(value_of(data, "Представление", vid)) else "")
         names = {"list": i18n.name(_LIST_CAPTION), "obj": i18n.name(_OBJECT_CAPTION),
-                 "rec": i18n.name(_RECORD_CAPTION)}
+                 "rec": i18n.name(_RECORD_CAPTION), "own": i18n.name(_OWN_CAPTION)}
         # A set of captions the table does not know gets a finding per caption left empty.
         for message_key in ([key] if key else [_MISSING_CAPTION[path] for path in missing]):
             yield _presentation_diag(source, ref, vid, message_key, tail=tail, **names)
@@ -1105,7 +1120,10 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
       presents the record; a probe build took any value there, a phrase included, and nothing
       in the automatic interface read it: the commands and the forms keep the name of the set
       until the interface captions them (the help topic on a constants set in the interface) -
-      so a filled top-level property does not count, and the message says why.
+      so a filled top-level property does not count, and the message says why;
+    - a processing captions its interface section itself (`Interface.Presentation`): 2.1 names
+      processings among the top-level elements, and a probe showed that caption on both the
+      command of the automatic interface and the title of the processing form.
 
     Without a caption the element name stands on the commands that open and create its forms.
     The deprecation mark applies where the value is a text: to the top-level text of a
