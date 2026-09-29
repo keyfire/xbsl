@@ -544,7 +544,7 @@ usage: xbsl add-subsystem [-h] [--representation REPRESENTATION] [--no-auto-inte
 
 ### `xbsl add-dependency`
 
-attach a library to the project (the Библиотеки section of Project.yaml); see also project-info for the libraries already attached
+attach a library to the project (the Libraries section of Project.yaml); see also project-info for the libraries already attached
 
 ```bash
 usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name version

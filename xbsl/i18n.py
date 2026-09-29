@@ -1531,7 +1531,7 @@ _CORE_MESSAGES = {
     "cli.help.scaf.add-dependency": {
         "ru": "подключить библиотеку к проекту (секция Библиотеки Проект.yaml); см. также "
               "project-info – какие библиотеки уже подключены",
-        "en": "attach a library to the project (the Библиотеки section of Project.yaml); see also "
+        "en": "attach a library to the project (the Libraries section of Project.yaml); see also "
               "project-info for the libraries already attached",
     },
     "cli.help.scaf.add-dependency-vendor": {
