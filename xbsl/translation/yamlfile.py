@@ -258,9 +258,11 @@ def _identifier_value(node, resolver, report, edits, scope: str = "", *,
 #: The type every object of an entity is, whatever its kind: its members are the fields an
 #: element has without declaring them, the reference among them.
 _ENTITY_OBJECT = "EntityObject"
+#: The collection of the attributes of an element, or of a tabular section of one.
+_ATTRIBUTES = "Реквизиты"
 
 
-def _field_name_value(node, resolver, report, edits) -> None:
+def _field_name_value(node, resolver, report, edits, field_kind: str = "") -> None:
     """A value naming a FIELD of the element (`AttributeName`): the list the permissions of an
     object are computed by, the fields of an index, the presentation field.
 
@@ -268,17 +270,39 @@ def _field_name_value(node, resolver, report, edits) -> None:
     every object has is a member of the entity object, and its owner spells it: the reference
     is `Reference` there, while the flat tables call the same word `Link` after a dot and
     nothing at all on its own - the translated list kept the Russian word and named no field
-    of the element. An entry of the dictionary still answers first, as it does in the code.
+    of the element. A standard attribute of the kind is spelled by the metamodel (see
+    _standard_attribute); `field_kind` is the kind whose fields the list names, empty where the
+    walk does not know it. An entry of the dictionary still answers first, as it does in the code.
     """
     value = node.value
     if (isinstance(value, str) and _IDENT_CHAIN_RE.fullmatch(value) and "." not in value
             and has_cyrillic(value) and value not in resolver.project_names
             and resolver.dictionary.token(value) is None):
-        member = platform_map.member_of(_ENTITY_OBJECT, value)
+        member = (platform_map.member_of(_ENTITY_OBJECT, value)
+                  or _standard_attribute(field_kind, value))
         if member:
             _set_scalar(node, member, edits)
             return
     _identifier_value(node, resolver, report, edits)
+
+
+def _standard_attribute(kind: str, name: str) -> str | None:
+    """The English spelling of a standard attribute of the element kind, or None.
+
+    A standard attribute has a class of its own in the metamodel, and the class carries the
+    name in both spellings (metamodel.dispatch_english): the code, the numbers of the sent and
+    the received message and this node of an exchange plan are `Code`, `SentNumber`,
+    `ReceivedNumber` and `ThisNode`. The flat tables keep one spelling per word and none where
+    the platform spells a word two ways, and that is where the list of an exchange plan came out
+    half translated, naming fields the English object does not have. The answer is per kind: a
+    word is a standard attribute of one kind and an ordinary name of another.
+    """
+    if not kind or not name:
+        return None
+    cls = metamodel.item_class(kind, ((_ATTRIBUTES, name),))
+    if not cls or metamodel.dispatch_name(cls) != name:
+        return None
+    return metamodel.dispatch_english(cls)
 
 
 def _dollar_ref(node, resolver, report, edits) -> bool:
@@ -589,12 +613,14 @@ def _walk_object(root, kind: str, resolver, report, edits, *, localized_strings:
     name = _mapping_value(root, "Имя") or ""
     scope = name if localized_strings else ""
     _walk_meta_mapping(root, cls, props, kind, resolver, report, edits, owner=name,
-                       namespace=name, localized_strings=localized_strings, scope=scope)
+                       namespace=name, localized_strings=localized_strings, scope=scope,
+                       field_kind=kind)
 
 
 def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner: str = "",
                        namespace: str = "",
-                       localized_strings: bool = False, scope: str = "") -> None:
+                       localized_strings: bool = False, scope: str = "",
+                       field_kind: str = "") -> None:
     # The node's own `Type`: what a default value standing next to it is judged against.
     sibling_type = _mapping_value(node, "Тип") or _mapping_value(node, "Type") or ""
     for knode, vnode in node.value:
@@ -618,7 +644,7 @@ def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner
                 _walk_localization_section(vnode, resolver, report, edits, scope=scope)
                 continue
             _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner, namespace,
-                        sibling_type=sibling_type)
+                        sibling_type=sibling_type, field_kind=field_kind)
         else:
             # A key the class does not describe - the default of an interface component's
             # property among them: the class knows the name and the type, nothing else.
@@ -627,7 +653,7 @@ def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner
 
 
 def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: str = "",
-                namespace: str = "", sibling_type: str = "") -> None:
+                namespace: str = "", sibling_type: str = "", field_kind: str = "") -> None:
     value_kind = record.get("kind")
     declared = str(record.get("type") or "")
     if _enum_default_edit(key, vnode, sibling_type, resolver, report, edits):
@@ -656,7 +682,7 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                 inner = resolved
         if inner:
             _walk_meta_mapping(vnode, inner, metamodel.properties_of_class(inner), None,
-                               resolver, report, edits, owner=owner)
+                               resolver, report, edits, owner=owner, field_kind=field_kind)
         else:
             _walk_component_mapping(vnode, resolver, report, edits, owner)
         return
@@ -682,9 +708,15 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                         report.note_name(f"{namespace}.{key}", own_name, translated,
                                          line, col)
                 if target:
-                    _walk_meta_mapping(item, target, metamodel.properties_of_class(target), None,
-                                       resolver, report, edits, owner=owner,
-                                       namespace=f"{namespace}.{own_name}" if own_name else namespace)
+                    # An item with attributes of its own - a tabular section - is the owner of
+                    # the fields its indexes name; the standard attributes of the element are not
+                    # among them.
+                    target_props = metamodel.properties_of_class(target)
+                    inner_fields = "" if _ATTRIBUTES in target_props else field_kind
+                    inner_namespace = f"{namespace}.{own_name}" if own_name else namespace
+                    _walk_meta_mapping(item, target, target_props, None, resolver, report, edits,
+                                       owner=owner, namespace=inner_namespace,
+                                       field_kind=inner_fields)
                 else:
                     _walk_component_mapping(item, resolver, report, edits, owner)
             elif isinstance(item, yaml.ScalarNode):
@@ -697,7 +729,7 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                     # came out as the property `Invoices.Link`, which names no type at all.
                     _type_scalar(item, resolver, report, edits)
                 elif item_cls == "AttributeName":
-                    _field_name_value(item, resolver, report, edits)
+                    _field_name_value(item, resolver, report, edits, field_kind)
                 else:
                     _identifier_value(item, resolver, report, edits)
         return
@@ -739,7 +771,7 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
         _enum_scalar(vnode, declared, resolver, report, edits)
         return
     if declared == "AttributeName":
-        _field_name_value(vnode, resolver, report, edits)
+        _field_name_value(vnode, resolver, report, edits, field_kind)
         return
     if declared in ("Term", "BslHandler"):
         # A handler names a method of the element's module - the method of a SOAP operation,

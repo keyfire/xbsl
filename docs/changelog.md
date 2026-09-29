@@ -60,6 +60,9 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The help of `--element-version` names the real default.** It said "the latest in the
   bundle", while the version comes from `XBSL_ELEMENT_VERSION` or, without it, from the `default`
   of `index.json` in the data root.
+- **The translator spells the standard attributes of an exchange plan in `ComputePermissionsBy`.**
+  The number of the sent message and this node stayed Russian in the list, so the English exchange
+  plan named fields its object does not have. Now the kind spells them: `SentNumber`, `ThisNode`.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
