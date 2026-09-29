@@ -114,7 +114,7 @@ usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore I
 The xbsl MCP server (stdio): linting, the Element documentation and metadata scaffolding as agent tools.
 
 ```bash
-usage: xbsl-mcp [-h]
+usage: xbsl mcp [-h]
 ```
 
 **Options**
@@ -123,7 +123,7 @@ usage: xbsl-mcp [-h]
 |---|---|
 | `-h, --help` | show this help message and exit |
 
-No flags: the server starts without parameters and talks over stdio. The diagnostics language follows XBSL_LANG (then the system locale, then ru). Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp
+No flags: the server starts without parameters and talks over stdio. The diagnostics language follows XBSL_LANG (then the system locale, then ru). xbsl-mcp runs this server behind a supervisor, so the session outlives an update of the engine. Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp
 
 ## `xbsl web`
 

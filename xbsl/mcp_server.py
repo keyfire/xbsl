@@ -2950,7 +2950,7 @@ def main() -> None:
     # The server takes no flags, but --help must still answer as a command: without a parser
     # `xbsl mcp --help` started the server and waited on stdin - a hang, not a help screen.
     i18n.ArgumentParser(
-        prog="xbsl-mcp",
+        prog="xbsl mcp",
         description=i18n.t("cli.help.mcp.description"),
         epilog=i18n.t("cli.help.mcp.epilog"),
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -857,9 +857,13 @@ _CORE_MESSAGES = {
     "cli.help.mcp.epilog": {
         "ru": "Флагов нет: сервер запускается без параметров и общается по stdio.\n"
               "Язык замечаний – переменная XBSL_LANG (иначе локаль системы, иначе ru).\n"
+              "xbsl-mcp запускает этот сервер за супервизором, и сессия переживает обновление "
+              "движка.\n"
               "Регистрация в Claude Code: claude mcp add xbsl -- xbsl-mcp",
         "en": "No flags: the server starts without parameters and talks over stdio.\n"
               "The diagnostics language follows XBSL_LANG (then the system locale, then ru).\n"
+              "xbsl-mcp runs this server behind a supervisor, so the session outlives an update "
+              "of the engine.\n"
               "Registration in Claude Code: claude mcp add xbsl -- xbsl-mcp",
     },
     # -- the supervisor of the MCP server (mcp_supervisor.py) --

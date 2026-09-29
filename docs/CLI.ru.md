@@ -114,7 +114,7 @@ usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore I
 MCP-сервер xbsl (stdio): линт, документация Элемента и создание метаданных как инструменты агента.
 
 ```bash
-usage: xbsl-mcp [-h]
+usage: xbsl mcp [-h]
 ```
 
 **Параметры**
@@ -123,7 +123,7 @@ usage: xbsl-mcp [-h]
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
 
-Флагов нет: сервер запускается без параметров и общается по stdio. Язык замечаний – переменная XBSL_LANG (иначе локаль системы, иначе ru). Регистрация в Claude Code: claude mcp add xbsl -- xbsl-mcp
+Флагов нет: сервер запускается без параметров и общается по stdio. Язык замечаний – переменная XBSL_LANG (иначе локаль системы, иначе ru). xbsl-mcp запускает этот сервер за супервизором, и сессия переживает обновление движка. Регистрация в Claude Code: claude mcp add xbsl -- xbsl-mcp
 
 ## `xbsl web`
 
