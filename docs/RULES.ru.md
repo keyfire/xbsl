@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 272.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 276.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -88,6 +88,7 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `yaml/name-matches-file` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Имя не совпадает с именем файла |
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Дубли Ид в проекте |
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта [доки](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/Catalog/Attributes/Name_ru/) |
+| `yaml/document-date-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Документ без стандартного реквизита `Дата` в `Реквизиты`: реквизит обязателен, и сборка отвергает документ [доки](https://1cmycloud.com/docs/help/topics/document-element/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ссылочный тип в позиции `Тип` без `?`: у ссылки нет значения по умолчанию, и компиляция падает [подробнее](#a-yaml-ref-needs-nullable) [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/union-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Составной тип без пустого значения в позиции `Тип` (`Строка|Число`): значение по умолчанию строится только для одного типа, и компиляция падает. Параметру записи или удаления пустое значение нужно и при одном типе (`Булево`) [подробнее](#a-yaml-union-needs-nullable) |
 | `yaml/contract-facet-mismatch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Ограничения реквизита, который переопределяет свойство контракта сущности, расходятся с ограничениями свойства (длина строки, длины и границы числа) – компиляция падает [подробнее](#a-yaml-contract-facet-mismatch) |
@@ -109,6 +110,8 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | То же для динамического списка, чью иерархию решает основная таблица (`ИспользуемаяИерархия` не задана): над справочником без иерархии, документом или регистром список плоский, и `Навигация: Отсутствует` теряет хвост [подробнее](#a-yaml-dynlist-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Голое `Выключено`, `ПоУмолчанию` или `Авто` в `ИспользуемаяИерархия` динамического списка: применение отвергает значение, у которого не указан тип. Исправление пишет узел с типом, а `Авто` убирает [подробнее](#a-yaml-hierarchy-bare-value) |
 | `yaml/compute-permissions-by` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `РасчетРазрешенийПо` против настроек доступа сущности: списка нет, а разрешение вычисляется для каждого объекта, или список есть, а так не вычисляется ни одно, – сборка отвергает и то и другое [подробнее](#a-yaml-compute-permissions-by) |
+| `yaml/compute-permissions-by-unknown` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Имя в `РасчетРазрешенийПо`, которое не поле элемента: реквизит с опечаткой или не объявленный, стандартный реквизит без записи в `Реквизиты`, табличная часть – сборка отвечает, что реквизит не найден [подробнее](#a-yaml-compute-permissions-by-unknown) |
+| `yaml/soap-handler-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Обработчик SOAP-сервиса, у которого в `Имя` буква не латиницей, пробельный символ или цифра в начале: имя становится операцией WSDL-описания, и сборка его отвергает [доки](https://1cmycloud.com/docs/help/topics/soap-service/) |
 | `yaml/component-member-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Имя повторяется среди собственных `Свойства` и `События` компонента интерфейса: оба списка – одно пространство имен, и сборка отвергает имя как неуникальное [подробнее](#a-yaml-component-member-unique) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Комментарий `#` в описании элемента: визуальный редактор пишет файл заново из модели и сохраняет только документирующий комментарий `##` в первых строках узла, у которого он есть (элемент, компонент, объявленное свойство, табличная часть и подобные). Автоисправление меняет маркер у блока, который уже стоит на таком месте, и переносит внутрь узла блок, стоящий перед `-` элемента списка (кроме экземпляра компонента проекта в списке: на нём комментарий ломает сборку); остальное называется вместе с ближайшим узлом, у которого комментарий есть |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `##` стоит там, где среда разработки его не читает: перед `-` элемента списка, над отдельным свойством, у узла без документирующего комментария (стандартный реквизит вроде `Код` и `Наименование`, команда, поле динамического списка). Он пропадёт так же, как комментарий `#`. Отдельный случай – экземпляр компонента проекта или библиотеки в списке: с блоком `##` на таком узле сервер не применяет проект, и правило называет эту причину |
@@ -275,6 +278,17 @@ calculating access permissions without configuring access permissions calculatio
 документа, хранилища настроек и регистра сведений обоих видов. Правило судит виды, у настроек
 доступа которых это свойство вообще есть: справочник, документ, план обмена, хранилище настроек,
 интегрируемое приложение и регистры.
+
+<a id="a-yaml-compute-permissions-by-unknown"></a>**`yaml/compute-permissions-by-unknown`.**
+Сборка отвечает `Attribute "X" is not found` на имени в списке. Пробник на сервере дал
+такой ответ для реквизита с опечаткой, для `Наименование` справочника и `Номер` документа,
+не записанных в `Реквизиты`, для `Ид` и для табличной части, а принял объявленный
+реквизит, измерения, ресурсы и реквизиты регистра, ссылку, `Родитель` иерархического
+справочника и `Период` периодического регистра. Поля элемента – то, что он объявляет, и
+служебные поля, которые у него есть без объявления. Этот набор взят с запасом, поэтому
+необъявленный `Номер` документа правило оставляет сборке, как и `ПометкаУдаления`: пробник
+принял это имя и затем уронил все применение внутри сервера. Правило судит справочник,
+документ и регистры – виды, которые проверил пробник.
 
 <a id="a-yaml-component-member-unique"></a>**`yaml/component-member-unique`.** Компонент интерфейса
 объявляет собственные свойства и собственные события по имени, и компилятор держит оба списка в одном
@@ -620,7 +634,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/component-in-server-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение `Компонент.Член(...)` к компоненту интерфейса из кода, компилируемого для сервера: тип компонента живёт на клиенте [подробнее](#d-code-component-in-server-context) [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `yaml/delete-current-needs-immediate` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `ПриУдаленииОбъектаПоСсылке: УдалятьТекущий` у реквизита элемента, который удаление только помечает: компиляция такую пару отвергает [подробнее](#d-yaml-delete-current-needs-immediate) [доки](https://1cmycloud.com/docs/help/topics/data-deletion/) |
 | `code/access-context-read-noop` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Расширение контекста доступа правом Чтения для типа с `Чтение: РазрешеноВсем`: выдавать нечего, а вызов создаёт впечатление защищённости [подробнее](#d-code-access-context-read-noop) [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
-| `code/per-object-permissions-need-common` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Объект вычисляет разрешения для каждого объекта, но в его модуле нет обработчика `ВычислитьРазрешенияДоступа` – общий расчёт обязателен и при per-object, пусть и возвращает пустой массив [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| `code/per-object-permissions-need-common` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Объект вычисляет разрешения для каждого объекта, но в его модуле нет обработчика `ВычислитьРазрешенияДоступа` – общий расчет обязателен и при per-object, пусть и возвращает пустой массив. Только без списков обработчиков в данных: с ними тот же обработчик ошибкой называет `code/mandatory-handler-missing` [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 | `code/permission-field-not-declared` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | В `ВычислитьРазрешенияДоступаДляОбъектов` читается поле, которого нет среди `РасчетРазрешенийПо`, либо объявленное поле берётся через `Сущность` вместо `Запись` [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 | `code/permission-handlers-need-recalc` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Модуль объявляет обработчик разрешений, а `ПересчитатьРазрешенияДоступа` этой сущности нигде не вызван: платформа обработчик сама не вызывает, и правка прав молча не действует [подробнее](#d-code-permission-handlers-need-recalc) [доки](https://1cmycloud.com/docs/help/topics/recalculate-access-permissions-and-keys/) |
 | `code/access-key-handler-flavour` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Вычисляемому ключу доступа нужен обработчик `ПроверитьНаличиеКлючейДоступа` в модуле менеджера; ключ с `РучнаяВыдача: Истина` не принимает этот обработчик [доки](https://1cmycloud.com/docs/help/topics/manage-access-control/) |
@@ -638,6 +652,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к члену, которого у коллекции строк табличной части нет: коллекция это `Массив<Сущность.Секция>` [подробнее](#d-code-unknown-tabular-member) |
 | `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Вызов глобального имени вне его окружения: `Сообщить` в серверном модуле, вычисление выражения в клиентском методе без `@НаСервере` [подробнее](#d-code-global-unavailable) [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/type-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Стандартный тип там, где его нет по документации: серверный `Кодировки` в клиентском методе и обратный случай [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/constant-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Константа модуля в методе, который компилируется для окружения, где ее нет: константа модуля формы без аннотации живет на клиенте, и метод `@НаСервере` того же модуля ее не видит. Быстрое исправление дает константе недостающую сторону [подробнее](#d-code-constant-unavailable) [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная, параметр или метод с именем элемента проекта: объявление закрывает обращение к элементу из этой области [подробнее](#d-style-shadow-project-name) [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная `знч`, `пер` или `исп` с именем свойства объекта, с которым работает метод: имя разрешается в переменную, и ни чтение, ни присваивание до свойства не доходят [подробнее](#d-style-shadow-own-property) [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Член составного типа, который уже покрыт другим: повтор, второе пустое значение или член под более широким соседом [подробнее](#d-style-redundant-union-member) [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
@@ -1025,6 +1040,20 @@ HTTP-сервиса проекта или ресурсом. Адрес data в �
 на сервере. `@НаКлиенте` и `@НаСервере` переопределяют окружение модуля, а доступность имён
 берётся из строк "Доступность" пакетов глобального контекста.
 
+<a id="d-code-constant-unavailable"></a>**`code/constant-unavailable`.** Константа существует
+в окружении, которое называют ее аннотации, а без них – в окружении своего модуля, и метод
+компилируется для окружений своих аннотаций или модуля. Применение отвечает
+`Variable "X" is not defined` с меткой той стороны, где константы нет. Один проект-пробник
+проверил все сочетания в форме, команде и общем модуле обоих окружений: метод `@НаСервере`
+(один, с `@ДоступноСКлиента` или с `@Контекстный`), метод с обеими аннотациями и метод без
+аннотаций в модуле обоих окружений получили отказ на голом имени, на имени внутри лямбды
+и на короткой интерполяции `%ИМЯ`, а зеркальный случай – константа `@НаСервере` в
+клиентском методе – тоже. Окружение модуля берется из yaml рядом с ним, поэтому правило
+остается файловым. Общий модуль только клиентского окружения не проверяется: `@НаСервере`
+он отвергает сам. Быстрое исправление ни одну сторону не отнимает: константа клиентского
+модуля без аннотации получает `@НаСервере @НаКлиенте`, с аннотацией – недостающую рядом со
+своей, и исправленный так пробник скомпилировался.
+
 <a id="d-style-shadow-project-name"></a>**`style/shadow-project-name`.** Пример: `знч Склады` при
 справочнике `Склады`. Платформенные имена параметров обработчиков с именами проекта не
 пересекаются.
@@ -1169,7 +1198,10 @@ HTTP-сервиса проекта или ресурсом. Адрес data в �
 элемента внутри его имени (`ОтчетЗависшиеЗадачи`), слова-пустышки (`Управление`, `Менеджер`),
 постфикс окружения у общего модуля (`ОбменДаннымиКлиентИСервер` – окружение задаётся свойством),
 булев реквизит через отрицание (`НетОшибок` вместо `Успешно`), незаполненное `Представление` и
-обязательные префиксы отдельных видов (`КлючДоступа`, `ПравоНа`, `Навигация`).
+обязательные префиксы отдельных видов (`КлючДоступа`, `ПравоНа`, `Навигация`). У справочника,
+документа и других видов, где `Представление` верхнего уровня называет реквизит, заголовки
+задаются в разделе интерфейса, и нужны оба: `Интерфейс.Список.Представление` для списка и
+`Интерфейс.Объект.Представление` для объекта.
 
 ### Соглашения по написанию кода (правила `style/`)
 

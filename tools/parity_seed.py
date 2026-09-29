@@ -2553,6 +2553,138 @@ VisibilityScope: InProject
 _SUMMARY_TOKENS = {"СводкаЗаявок": "ApplicationSummary", "ПериодСводки": "SummaryPeriod"}
 
 
+# A catalog names its presentation attribute at the top level and keeps its captions in the
+# interface section: the list in the plural, the object in the singular (naming/presentation).
+_PRICES_NAMED_RU = _PRICES_RU + "Представление: Наименование\n"
+_PRICES_LIST_CAPTION_RU = "Интерфейс:\n    Список:\n        Представление: Цены\n"
+_PRICES_OBJECT_CAPTION_RU = "    Объект:\n        Представление: Цена\n"
+
+
+#: A form whose module reads a module constant from a method compiled for the server
+#: (code/constant-unavailable): a component module lives in the client environment, and so
+#: does a constant it declares without an environment annotation.
+_CONST_CARD_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000fa1
+Имя: КарточкаЗаявки
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+"""
+_CONST_CARD_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000fa1
+Name: ApplicationCard
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+"""
+_CONST_MODULE_RU = """\
+{annotations}конст ПРЕФИКС_ЗАЯВКИ = "З-"
+
+@НаСервере @ДоступноСКлиента
+статический метод СобратьКод(): Строка
+    возврат ПРЕФИКС_ЗАЯВКИ
+;
+"""
+_CONST_MODULE_EN = """\
+{annotations}const APPLICATION_PREFIX = "З-"
+
+@OnServer @AvailableFromClient
+static method BuildCode(): String
+    return APPLICATION_PREFIX
+;
+"""
+_CONST_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "ПРЕФИКС_ЗАЯВКИ": "APPLICATION_PREFIX",
+                 "СобратьКод": "BuildCode"}
+#: A SOAP service with one handler (yaml/soap-handler-name); the name is Latin in both trees,
+#: so the verdict does not depend on how the dictionary spells a project name.
+_SOAP_SERVICE_RU = """\
+ВидЭлемента: SoapСервис
+Ид: 1d1f5c60-0000-4000-8000-000000000fa2
+Имя: СервисЗаявок
+ОбластьВидимости: ВПроекте
+ПространствоИменСервиса: https://example.com/applications
+КорневойUrl: applications
+Обработчики:
+    -
+        Имя: {handler}
+        Метод: ПринятьЗаявку
+"""
+_SOAP_SERVICE_EN = """\
+ElementKind: SoapService
+Id: 1d1f5c60-0000-4000-8000-000000000fa2
+Name: ApplicationService
+VisibilityScope: InProject
+ServiceNamespace: https://example.com/applications
+RootUrl: applications
+Handlers:
+    -
+        Name: {handler}
+        Method: AcceptApplication
+"""
+_SOAP_TOKENS = {"СервисЗаявок": "ApplicationService", "ПринятьЗаявку": "AcceptApplication"}
+#: A document and its attributes (yaml/document-date-required).
+_DATED_DOCUMENT_RU = """\
+ВидЭлемента: Документ
+Ид: 1d1f5c60-0000-4000-8000-000000000fa3
+Имя: Поступления
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000fa4
+        Имя: Сумма
+        Тип: Число
+"""
+_DATED_DOCUMENT_EN = """\
+ElementKind: Document
+Id: 1d1f5c60-0000-4000-8000-000000000fa3
+Name: Receipts
+VisibilityScope: InProject
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000fa4
+        Name: Amount
+        Type: Number
+"""
+_DATED_DOCUMENT_TOKENS = {"Поступления": "Receipts", "Сумма": "Amount"}
+#: A catalog computing the permissions of each object by the attributes it lists
+#: (yaml/compute-permissions-by-unknown).
+_LISTED_CATALOG_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000fa5
+Имя: Склады
+ОбластьВидимости: ВПроекте
+КонтрольДоступа:
+    РасчетРазрешенийПо: [{listed}]
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000fa6
+        Имя: Ответственный
+        Тип: Строка
+        МаксимальнаяДлина: 50
+"""
+_LISTED_CATALOG_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000fa5
+Name: Stock
+VisibilityScope: InProject
+AccessControl:
+    ComputePermissionsBy: [{listed}]
+    Permissions:
+        Read: PermissionsComputedForEachObject
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000fa6
+        Name: Keeper
+        Type: String
+        MaxLength: 50
+"""
+_LISTED_CATALOG_TOKENS = {"Склады": "Stock", "Ответственный": "Keeper"}
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -5323,8 +5455,10 @@ SEEDS: list[Seed] = [
     ),
     Seed(
         rule="code/per-object-permissions-need-common",
-        expect=FINDING,
-        note="per-object permissions without the common handler in the module",
+        expect=CLEAN,
+        note="per-object permissions without the common handler in the module: with the handler "
+             "lists of the data the rule gives way, and code/mandatory-handler-missing reports it",
+        needs_section="element_module_handlers",
         files={
             "Заявки.yaml": _CATALOG_RU + "КонтрольДоступа:\n"
                             "    Разрешения:\n"
@@ -6762,9 +6896,18 @@ SEEDS: list[Seed] = [
     ),
     Seed(
         rule="naming/presentation",
+        expect=FINDING,
+        note="a catalog with the attribute name at the top level and the list caption alone: "
+             "the standard wants the object captioned too, in the singular",
+        files={"Цены.yaml": _PRICES_NAMED_RU + _PRICES_LIST_CAPTION_RU},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
         expect=CLEAN,
-        note="the same element with the presentation filled in",
-        files={"Цены.yaml": _PRICES_RU + "Представление: Цены\n"},
+        note="the same catalog with both interface captions, the list and the object",
+        files={"Цены.yaml": _PRICES_NAMED_RU + _PRICES_LIST_CAPTION_RU
+               + _PRICES_OBJECT_CAPTION_RU},
         tokens=_PRICES_TOKENS,
     ),
     Seed(
@@ -8305,6 +8448,94 @@ SEEDS: list[Seed] = [
         },
         tokens={"Заявки": "Applications", "Состояния": "States", "Открыт": "Open",
                 "Состояние": "State"},
+    ),
+    Seed(
+        rule="code/constant-unavailable",
+        expect=FINDING,
+        note="a constant of a form module without an environment annotation, read by a server "
+             "method of the same module - the constant exists on the client alone",
+        files={"КарточкаЗаявки.yaml": _CONST_CARD_RU,
+               "КарточкаЗаявки.xbsl": _CONST_MODULE_RU.format(annotations="")},
+        english={"ApplicationCard.yaml": _CONST_CARD_EN,
+                 "ApplicationCard.xbsl": _CONST_MODULE_EN.format(annotations="")},
+        tokens=_CONST_TOKENS,
+    ),
+    Seed(
+        rule="code/constant-unavailable",
+        expect=CLEAN,
+        note="the same constant annotated for both environments",
+        files={"КарточкаЗаявки.yaml": _CONST_CARD_RU,
+               "КарточкаЗаявки.xbsl": _CONST_MODULE_RU.format(
+                   annotations="@НаСервере @НаКлиенте\n")},
+        english={"ApplicationCard.yaml": _CONST_CARD_EN,
+                 "ApplicationCard.xbsl": _CONST_MODULE_EN.format(
+                     annotations="@OnServer @OnClient\n")},
+        tokens=_CONST_TOKENS,
+    ),
+    Seed(
+        rule="yaml/soap-handler-name",
+        expect=FINDING,
+        note="a handler name with a whitespace - the build takes Latin letters, digits and the "
+             "underscore",
+        files={"СервисЗаявок.yaml": _SOAP_SERVICE_RU.format(handler='"Accept Application"')},
+        english={"ApplicationService.yaml": _SOAP_SERVICE_EN.format(
+            handler='"Accept Application"')},
+        tokens=_SOAP_TOKENS,
+    ),
+    Seed(
+        rule="yaml/soap-handler-name",
+        expect=CLEAN,
+        note="the same handler named in Latin letters",
+        files={"СервисЗаявок.yaml": _SOAP_SERVICE_RU.format(handler="AcceptApplication")},
+        english={"ApplicationService.yaml": _SOAP_SERVICE_EN.format(
+            handler="AcceptApplication")},
+        tokens=_SOAP_TOKENS,
+    ),
+    Seed(
+        rule="yaml/document-date-required",
+        expect=FINDING,
+        note="a document whose attributes lack the standard date",
+        files={"Поступления.yaml": _DATED_DOCUMENT_RU},
+        english={"Receipts.yaml": _DATED_DOCUMENT_EN},
+        tokens=_DATED_DOCUMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/document-date-required",
+        expect=CLEAN,
+        note="the same document declaring the date",
+        files={"Поступления.yaml": _DATED_DOCUMENT_RU
+               + "    -\n        Имя: Дата\n        Тип: ДатаВремя\n"},
+        english={"Receipts.yaml": _DATED_DOCUMENT_EN
+                 + "    -\n        Name: Date\n        Type: DateTime\n"},
+        tokens=_DATED_DOCUMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=FINDING,
+        note="the list names the standard name attribute the catalog does not declare",
+        files={"Склады.yaml": _LISTED_CATALOG_RU.format(listed="Наименование")},
+        english={"Stock.yaml": _LISTED_CATALOG_EN.format(listed="Name")},
+        tokens=_LISTED_CATALOG_TOKENS,
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by-unknown",
+        expect=CLEAN,
+        note="the list names a declared attribute and the reference, a field every object has",
+        files={"Склады.yaml": _LISTED_CATALOG_RU.format(listed="Ответственный, Ссылка")},
+        english={"Stock.yaml": _LISTED_CATALOG_EN.format(listed="Keeper, Reference")},
+        tokens=_LISTED_CATALOG_TOKENS,
+    ),
+    Seed(
+        rule="code/mandatory-handler-missing",
+        expect=FINDING,
+        note="per-object permissions whose module lacks the common calculation - the defect "
+             "code/per-object-permissions-need-common reported as well before it gave way",
+        files={"Заявки.yaml": _CATALOG_RU + "КонтрольДоступа:\n"
+                              "    Разрешения:\n"
+                              "        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n",
+               "Заявки.xbsl": "метод Проба()\n;\n"},
+        tokens={"Заявки": "Applications", "Проба": "Probe"},
+        needs_section="element_module_handlers",
     ),
 ]
 

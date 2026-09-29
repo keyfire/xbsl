@@ -29,6 +29,7 @@ deliberately absent.
 ```sh
 xbsl new-project . vendor App                          # descriptor + module + a subsystem
 xbsl new-object <subsystem-dir> <kind> <name>          # kind: Catalog, Document, Enum, ... (--help spells them)
+xbsl new-object <subsystem-dir> <kind> <name> --presentation <plural> --object-presentation <singular>
 xbsl add-field <object>.yaml <item-kind> <name> --type <type>  # item kind: реквизит, ... (--help lists them)
 xbsl add-form . --name <object>                        # object + list forms, registered
 xbsl add-form . --name <object> --forms list-cards     # list form as a card grid
@@ -62,6 +63,13 @@ language spells them: `PermitAuthenticated` or its Russian name, `Read` or `Чт
 annotations and every identifier reach the CLI in the spelling the platform uses for the
 project's development language. The prose of this page names them by their English equivalents -
 `Catalog`, `Attributes`, `OnServer` - which is why the examples above use placeholders.
+
+`--presentation` writes the caption of the element where its kind keeps it. A catalog, a
+document, an exchange plan and a settings storage keep two captions in the `Interface` section:
+`--presentation` is the list caption, in the plural, and `--object-presentation` the object
+caption, in the singular (MCP `presentation` and `object_presentation`). The tool cannot derive
+one from the other, and `naming/presentation` asks for both, so an object created with both lints
+clean. Any other kind refuses `--object-presentation`.
 
 `project-info` answers narrowly. `--kind`, `--subsystem` and `--package` narrow the list of objects,
 `--brief` leaves the lists out and keeps the counts, and `--project` walks only the named project -
@@ -179,7 +187,8 @@ individual one, custom rights of a `PrivilegeOnElement` included. Either languag
 the file gets its own: an English object is written `Read: PermitEveryone` even when the call
 spoke Russian. `--calc-by` fills
 `ComputePermissionsBy`, which is mandatory for `PermissionsComputedForEachObject`. Wrong methods,
-rights a kind does not have, and per-object rights on a `ConstantsSet` are all rejected. The
+rights a kind does not have, and per-object rights on a `ConstantsSet`, a service or a
+`Processing` are all rejected: their access settings have no `ComputePermissionsBy`. The
 computed-permission handlers stay yours to write, and the `notes` field says which ones you need.
 `object-info` reports the current permissions and the kind's rights, `project-info` the `Default`
 of every object, both in the Russian names whichever language the file is written in. No section
@@ -268,7 +277,8 @@ time; the JSON files of the project's resources are read for it too. The metadat
 view. Resources of the current subsystem take priority over imported namesakes. The root and
 packages of that subsystem have equal priority; two matching local namespaces remain ambiguous.
 `--limit` (MCP `limit`, 100 by default) keeps the first places in the list, and `total` counts
-all of them.
+all of them. When the limit leaves places out, the answer says `hasMore: true`, and the command
+also prints a line on stderr with the `--limit` that lists them all.
 
 `xbsl unused-resources <root>` and MCP `meta_unused_resources` list candidates with no
 known uses. They scan resource literals, image properties, resource-loading wrappers,

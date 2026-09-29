@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 272 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 276 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -91,6 +91,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/name-matches-file` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Name does not match the file name |
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Duplicate Id in the project |
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object [docs](https://1cmycloud.com/docs/help/stdlib/element/ProjectElements/Std/ProjectElements/Catalog/Attributes/Name_ru/) |
+| `yaml/document-date-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A document without the standard `Date` attribute among its `Attributes`: the attribute is required, and the build refuses the document [docs](https://1cmycloud.com/docs/help/topics/document-element/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A reference type in a type position without `?`: a reference has no default value, so the compilation fails [details](#a-yaml-ref-needs-nullable) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/union-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A union type without the empty member in a type position (`String|Number`): a default value is built for a single type only, so the compilation fails. A write or delete parameter needs the empty member even with a single type (`Boolean`) [details](#a-yaml-union-needs-nullable) |
 | `yaml/contract-facet-mismatch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The restrictions of an attribute that overrides an entity contract property disagree with those of the property (the string length, the lengths and bounds of a number) - the compilation fails [details](#a-yaml-contract-facet-mismatch) |
@@ -112,6 +113,8 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` of a dynamic list: the apply refuses the value as one whose type is not specified. The fix writes the typed node, or takes `Auto` out [details](#a-yaml-hierarchy-bare-value) |
 | `yaml/compute-permissions-by` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | `ComputePermissionsBy` against the access settings of an entity: no list while a privilege computes its permissions for each object, or a list while none does - the build refuses both [details](#a-yaml-compute-permissions-by) |
+| `yaml/compute-permissions-by-unknown` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name in `ComputePermissionsBy` that is no field of the element - a misspelt or undeclared attribute, a standard attribute left out of `Attributes`, a tabular section: the build answers that the attribute is not found [details](#a-yaml-compute-permissions-by-unknown) |
+| `yaml/soap-handler-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A SOAP service handler whose `Name` holds a letter outside Latin, a whitespace or a leading digit: the name becomes an operation of the WSDL description, and the build refuses it [docs](https://1cmycloud.com/docs/help/topics/soap-service/) |
 | `yaml/component-member-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name repeated among the own `Properties` and `Events` of an interface component: the two lists are one namespace, and the build refuses the name as not unique [details](#a-yaml-component-member-unique) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
@@ -279,6 +282,18 @@ calculation for each object" at the first attribute. A probe on a server gave bo
 catalog, a document, a settings storage and both kinds of an information register. The
 rule judges the kinds whose access settings have the property at all: a catalog, a document, an
 exchange plan, a settings storage, an integrable application and the registers.
+
+<a id="a-yaml-compute-permissions-by-unknown"></a>**`yaml/compute-permissions-by-unknown`.**
+The build answers `Attribute "X" is not found` at the name in the list. A probe on a
+server gave that answer for a misspelt attribute, for the `Name` of a catalog and the
+`Number` of a document left out of `Attributes`, for `Id` and for a tabular section, and
+took a declared attribute, the dimensions, resources and attributes of a register, the
+reference, the `Parent` of a hierarchical catalog and the `Period` of a periodic register.
+The fields are what the element declares and the service fields it has without a
+declaration. That set errs on the wide side, so an undeclared `Number` of a document is left
+to the build, and so is `DeletionMark`: the probe passed the name and then failed the whole
+apply inside the server. The rule judges a catalog, a document and the registers, the kinds
+the probe settled.
 
 <a id="a-yaml-component-member-unique"></a>**`yaml/component-member-unique`.** An interface
 component declares its own properties and its own events by name, and the compiler keeps the two
@@ -626,7 +641,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/component-in-server-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `Component.Member(...)` access to an interface component from code compiled for the server: the component's type lives on the client [details](#d-code-component-in-server-context) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `yaml/delete-current-needs-immediate` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | `OnReferencedObjectDeletion: DeleteCurrent` on an attribute of an element that only marks a deletion: the compilation rejects that pair [details](#d-yaml-delete-current-needs-immediate) [docs](https://1cmycloud.com/docs/help/topics/data-deletion/) |
 | `code/access-context-read-noop` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Extending the access context with the read privilege for a type whose yaml says `Read: PermitEveryone`: there is nothing to grant, and the call only looks like a guard [details](#d-code-access-context-read-noop) [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
-| `code/per-object-permissions-need-common` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An object calculates its permissions per object, but its module declares no `ComputeAccessPermissions` handler – the common calculation is required even then, if only to return an empty array [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| `code/per-object-permissions-need-common` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An object calculates its permissions per object, but its module declares no `ComputeAccessPermissions` handler – the common calculation is required even then, if only to return an empty array. Only without the handler lists of the data: with them `code/mandatory-handler-missing` reports the same handler as an error [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 | `code/permission-field-not-declared` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Inside `ComputeAccessPermissionsForObjects` a field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity` instead of the record [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 | `code/permission-handlers-need-recalc` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A module declares a permission handler while nothing calls `RecomputeAccessPermissions` for that entity: the platform never calls the handler, so a permission edit silently does nothing [details](#d-code-permission-handlers-need-recalc) [docs](https://1cmycloud.com/docs/help/topics/recalculate-access-permissions-and-keys/) |
 | `code/access-key-handler-flavour` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A computed access key requires the `CheckHasAccessKeys` handler in its manager module; a key with `ManualGrant: True` cannot declare it [docs](https://1cmycloud.com/docs/help/topics/manage-access-control/) |
@@ -644,6 +659,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A member access on a tabular section's row collection that the array type does not have: the collection is `Array<Entity.Section>` [details](#d-code-unknown-tabular-member) |
 | `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A call of a global name outside its environment: `Message` in a server module, the dynamic evaluation globals in a client method without `@OnServer` [details](#d-code-global-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/type-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A standard type used where its documentation says it does not exist: a server-only type such as `Encodings` in a client method, and the reverse [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/constant-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A module constant read by a method compiled for an environment the constant does not exist in: a constant of a form module without an annotation lives on the client, and an `@OnServer` method of the same module does not see it. The quick fix gives the constant the missing side [details](#d-code-constant-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable, parameter or method named like a project element: the declaration shadows the element for that scope [details](#d-style-shadow-project-name) [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A `val`, `var` or `use` variable named like a property of the object its method works on: the name resolves to the variable, so neither a read nor an assignment reaches the property [details](#d-style-shadow-own-property) [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A member of a union type that another member already covers: a repeat, a second empty value, or a member under a wider neighbour [details](#d-style-redundant-union-member) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
@@ -1035,6 +1051,21 @@ method is unavailable in the current environment. `Message` is client-only and t
 evaluation is server-only. `@OnClient` and `@OnServer` override the module's environment, and the
 availability comes from the per-member availability lines of the global context packages.
 
+<a id="d-code-constant-unavailable"></a>**`code/constant-unavailable`.** A constant exists in
+the environment its annotations name, or else in the environment of its module, and a
+method is compiled for the environments of its own annotations or of the module. The apply
+answers `Variable "X" is not defined` under the tag of the side the constant lacks. One
+probe project settled every combination in a form, a command and a common module of both
+environments: an `@OnServer` method, alone or with `@AvailableFromClient` or `@Contextual`,
+a method with both annotations and an unannotated method of a module of both environments
+were refused for a bare name, a name inside a lambda and a short interpolation `%NAME`, and
+the mirror case - a constant declared `@OnServer`, read by a client method - was refused
+too. The environment of the module comes from the yaml beside it, so the rule stays a file
+rule. A common module of the client alone is not judged: it refuses `@OnServer` by itself.
+The quick fix never takes a side away: an unannotated constant of a client module gets
+`@OnServer @OnClient`, an annotated one the missing annotation beside its own, and the
+probe project fixed that way compiled.
+
 <a id="d-style-shadow-project-name"></a>**`style/shadow-project-name`.** An example: a
 `Warehouses` variable next to the `Warehouses` catalog. Platform handler parameter names never
 collide with project names.
@@ -1186,7 +1217,9 @@ word for kind, the element kind repeated inside its own name, filler words such 
 management or manager, an environment suffix on a common module name (the environment is a
 property, not a name), a boolean attribute named by a negation instead of the positive form, an
 empty `Presentation`, and the prefixes required for certain kinds - access key, right and
-navigation.
+navigation. A catalog, a document and the other kinds whose top-level `Presentation` names an
+attribute are captioned in the interface section instead, and both captions are required:
+`Interface.List.Presentation` for the list and `Interface.Object.Presentation` for the object.
 
 ### Code style conventions (the `style/` rules)
 

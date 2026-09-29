@@ -437,3 +437,93 @@ def unknown_property(source: SourceFile) -> Iterable[Diagnostic]:
                 i18n.t("yaml/unknown-property.unknown", prop=key, vid=vid),
             ))
     return diags
+
+
+# --- The required date of a document ------------------------------------------------------
+
+MESSAGES_DOCUMENT_DATE = {
+    "yaml/document-date-required.title": {
+        "ru": "У документа нет реквизита Дата",
+        "en": "A document without the Date attribute",
+    },
+    "yaml/document-date-required.missing": {
+        "ru": "Документ не объявляет в Реквизиты стандартный реквизит {date}, а у документа он "
+              "обязателен: по нему документы выстраиваются на оси времени. Сборка откажет: "
+              "\"Attribute \"{date}\" is required\". Добавьте в Реквизиты элемент с Имя: {date} "
+              "и типом Дата или ДатаВремя.",
+        "en": "The document does not declare the standard {date} attribute in "
+              "{n[Реквизиты]}, and a document must have it: it places the documents on the "
+              "time axis. The build refuses it: \"Attribute \"{date}\" is required\". Add an "
+              "item with {n[Имя]}: {date} and the type {n[Дата]} or {n[ДатаВремя]} to "
+              "{n[Реквизиты]}.",
+    },
+}
+i18n.register(MESSAGES_DOCUMENT_DATE)
+
+_DOCUMENT = "Документ"
+_ATTRIBUTES = "Реквизиты"
+
+
+@lru_cache(maxsize=1)
+def _document_date() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """(both spellings of the date attribute, of the attributes section, of the name key).
+
+    The date is the built-in item the metamodel dispatches the attributes of a document to by
+    its name (`DateAttributeDescriptor`); empty without the metamodel, and the rule is silent.
+    """
+    record = metamodel.properties(_DOCUMENT).get(_ATTRIBUTES) or {}
+    item = record.get("item") or ""
+    date: set[str] = set()
+    for cls, presents in metamodel.dispatched_classes(item) if item else ():
+        if cls == "DateAttributeDescriptor":
+            date.update(name for name in (presents, metamodel.dispatch_english(cls)) if name)
+    return (frozenset(date), frozenset({_ATTRIBUTES, record.get("en")} - {None}),
+            frozenset(terms.key_forms("Имя")))
+
+
+dataset.register_reset(_document_date.cache_clear)
+
+
+@rule(
+    "yaml/document-date-required", "yaml/document-date-required.title", "A",
+    severity=Severity.ERROR,
+)
+def document_date_required(source: SourceFile) -> Iterable[Diagnostic]:
+    """A document whose attributes lack the built-in date.
+
+    The help calls the date the required standard attribute of a document (docs
+    topics/document-element), and a probe on a server refused a document without it at the
+    dash of its first attribute, with `Attribute "Дата" is required`, while the same
+    document with the date compiled. A description whose attributes are not a list is not
+    judged.
+    """
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    date, section_keys, name_keys = _document_date()
+    if not date:
+        return
+    data, err = _parsed(source)
+    if err is not None or object_kind(data) != _DOCUMENT:
+        return
+    fields = next((data[key] for key in section_keys if key in data), None)
+    if fields is not None and not isinstance(fields, list):
+        return
+    for item in fields or ():
+        if isinstance(item, dict) and any(item.get(key) in date for key in name_keys):
+            return
+    line, col = 1, 1
+    root = _composed(source)
+    if isinstance(root, yaml.MappingNode):
+        for key, value in root.value:
+            if isinstance(key, yaml.ScalarNode) and key.value in section_keys:
+                # The compiler points at the list itself - the dash of its first item.
+                anchor = value if isinstance(value, yaml.SequenceNode) else key
+                line, col = anchor.start_mark.line + 1, anchor.start_mark.column + 1
+                break
+    # The name to write is spelled the way the file spells its kind key.
+    english = any(key.isascii() and key in data for key in terms.key_forms("ВидЭлемента"))
+    shown = next((name for name in sorted(date) if name.isascii() == english), sorted(date)[0])
+    yield Diagnostic(
+        source.rel, line, col, "yaml/document-date-required", Severity.ERROR,
+        i18n.t("yaml/document-date-required.missing", date=shown),
+    )

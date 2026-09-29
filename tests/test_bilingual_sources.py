@@ -33,6 +33,11 @@ RUSSIAN = """\
 Имя: Tasks
 Представление: Описание
 ОбластьВидимости: ВПроекте
+Интерфейс:
+    Список:
+        Представление: Задачи
+    Объект:
+        Представление: Задача
 Реквизиты:
     -
         Ид: 8f3a2c14-7b6d-4e05-9a1c-2d5f8b47e903
@@ -46,6 +51,11 @@ Id: 42073842-db14-41d6-a17a-7b03a5d57933
 Name: Tasks
 Presentation: Description
 VisibilityScope: InProject
+Interface:
+    List:
+        Presentation: Tasks
+    Object:
+        Presentation: Task
 Attributes:
     -
         Id: 8f3a2c14-7b6d-4e05-9a1c-2d5f8b47e903

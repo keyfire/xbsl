@@ -1,6 +1,8 @@
 """Checks of the per-object access control rules (xbsl/rules/access_control.py)."""
 
-from xbsl import engine
+import pytest
+
+from xbsl import engine, modulehandlers
 from xbsl.cli import discover
 
 COMMON = "code/per-object-permissions-need-common"
@@ -54,29 +56,48 @@ def _per_object(body):
 
 # --- code/per-object-permissions-need-common -------------------------------------------
 
-def test_common_handler_missing_flagged(tmp_path):
+
+@pytest.fixture()
+def without_handler_lists(monkeypatch):
+    """A checkout whose data has no handler lists of the element modules: the rule speaks."""
+    monkeypatch.setattr(modulehandlers, "element_available", lambda: False)
+
+
+def test_common_handler_missing_flagged(tmp_path, without_handler_lists):
     d = _pair(tmp_path, _per_object("возврат"))
     assert any(x.rule_id == COMMON and "Записи" in x.message for x in d)
 
 
-def test_common_handler_present_ok(tmp_path):
+def test_common_handler_present_ok(tmp_path, without_handler_lists):
     d = _pair(tmp_path, _COMMON_HANDLER + _per_object("возврат"))
     assert not _has(d, COMMON)
 
 
-def test_object_without_per_object_rights_not_checked(tmp_path):
+def test_with_the_handler_lists_the_mandatory_handler_rule_reports_it_alone(tmp_path):
+    """The same defect used to come twice, as this warning and as the error of
+    code/mandatory-handler-missing; with the lists of the data the error is the one left."""
+    if not modulehandlers.element_available():
+        pytest.skip("the data carries no handler lists of the element modules")
+    d = _pair(tmp_path, _per_object("возврат"),
+              select={COMMON, "code/mandatory-handler-missing"})
+    assert not _has(d, COMMON)
+    assert any(x.rule_id == "code/mandatory-handler-missing"
+               and "ВычислитьРазрешенияДоступа" in x.message for x in d)
+
+
+def test_object_without_per_object_rights_not_checked(tmp_path, without_handler_lists):
     """Nothing asks for a per-object calculation, so nothing requires the common one."""
     d = _pair(tmp_path, _per_object("возврат"), control="    РасчетРазрешенийПо:\n        - Владелец\n")
     assert not _has(d, COMMON)
 
 
-def test_module_without_any_handler_flagged(tmp_path):
+def test_module_without_any_handler_flagged(tmp_path, without_handler_lists):
     """A module that declares NEITHER handler is the same defect, not an unknown case."""
     d = _pair(tmp_path, "// пока пусто\n")
     assert _has(d, COMMON)
 
 
-def test_common_handler_missing_english_flagged(tmp_path):
+def test_common_handler_missing_english_flagged(tmp_path, without_handler_lists):
     (tmp_path / "Records.yaml").write_text(
         "ElementKind: Catalog\n"
         "Ид: 12121212-1212-1212-1212-121212121213\n"

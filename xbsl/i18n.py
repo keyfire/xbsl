@@ -1310,11 +1310,22 @@ _CORE_MESSAGES = {
     },
     "cli.help.scaf.no-presentation": {
         "ru": "заголовок элемента: пишется туда, где его держит вид – в Представление или, у "
-              "справочника, документа, регистра и обработки, в раздел Интерфейс (без него "
-              "первый же линт дает naming/presentation)",
+              "справочника, документа, регистра и обработки, в раздел Интерфейс; у справочника "
+              "и документа это заголовок списка, а заголовок объекта задает "
+              "--object-presentation (без заголовка первый же линт дает naming/presentation)",
         "en": "the element caption: written where the kind keeps it - into Presentation or, "
               "for a catalog, a document, a register and a processing, into the Interface "
-              "section (without it the very first lint answers naming/presentation)",
+              "section; for a catalog and a document it is the list caption, and "
+              "--object-presentation gives the object one (without a caption the very first "
+              "lint answers naming/presentation)",
+    },
+    "cli.help.scaf.no-object-presentation": {
+        "ru": "заголовок объекта в единственном числе: пишется в Интерфейс.Объект.Представление "
+              "справочника, документа, плана обмена и хранилища настроек, другой вид его не "
+              "принимает; вместе с --presentation новый объект проходит naming/presentation",
+        "en": "the object caption in the singular: written into Interface.Object.Presentation "
+              "of a catalog, a document, an exchange plan and a settings storage, any other "
+              "kind refuses it; with --presentation the new object passes naming/presentation",
     },
     "cli.help.scaf.no-base": {
         "ru": "базовый тип компонента интерфейса (Группа, ФормаОбъекта<Товар.Объект>); "
@@ -1634,10 +1645,18 @@ _CORE_MESSAGES = {
         "en": "also return files protected by bounded dynamic or uncertain paths",
     },
     "cli.help.scaf.resource-references-limit": {
-        "ru": "не более N мест в списке references; total считает все места (по умолчанию 100, "
-              "как у meta_resource_references)",
-        "en": "list at most N places in references; total counts every place (default: 100, "
-              "as in meta_resource_references)",
+        "ru": "не более N мест в списке references; total считает все места, а hasMore: true "
+              "и строка в stderr говорят, что список обрезан (по умолчанию 100, как у "
+              "meta_resource_references)",
+        "en": "list at most N places in references; total counts every place, and hasMore: "
+              "true with a line on stderr says the list is cut (default: 100, as in "
+              "meta_resource_references)",
+    },
+    "cli.resource-references-more": {
+        "ru": "Список references обрезан: показано {shown} из {total}; весь список даст "
+              "--limit {total}",
+        "en": "The references list is cut: {shown} of {total} shown; --limit {total} lists "
+              "them all",
     },
     "cli.help.scaf.unused-resources-limit": {
         "ru": "не более N записей в каждом возвращаемом списке; итоги всегда полные "
