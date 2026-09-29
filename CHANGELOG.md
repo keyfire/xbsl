@@ -28,6 +28,13 @@ entry either - say what the behaviour was, not which class name was compared.
   new set passes `naming/presentation`. MCP `meta_new_object` and the language server call it
   `periodicity`.
 
+### Changed
+
+- **`naming/presentation` now asks a processing for its caption.** A processing keeps it in
+  `Interface.Presentation`: the form and the command that opens it are named by it, and without it
+  both carry the element name. The standard lists processings among the elements whose
+  presentation is mandatory, and `new-object --presentation` writes the caption right there.
+
 ### Fixed
 
 - **The cards of the help no longer run together.** The links of a card grid used to merge into one

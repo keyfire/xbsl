@@ -3421,6 +3421,17 @@ def test_new_object_caption_of_a_kind_without_a_top_level_one(tmp_path):
 
 
 @pytest.mark.needs_data
+def test_new_object_processing_with_a_caption_passes_the_naming_rule(tmp_path):
+    """naming/presentation asks a processing for the caption of its interface section, and
+    presentation is what writes it: the new processing lints clean, one without it does not."""
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "ЗагрузкаЦен", presentation="Загрузка цен"))
+    assert xbsl.engine.run([tmp_path / "ЗагрузкаЦен.yaml"], select={"naming/presentation"}) == []
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "ПересчетЦен"))
+    found = xbsl.engine.run([tmp_path / "ПересчетЦен.yaml"], select={"naming/presentation"})
+    assert len(found) == 1 and "Интерфейс.Представление" in found[0].message
+
+
+@pytest.mark.needs_data
 def test_new_object_caption_replaces_the_one_a_kind_writes_itself(tmp_path):
     # A command is born captioned with its name; the caller's caption used to be written
     # next to it - two top-level keys of one name.
