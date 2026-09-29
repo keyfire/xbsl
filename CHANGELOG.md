@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
 ### Added
 
@@ -36,44 +36,6 @@ entry either - say what the behaviour was, not which class name was compared.
   to a method compiled for the other one, with `Unknown property` or `Type ... is unavailable`. ([#164](https://github.com/keyfire/xbsl/pull/164))
 - **New `yaml/root-url-cyrillic` warns about a service `RootUrl` in Cyrillic.** The build takes
   such an address, yet no request reaches the service. The quick fix writes it in Latin letters. ([#164](https://github.com/keyfire/xbsl/pull/164))
-
-### Changed
-
-- **`naming/presentation` checks the captions of registers and constants sets.** An information
-  register needs the list and the record captions, an accumulation register the list one, a
-  constants set the record one: its top-level `Presentation` names a constant, not a caption. The
-  interface captions of a deprecated element have to start with the deprecation mark as well. ([#164](https://github.com/keyfire/xbsl/pull/164))
-- **`yaml/compute-permissions-by-unknown` also judges an exchange plan, a settings storage and an
-  integrable application.** It knows their built-in fields, reports an undeclared `Number` of a
-  document, and flags `DeletionMark` and `Presentation` as computed fields: the compiler takes them,
-  and then the build fails to apply. ([#164](https://github.com/keyfire/xbsl/pull/164))
-- **`yaml/soap-handler-name` knows the rest of the ASCII punctuation.** It reports the characters
-  the build refuses in a handler name (`%`, `<`, `>`, a double quote, the braces and a few more)
-  and a hyphen or a dot in the first place. ([#164](https://github.com/keyfire/xbsl/pull/164))
-
-### Fixed
-
-- **`new-object` creates an access key with `ManualGrant: False`.** A project in the newest
-  compatibility mode refused a key that did not choose its flavour. The property is written only
-  where the mode of the project knows it, from 8.0 on. ([#164](https://github.com/keyfire/xbsl/pull/164))
-- **`xbsl translate` translates the `Method` of a SOAP handler and the reference field in
-  `ComputePermissionsBy`.** The handler named a method the translated module no longer had, and the
-  reference stayed Russian; now it is `Reference`, the member of an entity object. `AnyMethod` of a
-  route and the fields of an index are translated the same way. ([#164](https://github.com/keyfire/xbsl/pull/164))
-- **`self-update --stop-holders` no longer ends the xbsl commands of other sessions.** It used to
-  stop every process of the package, a running lint included. Now it stops the servers and names
-  each running command by pid and command line. If one of them keeps the package busy, the update
-  refuses and asks you to wait; `--stop-holders=all` ends the commands as before. ([#164](https://github.com/keyfire/xbsl/pull/164))
-- **`yaml/compute-permissions-by-unknown` takes `DeletionMarkInstant`.** The build accepts the
-  moment of the deletion mark in the list, and the rule reported it as an unknown attribute. ([#164](https://github.com/keyfire/xbsl/pull/164))
-- **`new-object` writes the address of an HTTP or a SOAP service in Latin letters.** For a Cyrillic
-  name the root address used to stay Cyrillic, and the new service built but never answered; now
-  the name is transliterated into an address like `/proverka-zakazov`. ([#164](https://github.com/keyfire/xbsl/pull/164))
-
-## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0
-
-### Added
-
 - **`meta_resource_references` says when the limit cut the list.** The new `hasMore` field is
   `true` when `references` holds fewer places than `total`: a cut list used to pass for the whole
   one. The `resource-references` command returns the same field and prints a line on stderr with
@@ -163,6 +125,17 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Changed
 
+- **`naming/presentation` checks the captions of registers and constants sets.** An information
+  register needs the list and the record captions, an accumulation register the list one, a
+  constants set the record one: its top-level `Presentation` names a constant, not a caption. The
+  interface captions of a deprecated element have to start with the deprecation mark as well. ([#164](https://github.com/keyfire/xbsl/pull/164))
+- **`yaml/compute-permissions-by-unknown` also judges an exchange plan, a settings storage and an
+  integrable application.** It knows their built-in fields, reports an undeclared `Number` of a
+  document, and flags `DeletionMark` and `Presentation` as computed fields: the compiler takes them,
+  and then the build fails to apply. ([#164](https://github.com/keyfire/xbsl/pull/164))
+- **`yaml/soap-handler-name` knows the rest of the ASCII punctuation.** It reports the characters
+  the build refuses in a handler name (`%`, `<`, `>`, a double quote, the braces and a few more)
+  and a hyphen or a dot in the first place. ([#164](https://github.com/keyfire/xbsl/pull/164))
 - **`naming/presentation` asks a catalog, a document and similar kinds for both interface
   captions.** The attribute name in the top-level `Presentation` no longer stands in for them:
   section 2.3 of the naming standard wants `Interface.List.Presentation` in the plural and
@@ -252,6 +225,22 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`new-object` creates an access key with `ManualGrant: False`.** A project in the newest
+  compatibility mode refused a key that did not choose its flavour. The property is written only
+  where the mode of the project knows it, from 8.0 on. ([#164](https://github.com/keyfire/xbsl/pull/164))
+- **`xbsl translate` translates the `Method` of a SOAP handler and the reference field in
+  `ComputePermissionsBy`.** The handler named a method the translated module no longer had, and the
+  reference stayed Russian; now it is `Reference`, the member of an entity object. `AnyMethod` of a
+  route and the fields of an index are translated the same way. ([#164](https://github.com/keyfire/xbsl/pull/164))
+- **`self-update --stop-holders` no longer ends the xbsl commands of other sessions.** It used to
+  stop every process of the package, a running lint included. Now it stops the servers and names
+  each running command by pid and command line. If one of them keeps the package busy, the update
+  refuses and asks you to wait; `--stop-holders=all` ends the commands as before. ([#164](https://github.com/keyfire/xbsl/pull/164))
+- **`yaml/compute-permissions-by-unknown` takes `DeletionMarkInstant`.** The build accepts the
+  moment of the deletion mark in the list, and the rule reported it as an unknown attribute. ([#164](https://github.com/keyfire/xbsl/pull/164))
+- **`new-object` writes the address of an HTTP or a SOAP service in Latin letters.** For a Cyrillic
+  name the root address used to stay Cyrillic, and the new service built but never answered; now
+  the name is transliterated into an address like `/proverka-zakazov`. ([#164](https://github.com/keyfire/xbsl/pull/164))
 - **`new-object SoapService` writes a handler the build accepts.** The handler of the example
   operation had a Cyrillic name, and the build refused the new service; now it is `Operation1`, and
   the module method keeps its name. ([#163](https://github.com/keyfire/xbsl/pull/163))
