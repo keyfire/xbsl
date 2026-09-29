@@ -18,8 +18,11 @@ def checked_catalog(monkeypatch):
         "Массив": ["Сортировать", "Фильтровать"],
         "Последовательность": ["Фильтровать"],
     }
-    def load(name):
-        data = original(name)
+    # The stand-in keeps the signature of load_json: dataset.load_optional passes the version
+    # along, and a one-argument stand-in failed whenever no earlier test had filled the caches
+    # that read the data through it.
+    def load(name, version=None):
+        data = original(name, version)
         return {**data, "checked_return_methods": checked} if name == "stdlib.json" else data
     monkeypatch.setattr(dataset, "load_json", load)
     subject._checked_methods.cache_clear()
