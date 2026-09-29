@@ -35,6 +35,9 @@
 - **The context menu of a tabular section creates the module of its row.** For a catalog or a
   document, "Create row module" adds an empty module next to the description and opens it. Once it
   exists, the item becomes "Open row module". ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **Three new rules link to the documentation:** `code/mandatory-handler-missing`,
+  `yaml/register-entity-contract` and `yaml/report-parameters-alias` open their pages from the
+  Problems panel. ([#160](https://github.com/keyfire/xbsl/pull/160))
 
 ### Changed
 

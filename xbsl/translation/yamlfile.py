@@ -410,6 +410,24 @@ def _is_enum_class(declared: str) -> bool:
     return declared.endswith("Enum")
 
 
+def _holds_type(declared: str) -> bool:
+    """Does a value of this declared class NAME A TYPE rather than a member?
+
+    The metamodel types such a slot `Type`, `TypeSet` or `TypeNameHolder`, or binds it to a
+    type (`DataBinding<Type...>`). A list says the same through the class of its items: the
+    bases of `CreateOnBasis` are `Type` items, and the walk used to read them as names.
+    """
+    return (declared in ("Type", "TypeNameHolder", "TypeSet")
+            or declared.startswith("DataBinding<Type"))
+
+
+def _type_scalar(node, resolver, report, edits) -> None:
+    """A scalar that is a type expression: platform types, facets, project names."""
+    value = node.value
+    if isinstance(value, str) and has_cyrillic(value):
+        _set_scalar(node, translate_type_expression(value, resolver, report, at=_at(node)), edits)
+
+
 def _enum_spelling(value: str, enum_name: str | None, resolver, report) -> str | None:
     """The English spelling of one enumeration value: its enumeration's table, then the
     dictionary (a project enumeration has no platform table); None when neither answers."""
@@ -643,6 +661,12 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
             elif isinstance(item, yaml.ScalarNode):
                 if _is_enum_class(item_cls):
                     _enum_scalar(item, item_cls, resolver, report, edits)
+                elif _holds_type(item_cls):
+                    # A list of TYPES - the bases an object is created on, the faults of a
+                    # SOAP service, the contracts of a type. After a dot there stands a facet,
+                    # so `Накладные.Ссылка` is `Invoices.Reference`; read as a name, the item
+                    # came out as the property `Invoices.Link`, which names no type at all.
+                    _type_scalar(item, resolver, report, edits)
                 else:
                     _identifier_value(item, resolver, report, edits)
         return
@@ -677,11 +701,8 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
     if value_kind == "enum":
         _enum_scalar(vnode, record.get("enum"), resolver, report, edits)
         return
-    if (value_kind == "type" or key == "Тип" or declared in ("TypeNameHolder", "TypeSet")
-            or declared.startswith("DataBinding<Type")):
-        value = vnode.value
-        if isinstance(value, str) and has_cyrillic(value):
-            _set_scalar(vnode, translate_type_expression(value, resolver, report, at=_at(vnode)), edits)
+    if value_kind == "type" or key == "Тип" or _holds_type(declared):
+        _type_scalar(vnode, resolver, report, edits)
         return
     if _is_enum_class(declared):
         _enum_scalar(vnode, declared, resolver, report, edits)

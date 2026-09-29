@@ -28,7 +28,7 @@ import json
 import os
 import re
 import uuid as _uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -1320,6 +1320,58 @@ FIELD_KINDS = tuple(_SECTION_SPECS)
 ADD_FIELD_KINDS = FIELD_KINDS + tuple(_MAPPING_SPECS)
 SET_PROPERTY_KINDS = FIELD_KINDS
 
+#: The same field kinds in English, so a project that writes English is filled in with English
+#: words. Each is the platform's own word for the item - the term dictionary's `Attribute` and
+#: `TabularPart` for the Russian nouns - and where it has no singular (a query parameter, a
+#: template) the singular of the section's English key (`QueryParameters`, `Templates`);
+#: tests/test_scaffold.py holds the table to that data. A table and not a lookup: the words are
+#: the tool's vocabulary, and the refusals and the CLI help name them with or without the data.
+#: Written lower case and hyphenated like the Russian words; case and hyphens do not matter when
+#: a word is read (see field_kind_of).
+FIELD_KINDS_EN: dict[str, str] = {
+    "реквизит": "attribute",
+    "измерение": "dimension",
+    "ресурс": "resource",
+    "значение": "value",
+    "параметр": "parameter",
+    "поле": "field",
+    "константа": "constant",
+    "свойство": "property",
+    "событие": "event",
+    "операция": "operation",
+    "индекс": "index",
+    "параметр-запроса": "query-parameter",
+    "табличная-часть": "tabular-part",
+    "строка": "string",
+    "шаблон": "template",
+}
+
+
+def _folded_word(word: str) -> str:
+    """A tool word with case and hyphens set aside: `tabular-part`, `TabularPart` are one word."""
+    return word.strip().replace("-", "").replace("_", "").casefold()
+
+
+_FIELD_KIND_WORDS: dict[str, str] = {
+    **{_folded_word(word): word for word in ADD_FIELD_KINDS},
+    **{_folded_word(english): word for word, english in FIELD_KINDS_EN.items()},
+}
+
+
+def field_kind_of(value: str) -> str:
+    """The field kind a caller names, in either language, as the tables of this module name it.
+
+    `attribute` is `реквизит`, `tabular-part` is `табличная-часть`. An unknown word comes back
+    as it was written, so the refusal that follows quotes the caller.
+    """
+    return _FIELD_KIND_WORDS.get(_folded_word(value), value)
+
+
+def field_kinds_named(kinds: Iterable[str]) -> str:
+    """The field kinds for a refusal or a help line: each with its English word next to it."""
+    return ", ".join(f"{kind} ({FIELD_KINDS_EN[kind]})" if kind in FIELD_KINDS_EN else kind
+                     for kind in kinds)
+
 
 # --- project discovery ------------------------------------------------------------------
 
@@ -2308,10 +2360,15 @@ def op_new_object(
             f"Вид {kind} не поддерживает управление доступом – параметр access неприменим; "
             "поддерживают: " + ", ".join(sorted(ACCESS_KIND_RIGHTS))
         )
-    if access and access not in ACCESS_METHODS:
-        raise ScaffoldError(
-            f"Недопустимый способ контроля доступа '{access}'; доступны: " + ", ".join(ACCESS_METHODS)
-        )
+    if access:
+        # Either language: the method is written below in the language of the project.
+        method = access_method(access)
+        if method is None:
+            raise ScaffoldError(
+                f"Недопустимый способ контроля доступа '{access}'; доступны: "
+                + access_methods_named()
+            )
+        access = method
 
     caption = caption_path(kind) if presentation else None
 
@@ -2356,7 +2413,7 @@ def op_new_object(
         # entries inside Разрешения (see ACCESS_KIND_RIGHTS and the "Контроль прав доступа"
         # documentation).
         extra += ["КонтрольДоступа:", f"    {_PERMISSIONS_KEY}:",
-                  f"        {ACCESS_DEFAULT_RIGHT}: {access}"]
+                  f"        {ACCESS_DEFAULT_RIGHT}: {_spelled(access, lang, 'enums')}"]
     top_caption = presentation if caption == _TOP_CAPTION else None
     if top_caption:
         # A kind that writes a caption of its own (a command is born with its name) gives way
@@ -2571,6 +2628,7 @@ def op_add_field(
     so and point at the sibling section that already exists - see _new_section_notes.
     """
     yaml_path = Path(yaml_path)
+    field_kind = field_kind_of(field_kind)
     name = _check_identifier(name, "элемента")
     doc_lines = _doc_lines(doc)
     text, nl = _load_for_edit(yaml_path, reader)
@@ -2635,7 +2693,8 @@ def op_add_field(
     spec = _SECTION_SPECS.get(field_kind)
     if spec is None:
         raise ScaffoldError(
-            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(ADD_FIELD_KINDS)}"
+            f"Неизвестный вид элемента '{field_kind}'; доступны: "
+            + field_kinds_named(ADD_FIELD_KINDS)
         )
     allowed = KIND_SECTIONS.get(kind)
     if allowed is None:
@@ -2646,7 +2705,7 @@ def op_add_field(
         )
     if field_kind not in allowed:
         raise ScaffoldError(
-            f"У вида {kind} нет секции для '{field_kind}'; доступны: {', '.join(allowed)}"
+            f"У вида {kind} нет секции для '{field_kind}'; доступны: {field_kinds_named(allowed)}"
         )
     existing = {i.get("Имя") for i in section_items(text, spec["section"], top_level=True)}
     if name in existing:
@@ -2728,6 +2787,7 @@ def op_add_fields(
     (doc) is one item's own text: a batch of several names with one is refused rather than
     copying the same comment onto every item.
     """
+    field_kind = field_kind_of(field_kind)
     if field_kind == "операция":
         raise ScaffoldError(
             "Вид 'операция' пачкой не добавляется: операция пишет ещё и обработчик в модуль"
@@ -3258,6 +3318,7 @@ def op_set_field_property(
     block is refused rather than flattened.
     """
     yaml_path = Path(yaml_path)
+    field_kind = field_kind_of(field_kind)
     if not props:
         raise ScaffoldError("Не заданы свойства для установки")
     text, nl = _load_for_edit(yaml_path, reader)
@@ -3276,11 +3337,12 @@ def op_set_field_property(
     spec = _SECTION_SPECS.get(field_kind)
     if spec is None:
         raise ScaffoldError(
-            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(SET_PROPERTY_KINDS)}"
+            f"Неизвестный вид элемента '{field_kind}'; доступны: "
+            + field_kinds_named(SET_PROPERTY_KINDS)
         )
     allowed = KIND_SECTIONS.get(kind)
     if allowed is None or field_kind not in allowed:
-        avail = ", ".join(allowed) if allowed else "нет"
+        avail = field_kinds_named(allowed) if allowed else "нет"
         raise ScaffoldError(f"У вида {kind} нет секции для '{field_kind}'; доступны: {avail}")
 
     if tabular:
@@ -3499,7 +3561,7 @@ def _add_mapping_entry(
     """
     allowed = KIND_SECTIONS.get(kind)
     if allowed is None or field_kind not in allowed:
-        avail = ", ".join(allowed) if allowed else "нет"
+        avail = field_kinds_named(allowed) if allowed else "нет"
         raise ScaffoldError(f"У вида {kind} нет секции для '{field_kind}'; доступны: {avail}")
     section = map_spec["section"]
     raw_value = value if value and value != "Строка" else key
@@ -4189,8 +4251,9 @@ def _new_http_service(
             "обычно его задают латиницей (например, Имя КаталогHttpСервис, КорневойUrl /catalog)"
         )
     if access:
+        method = _spelled(access, lang, "enums")
         lines += spelled_lines(
-            ["КонтрольДоступа:", "    Разрешения:", f"        Вызов: {access}"], lang
+            ["КонтрольДоступа:", "    Разрешения:", f"        Вызов: {method}"], lang
         )
     lines.append(spelled_key("ШаблоныUrl", lang) + ":")
     for path, template, method_handlers in assigned:
@@ -6161,6 +6224,52 @@ ACCESS_KIND_RIGHTS: dict[str, tuple[str, ...]] = {
 # A constant set does not support per-record permissions (the "Свойства элемента проекта
 # вида НаборКонстант" documentation).
 _NO_PER_OBJECT_KINDS = ("НаборКонстант",)
+#: Every right some kind has, in the order of the table: what a right is read against when the
+#: kind is not at hand (the summary of a file, see access_info).
+_ALL_RIGHTS = tuple(dict.fromkeys(r for rights in ACCESS_KIND_RIGHTS.values() for r in rights))
+
+
+def access_method(value: str) -> str | None:
+    """An access method named in either language, as the tables name it; None - no such method.
+
+    An English project writes `PermitEveryone` for the method a Russian one spells in Russian.
+    The pair is the platform's own, a value of its access enumeration in the term dictionary
+    (see _enum_value), so without the data an English name is not recognized - the way the tool
+    read it before.
+    """
+    method = _enum_value(value.strip())
+    return method if method in ACCESS_METHODS else None
+
+
+def access_right(value: str, kind: str | None = None) -> str | None:
+    """A right named in either language: `Read`, `Default` or their Russian spellings.
+
+    A right is a KEY of the permissions block, so its English spelling is the metamodel's, as for
+    any other key (key_forms). `kind` narrows the rights to the ones that kind has, None takes
+    the rights of every kind. None when the value names no such right.
+    """
+    value = value.strip()
+    rights = ACCESS_KIND_RIGHTS.get(kind, ()) if kind else _ALL_RIGHTS
+    for right in (ACCESS_DEFAULT_RIGHT, *rights):
+        if value in key_forms(right):
+            return right
+    return None
+
+
+def access_methods_named() -> str:
+    """The access methods for a refusal or a help line, each with its English spelling."""
+    return ", ".join(
+        method if (english := _spelled(method, "en", "enums")) == method else f"{method} ({english})"
+        for method in ACCESS_METHODS
+    )
+
+
+def _rights_named(rights: Iterable[str]) -> str:
+    """The rights for a refusal, each with its English spelling when the data has one."""
+    return ", ".join(
+        right if (english := spelled_key(right, "en")) == right else f"{right} ({english})"
+        for right in rights
+    )
 
 _ACCESS_SECTION = "КонтрольДоступа"
 _PERMISSIONS_KEY = "Разрешения"
@@ -6216,13 +6325,21 @@ def access_info(text: str) -> dict | None:
     {permissions: {right: method}, default: method|None, calc_by: [fields]}. A missing
     section is precisely None, not an empty summary: the platform then applies
     РазрешеноАдминистраторам.
+
+    The rights and the methods come back in the Russian spelling the tables of this module use,
+    whichever language the file writes them in: `Default: PermitEveryone` of an English file is
+    `ПоУмолчанию: РазрешеноВсем` here. Read as written, such a file had no `default` at all. A
+    custom right (`ПравоНаX.ИмяПрава`) and a value no table knows are kept as written.
     """
     bounds = _section_bounds(text, _ACCESS_SECTION, top_level=True)
     if bounds is None:
         return None
     _, header_line_end, body_end = bounds
     body = text[header_line_end:body_end]
-    permissions = _mapping_in(body, _PERMISSIONS_KEY)
+    permissions = {
+        ((right if "." in right else access_right(right)) or right): access_method(method) or method
+        for right, method in _mapping_in(body, _PERMISSIONS_KEY).items()
+    }
     return {
         "permissions": permissions,
         "default": permissions.get(ACCESS_DEFAULT_RIGHT),
@@ -6243,11 +6360,12 @@ def _access_anchor(text: str) -> int:
 
 
 def _set_mapping_value(text: str, section_offset_end: int, body_end: int, indent: str,
-                       key: str, value: str, nl: str) -> tuple[str, int]:
+                       key: str, value: str, nl: str,
+                       added_as: str | None = None) -> tuple[str, int]:
     """Replace a mapping key's value or append the key at the end of the section.
 
     An existing key is recognized in either spelling and keeps the one it is written in;
-    a key being added is written as the caller spelled it.
+    a key being added is written as `added_as` spells it, or as the caller spelled `key`.
     Returns (new text, shift of the section end) - the caller recomputes the bounds.
     """
     body = text[section_offset_end:body_end]
@@ -6258,7 +6376,7 @@ def _set_mapping_value(text: str, section_offset_end: int, body_end: int, indent
             end = section_offset_end + m.end()
             new_line = f"{m.group(1)}{spelling}: {value}"
             return text[:start] + new_line + text[end:], len(new_line) - (end - start)
-    addition = f"{nl}{indent}{key}: {value}"
+    addition = f"{nl}{indent}{added_as or key}: {value}"
     return text[:body_end] + addition + text[body_end:], len(addition)
 
 
@@ -6280,11 +6398,16 @@ def op_set_access(
     РазрешенияВычисляютсяДляКаждогоОбъекта. The operation does NOT write permission
     computation handlers: that is business logic (see the "Самостоятельное формирование
     разрешений и выдача экземпляров ключей" documentation) - a reminder is left in notes.
+
+    Rights and methods are taken in either language (`Read=PermitEveryone` or the same pair
+    spelled in Russian - see access_right and access_method) and written in the language of the
+    file, like its keys: an English object gets `Read: PermitEveryone` whatever the caller
+    spoke.
     """
-    wanted: dict[str, str] = dict(permissions or {})
+    given: dict[str, str] = dict(permissions or {})
     if default:
-        wanted[ACCESS_DEFAULT_RIGHT] = default
-    if not wanted and calc_by is None:
+        given[ACCESS_DEFAULT_RIGHT] = default
+    if not given and calc_by is None:
         raise ScaffoldError("Нечего менять: задайте default, permissions или calc_by")
 
     info = object_info(Path(root), name=name, yaml_path=yaml_path)
@@ -6298,22 +6421,29 @@ def op_set_access(
 
     result = ScaffoldResult()
     known = ACCESS_KIND_RIGHTS[kind]
-    for right, method in wanted.items():
-        if method not in ACCESS_METHODS:
+    # Right -> method in the spelling of the tables, whichever language the caller spoke.
+    wanted: dict[str, str] = {}
+    for right, method in given.items():
+        canonical = access_method(method)
+        if canonical is None:
             raise ScaffoldError(
                 f"Недопустимый способ контроля доступа '{method}' у права '{right}'; "
-                + "доступны: " + ", ".join(ACCESS_METHODS)
+                + "доступны: " + access_methods_named()
             )
-        if method == _PER_OBJECT and kind in _NO_PER_OBJECT_KINDS:
+        if canonical == _PER_OBJECT and kind in _NO_PER_OBJECT_KINDS:
             raise ScaffoldError(f"Вид {kind} не поддерживает {_PER_OBJECT}")
-        if right != ACCESS_DEFAULT_RIGHT and "." not in right and right not in known:
-            allowed = ", ".join(known) if known else "только " + ACCESS_DEFAULT_RIGHT
+        # A custom right is a name of the project and goes in as written.
+        own = right if "." in right else access_right(right, kind)
+        if own is None:
+            allowed = _rights_named(known) if known else "только " + ACCESS_DEFAULT_RIGHT
             raise ScaffoldError(
                 f"У вида {kind} нет права '{right}'; доступны: {allowed} "
                 f"(и {ACCESS_DEFAULT_RIGHT}; пользовательское право пишется как ПравоНаX.ИмяПрава)"
             )
+        wanted[own] = canonical
 
     text, nl = _load_for_edit(owner_path, reader)
+    lang = yaml_language(text, owner_path.parent)
     current = access_info(text)
     per_object = [r for r, m in wanted.items() if m == _PER_OBJECT]
     if per_object:
@@ -6335,14 +6465,14 @@ def op_set_access(
         return result
 
     if current is None:
-        # The section keys are spelled like the file; the rights and the methods are the
-        # platform's own names, which the caller passes and this operation validates.
-        lang = yaml_language(text, owner_path.parent)
+        # Everything is spelled like the file: the section keys, the rights (keys too) and the
+        # methods (values of the platform's enumeration).
         lines = [
             f"{spelled_key(_ACCESS_SECTION, lang)}:",
             f"    {spelled_key(_PERMISSIONS_KEY, lang)}:",
         ]
-        lines += [f"        {right}: {method}" for right, method in wanted.items()]
+        lines += [f"        {spelled_key(right, lang)}: {_spelled(method, lang, 'enums')}"
+                  for right, method in wanted.items()]
         if calc_by:
             lines.append(f"    {spelled_key(_CALC_BY_KEY, lang)}: [{', '.join(calc_by)}]")
         at = _access_anchor(text)
@@ -6378,18 +6508,25 @@ def _access_body_bounds(text: str) -> tuple[int, int]:
 
 
 def _write_permission(text: str, right: str, method: str, nl: str) -> str:
-    """Pinpoint-set a right in an existing КонтрольДоступа section."""
+    """Pinpoint-set a right in an existing `AccessControl` section.
+
+    `right` and `method` come in the spelling of the tables; the file gets its own: a right
+    already there keeps the spelling it is written in, a new one and the method follow the
+    language of the file.
+    """
     header_line_end, body_end = _access_body_bounds(text)
     body = text[header_line_end:body_end]
+    lang = yaml_language(text)
+    value = _spelled(method, lang, "enums")
     perms = _section_bounds(body, _PERMISSIONS_KEY)
     if perms is None:  # the section exists but Разрешения does not - append the block
-        key = spelled_key(_PERMISSIONS_KEY, yaml_language(text))
-        addition = f"{nl}    {key}:{nl}        {right}: {method}"
+        key = spelled_key(_PERMISSIONS_KEY, lang)
+        addition = f"{nl}    {key}:{nl}        {spelled_key(right, lang)}: {value}"
         return text[:body_end] + addition + text[body_end:]
     perm_indent, perm_header_end, perm_body_end = perms
     new_text, _ = _set_mapping_value(
         text, header_line_end + perm_header_end, header_line_end + perm_body_end,
-        " " * (perm_indent + 4), right, method, nl,
+        " " * (perm_indent + 4), right, value, nl, added_as=spelled_key(right, lang),
     )
     return new_text
 

@@ -1154,10 +1154,12 @@ _CORE_MESSAGES = {
         "en": "the environment – for CommonModule and Structure",
     },
     "cli.help.scaf.no-access": {
-        "ru": "способ доступа: у HttpСервис пишется в Разрешения.Вызов, у объектов данных – "
+        "ru": "способ доступа, русским или английским именем (РазрешеноВсем или PermitEveryone): "
+              "у HttpСервис пишется в Разрешения.Вызов, у объектов данных – "
               "в Разрешения.ПоУмолчанию (отдельные права ставит set-access)",
-        "en": "the access method: for HttpService it goes to Разрешения.Call, for data "
-              "objects to Разрешения.Default (individual rights are set by set-access)",
+        "en": "the access method, in either language (e.g. PermitEveryone): for HttpService "
+              "it goes to Permissions.Call, for data objects to Permissions.Default (individual "
+              "rights are set by set-access)",
     },
     "cli.help.scaf.af-yaml": {
         "ru": "yaml объекта, в который добавить поле",
@@ -1575,12 +1577,15 @@ _CORE_MESSAGES = {
               "rights and the set this kind has",
     },
     "cli.help.scaf.set-access-default": {
-        "ru": "способ для права ПоУмолчанию",
-        "en": "the method for the Default right",
+        "ru": "способ для права ПоУмолчанию, русским или английским именем "
+              "(РазрешеноВсем или PermitEveryone)",
+        "en": "the method for the Default right, in either language (e.g. PermitEveryone)",
     },
     "cli.help.scaf.set-access-permission": {
-        "ru": "способ отдельного права (повторяемый), напр. Чтение=РазрешеноВсем",
-        "en": "the method for a single right (repeatable), e.g. Чтение=PermitEveryone",
+        "ru": "способ отдельного права (повторяемый), напр. Чтение=РазрешеноВсем или "
+              "Read=PermitEveryone",
+        "en": "the method for a single right (repeatable), in either language, e.g. "
+              "Read=PermitEveryone",
     },
     "cli.help.scaf.set-access-calc-by": {
         "ru": "поля РасчетРазрешенийПо через запятую "

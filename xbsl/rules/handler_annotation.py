@@ -45,11 +45,15 @@ of the kind as used. The own module of an HTTP service, a SOAP service and a pro
 the permissions handler alone, and the build uses it by the same test of their access settings
 (the handler provider of access control sets `enabled` by it for every module with an
 access-control target); below the mode the settings of a processing came in, the build does not
-read them, and the handler is not judged there.
+read them, and the handler is not judged there. The probe gave the same refusal for a SOAP
+service without access settings, and for a processing without them in the mode its settings
+came in.
 
 Three more answers of the compiler the rule follows. A module the data lists with no handler at
-all - a common module, a data journal, localized strings, a fragment of the command interface,
-a global client event - declares nothing, and any name under the annotation is refused there.
+all - a common module, a data journal, a fragment of the command interface, a global client
+event - declares nothing, and any name under the annotation is refused there. The module file
+of localized strings is not compiled at all: the probe reported neither a handler nor a name
+the platform does not know in it, and the data leaves the kind out.
 The object module of a catalog, a document, an exchange plan and an integrable application
 declares `OnCreateOnBasis` once for each type the description lists under `CreateOnBasis`
 (modulehandlers.PER_ITEM_PROPERTIES): without the list the handler is not found, and the message

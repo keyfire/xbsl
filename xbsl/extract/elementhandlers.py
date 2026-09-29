@@ -54,6 +54,14 @@ that collection, and not at all when it is empty: the object module of a catalog
 interpreter follows such a loop over a field of a model and names the collection by the getter
 the constructors of the model fill that field from (see _field_source); the row keeps it under
 `per`, unless another path declares the same handler outside the loop.
+
+The builder the sink answers is followed as well. A provider may build a handler `required` -
+a module that does not declare it is refused ("Mandatory handler X is not defined") - and may
+name the handlers required along with it (`requiredHandlers`); both stay on the declaration.
+A row is marked `required` only when every declaration of it is built required with a value
+the interpreter knows, and every return of the provider for the module in the modes of a
+declaration has declared it on the way (see _required): a key granted by hand returns before
+its handler is built, and the access-control provider computes the value from the settings.
 """
 
 from __future__ import annotations
@@ -69,6 +77,8 @@ from xbsl.extract import classcode
 #: The interface every handler provider implements, and the call that states one handler.
 PROVIDER_INTERFACE = "com/e1c/g5rt/appengine/core/bsl/compiletime/spi/ITypeHandlersProviderPart"
 _SINK = "ITypeHandlersProviderPart$TypeHandlerInfo.builder"
+#: The builder the sink answers: `required` and `requiredHandlers` are called on it.
+_BUILDER = "ITypeHandlersProviderPart$TypeHandlerInfo$Builder"
 _PROVIDER_METHOD = "getHandlers"
 #: A term, a compatibility mode and the comparisons the providers make of it.
 _TERM_CLASS = "com/e1c/g5rt/utils/common/Term"
@@ -96,6 +106,13 @@ _KIND_ALIASES = {"ApplicationProject": "Project"}
 #: The kind whose modules the component descriptions cover, base by base (module_handlers):
 #: its providers answer for every component at once and are left to that source.
 COMPONENT_KIND = "КомпонентИнтерфейса"
+#: The kinds whose module file the build does not compile at all, so that no name in it is
+#: judged. The access-control provider tests every singleton project type, and the kinds it
+#: passes keep an empty slot; a probe on a server (2026-09) showed the build
+#: skipping the module of localized strings silently - neither a handler of it nor a name
+#: the platform does not know was reported - while the modules of a data journal, a fragment
+#: of the command interface and a global client event refused a handler under the same test.
+UNCOMPILED_KINDS = frozenset({"ЛокализованныеСтроки"})
 #: The access-control info the access-control provider asks for the target of a module, and the
 #: parts it answers from - each names a target type class and the type class of its manager.
 _ACCESS_INFO = "com/e1c/g5rt/appengine/core/accesscontrol/common/IAccessControlInfoProvider"
@@ -142,6 +159,9 @@ _MAX_STEPS = 400000
 #   ("int", n)                          a small integer constant
 #   ("coll", source)                    a collection a field of a model holds, see _field_source
 #   ("each", source) / ("hasnext", source)  its iterator and the test of its next item
+#   ("hb", indices, value)              the builder of a declaration: `value` is what was
+#                                       given to `TypeHandlerInfo.builder`, `indices` the
+#                                       entries of Interpreter.found it recorded
 #
 # A method description built in a loop over such a collection carries its source third:
 # ("meth", name, source).
@@ -162,6 +182,8 @@ def _meths(value) -> list:
         return []
     if value[0] == "meth":
         return [value]
+    if value[0] == "hb":
+        return _meths(value[2])
     if value[0] in ("list", "stream", "iter", "oneof"):
         return [item for part in value[1] for item in _meths(part)]
     return []
@@ -372,6 +394,28 @@ class Found:
     target_requires: frozenset = frozenset()  # instanceof tests of that target
     kind: tuple | None = None  # the term of the kind a kind test chose (see _KIND_TESTS)
     per: str | None = None  # the collection the handler is declared once per item of
+    provider: str = ""     # the provider class that declares it
+    # What the builder of the declaration was told by `required`: True, False, or None for a
+    # value the interpreter does not know; empty when `required` was never called.
+    required: set = field(default_factory=set)
+    # The handlers `requiredHandlers` made required along with it (their Russian names; None
+    # for one the interpreter could not name).
+    companions: set = field(default_factory=set)
+
+
+@dataclass
+class Exit:
+    """One path of a provider that returns: what it tested and what it declared on the way."""
+
+    provider: str
+    tested: str
+    low: tuple | None
+    high: tuple | None
+    requires: frozenset
+    managed: bool
+    target_requires: frozenset
+    kind: tuple | None
+    declared: frozenset    # the names declared on the path (the Russian one of a term)
 
 
 @dataclass
@@ -389,11 +433,12 @@ class _Path:
     target_requires: frozenset = frozenset()
     kind: tuple | None = None
     per: str | None = None  # inside a loop over the items of this collection
+    declared: frozenset = frozenset()  # the names declared so far on this path
 
     def fork(self, pc: int) -> _Path:
         return _Path(pc, list(self.stack), dict(self.locals), dict(self.visits), self.tested,
                      self.low, self.high, self.requires, dict(self.lists), self.managed,
-                     self.target_requires, self.kind, self.per)
+                     self.target_requires, self.kind, self.per, self.declared)
 
     def branch(self) -> _Path:
         """A fresh start on the facts of this branch: a helper or a lambda runs on it."""
@@ -411,6 +456,7 @@ class Interpreter:
     def __init__(self, index: ClassIndex):
         self.index = index
         self.found: list[Found] = []
+        self.exits: list[Exit] = []
         self.incomplete: set[str] = set()
         self._statics: dict[str, dict[str, object]] = {}
         self._initializing: dict[str, dict[str, list]] = {}
@@ -479,11 +525,13 @@ class Interpreter:
             if method.name == _PROVIDER_METHOD and method.code is not None \
                     and method.descriptor.startswith("(Lcom/e1c/g5rt/appengine/core/mdd/common/types/"):
                 args = [("obj", owner), ("param", 1), None, ("mode",)]
-                self._run(owner, method, args, 0, record=True, provider=owner)
+                self._run(owner, method, args, 0, record=True, provider=owner,
+                          exits=self.exits)
 
     def _run(self, owner: str, method: _Method, args: list, depth: int, *,
              returned: list | None = None, stores: dict | None = None, record: bool,
-             provider: str | None = None, start: _Path | None = None) -> None:
+             provider: str | None = None, start: _Path | None = None,
+             exits: list | None = None) -> None:
         if depth > _MAX_DEPTH or method.code is None:
             return
         klass = self.index.get(owner)
@@ -519,6 +567,12 @@ class Interpreter:
                 outcome = self._step(owner, pool, code, path, depth, returned, stores, record,
                                      provider)
                 if outcome is None:
+                    if exits is not None and provider and path.tested is not None \
+                            and (0xAC <= code[path.pc] <= 0xB1):
+                        # A return of the provider itself: what the path declared for its type.
+                        exits.append(Exit(provider, path.tested, path.low, path.high,
+                                          path.requires, path.managed, path.target_requires,
+                                          path.kind, path.declared))
                     break
                 paths.extend(outcome[1:])
                 if not outcome[0]:
@@ -890,12 +944,36 @@ class Interpreter:
             return ("target",)
         if (callee_owner, callee) in _KIND_TESTS:
             return ("kindtest", (callee_owner, callee))
-        # The sink: the method a handler is declared by.
+        # The sink: the method a handler is declared by. It answers the builder of the
+        # declaration, which remembers what it recorded for the calls that follow.
         if f"{simple}.{callee}".endswith(_SINK) or called_is(callee_owner, callee, _SINK):
             if record and provider:
+                recorded = []
                 for meth in _meths(args[0] if args else None) or [("meth", ("dyn", "unknown"))]:
-                    self._record(path, meth[1], meth[2] if len(meth) > 2 else path.per)
+                    index = self._record(path, meth[1], meth[2] if len(meth) > 2 else path.per,
+                                         provider)
+                    if index is not None:
+                        recorded.append(index)
+                return ("hb", tuple(recorded), args[0] if args else None)
             return args[0] if args else None
+        # The builder told the declaration is required (`required()`, `required(boolean)`),
+        # or that other handlers are required along with it (`requiredHandlers(terms)`).
+        if callee_owner.endswith(_BUILDER) and isinstance(receiver, tuple) \
+                and receiver[0] == "hb":
+            if callee == "required":
+                flag = args[0] if args else ("int", 1)
+                value = {("int", 1): True, ("int", 0): False}.get(flag)
+                for index in receiver[1]:
+                    self.found[index].required.add(value)
+            elif callee == "requiredHandlers":
+                listed = args[0] if args else None
+                items = listed[1] if isinstance(listed, tuple) and listed[0] == "list" else (None,)
+                for index in receiver[1]:
+                    # A term the interpreter could not name counts as None.
+                    self.found[index].companions.update(
+                        item[2] if isinstance(item, tuple) and item[0] == "term" else None
+                        for item in items)
+            return receiver
         # Terms built of their two spellings.
         if callee_owner == _TERM_CLASS and result_kind == _TERM_DESCRIPTOR:
             strings = [a[1] for a in args if isinstance(a, tuple) and a[0] == "str"]
@@ -1010,8 +1088,10 @@ class Interpreter:
                 start.locals[slot] = value
                 slot += 2 if _is_wide(kind) else 1
             returned: list = []
+            mark = len(self.found)
             self._run(where, method, call_args, depth + 1, returned=returned, record=True,
                       provider=provider, start=start)
+            path.declared = path.declared | _names_of(self.found[mark:])
             return _join(returned) if returned else None
         value = self.summary(where, method, call_args, depth)
         if value is None and result_kind == _TERM_DESCRIPTOR:
@@ -1035,15 +1115,22 @@ class Interpreter:
             start.locals[slot] = value
             slot += 2 if _is_wide(kind) else 1
         returned: list = []
+        mark = len(self.found)
         self._run(owner, method, args, depth + 1, returned=returned, record=record,
                   provider=provider, start=start)
+        # What the lambda declared on any of its paths counts as declared on the caller's.
+        path.declared = path.declared | _names_of(self.found[mark:])
         return _join(returned) if returned else None
 
-    def _record(self, path: _Path, name, per: str | None = None) -> None:
+    def _record(self, path: _Path, name, per: str | None = None,
+                provider: str = "") -> int | None:
+        """Record one declaration on `path`; its index in `found`, None off a type test."""
         if path.tested is None:
-            return
+            return None
         self.found.append(Found(path.tested, name, path.low, path.high, path.requires,
-                                path.managed, path.target_requires, path.kind, per))
+                                path.managed, path.target_requires, path.kind, per, provider))
+        path.declared = path.declared | _names_of(self.found[-1:])
+        return len(self.found) - 1
 
     # -- the collections of a model --------------------------------------------------------
     def _field_source(self, owner: str, name: str) -> str:
@@ -1065,6 +1152,13 @@ class Interpreter:
 
 def called_is(owner: str, name: str, suffix: str) -> bool:
     return f"{owner}.{name}".endswith(suffix)
+
+
+def _names_of(found: list[Found]) -> frozenset:
+    """The names some declarations are made under: the Russian one of a term, the source of a
+    name read at build time."""
+    return frozenset(entry.name[2] if entry.name[0] == "term" else entry.name[1]
+                     for entry in found)
 
 
 def _per_item(value, source: str):
@@ -1370,16 +1464,57 @@ def _mode_text(mode: tuple | None) -> str:
     return ".".join(str(part) for part in mode) if mode else ""
 
 
+def _overlap(first: tuple, second: tuple) -> bool:
+    """Whether two half-open ranges of modes (None - unbounded) share a mode."""
+    (low, high), (other_low, other_high) = first, second
+    return ((low is None or other_high is None or low < other_high)
+            and (other_low is None or high is None or other_low < high))
+
+
+def _required(declarations: list[Found], returns: dict, kind: str, facet: str, russian: str,
+              per: str | None) -> bool:
+    """Whether the compiler requires the handler wherever it declares it.
+
+    Every declaration has to be built `required` with a value the interpreter knows to be
+    true: the access-control provider passes `required` a value it computes from the access
+    settings, and such a handler stays unmarked here (modulehandlers models the settings). And
+    every return of the provider for the module in the modes of a declaration has to have
+    declared it on the way: a key granted by hand returns before its handler is built, and a
+    handler some paths skip is not required on them. A handler declared once per item of a
+    collection is required for each item; the paths that skip the loop are an empty collection,
+    not a doubt.
+    """
+    if not declarations or any(found.required != {True} for found in declarations):
+        return False
+    if per is not None:
+        return True
+    return all(russian in declared
+               for found in declarations
+               for low, high, declared in returns.get((kind, facet, found.provider), ())
+               if _overlap((found.low, found.high), (low, high)))
+
+
+def _needs(declarations: list[Found]) -> list[str]:
+    """The handlers every declaration made required along with it (`requiredHandlers`), in
+    name order; none when the declarations disagree or one of the names is not known."""
+    sets = {frozenset(found.companions) for found in declarations}
+    if len(sets) != 1:
+        return []
+    names = next(iter(sets))
+    return [] if None in names else sorted(names)
+
+
 def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict, list[str]]:
     """({Russian kind: {facet: {"handlers": [rows], "dynamic": [sources]}}}, notes).
 
     `kinds` is the kind table of the distribution (Russian kind: English). A row is
     {"ru", "en"} plus `from`/`to` when the handler is declared in some compatibility modes
-    only (a half-open range, as the component descriptions write it), and `per` when it is
+    only (a half-open range, as the component descriptions write it), `per` when it is
     declared once per item of a collection the description fills (the getter it is read by,
-    see _field_source). `dynamic` names the places a handler name is read from at build time; a
-    module with it is not to be judged. A module the providers declare nothing for has an empty
-    list of handlers.
+    see _field_source), `required` when the compiler requires it wherever it declares it (see
+    _required) and `needs` - the Russian names of the handlers it makes required along with it.
+    `dynamic` names the places a handler name is read from at build time; a module with it is
+    not to be judged. A module the providers declare nothing for has an empty list of handlers.
     """
     index = ClassIndex(car)
     words, types = facet_words(car)
@@ -1409,35 +1544,45 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
     managers = access_managers(index)
     notes.append(f"модулей с целью контроля доступа: {len(managers)}")
 
+    unmapped: set[str] = set()
+    unknown: set[str] = set()
+
+    def places(entry: Found | Exit) -> list[tuple[str, str, bool]]:
+        """(kind, module, whether the entry applies to it) of every module a declaration or a
+        return of a provider stands for; the kinds left to other sources are left out."""
+        out = []
+        for class_name in expand(entry.tested):
+            # A path past the access-control target test declares for the managers alone.
+            applies = not entry.managed or controls(index, managers, class_name, entry)
+            element = element_of(class_name, kinds, words, types)
+            if element is None:
+                if applies and isinstance(entry, Found):
+                    unmapped.add(class_name)
+                continue
+            kind, facet = element
+            if entry.kind is not None:
+                if entry.kind[2] not in kinds:
+                    unknown.add(entry.kind[2])
+                    continue
+                kind = entry.kind[2]
+            if kind == COMPONENT_KIND or kind in UNCOMPILED_KINDS:
+                continue  # the component descriptions list these; see UNCOMPILED_KINDS
+            if applies and any(kind not in kinds_with(required) for required in entry.requires):
+                applies = False
+            out.append((kind, facet, applies))
+        return out
+
     table: dict[str, dict[str, dict]] = {}
     spans: dict[tuple[str, str, str], list] = {}
     rows: dict[tuple[str, str, str], dict] = {}
     pers: dict[tuple[str, str, str], set] = {}
-    unmapped: set[str] = set()
-    unknown: set[str] = set()
+    declarations: dict[tuple[str, str, str], list[Found]] = {}
     for found in interpreter.found:
-        for class_name in expand(found.tested):
-            # A path past the access-control target test declares for the managers alone.
-            applies = not found.managed or controls(index, managers, class_name, found)
-            element = element_of(class_name, kinds, words, types)
-            if element is None:
-                if applies:
-                    unmapped.add(class_name)
-                continue
-            kind, facet = element
-            if found.kind is not None:
-                if found.kind[2] not in kinds:
-                    unknown.add(found.kind[2])
-                    continue
-                kind = found.kind[2]
-            if kind == COMPONENT_KIND:
-                continue  # the component descriptions list these, per base component
+        for kind, facet, applies in places(found):
             # The providers are asked about this module: it keeps its slot, empty when no path
             # declares anything for it (see the module docstring).
             slot = table.setdefault(kind, {}).setdefault(facet, {"handlers": [], "dynamic": []})
             if not applies:
-                continue
-            if any(kind not in kinds_with(required) for required in found.requires):
                 continue
             if found.name[0] != "term":
                 source = found.name[1].rsplit("/", 1)[-1]
@@ -1449,10 +1594,20 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
             spans.setdefault(key, []).append((found.low, found.high))
             rows.setdefault(key, {"ru": russian, "en": english})
             pers.setdefault(key, set()).add(found.per)
+            declarations.setdefault(key, []).append(found)
+    # {(kind, module, provider): [(low, high, names declared)]} of the returns of a provider.
+    returns: dict[tuple[str, str, str], list] = {}
+    for exit_ in interpreter.exits:
+        for kind, facet, applies in places(exit_):
+            if applies:
+                returns.setdefault((kind, facet, exit_.provider), []).append(
+                    (exit_.low, exit_.high, exit_.declared))
     for provider in sorted(interpreter.incomplete):
         notes.append(f"провайдер не пройден до конца, его модули динамические: {provider}")
+    required_count = 0
     for (kind, facet, russian), row in rows.items():
-        merged = _merge_modes(spans[(kind, facet, russian)])
+        key = (kind, facet, russian)
+        merged = _merge_modes(spans[key])
         entry = dict(row)
         if merged is not None:
             low, high = merged
@@ -1460,10 +1615,17 @@ def element_handlers(car: zipfile.ZipFile, kinds: dict[str, str]) -> tuple[dict,
                 entry["from"] = _mode_text(low)
             if high is not None:
                 entry["to"] = _mode_text(high)
-        per = _per_of(pers[(kind, facet, russian)])
+        per = _per_of(pers[key])
         if per is not None:
             entry["per"] = per
+        if _required(declarations[key], returns, kind, facet, russian, per):
+            entry["required"] = True
+            required_count += 1
+        needs = _needs(declarations[key])
+        if needs:
+            entry["needs"] = needs
         table[kind][facet]["handlers"].append(entry)
+    notes.append(f"обязательных обработчиков: {required_count}")
     for kind in table:
         for facet in table[kind]:
             slot = table[kind][facet]

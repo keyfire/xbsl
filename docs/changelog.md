@@ -88,6 +88,18 @@ entry either - say what the behaviour was, not which class name was compared.
   error. The module of the contract type itself and static methods are not checked. ([#158](https://github.com/keyfire/xbsl/pull/158))
 - **`resource-references --limit` caps the list of places the way `meta_resource_references` does.**
   The default is 100 places, and `total` still counts all of them. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **New `code/mandatory-handler-missing` catches a module without a handler the compiler
+  requires.** That is the handler of a command or a scheduled job, the access handlers the
+  settings switch on, `OnCreateOnBasis` for every basis type, and the other half of a pair. ([#160](https://github.com/keyfire/xbsl/pull/160))
+- **New `yaml/compute-permissions-by` checks `ComputePermissionsBy` against the access
+  settings.** The list is required once a permission is computed for each object, and refused
+  otherwise. ([#160](https://github.com/keyfire/xbsl/pull/160))
+- **New `yaml/register-entity-contract` catches a register that implements an entity contract.**
+  A register can implement only a type contract, and the server rejects anything else. ([#160](https://github.com/keyfire/xbsl/pull/160))
+- **New `yaml/report-parameters-alias` catches report query parameters under `Parameters`.** The
+  server rejects that key, and the fix renames it to `QueryParameters`. ([#160](https://github.com/keyfire/xbsl/pull/160))
+- **Scaffolding takes English words.** `add-field` and `set-field-property` accept English item
+  kinds, and `set-access` takes the rights and methods an English yaml writes. ([#160](https://github.com/keyfire/xbsl/pull/160))
 
 ### Changed
 
@@ -226,6 +238,12 @@ entry either - say what the behaviour was, not which class name was compared.
   methods.** The compiler refuses both. ([#159](https://github.com/keyfire/xbsl/pull/159))
 - **`set-field-property` reads a `Type` the way `add-field` reads `--type`.** Markup escapes are
   undone and platform names follow the language of the file. ([#159](https://github.com/keyfire/xbsl/pull/159))
+- **Types in `CreateOnBasis` are translated as types.** `Invoices.Ссылка` becomes
+  `Invoices.Reference`, not `Invoices.Link`; the same goes for SOAP faults and type contracts. ([#160](https://github.com/keyfire/xbsl/pull/160))
+- **`yaml/union-needs-nullable` also checks a single type in a write or delete parameter.** Such a
+  parameter needs the empty value, so `Boolean` fails where `Boolean?` compiles. ([#160](https://github.com/keyfire/xbsl/pull/160))
+- **Long names no longer get hints that differ by a whole word.** `Condition` is not offered
+  `ConditionString` anymore, while real typos keep their hints. ([#160](https://github.com/keyfire/xbsl/pull/160))
 
 ## 2026-09-27 – 0.120.0
 

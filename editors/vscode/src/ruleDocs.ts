@@ -283,12 +283,25 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "code/handler-overrides-nothing",
     page: "stdlib/element/xbsl/Std/Annotations/Handler_ru",
   },
+  {
+    match: (r) => r === "code/mandatory-handler-missing",
+    page: "stdlib/element/xbsl/Std/Annotations/Handler_ru",
+  },
   // The page on project enumerations explains their values and the default one.
   {
     match: (r) => r === "yaml/enum-needs-nullable" || r === "yaml/enum-default-value",
     page: "topics/fixed-set-of-values",
   },
   { match: (r) => r === "yaml/ref-needs-nullable", page: TYPES, anchor: "тип-неопределено" },
+  // The type contract page lists the elements that implement one - both registers among them,
+  // while the entity contract page names neither.
+  { match: (r) => r === "yaml/register-entity-contract", page: "topics/type-contract" },
+  // The query parameters of a report are documented under their own key.
+  {
+    match: (r) => r === "yaml/report-parameters-alias",
+    page: "topics/use-query-to-create-report",
+    anchor: "параметры-запроса",
+  },
   { match: (r) => r === "yaml/date-input-needs-plain-date", page: "topics/edit-component" },
   { match: (r) => r === "code/resource-bare-name", page: IMAGES },
   { match: (r) => r === "code/unknown-resource", page: IMAGES },

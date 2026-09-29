@@ -2307,7 +2307,162 @@ def test_set_access_on_an_english_object(tmp_path):
     # The section lands before the first data section, not at the end of the file.
     assert text.index("AccessControl:") < text.index("Attributes:")
     assert scaffold.access_info(text)["default"] == "РазрешеноВсем"
+    # The right and the method are spelled like the file too, whatever the caller spoke.
+    assert "        Default: PermitEveryone\n" in text
     assert _valid_yaml(text)
+
+
+# --- English words of the tool --------------------------------------------------------------
+
+
+def test_field_kinds_are_taken_in_english(tmp_path):
+    """An English project is filled in with English words: `attribute` is the attribute kind,
+    `tabular-part` the tabular part one - case and hyphens aside. The words are a table of the
+    tool, so they work without the platform data as well."""
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Товары"))
+    yaml_path = subsystem / "Товары.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "attribute", "Цвет"))
+    apply_result(scaffold.op_add_field(yaml_path, "TabularPart", "Состав"))
+    apply_result(scaffold.op_add_fields(yaml_path, "Attribute", ["Вес", "Объем"], type_="Число"))
+    apply_result(scaffold.op_add_field(yaml_path, "attribute", "Количество", type_="Число",
+                                       tabular="Состав"))
+    apply_result(scaffold.op_set_field_property(yaml_path, "attribute", "Цвет",
+                                                {"Представление": "Цвет товара"}))
+    parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
+    assert [a["Имя"] for a in parsed["Реквизиты"]] == ["Цвет", "Вес", "Объем"]
+    assert parsed["Реквизиты"][0]["Представление"] == "Цвет товара"
+    assert [a["Имя"] for a in parsed["ТабличныеЧасти"][0]["Реквизиты"]] == ["Количество"]
+    assert scaffold.field_kind_of("query-parameter") == "параметр-запроса"
+    assert scaffold.field_kind_of("табличная-часть") == "табличная-часть"
+
+
+def test_a_field_kind_refusal_names_the_english_words(tmp_path):
+    """A word the tool does not know is quoted back as written, next to both vocabularies."""
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Товары"))
+    with pytest.raises(ScaffoldError, match=r"'atribute'.*реквизит \(attribute\)"):
+        scaffold.op_add_field(subsystem / "Товары.yaml", "atribute", "Цвет")
+    with pytest.raises(ScaffoldError, match=r"нет секции для 'измерение'.*реквизит \(attribute\)"):
+        scaffold.op_add_field(subsystem / "Товары.yaml", "dimension", "Склад")
+
+
+def test_the_english_field_kinds_cover_the_russian_ones_one_to_one():
+    assert set(scaffold.FIELD_KINDS_EN) == set(scaffold.ADD_FIELD_KINDS)
+    folded = [scaffold._folded_word(word) for word in scaffold.FIELD_KINDS_EN.values()]
+    assert len(set(folded)) == len(folded)
+    assert not set(folded) & {scaffold._folded_word(word) for word in scaffold.ADD_FIELD_KINDS}
+
+
+def _kebab(camel: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "-", camel).lower()
+
+
+@pytest.mark.needs_data
+def test_the_english_field_kinds_are_the_platform_words():
+    """Each English word is the platform's own: the term dictionary's word for the singular
+    noun, or - where it has none - the singular of the section's English key. The negative
+    control is the pair a hand would guess: `tabular-section` is neither."""
+    def platform_word(russian: str) -> set[str]:
+        camel = "".join(part[:1].upper() + part[1:] for part in russian.split("-"))
+        words = set()
+        if (single := scaffold.terms.common_english(camel)):
+            words.add(_kebab(single))
+        spec = scaffold._SECTION_SPECS.get(russian) or scaffold._MAPPING_SPECS[russian]
+        section = scaffold.key_forms(spec["section"])[-1]
+        for plural, singular in (("ies", "y"), ("es", ""), ("s", "")):
+            if section.isascii() and section.endswith(plural):
+                words.add(_kebab(section[: -len(plural)] + singular))
+        return words
+
+    for russian, english in scaffold.FIELD_KINDS_EN.items():
+        assert english in platform_word(russian), russian
+    assert "tabular-section" not in platform_word("табличная-часть")
+
+
+@pytest.mark.needs_data
+def test_set_access_takes_english_words_in_an_english_project(tmp_path):
+    """`Read=PermitEveryone` is what an English yaml writes, so it is what the caller passes;
+    the summary reads it back in the spelling of the tables, and a Russian call over the same
+    right replaces the line in place without turning it Russian."""
+    subsystem = _make_english_project(tmp_path)
+    yaml_path = subsystem / "Tasks.yaml"
+    apply_result(scaffold.op_set_access(tmp_path, name="Tasks", default="PermitAuthenticated",
+                                        permissions={"Read": "PermitEveryone"}))
+    text = yaml_path.read_text(encoding="utf-8")
+    assert "        Default: PermitAuthenticated\n" in text
+    assert "        Read: PermitEveryone\n" in text
+    info = scaffold.access_info(text)
+    assert info["default"] == "РазрешеноАутентифицированным"
+    assert info["permissions"] == {"ПоУмолчанию": "РазрешеноАутентифицированным",
+                                   "Чтение": "РазрешеноВсем"}
+
+    again = scaffold.op_set_access(tmp_path, name="Tasks", permissions={"Read": "PermitEveryone"})
+    assert again.changes == [] and any("уже имеют такие значения" in n for n in again.notes)
+
+    apply_result(scaffold.op_set_access(tmp_path, name="Tasks",
+                                        permissions={"Чтение": "РазрешеноАдминистраторам",
+                                                     "Delete": "PermitAdmins"}))
+    text = yaml_path.read_text(encoding="utf-8")
+    assert "        Read: PermitAdmins\n" in text and "        Delete: PermitAdmins\n" in text
+    assert not re.search("[А-Яа-я]", text.split("AccessControl:")[1].split("Attributes:")[0])
+    assert _valid_yaml(text)
+
+
+@pytest.mark.needs_data
+def test_set_access_takes_english_words_in_a_russian_project(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Товары"))
+    result = scaffold.op_set_access(tmp_path, name="Товары", default="PermitEveryone",
+                                    permissions={"Read": "PermissionsComputed"})
+    apply_result(result)
+    perms = _valid_yaml((subsystem / "Товары.yaml").read_text(encoding="utf-8"))["КонтрольДоступа"]
+    assert perms["Разрешения"] == {"ПоУмолчанию": "РазрешеноВсем",
+                                   "Чтение": "РазрешенияВычисляются"}
+    assert any("ВычислитьРазрешенияДоступа" in n for n in result.notes)
+
+    with pytest.raises(ScaffoldError, match=r"'PermitGuests'.*РазрешеноВсем \(PermitEveryone\)"):
+        scaffold.op_set_access(tmp_path, name="Товары", default="PermitGuests")
+    with pytest.raises(ScaffoldError, match=r"нет права 'Call'.*Чтение \(Read\)"):
+        scaffold.op_set_access(tmp_path, name="Товары", permissions={"Call": "PermitEveryone"})
+
+
+@pytest.mark.needs_data
+def test_new_object_takes_an_english_access_method(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Catalog", "Notes", access="PermitEveryone"))
+    text = (subsystem / "Notes.yaml").read_text(encoding="utf-8")
+    assert "    Permissions:\n        Default: PermitEveryone\n" in text
+
+    russian = _make_project(tmp_path / "ru")
+    apply_result(scaffold.op_new_object(russian, "HttpСервис", "Каталог",
+                                        access="PermitAuthenticated"))
+    service = _valid_yaml((russian / "Каталог.yaml").read_text(encoding="utf-8"))
+    assert service["КонтрольДоступа"]["Разрешения"]["Вызов"] == "РазрешеноАутентифицированным"
+
+
+@pytest.mark.needs_data
+def test_the_summary_of_an_english_file_has_its_default(tmp_path):
+    """An English object as the platform writes it: read by its Russian key alone, the default
+    right was not there at all, and the overview said the platform default applied."""
+    subsystem = _make_english_project(tmp_path)
+    (subsystem / "Tasks.yaml").write_text(
+        ENGLISH_CATALOG.replace("Attributes:", "AccessControl:\n    Permissions:\n"
+                                "        Default: PermitEveryone\nAttributes:", 1),
+        encoding="utf-8",
+    )
+    overview = scaffold.project_info(tmp_path)
+    tasks = next(o for o in overview["objects"] if o["name"] == "Tasks")
+    assert tasks["access_default"] == "РазрешеноВсем"
+
+
+def test_english_access_words_need_the_data(monkeypatch):
+    """The English methods are the platform's term pairs: with the pairs cut off they are not
+    known - the negative control of the lookup - and the Russian names still are."""
+    monkeypatch.setattr(scaffold.terms, "russian", lambda value, section: None)
+    monkeypatch.setattr(scaffold.terms, "common_russian", lambda value: None)
+    assert scaffold.access_method("PermitEveryone") is None
+    assert scaffold.access_method("РазрешеноВсем") == "РазрешеноВсем"
 
 
 @pytest.mark.needs_data

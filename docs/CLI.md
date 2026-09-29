@@ -392,7 +392,7 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `-h, --help` | show this help message and exit |
 | `--scope SCOPE` | the visibility scope; the platform default is InSubsystem |
 | `--environment ENVIRONMENT` | the environment – for CommonModule and Structure |
-| `--access ACCESS` | the access method: for HttpService it goes to Разрешения.Call, for data objects to Разрешения.Default (individual rights are set by set-access) |
+| `--access ACCESS` | the access method, in either language (e.g. PermitEveryone): for HttpService it goes to Permissions.Call, for data objects to Permissions.Default (individual rights are set by set-access) |
 | `--routes ROUTES` | HttpService routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
 | `--presentation PRESENTATION` | the element caption: written where the kind keeps it - into Presentation or, for a catalog, a document, a register and a processing, into the Interface section (without it the very first lint answers naming/presentation) |
@@ -414,7 +414,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object to add the field to |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие, операция, индекс, параметр-запроса, табличная-часть, строка, шаблон |
+| `field_kind` | реквизит (attribute), измерение (dimension), ресурс (resource), значение (value), параметр (parameter), поле (field), константа (constant), свойство (property), событие (event), операция (operation), индекс (index), параметр-запроса (query-parameter), табличная-часть (tabular-part), строка (string), шаблон (template) |
 | `name` | the field name |
 
 **Options**
@@ -627,7 +627,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the object whose item gets the properties |
-| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа, свойство, событие, операция, индекс, параметр-запроса, табличная-часть |
+| `field_kind` | реквизит (attribute), измерение (dimension), ресурс (resource), значение (value), параметр (parameter), поле (field), константа (constant), свойство (property), событие (event), операция (operation), индекс (index), параметр-запроса (query-parameter), табличная-часть (tabular-part) |
 | `name` | the name of the item in the section |
 
 **Options**
@@ -829,8 +829,8 @@ usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]
 | `-h, --help` | show this help message and exit |
 | `--name NAME` | the object name in the project |
 | `--path PATH` | the object's yaml (instead of `--name`) |
-| `--default DEFAULT` | the method for the Default right |
-| `--permission RIGHT=METHOD` | the method for a single right (repeatable), e.g. Чтение=PermitEveryone |
+| `--default DEFAULT` | the method for the Default right, in either language (e.g. PermitEveryone) |
+| `--permission RIGHT=METHOD` | the method for a single right (repeatable), in either language, e.g. Read=PermitEveryone |
 | `--calc-by CALC_BY` | ComputePermissionsBy fields, comma-separated (required for PermissionsComputedForEachObject) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 

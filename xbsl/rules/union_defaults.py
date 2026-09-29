@@ -23,8 +23,10 @@ Three positions fail with messages of their own, and the rule quotes each:
 
 - a parameter of writing or deleting (`WriteParameters`, `DeleteParameters`) - "The type
   composition of parameter ... must contain "Undefined" type". There is no default key there,
-  so the empty member is the only way out. The same message came for a single type (`Boolean`)
-  - that is beyond a rule about unions and stays unreported here;
+  so the empty member is the only way out. Here the empty member is demanded of a SINGLE type
+  as well: a second probe got the same message for `Boolean` and for `Number` alone, so in these
+  two sections a plain type without `?` is reported too, with the fix `Boolean?` - the form the
+  documentation writes in its own example of a write parameter;
 - a query parameter of a report (`QueryParameters`) - the default value of the parameter is
   not set; the stand answered in Russian here:
   `Не указано значение по умолчанию для параметра`. A single type, a union with the empty
@@ -35,12 +37,16 @@ Three positions fail with messages of their own, and the rule quotes each:
 
 A union with a REFERENCE member is the business of the sibling yaml/ref-needs-nullable (the
 same compiler message, reported there with the reference named); this rule takes the unions
-that have none, so one position never gets two findings. Narrowing, as there: an alternative
-outside the plain-chain shape (a generic, a qualified name) leaves the union alone, and a typed
-literal (a `Value` node holding its own `Type`) is not a declaration.
+that have none, so one position never gets two findings. The same holds for a single reference
+in a write or delete parameter, and yaml/enum-needs-nullable leaves those parameters to this
+rule, so a project enumeration there is reported once, with the message of the section.
+Narrowing, as there: an alternative outside the plain-chain shape (a generic, a qualified name)
+leaves the union alone - and the single type of an operation parameter too - and a typed literal
+(a `Value` node holding its own `Type`) is not a declaration.
 
 The fix is mechanical - append the empty member, `String|Number|?` (inside the angle brackets
-for an input field) - and is offered as a quick fix when the value is written as a plain scalar.
+for an input field, and `Boolean?` for the single type of an operation parameter) - and is
+offered as a quick fix when the value is written as a plain scalar.
 """
 
 from __future__ import annotations
@@ -101,6 +107,16 @@ MESSAGES = {
               "compilation will fail with 'The type composition of parameter ... must contain "
               "\"Undefined\" type'. Add the empty value to the set: '{name}|?'.",
     },
+    "yaml/union-needs-nullable.operation-single": {
+        "ru": "Тип '{name}' параметра записи или удаления без пустого значения: в составе такого "
+              "параметра должно быть Неопределено и при одном типе, серверная компиляция упадет "
+              "с 'The type composition of parameter ... must contain \"Undefined\" type'. "
+              "Укажите '{name}?'.",
+        "en": "Type '{name}' of a write or delete parameter has no empty value: the type "
+              "composition of such a parameter must contain Undefined even for a single type, "
+              "the server-side compilation will fail with 'The type composition of parameter "
+              "... must contain \"Undefined\" type'. Use '{name}?'.",
+    },
     "yaml/union-needs-nullable.report": {
         "ru": "Тип '{name}' параметра запроса отчета – составной тип без пустого значения: "
               "значение по умолчанию для него не строится, серверная компиляция упадет с 'Не "
@@ -152,6 +168,16 @@ def _section_keys() -> dict[str, str]:
 dataset.register_reset(_section_keys.cache_clear)
 
 
+@lru_cache(maxsize=1)
+def _operation_keys() -> tuple[str, ...]:
+    """Every spelling of the write and delete parameter sections - a file that names neither
+    and has no `|` in it holds nothing for the rule."""
+    return tuple(key for key, message in _section_keys().items() if message == "operation")
+
+
+dataset.register_reset(_operation_keys.cache_clear)
+
+
 def _section_items(root) -> dict[int, str]:
     """{id of a mapping: the message key} for the items of the sections of _SECTIONS."""
     keys = _section_keys()
@@ -167,6 +193,44 @@ def _section_items(root) -> dict[int, str]:
                 if isinstance(item, yaml.MappingNode):
                     out[id(item)] = message
     return out
+
+
+def operation_type_positions(source: SourceFile) -> frozenset[tuple[int, int]]:
+    """(line, column) of the `Type` value of every write or delete parameter of the file.
+
+    Such a parameter must carry the empty value whatever its type, and this rule reports it with
+    the refusal of the section; a sibling that would judge the same value by the type alone
+    (yaml/enum-needs-nullable) leaves these positions out, so a position gets one finding. The
+    column points past an opening quote, the way a text search for the value finds it.
+    """
+    if not _HAVE_YAML or not any(key in source.text for key in _operation_keys()):
+        return frozenset()
+    root = _composed(source)
+    if root is None:
+        return frozenset()
+    items = _section_items(root)
+    out: set[tuple[int, int]] = set()
+    for mapping in _mapping_nodes(root):
+        if items.get(id(mapping)) != "operation":
+            continue
+        entry = _scalar_entries(mapping).get("Тип")
+        if entry is None or not isinstance(entry[1], yaml.ScalarNode):
+            continue
+        node = entry[1]
+        quote = 1 if node.style in ("'", '"') else 0
+        out.add((node.start_mark.line + 1, node.start_mark.column + 1 + quote))
+    return frozenset(out)
+
+
+def _plain_single(text: str) -> bool:
+    """A single plain chain with no empty value and no reference facet.
+
+    A reference is left to yaml/ref-needs-nullable, which reports it in every position; a
+    generic or a qualified name is outside the shapes the probes settled.
+    """
+    if not text or text in _NULLABLE_ALTS or text.endswith("?"):
+        return False
+    return bool(_YAML_UNION_ALT_RE.match(text)) and not _yaml_patterns()[0].fullmatch(text)
 
 
 def _plain_union(text: str) -> bool:
@@ -186,8 +250,10 @@ def _plain_union(text: str) -> bool:
 @rule("yaml/union-needs-nullable", "yaml/union-needs-nullable.title", "A",
       severity=Severity.ERROR)
 def yaml_union_needs_nullable(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "yaml" or not _HAVE_YAML or "|" not in source.text:
+    if source.kind != "yaml" or not _HAVE_YAML:
         return
+    if "|" not in source.text and not any(key in source.text for key in _operation_keys()):
+        return  # no union and no operation parameter - the cheap gate before the parse
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
         return
@@ -234,13 +300,22 @@ def yaml_union_needs_nullable(source: SourceFile) -> Iterable[Diagnostic]:
         if _DEFAULT_KEY in entries or _VALUE_KEY in entries or _is_required(entries):
             continue
         stripped = value.strip()
+        section = sections.get(id(mapping))
         if not _plain_union(stripped):
+            if section == "operation" and _plain_single(stripped):
+                # The composition of an operation parameter must hold the empty value even
+                # when it names one type - see the module docstring.
+                yield Diagnostic(
+                    source.rel, line, column,
+                    "yaml/union-needs-nullable", Severity.ERROR,
+                    i18n.t("yaml/union-needs-nullable.operation-single", name=stripped),
+                    fix=TextEdit(end, end, "?") if plain else None,
+                )
             continue
         type_key = entry[0].value
         default_key = _DEFAULT_KEY
         if type_key != "Тип":  # the file speaks English - so does the advice
             default_key = metamodel.english_name(_DEFAULT_KEY) or _DEFAULT_KEY
-        section = sections.get(id(mapping))
         default = "" if contract or section == "operation" else i18n.t(
             "yaml/union-needs-nullable.or-default", key=default_key, type=type_key,
         )

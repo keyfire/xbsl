@@ -10,8 +10,11 @@ The position narrows the candidates: a call is offered what can be called, a bar
 a value. A short name is offered only a candidate one edit away: across the whole scope a short
 word almost always had a neighbour two edits off (`Close` got the function `Cos`).
 
+A long name barely similar to a candidate is offered it only when the two differ by scattered
+letters, the way a typo does, and not by a word (`Condition` got `ConditionString`).
+
 The search is bounded so that the global names cost next to nothing, and the bounds never change
-what difflib would pick: the last tests hold the two side by side.
+what difflib would pick among the candidates that pass: the last tests hold the two side by side.
 """
 
 import difflib
@@ -20,7 +23,13 @@ import random
 import pytest
 
 from xbsl import engine
-from xbsl.rules.undefined_names import _HINT_CUTOFF, _closest_in, _hint_table
+from xbsl.rules.undefined_names import (
+    _HINT_CUTOFF,
+    _TYPO_BAND,
+    _closest_in,
+    _hint_table,
+    _typo_shaped,
+)
 
 _RULE = "code/undefined-name"
 
@@ -182,6 +191,38 @@ def test_a_short_name_is_offered_only_a_candidate_one_edit_away():
     assert _hints("Рейсы.Объект.xbsl", bare.format(expr="Итго")) == [("Итго", "Итог")]
 
 
+@pytest.mark.needs_data
+def test_a_long_name_is_not_offered_a_name_a_word_away():
+    # `ДатаРейса` and the local score exactly the cutoff, and what tells them apart is the whole
+    # word `Начала`, not a typo: the distribution's own modules got hints like `Condition` ->
+    # `ConditionString` this way. The control is a letter dropped from the same local.
+    text = (
+        "@ВПроекте\nметод Сводка(): Число\n    знч ДатаНачалаРейса = 1\n"
+        "    возврат {expr}\n;\n"
+    )
+    assert _hints("Рейсы.Объект.xbsl", text.format(expr="ДатаРейса")) == [("ДатаРейса", None)]
+    assert _hints("Рейсы.Объект.xbsl", text.format(expr="ДатаНачлаРейса")) == [
+        ("ДатаНачлаРейса", "ДатаНачалаРейса")]
+
+
+@pytest.mark.needs_data
+def test_two_changed_letters_of_a_long_name_are_still_a_typo():
+    # Two letters of an eight-letter name changed score the very same cutoff, and they are a
+    # typo: the letters lie apart, so the name is still offered.
+    text = "@ВПроекте\nметод Сводка(): Число\n    знч Перелеты = 1\n    возврат Пкрелетя\n;\n"
+    assert _hints("Рейсы.Объект.xbsl", text) == [("Пкрелетя", "Перелеты")]
+
+
+def test_a_typo_is_told_from_a_word_by_the_runs_left_unmatched():
+    def shaped(candidate: str, name: str) -> bool:
+        return _typo_shaped(difflib.SequenceMatcher(None, candidate, name))
+
+    assert shaped("Перелеты", "Пкрелетя")  # two letters apart
+    assert shaped("ДатаНачалаРейса", "ДатаНачлаРейса")  # one letter dropped
+    assert not shaped("ДатаНачалаРейса", "ДатаРейса")  # a word dropped
+    assert not shaped("ConditionString", "Condition")  # a word added at the end
+
+
 def _typos(names: list[str], rng: random.Random) -> list[str]:
     out = []
     for name in names:
@@ -207,14 +248,24 @@ def test_the_bounded_search_picks_what_difflib_picks():
     letters = "абвгдежзиклмнопрстуфхцшщыэюяABCDEFGHabcdefghxyz_0"
     names = sorted({
         "".join(rng.choice(letters) for _ in range(rng.randint(1, 16))) for _ in range(600)
-    } | {"Сумма", "Суммы", "Итог", "Итоги", "ПолучитьЗначение", "Значение", "aaaa", "aaab"})
+    } | {"Сумма", "Суммы", "Итог", "Итоги", "ПолучитьЗначение", "Значение", "aaaa", "aaab",
+         "ДатаНачалаРейса", "Перелеты"})
     table = _hint_table(names)
     words = _typos(rng.sample(names, 300), rng) + rng.sample(names, 50) + ["", "а", "zz"]
+    # The typo band from both sides: a word away (difflib alone would offer the date) and two
+    # letters changed (a typo, offered all the same).
+    words += ["ДатаРейса", "КлючИЗначение", "Пкрелетя"]
     for word in words:
         others = [n for n in names if n != word]
-        expected = difflib.get_close_matches(word, others, n=1, cutoff=_HINT_CUTOFF)
+        # difflib's own pick, less the candidates of the typo band that differ by a word: the
+        # check is made on every candidate, so the answer is the best of those that pass it.
+        passing = [(score, n) for n in others
+                   if (score := difflib.SequenceMatcher(None, n, word).ratio()) >= _HINT_CUTOFF
+                   and (score >= _TYPO_BAND
+                        or _typo_shaped(difflib.SequenceMatcher(None, n, word)))]
+        expected = max(passing)[1] if passing else None
         found = _closest_in(word, table)
-        assert (found[1] if found else None) == (expected[0] if expected else None), word
+        assert (found[1] if found else None) == expected, word
 
 
 def _one_edit(word: str, candidate: str) -> bool:

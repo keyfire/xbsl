@@ -472,3 +472,87 @@ def test_the_module_of_the_project_by_the_kind_of_the_project(more_data):
 def test_control_without_the_project_slot_no_project_kind_is_judged(elements):
     assert modulehandlers.project_slot("Библиотека") is None
     assert modulehandlers.project_slot("Приложение") is None
+
+
+# --- the handlers the compiler requires --------------------------------------------------------
+
+_HANDLER_REQUIRED = {"ru": "Обработчик", "en": "Handler", "required": True}
+_ON_BASIS_REQUIRED = {**_ON_BASIS, "required": True}
+_LINK = {"ru": "ВычислитьВнешнююНавигационнуюСсылку", "en": "ComputeExternalNavigationLink",
+         "needs": ["ВычислитьСсылкуПоВнешнейНавигационнойСсылке"]}
+_BACK = {"ru": "ВычислитьСсылкуПоВнешнейНавигационнойСсылке",
+         "en": "ComputeReferenceByExternalNavigationLink",
+         "needs": ["ВычислитьВнешнююНавигационнуюСсылку"]}
+_REQUIRED_ELEMENTS = {
+    **_SETTINGS_ELEMENTS,
+    "Справочник": {
+        "": {"handlers": [_LINK, _PERMISSIONS, _BACK, _CHOICE],
+             "dynamic": [modulehandlers.RECORD_SECURITY_SOURCE]},
+        "Объект": {"handlers": [{"ru": "ПередЗаписью", "en": "BeforeWrite"}, _ON_BASIS_REQUIRED]},
+    },
+    "ОбычнаяКоманда": {"": {"handlers": [_HANDLER_REQUIRED]}},
+    "ПереключаемаяКоманда": {"": {"handlers": [{"ru": "Обработчик", "en": "Handler"}]}},
+    "Старое": {"": {"handlers": [{**_HANDLER_REQUIRED, "to": "8.0"}]}},
+    "HttpСервис": {"": {"handlers": [_PERMISSIONS]}},
+}
+
+
+@pytest.fixture
+def required_data(tmp_path):
+    _root(tmp_path, {**_STDLIB, "element_module_handlers": _REQUIRED_ELEMENTS})
+    dataset.set_data_root(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_a_row_the_data_marks_required_is_required(required_data):
+    assert _names(modulehandlers.required_rows("ОбычнаяКоманда", "", None, None, None)) == [
+        "Обработчик"]
+    # The control: the same handler without the mark is optional.
+    assert modulehandlers.required_rows("ПереключаемаяКоманда", "", None, None, None) == ()
+
+
+def test_a_required_row_counts_only_in_the_modes_it_is_declared_in(required_data):
+    assert _names(modulehandlers.required_rows("Старое", "", None, None, (7, 0))) == [
+        "Обработчик"]
+    assert modulehandlers.required_rows("Старое", "", None, None, (8, 0)) == ()
+
+
+def test_a_required_row_per_item_needs_a_description_that_fills_the_collection(required_data):
+    filled = frozenset({"СозданиеНаОсновании"})
+    assert _names(modulehandlers.required_rows("Справочник", "Объект", None, filled, None)) == [
+        "ПриСозданииНаОсновании"]
+    assert modulehandlers.required_rows("Справочник", "Объект", None, frozenset(), None) == ()
+    # A description that cannot be read requires none of them.
+    assert modulehandlers.required_rows("Справочник", "Объект", None, None, None) == ()
+
+
+def test_the_access_handlers_are_required_as_the_settings_use_them(required_data):
+    assert modulehandlers.required_rows("Справочник", "", _Settings(), None, None) == ()
+    assert _names(modulehandlers.required_rows(
+        "Справочник", "", _Settings(computed=True), None, None)) == ["ВычислитьРазрешенияДоступа"]
+    assert _names(modulehandlers.required_rows(
+        "Справочник", "", _Settings(computed=True, per_object=True), None, None)) == [
+        "ВычислитьРазрешенияДоступа", "ВычислитьРазрешенияДоступаДляОбъектов"]
+    assert _names(modulehandlers.required_rows(
+        "HttpСервис", "", _Settings(computed=True), None, None, controlled=True)) == [
+        "ВычислитьРазрешенияДоступа"]
+
+
+def test_control_settings_that_cannot_be_read_require_no_access_handler(required_data):
+    assert modulehandlers.required_rows("Справочник", "", None, None, None) == ()
+    assert modulehandlers.required_rows(
+        "Справочник", "", _Settings(computed=True, per_object=True, standard=True),
+        None, None) == ()
+
+
+def test_a_handler_of_a_pair_needs_the_other_in_either_spelling(required_data):
+    needs = modulehandlers.needs_of("Справочник", "")
+    assert _names(needs["ВычислитьВнешнююНавигационнуюСсылку"]) == [
+        "ВычислитьСсылкуПоВнешнейНавигационнойСсылке"]
+    assert needs["ComputeExternalNavigationLink"] == needs["ВычислитьВнешнююНавигационнуюСсылку"]
+    assert _names(needs["ВычислитьСсылкуПоВнешнейНавигационнойСсылке"]) == [
+        "ВычислитьВнешнююНавигационнуюСсылку"]
+    assert modulehandlers.needs_of("ОбычнаяКоманда", "") == {}

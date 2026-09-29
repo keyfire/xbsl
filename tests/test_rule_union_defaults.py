@@ -8,7 +8,8 @@ constant, on a property of an interface component and on a property of an entity
 with `|?`, with `DefaultValue` next to the type, on a required structure field, on a parameter
 of a global client event and of a virtual table and on a property of a type contract. A write
 or delete parameter, a report query parameter and an input field around a union fail with
-messages of their own, and the rule quotes each.
+messages of their own, and the rule quotes each; a write or delete parameter fails with a
+single type too.
 
 The rule needs no Element data, so the tests live outside test_rules and run in the public CI
 (the English spelling of a description needs the platform dictionary and is marked).
@@ -157,6 +158,83 @@ def test_write_and_delete_parameters_quote_their_own_refusal():
         assert "must contain" in x.message and "ЗначениеПоУмолчанию" not in x.message
     fixed = _operations("Строка|Число|?", "Число|Булево|?")
     assert _lint(fixed) == []
+
+
+def test_a_single_type_of_an_operation_parameter_is_flagged_with_a_fix():
+    # The second probe: `Boolean` and `Number` alone got the same refusal - the composition of
+    # such a parameter must hold the empty value even with one type in it.
+    text = _operations("Булево", "Число")
+    d = _lint(text)
+    assert [(x.line, x.col) for x in d] == [(7, 14), (11, 14)]
+    assert "must contain" in d[0].message and "'Булево?'" in d[0].message
+    assert "'Число?'" in d[1].message
+    for x in d:
+        assert "ЗначениеПоУмолчанию" not in x.message
+    fixed = text
+    for x in sorted(d, key=lambda x: x.fix.start, reverse=True):
+        fixed = fixed[:x.fix.start] + x.fix.new + fixed[x.fix.end:]
+    assert "Тип: Булево?\n" in fixed and "Тип: Число?\n" in fixed
+    assert _lint(fixed) == []
+
+
+def test_a_single_type_outside_the_operation_sections_is_left_alone():
+    # The negative control: the same `Boolean` as an attribute has a default value of its own,
+    # and the finding appears only once the type moves into the operation section.
+    assert _lint(_attribute("Булево")) == []
+    assert len(_lint(_operations("Булево", "Число|?"))) == 1
+
+
+def test_operation_parameters_that_compile_or_belong_to_the_siblings_are_left_alone():
+    # The empty value in any spelling passes; a single reference is reported by
+    # yaml/ref-needs-nullable, and a generic or a qualified name is not judged.
+    for value in ("Булево?", "Неопределено", "Товары.Ссылка", "Массив<Строка>",
+                  "Кладовая::Пополняемое"):
+        assert _lint(_operations(value, "Число?")) == [], value
+
+
+def test_a_quoted_single_type_of_an_operation_parameter_is_flagged_without_a_fix():
+    d = _lint(_operations("\"Булево\"", "Число?"))
+    assert len(d) == 1 and d[0].fix is None and (d[0].line, d[0].col) == (7, 15)
+
+
+_ENUM = ("ВидЭлемента: Перечисление\nИд: 33333333-3333-3333-3333-333333333333\n"
+         "Имя: ВидПометки\nЭлементы:\n    -\n        Имя: Важная\n    -\n        Имя: Обычная\n")
+
+
+def _with_enum(text: str, rules: set[str]):
+    sources = [engine.load_text("ВидПометки.yaml", _ENUM), engine.load_text("Товары.yaml", text)]
+    return [(x.rule_id, x.line, x.col)
+            for x in engine.run_sources(sources, select=rules)]
+
+
+def test_an_enumeration_in_an_operation_parameter_is_reported_once():
+    # yaml/enum-needs-nullable leaves the write and delete parameters to this rule, which quotes
+    # the refusal of the section; the same enumeration as an attribute of the file stays its.
+    text = _attribute("ВидПометки") + (
+        "ПараметрыУдаления:\n    -\n        Имя: Режим\n        Тип: \"ВидПометки\"\n")
+    both = {_RULE, "yaml/enum-needs-nullable"}
+    assert _with_enum(text, both) == [(_RULE, 12, 15), ("yaml/enum-needs-nullable", 8, 14)]
+
+
+def test_negative_control_the_same_item_outside_the_operation_section():
+    # The section key alone makes the difference: under an ordinary list the enumeration rule
+    # judges the item, and this rule leaves the single type alone.
+    item = "    -\n        Имя: Режим\n        Тип: ВидПометки\n"
+    both = {_RULE, "yaml/enum-needs-nullable"}
+    assert _with_enum(_HEAD + "ПараметрыЗаписи:\n" + item, both) == [(_RULE, 7, 14)]
+    listed = _with_enum(_HEAD + "Реквизиты:\n" + item, both)
+    assert listed == [("yaml/enum-needs-nullable", 7, 14)]
+
+
+@pytest.mark.needs_data
+def test_an_english_write_parameter_is_advised_in_its_own_spelling():
+    # An English description is read as an element only with the platform dictionary.
+    text = ("ElementKind: Catalog\nId: 11111111-1111-1111-1111-111111111111\nName: Goods\n"
+            "WriteParameters:\n    -\n        Name: Mark\n        Type: Boolean\n")
+    d = _lint(text, "Goods.yaml")
+    assert len(d) == 1 and "'Boolean?'" in d[0].message and (d[0].line, d[0].col) == (7, 15)
+    fixed = text[:d[0].fix.start] + d[0].fix.new + text[d[0].fix.end:]
+    assert "Type: Boolean?\n" in fixed and _lint(fixed, "Goods.yaml") == []
 
 
 def _report(param: str) -> str:

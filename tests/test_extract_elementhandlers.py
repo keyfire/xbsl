@@ -221,3 +221,108 @@ def test_a_row_is_per_item_only_when_every_path_loops_over_one_collection():
     assert eh._per_of({_SOURCE, None}) is None
     assert eh._per_of({_SOURCE, "Other.items"}) is None
     assert eh._per_of({None}) is None
+
+
+# --- the handlers the compiler requires ----------------------------------------------------
+
+_BUILDER = "com/acme/spi/ITypeHandlersProviderPart$TypeHandlerInfo$Builder"
+_BUILD_SINK = "com/acme/spi/ITypeHandlersProviderPart$TypeHandlerInfo"
+_HANDLER = ("term", "Handler", "Обработчик")
+
+
+def _declare(interpreter, path, name=_HANDLER):
+    """The sink called on `path`: the builder of one declaration."""
+    return interpreter._call("P", path, 0xB8, _BUILD_SINK, "builder", "(Lx;)Ly;", ["Lx;"],
+                             [("meth", name)], None, 0, True, "P")
+
+
+def _on_builder(interpreter, path, builder, method, args):
+    return interpreter._call("P", path, 0xB6, _BUILDER, method, "(Z)Ly;", ["Z"] * len(args),
+                             list(args), builder, 0, True, "P")
+
+
+def test_the_sink_answers_a_builder_that_knows_its_declaration():
+    interpreter = _interpreter()
+    builder = _declare(interpreter, _path())
+    assert builder[0] == "hb" and builder[1] == (0,)
+    assert interpreter.found[0].provider == "P"
+    assert eh._meths(builder) == [("meth", _HANDLER)]
+
+
+def test_required_marks_the_declaration_it_was_called_on():
+    interpreter = _interpreter()
+    path = _path()
+    builder = _declare(interpreter, path)
+    assert _on_builder(interpreter, path, builder, "required", []) == builder
+    assert interpreter.found[0].required == {True}
+
+
+def test_control_a_required_value_the_interpreter_does_not_know_is_a_doubt():
+    interpreter = _interpreter()
+    path = _path()
+    builder = _declare(interpreter, path)
+    _on_builder(interpreter, path, builder, "required", [("int", 1)])
+    _on_builder(interpreter, path, builder, "required", [None])
+    assert interpreter.found[0].required == {True, None}
+
+
+def test_the_handlers_required_along_are_kept_by_name():
+    interpreter = _interpreter()
+    path = _path()
+    builder = _declare(interpreter, path)
+    pair = ("list", (("term", "ComputeReferenceByExternalNavigationLink",
+                      "ВычислитьСсылкуПоВнешнейНавигационнойСсылке"),))
+    interpreter._call("P", path, 0xB6, _BUILDER, "requiredHandlers", "(Ljava/util/List;)Ly;",
+                      ["Ljava/util/List;"], [pair], builder, 0, True, "P")
+    assert interpreter.found[0].companions == {"ВычислитьСсылкуПоВнешнейНавигационнойСсылке"}
+    assert eh._needs(interpreter.found) == ["ВычислитьСсылкуПоВнешнейНавигационнойСсылке"]
+
+
+def test_control_a_pair_the_declarations_disagree_on_is_dropped():
+    first = eh.Found("T", _HANDLER, None, None, companions={"А"})
+    second = eh.Found("T", _HANDLER, None, None)
+    assert eh._needs([first, second]) == []
+    assert eh._needs([eh.Found("T", _HANDLER, None, None, companions={None})]) == []
+
+
+def test_a_declaration_is_remembered_on_its_path():
+    interpreter = _interpreter()
+    path = _path()
+    _declare(interpreter, path)
+    assert path.declared == {"Обработчик"}
+    assert path.fork(3).declared == {"Обработчик"}
+
+
+def _found(required, low=None, high=None, provider="P"):
+    return eh.Found("T", _HANDLER, low, high, provider=provider, required=set(required))
+
+
+def test_a_handler_every_return_declares_as_required_is_required():
+    returns = {("Вид", "", "P"): [(None, None, frozenset({"Обработчик"}))]}
+    assert eh._required([_found({True})], returns, "Вид", "", "Обработчик", None)
+
+
+def test_control_a_return_that_skips_the_declaration_leaves_it_optional():
+    # A key granted by hand: from 8.0 on the provider returns before the handler is built.
+    returns = {("Вид", "", "P"): [(None, None, frozenset({"Обработчик"})),
+                                  ((8, 0), None, frozenset())]}
+    assert not eh._required([_found({True})], returns, "Вид", "", "Обработчик", None)
+    # The return is in other modes than the declaration: it does not count.
+    assert eh._required([_found({True}, high=(8, 0))], returns, "Вид", "", "Обработчик", None)
+
+
+def test_control_a_declaration_built_optional_somewhere_is_optional():
+    assert not eh._required([_found({True}), _found(set())], {}, "Вид", "", "Обработчик", None)
+    assert not eh._required([_found({True, False})], {}, "Вид", "", "Обработчик", None)
+    assert not eh._required([], {}, "Вид", "", "Обработчик", None)
+
+
+def test_a_handler_declared_per_item_is_required_whatever_the_returns():
+    returns = {("Вид", "Объект", "P"): [(None, None, frozenset())]}
+    assert eh._required([_found({True})], returns, "Вид", "Объект", "Обработчик", _SOURCE)
+
+
+def test_the_modes_of_two_ranges_overlap_when_they_share_a_mode():
+    assert eh._overlap((None, None), ((8, 0), None))
+    assert not eh._overlap((None, (8, 0)), ((8, 0), None))
+    assert eh._overlap(((7, 0), (9, 0)), ((8, 0), (8, 1)))

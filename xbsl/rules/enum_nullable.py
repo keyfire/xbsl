@@ -33,6 +33,11 @@ certain. Only yaml files with `ВидЭлемента` are checked; the values a
 yaml tree, so a `Тип: ...` line inside a literal block scalar cannot false-match. The rule is
 project-wide - it needs the enumerations of the whole project (it does not run in single-file
 mode).
+
+A write or delete parameter (`WriteParameters`, `DeleteParameters`) is left to
+yaml/union-needs-nullable: its type must contain the empty value whatever the type is, even an
+enumeration with a default item, and that rule reports it with the refusal of the section. Only
+those positions drop out - the same enumeration elsewhere in the file is still judged here.
 """
 
 from __future__ import annotations
@@ -44,6 +49,7 @@ from functools import lru_cache
 from xbsl import dataset, i18n, metamodel, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.rules.union_defaults import operation_type_positions
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_types import _value_positions
 
@@ -172,10 +178,17 @@ def _enum_nullable_mapper(source: SourceFile) -> dict | None:
             else:
                 candidates[value] = hit
         cands = []
+        # A write or delete parameter belongs to yaml/union-needs-nullable (see the docstring).
+        operations = operation_type_positions(source) if candidates else frozenset()
         for value, (name, off, msg_key, field) in candidates.items():
             if value in guarded:
                 continue  # positions are textual - a same-name guarded value is indistinguishable
             positions = _value_positions(source, value)
+            if operations:
+                kept = [place for place in positions if place not in operations]
+                if positions and not kept:
+                    continue  # every occurrence is an operation parameter
+                positions = kept
             positions = [(line, col + off) for line, col in positions] or [(1, 1)]
             cands.append((name, msg_key, positions, field))
         if cands:
