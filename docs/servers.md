@@ -24,11 +24,12 @@ outside the root are not checked.
 The whole-project check reads only the root and the dictionary. Any other open file, such as a module
 outside the root, keeps the findings of its own check until you close it.
 
-The server lives as long as the editor window, so the code on disk can change under it:
-`self-update`, a `git pull` of an editable checkout, a plugin upgrade. It keeps checking with what
-it loaded at start, and its findings then differ from the CLI and CI. So the server compares the
-engine version, the installed plugins and its code files with the state at start, and when one of
-them changed it shows a warning once per change and asks for a restart (in VS Code, the command
+The server lives as long as the editor window, so the code and the data on disk can change under
+it: `self-update`, a `git pull` of an editable checkout, a plugin upgrade, a reinstall that
+rewrites the platform data. It keeps checking with what it loaded at start, and its findings then
+differ from the CLI and CI. So the server compares the engine version, the installed plugins, its
+code files and the platform data files it has read with the state at start, and when one of them
+changed it shows a warning once per change and asks for a restart (in VS Code, the command
 "XBSL: Restart the linter"). The checks go on, and the server does not restart on its own.
 
 Everything an editor needs for code is standard LSP, so a plain client works with no extra
@@ -95,14 +96,29 @@ says the same in its own report. The server does not restart or exit on its own 
 [supervisor](#a-supervisor-that-replaces-the-server) does that for it), and `xbsl mcp-log` shows
 the first time it noticed each change.
 
+**When the platform data changed under a running server.** A few modules take constants from the
+platform's term pairs while the server imports them, and a reset of the caches does not rebuild
+those. A server started a moment before a reinstall wrote new data files went on answering from the
+old pairs, while the CLI read the new ones. So the server notes the size and the modification time
+of every data file it reads, and before every call compares them with the disk. The check costs one
+stat per file and reads nothing. When a file it read has changed or is gone, or a file it looked for
+and did not find has appeared, the tools refuse the same way, with reason `data`. This covers a
+plugin's data root that gets its `index.json` after the start. The record lists the files under
+`root` in `changed`, each marked `modified`, `added` or `removed`. `loaded` and `on_disk` name the
+data versions, and `fingerprint` tells one change from the next. `version_info` carries the same
+record. A file the server never read does not count, because no answer came from it. A new data
+version still shows up, since every server reads `index.json` to pick its version. Nor does the
+documentation database count: every call opens it anew.
+
 Only the client can restart the server; an agent that calls the tools cannot. So the refusal of
 a tool the CLI can run carries `cli`, the command line of the same call for a POSIX shell (Git
 Bash on Windows). The command starts the server's own interpreter, which imports the engine
-from the same place and so runs the code that is on disk now. `lint_paths`, `lint_source`,
-`baseline_prune`, `list_rules`, `meta_fold_comments`, the `translate_*` tools and the readers
-`meta_project_info`, `meta_object_info`, `meta_localization_info`, `meta_component_tree`,
-`meta_resource_references` and `meta_unused_resources` have such a command. A reader's command
-prints the same data as the tool, without the `root` and `file` the tool repeats. The text of a
+from the same place and so runs the code and reads the data that are on disk now. `lint_paths`,
+`lint_source`, `baseline_prune`, `list_rules`, `meta_fold_comments`, the `translate_*` tools and
+the readers `meta_project_info`, `meta_object_info`, `meta_localization_info`,
+`meta_component_tree`, `meta_resource_references` and `meta_unused_resources` have such a
+command. A reader's command prints the same data as the tool, without the `root` and `file`
+the tool repeats. The text of a
 `lint_source` call and the inline edits of a `translate_set` call are saved to a temporary file
 that the command reads, and `cli_note` names that file; a folder of such files older than a day,
 left by an earlier server, is taken out by the next one. A relative `filename` of `lint_source`
@@ -138,7 +154,7 @@ yours.
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go |
 | `list_rules(select, ignore, filter)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry, and `filter` narrows further: a word that IS a group (the part of an id before `/`) lists that group alone, while any other word is looked for as an id substring or as a word of the title or the description – every i18n text registered under the rule's id (the title and the message templates its diagnostics are built from), in either language, plus its English docstring; `docs/RULES.md` is not read, since it ships with neither the sdist nor the wheel. Matching is case-insensitive. A `filter` that matches nothing answers `{error, near_groups}` – the groups closest to it by spelling – instead of an empty list |
-| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file. `engine_on_disk` and `plugins_on_disk` say what is installed now, and `stale` appears when that differs from what the server loaded |
+| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file. `engine_on_disk` and `plugins_on_disk` say what is installed now, and `stale` appears when that differs from what the server loaded or when a platform data file it read changed on disk (reason `data`) |
 
 **Platform reference and schemas**
 
@@ -250,11 +266,11 @@ adds, such as `xbsl-mcp-supervisor`, gets its stub only from `pip install --upgr
 The worker decides when it has to go, and the supervisor reads that from its answers:
 
 - a refusal with `stale.ran: false` means the tool did not run: the engine on disk has another
-  version, or its code files changed under the same one. The supervisor sends the same call to
-  a new worker, and the agent gets the answer of the new code instead of the refusal.
-  `version_info` is asked again the same way, because it only reads. A worker started after
-  one change of the files is replaced after the next one too: the `fingerprint` of the record
-  tells the two apart;
+  version, its code files changed under the same one, or a platform data file the worker read
+  changed. The supervisor sends the same call to a new worker, and the agent gets the answer of
+  the new code and data instead of the refusal. `version_info` is asked again the same way,
+  because it only reads. A worker started after one change of the files is replaced after
+  the next one too: the `fingerprint` of the record tells the two apart;
 - an answer whose `stale` says the tool ran (it failed on a mix of the old and the new code, or
   the plugins on disk changed) reaches the agent as it is, because the tool may have written
   files. The next call goes to a new worker;

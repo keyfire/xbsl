@@ -47,6 +47,9 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The cards of the help no longer run together.** The links of a card grid used to merge into one
   line, and an example lost the icon that told a right one from a wrong one. The help now lists link
   cards, labels right and wrong examples, and keeps the code fragment of a card as code. ([#165](https://github.com/keyfire/xbsl/pull/165))
+- **Servers no longer answer from data replaced under them.** An MCP worker that read the term pairs
+  just before a reinstall rewrote them kept answering from the old ones. Now it refuses with reason
+  `data` and a new worker answers the call; the language server asks for a restart.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
