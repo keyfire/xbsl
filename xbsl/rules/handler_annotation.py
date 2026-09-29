@@ -29,9 +29,19 @@ no such description: the compiler declares their handlers in code, and the extra
 code into the `element_module_handlers` section, by the kind of the element and the module its
 file names (`Stock.Object.xbsl` is the Object module of the element `Stock.yaml`,
 `Stock.xbsl` its own). A module whose handler names come from the element's own description at
-build time - the operations of a processing, the record-level security handlers of an entity -
-is not judged: any name may be a handler there. Nor is a kind the data does not list, a chain of
-components ending outside the project and the catalog, or data without the lists.
+build time - the operations of a processing, of a SOAP client - is not judged: any name may be a
+handler there. Nor is a kind the data does not list, a chain of components ending outside the
+project and the catalog, or data without the lists.
+
+The own module of an entity is the exception: the one name it takes at build time is a
+record-level security handler, the kind says which of them it declares, and the access settings
+of its description (`AccessControl`) say which of those and of the permissions handler the
+build uses (modulehandlers.access_slot). A probe on a server (2026-09) gave, for the
+permissions handler of a catalog without access settings, a refusal of its own - "Handler X is
+not used in this project item" - and took it once a privilege computed its permissions; so a
+handler the element declares but its settings leave off gets that message, and a name it cannot
+declare at all the usual one. A description whose settings cannot be read counts every handler
+of the kind as used.
 
 A handler may be there in some compatibility modes only (`from` and `to` of its row, a
 half-open range - see modulehandlers.declared_in): the web chat handler of a client
@@ -57,10 +67,11 @@ from __future__ import annotations
 
 import difflib
 from collections.abc import Iterable
+from dataclasses import astuple
 from functools import lru_cache
 from pathlib import PurePosixPath
 
-from xbsl import dataset, i18n, modulehandlers, terms, typeinfer
+from xbsl import dataset, i18n, metamodel, modulehandlers, terms, typeinfer
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
@@ -170,6 +181,46 @@ MESSAGES = {
               "build refuses it: \"A handler associated with method \"{name}\" is not "
               "found\". Removing the annotation is not enough: in this mode the platform does "
               "not call such a method.",
+    },
+    f"{OVERRIDE_RULE}.element-nothing": {
+        "ru": "Метод '{name}' помечен @{annotation}, но переопределять ему нечего: {module} "
+              "такого обработчика не объявляет, а парный yaml этот метод не привязывает. "
+              "Сборка откажет: \"A handler associated with method \"{name}\" is not found\". "
+              "Если метод вызывается из модуля, снимите аннотацию.",
+        "en": "Method '{name}' carries @{annotation}, yet it has nothing to override: {module} "
+              "declares no such handler, and the paired yaml does not bind the method. The "
+              "build refuses it: \"A handler associated with method \"{name}\" is not "
+              "found\". If the method is called from the module, remove the annotation.",
+    },
+    f"{OVERRIDE_RULE}.element-unused": {
+        "ru": "Метод '{name}' помечен @{annotation}, но {module} обработчик {handler} при этих "
+              "настройках доступа не использует: {reason}. Сборка откажет: \"Handler "
+              "\"{name}\" is not used in this project item\".",
+        "en": "Method '{name}' carries @{annotation}, but {module} does not use the {handler} "
+              "handler with these access settings: {reason}. The build refuses it: \"Handler "
+              "\"{name}\" is not used in this project item\".",
+    },
+    f"{OVERRIDE_RULE}.unused-computed": {
+        "ru": "его вызывают, только когда настройки вычисляют разрешения "
+              "(РазрешенияВычисляются или РазрешенияВычисляютсяДляКаждогоОбъекта)",
+        "en": "it is called only when the settings compute permissions "
+              "({n[РазрешенияВычисляются]} or {n[РазрешенияВычисляютсяДляКаждогоОбъекта]})",
+    },
+    f"{OVERRIDE_RULE}.unused-per-object": {
+        "ru": "его вызывают, только когда настройки вычисляют разрешения для каждого объекта "
+              "(РазрешенияВычисляютсяДляКаждогоОбъекта)",
+        "en": "it is called only when the settings compute permissions for each object "
+              "({n[РазрешенияВычисляютсяДляКаждогоОбъекта]})",
+    },
+    f"{OVERRIDE_RULE}.unused-standard": {
+        "ru": "при стандартных разрешениях (СтандартныеРазрешения) обработчики доступа не "
+              "вызываются",
+        "en": "with the standard permissions ({n[СтандартныеРазрешения]}) no access handler is "
+              "called",
+    },
+    f"{OVERRIDE_RULE}.unused-never": {
+        "ru": "записи этого вида разрешения для каждого объекта не вычисляют",
+        "en": "the records of this kind never compute permissions for each object",
     },
     f"{OVERRIDE_RULE}.own-module": {
         "ru": "модуль элемента вида {kind}",
@@ -359,19 +410,101 @@ def _component_fact(source: SourceFile) -> dict | None:
 
 
 def _element_fact(source: SourceFile) -> dict | None:
-    """What the reduce needs of the description of any other element: its kind and bound names."""
+    """What the reduce needs of the description of any other element: its kind, bound names
+    and, for an entity, what its access settings say (see _access_settings)."""
     if not _HAVE_YAML:
         return None
     kind = object_kind_fast(source)
     if not kind or kind == _COMPONENT_KIND:
         return None
     bound = _yaml_fact(source)
-    return {
+    fact = {
         "k": "e",
         "stem": _handler_pair_stem(source.rel),
         "kind": kind,
         "bound": sorted(bound["bound"]) if bound else [],
     }
+    if modulehandlers.record_security_rows(kind, None) is not None:
+        data, error = _parsed(source)
+        settings = _access_settings(data, kind) if error is None else None
+        fact["access"] = list(astuple(settings)) if settings is not None else None
+    return fact
+
+
+#: The values of a privilege that compute its permissions, for each object or not (the
+#: `AccessControl` enumeration of the schema), and the value a privilege left out takes when the
+#: description names no default.
+_COMPUTED = "РазрешенияВычисляются"
+_PER_OBJECT = "РазрешенияВычисляютсяДляКаждогоОбъекта"
+_DEFAULT_VALUE = "РазрешеноАдминистраторам"
+_TRUE = frozenset({True, "Истина", "True", "true"})
+
+
+def _key_in(block, props: dict[str, dict], key: str):
+    """The value of `key` of a yaml block, whichever spelling the file uses."""
+    if not isinstance(block, dict):
+        return None
+    if key in block:
+        return block[key]
+    english = (props.get(key) or {}).get("en")
+    return block.get(english) if english else None
+
+
+def _access_value(value) -> str | None:
+    """A privilege value in the Russian spelling, None for one the enumeration does not have."""
+    if not isinstance(value, str):
+        return None
+    for russian in metamodel.enum_values("AccessControl") or (_COMPUTED, _PER_OBJECT,
+                                                               _DEFAULT_VALUE):
+        if value in (russian, terms.common_english(russian)):
+            return russian
+    return None
+
+
+def _access_settings(data, kind: str) -> modulehandlers.AccessSettings | None:
+    """What the access settings of an entity say, the way the build reads them; None when the
+    description cannot be read that far.
+
+    Each privilege of the kind takes the value the settings give it or else the default of the
+    settings (`Default`, the administrators when unnamed): the build computes permissions
+    when one of those values computes them, for each object when one computes them for each
+    object. The privileges are the keys the schema gives the permissions block, the default
+    aside. A settings storage may keep the standard permissions instead; an information register
+    splits its keys by its periodicity.
+    """
+    if not isinstance(data, dict):
+        return None
+    periodicity = value_of(data, "Периодичность", kind)
+    periodic = isinstance(periodicity, str) and periodicity not in (
+        "Непериодический", terms.common_english("Непериодический"))
+    control_record = metamodel.properties(kind).get("КонтрольДоступа") or {}
+    control = value_of(data, "КонтрольДоступа", kind)
+    if control is None:
+        return modulehandlers.AccessSettings(periodic=periodic)
+    control_props = metamodel.properties_of_class(control_record.get("type") or "")
+    permissions_record = control_props.get("Разрешения") or {}
+    permission_props = metamodel.properties_of_class(permissions_record.get("type") or "")
+    if not isinstance(control, dict) or not permission_props:
+        return None
+    standard = _key_in(control, control_props, "СтандартныеРазрешения") in _TRUE
+    permissions = _key_in(control, control_props, "Разрешения")
+    if permissions is None:
+        permissions = {}
+    if not isinstance(permissions, dict):
+        return None
+    written = _key_in(permissions, permission_props, "ПоУмолчанию")
+    default = _access_value(written) if written is not None else _DEFAULT_VALUE
+    values = []
+    for privilege in permission_props:
+        if privilege == "ПоУмолчанию":
+            continue
+        given = _key_in(permissions, permission_props, privilege)
+        values.append(_access_value(given) if given is not None else default)
+    if None in values:
+        return None  # a value the enumeration does not have: the build refuses it anyway
+    return modulehandlers.AccessSettings(
+        computed=any(value in (_COMPUTED, _PER_OBJECT) for value in values),
+        per_object=_PER_OBJECT in values, standard=standard, periodic=periodic)
 
 
 def _override_mapper(source: SourceFile) -> dict | None:
@@ -493,8 +626,19 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
     if element is None:
         return
     rows = modulehandlers.element_slot(element["kind"], module)
-    if not rows:
+    settings = None
+    off: tuple[dict, ...] = ()
+    if rows is None:
+        # The own module of an entity takes the record-level security handlers: the kind says
+        # which it declares, the access settings which of them the build uses.
+        access = element.get("access")
+        settings = modulehandlers.AccessSettings(*access) if access else None
+        split = modulehandlers.access_slot(element["kind"], module, settings)
+        if split is not None:
+            rows, off = split
+    if not rows and not off:
         return  # nothing known of the module, or names taken at build time: not judged
+    unused = {name: row for row in off for name in (row["ru"], row["en"])}
     mode, assumed = modes.get(rel, (None, False))
     present: dict[str, dict] = {}
     elsewhere: dict[str, dict] = {}
@@ -514,6 +658,15 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
         if name in bound or name in present:
             continue
         fields = {"name": name, "annotation": method["annotation"], "module": where}
+        left_off = unused.get(name)
+        if left_off is not None:
+            reason = modulehandlers.unused_reason(element["kind"], left_off, settings)
+            yield Diagnostic(
+                rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
+                i18n.t(f"{OVERRIDE_RULE}.element-unused", handler=left_off[_language()],
+                       reason=i18n.t(f"{OVERRIDE_RULE}.unused-{reason}"), **fields),
+            )
+            continue
         other = elsewhere.get(name)
         if other is not None and mode is not None:
             yield Diagnostic(
@@ -530,9 +683,11 @@ def _element_overrides(rel: str, fact: dict, elements: dict[str, dict],
                        similar=present[near[0]][_language()], **fields),
             )
             continue
+        # Settings that leave every handler off leave nothing to list.
+        message = (i18n.t(f"{OVERRIDE_RULE}.element-found",
+                          handlers=", ".join(row[_language()] for row in shown), **fields)
+                   if shown else i18n.t(f"{OVERRIDE_RULE}.element-nothing", **fields))
         yield Diagnostic(
-            rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR,
-            i18n.t(f"{OVERRIDE_RULE}.element-found",
-                   handlers=", ".join(row[_language()] for row in shown), **fields),
+            rel, method["line"], method["col"], OVERRIDE_RULE, Severity.ERROR, message,
             fix=TextEdit(method["start"], method["end"], ""),
         )

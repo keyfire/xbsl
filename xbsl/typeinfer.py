@@ -1683,15 +1683,26 @@ def wants_text(test) -> None:
         _TEXT_WANTED.append(test)
 
 
-def _compatibility_mode(data: dict) -> list[int] | None:
-    """The compatibility mode a project description declares, as numbers; None when it is not one."""
-    value = data.get("РежимСовместимости", data.get("CompatibilityMode"))
+#: The key of the compatibility mode in a project description, both spellings. Fixed here
+#: rather than looked up in the term data: without the data an English description is read all
+#: the same, and every reader of the mode (the project rules, the resources) reads it alike.
+_COMPATIBILITY_KEYS = ("РежимСовместимости", "CompatibilityMode")
+
+
+def declared_compatibility(data: dict) -> tuple[int, ...] | None:
+    """The compatibility mode a project description declares, as numbers; None when it is not one.
+
+    `data` is the parsed description. The one reading of the declared mode: `project_fact`
+    keeps it for the project rules, `resources.project_compatibility` for the visibility of a
+    resources folder, and both pass it to `read_mode`.
+    """
+    value = next((data[key] for key in _COMPATIBILITY_KEYS if key in data), None)
     if not isinstance(value, (str, int, float)):
         return None
     parts = str(value).strip().split(".")
     if not parts or not all(part.isdigit() for part in parts):
         return None
-    return [int(part) for part in parts]
+    return tuple(int(part) for part in parts)
 
 
 def project_fact(source) -> dict | None:
@@ -1718,9 +1729,9 @@ def project_fact(source) -> dict | None:
         if PurePosixPath(path).name in _PROJECT_FILES:
             fact = {"k": "project", "root": str(PurePosixPath(path).parent)}
             data, err = _parsed(source)
-            mode = _compatibility_mode(data) if err is None and isinstance(data, dict) else None
+            mode = declared_compatibility(data) if err is None and isinstance(data, dict) else None
             if mode:
-                fact["compat"] = mode
+                fact["compat"] = list(mode)
         else:
             element = element_fact(source)
             if element is not None:

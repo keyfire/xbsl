@@ -635,3 +635,97 @@ def test_the_reserved_words_are_written_only_when_the_help_lists_them(tmp_path):
     assert written["with"]["query_reserved_english_only"] == ["NULL", "TEMP"]
     assert "query_reserved" not in written["without"]
     assert "query_reserved_english_only" not in written["without"]
+
+
+# --- the types of the literals, out of the same table ------------------------------------------
+
+#: The table with its column of details as the help writes it: a literal links the page of its
+#: type (next to a page of a topic), a keyword - a topic only. `ПУСТО` is a made-up literal whose
+#: type page sits in a namespace, `НИЧЕГО` links two type pages at once.
+_RESERVED_LINKED = (
+    "<table><thead><tr><th>Русский язык<th>Английский язык<th>Подробнее<tbody>"
+    "<tr><td><code>ИЗ</code><td><code>FROM</code><td>"
+    "<a class=\"\" href=\"/docs/help/topics/select-from/\">Предложение ИЗ</a>"
+    "<tr><td><code>ИСТИНА</code><td><code>TRUE</code><td>Значение типа "
+    "<a class=\"\" href=\"/docs/help/stdlib/element/xbsl/Std/Boolean_ru/\"><code>Булево</code></a>."
+    " Используется в <a class=\"\" "
+    "href=\"/docs/help/topics/logical-and-boolean-operations-in-query-language/\">операциях</a>"
+    "<tr><td><code>НЕОПРЕДЕЛЕНО</code><td><code>UNDEFINED</code><td>Литерал типа "
+    "<a href=/docs/help/stdlib/element/xbsl/Std/Undefined_ru/>Неопределено</a>"
+    "<tr><td><code>ПУСТО</code><td><code>EMPTY</code><td>Литерал типа "
+    "<a href=\"/docs/help/stdlib/element/xbsl/Std/Collections/Blank_ru/\">Пустота</a>"
+    "<tr><td><code>НИЧЕГО</code><td><code>NOTHING</code><td>"
+    "<a href=\"/docs/help/stdlib/element/xbsl/Std/Boolean_ru/\">Булево</a> или "
+    "<a href=\"/docs/help/stdlib/element/xbsl/Std/Undefined_ru/\">Неопределено</a>"
+    "</table>"
+)
+_TYPE_PAIRS = {"Булево": "Boolean", "Неопределено": "Undefined", "Пустота": "Blank"}
+
+
+def test_the_type_of_a_literal_is_the_type_page_its_row_links():
+    """The column of details links a literal to the reference page of its type: the English
+    name of the page is paired with the Russian one by the type pairs of the distribution. A
+    row that links a topic only gives nothing, and so does a row that links two type pages."""
+    from xbsl.extract.terms import query_reserved_types
+
+    assert query_reserved_types(_RESERVED_LINKED, _TYPE_PAIRS) == {
+        "ИСТИНА": "Булево", "НЕОПРЕДЕЛЕНО": "Неопределено", "ПУСТО": "Пустота",
+    }
+
+
+def test_a_literal_whose_type_has_no_pair_gets_no_type():
+    """Nothing is guessed: a page the type pairs do not know, a table without links (an older
+    help) and a page without the table answer with nothing."""
+    from xbsl.extract.terms import query_reserved_types, query_reserved_words
+
+    unpaired = {"Булево": "Boolean"}
+
+    assert query_reserved_types(_RESERVED_LINKED, unpaired) == {"ИСТИНА": "Булево"}
+    assert query_reserved_types(_RESERVED_FULL, _TYPE_PAIRS) == {}
+    assert query_reserved_types("<p>Страница без таблицы</p>", _TYPE_PAIRS) == {}
+    # The words of the same table read as before.
+    words, _english_only = query_reserved_words(_RESERVED_LINKED)
+    assert words["ПУСТО"] == "EMPTY" and words["ИСТИНА"] == "TRUE"
+
+
+def _car_with_types(dist, page: str):
+    """A distribution with the syntax page and the reference pages of two types."""
+    import zipfile
+
+    from xbsl.extract import stdlib, terms
+
+    dist.mkdir()
+    car = dist / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr(terms._QUERY_SYNTAX_PAGE, "<html><body>" + page + "</body></html>")
+        for russian, english in (("Булево", "Boolean"), ("Неопределено", "Undefined")):
+            z.writestr(stdlib.STD_BASE + f"{english}_ru/index.html",
+                       f"<html><head><title>{russian} | Product</title></head></html>")
+    return dist
+
+
+def test_the_step_writes_the_types_of_the_literals_it_can_pair(tmp_path):
+    """End to end: the type pairs of the distribution pair the pages the table links, the
+    step writes them next to the reserved words - and leaves the key out when the table links no
+    type page, the way it leaves out the words when there is no table."""
+    import json
+
+    from xbsl.extract import _distro, terms
+
+    written = {}
+    for name, page in (("linked", _RESERVED_LINKED), ("plain", _RESERVED_MINIFIED)):
+        dist = _car_with_types(tmp_path / name, page)
+        root = tmp_path / f"data-{name}"
+        try:
+            terms.main(["--dist", str(dist), "--element-version", "9.9.9+1",
+                        "--data-dir", str(root)])
+        finally:
+            _distro.set_data_root(None)
+        written[name] = json.loads((root / "9.9.9+1" / "terms.json").read_text(encoding="utf-8"))
+
+    # `Blank` has no page in this distribution, so `ПУСТО` pairs nothing.
+    assert written["linked"]["query_reserved_types"] == {
+        "ИСТИНА": "Булево", "НЕОПРЕДЕЛЕНО": "Неопределено",
+    }
+    assert "query_reserved_types" not in written["plain"]
+    assert written["plain"]["query_reserved"] == _RESERVED

@@ -122,6 +122,31 @@ entry either - say what the behaviour was, not which class name was compared.
   `query_reserved_english_only`), and `data-diff` reports them. The translator and
   `comment/emphasis-caps` read them from the data and keep their own lists only for data
   without these keys; the findings do not change. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`yaml/union-needs-nullable` (tier A, error): a union type without the empty member has no
+  default value.** `String|Number` in the type of an attribute, a register field, a structure
+  field, a component property or a contract property fails the build with "Default value
+  initialization is not supported for types ..."; a probe on a live server confirmed every
+  place. A default value or `Required: True` lets it pass. The quick fix appends `|?`; a union with
+  a reference stays with `yaml/ref-needs-nullable`. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`yaml/contract-facet-mismatch` (tier A, error): the restrictions of an attribute that
+  overrides an entity contract property must agree with the property.** An extra restriction, a
+  missing one, an unequal value, or a value wider than a read-only property allows: the compiler
+  refuses each of them, as probes confirmed for strings and numbers and for the tables of a
+  contract. The quick fix sets the string length. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`yaml/contract-standard-length` (tier A, error): a standard attribute that overrides a
+  contract property needs the property's `MaxLength`.** `Name`, `Code` and a document's `Number`
+  always have a length (150, 7 and 9 by default), so a contract property without one fails the
+  build with "The maximum length for property ... is not set in entity contract"; the quick fix
+  sets `Length` on the attribute. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`code/contract-method-not-abstract` (tier D, error): an ordinary method in the object module
+  or a row module of an entity contract.** Such a module takes abstract methods only - a probe got
+  "Non-abstract method ... cannot be defined" in both. The module of the contract type itself and
+  static methods are not judged. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The types of the query language literals come from the help.** The `terms` step reads the
+  links of the reserved words table into `query_reserved_types`, `data-diff` reports the section,
+  and the typing of query rows keeps its own list for a checkout without the data. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`resource-references --limit`** caps the list of places like `meta_resource_references`, 100
+  by default; `total` still counts every place. ([#158](https://github.com/keyfire/xbsl/pull/158))
 
 ### Changed
 
@@ -199,6 +224,36 @@ entry either - say what the behaviour was, not which class name was compared.
   and the message says the mode is assumed. A project in mode 5.0 used to get a finding for
   every property newer than 5.0. The visibility of a resources folder without a descriptor
   follows the same reading: in such a project the folder is private, as in the newest mode. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **The MCP server refuses a call when the engine's code changed under the same version.** A pull
+  of an editable checkout between two releases used to show only after a tool failed, so the first
+  call ran on a mix of old and new code. Before every call the server now compares the engine's
+  code with the code it started with (a stat of a few folders per call, the files read again when
+  a folder changed or every five seconds) and refuses with `stale.reason: sources`, `ran: false`
+  and a `fingerprint`. `xbsl-mcp-supervisor` answers the same call from a new worker and tells two
+  pulls of one version apart by that fingerprint; the plugins keep their own check and still answer
+  with a warning. The supervisor also writes down another protocol version agreed by a new worker. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The spelling hint of `code/undefined-name` is the closest name of the whole scope.** The names
+  of the module, the element, the project and the global names compete, a tie goes to the nearer
+  group, and a name is never offered as its own hint. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **Scaffolding quotes a value only where YAML needs it.** `EventWithData<String>` or an
+  `https://...` default is written bare by every command, as the sources of the distribution write
+  them, and a boolean given as a word is written in the words of the file: `True`/`False` in an
+  English file, the Russian pair in a Russian one, the `DefaultValue` of a `Boolean` item included.
+  The help of `add-field` and `set-field-property` names every kind the commands take. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`new-object ConstantsSet` creates the set with a placeholder constant:** an empty set does not
+  compile ("Empty constant sets are not supported"); the first constant added with `add-field`
+  takes its place. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **`code/handler-overrides-nothing` judges the own module of an entity.** The kind tells which
+  record-level security handler it declares, and the access settings (`AccessControl`) tell
+  which of them and of `ComputeAccessPermissions` the build uses. A handler the settings leave off
+  gets the compiler's own words "Handler ... is not used in this project item"; an unknown name
+  keeps the "not found" message. The module of an access key overrides `CheckHasAccessKeys`
+  alone and is judged too, as a probe on a live server confirmed. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The handler table of element modules no longer gives `ComputeAccessPermissions` to modules
+  without an access-control target** (a common module, commands, client work parameters, a data
+  journal, an access key): the extractor now models the target the way the compiler finds it. The
+  action privilege gets `ComputeAccessPermissions`, and the project module
+  `ComputeSystemAccessPermissions`, which `code/unused-method` and the translator now know. ([#158](https://github.com/keyfire/xbsl/pull/158))
 
 ### Fixed
 
@@ -264,6 +319,14 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The ui schema extractor reads `stdlib.json` of the version it builds**, not of the default
   one, and warns when the data root has none: the retired components used to be left out
   without a word. ([#157](https://github.com/keyfire/xbsl/pull/157))
+- **`code/undefined-name` accepts a method of the row type in a tabular section row module only as
+  a call.** A probe compiled `Presentation()` and refused a bare `Presentation`; the finding now
+  says to add the parentheses. `structure/xbsl-pair` recognizes a row module by the declaration of
+  the section alone. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The `cli` command of `lint_source` reads a relative `filename` where the tool does**, made
+  absolute against the server's working directory, on any Python version. ([#158](https://github.com/keyfire/xbsl/pull/158))
+- **The resources read the compatibility mode of an English project without the term data**: one
+  reader of the declared mode serves the resources and the project rules. ([#158](https://github.com/keyfire/xbsl/pull/158))
 
 ## 2026-09-27 – 0.120.0
 

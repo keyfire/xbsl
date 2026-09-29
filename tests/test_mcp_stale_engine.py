@@ -5,8 +5,10 @@ checkout moved to 0.118.0, and `lint_paths` answered with four crashes of rules 
 `TypeError: ProjectCatalog.register_row() takes 3 positional arguments but 4 were given` - the
 modules loaded later were new, the catalog in memory was old. The CLI over the same files was
 clean. Now every tool but version_info compares the version on disk with the loaded one and
-refuses with the cure named; a failure under the same number is checked against the fingerprint
-of the sources taken at start; a crashed rule names the restart in its own report.
+refuses with the cure named; the engine's code files are compared with the start before the call
+too, so a pull between two releases is refused before the tool runs; a failure is checked
+against the fingerprint of all the sources taken at start; a crashed rule names the restart in
+its own report.
 
 A restart is in the client's hands, not the agent's: on 27.09.2026 a session met the refusal on
 every call after the engine moved from 0.119.1 to 0.120.0 and finished its work through the CLI
@@ -49,6 +51,7 @@ def disk(tmp_path, monkeypatch):
     monkeypatch.setattr(freshness, "PACKAGE", folder)
     monkeypatch.setattr(freshness, "_started", None)
     monkeypatch.setattr(freshness, "_checked", None)
+    monkeypatch.setattr(freshness, "_engine", None)
     monkeypatch.setattr(freshness, "_noted", None)
     monkeypatch.setattr(freshness, "_marks", None)
     monkeypatch.setattr(freshness, "_plugins_found", None)
@@ -65,10 +68,20 @@ def _update(folder, version: str) -> None:
 
 
 def _touch(path, text: str) -> None:
-    """Rewrite a file and move its time on, as a pull does, whatever the clock resolution."""
+    """Rewrite a file in place and move its time on, whatever the clock resolution. Its folder
+    keeps its time, as it does when an editor saves a file."""
     path.write_text(text, encoding="utf-8")
     stat = path.stat()
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+
+
+def _pull(path, text: str) -> None:
+    """Replace a file the way git does - remove it, write it anew - and move the times of the
+    file and of its folder on, whatever the clock resolution."""
+    folder = path.parent.stat()
+    path.unlink()
+    _touch(path, text)
+    os.utime(path.parent, ns=(folder.st_atime_ns, folder.st_mtime_ns + 2_000_000_000))
 
 
 def _stale_events():
@@ -111,8 +124,11 @@ def test_the_sources_are_judged_only_against_a_remembered_start(disk):
     freshness.remember()
     assert freshness.sources_state() is None
     _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c, d):\n    pass\n")
-    assert freshness.sources_state() == {
+    found = freshness.sources_state()
+    assert {key: found[key] for key in ("reason", "loaded", "on_disk")} == {
         "reason": "sources", "loaded": freshness.__version__, "on_disk": freshness.__version__}
+    # The number stays: a digest of the files on disk tells this change from the next one.
+    assert len(found["fingerprint"]) == 12 and int(found["fingerprint"], 16) >= 0
 
 
 # -- a crashed rule -----------------------------------------------------------------------------
@@ -253,20 +269,112 @@ def test_a_tool_without_a_cli_counterpart_is_refused_as_before(mcp_module, disk)
 
 
 def test_a_failure_after_the_sources_moved_names_the_command_too(mcp_module, disk, tmp_path):
+    """The sources moved while the call ran: the check before it had nothing to see."""
     freshness.remember()
 
     def translate_drift(root: str, filter: str = "", limit: int = 50, offset: int = 0) -> dict:
+        _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
         raise TypeError("drift_rows() takes 2 positional arguments but 3 were given")
 
     guarded = mcp_module._stale_guard(translate_drift)
-    _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
 
     answer = guarded(root=str(tmp_path), filter="Задач")
 
     assert answer["stale"]["reason"] == "sources" and "TypeError: drift_rows()" in answer["error"]
+    assert answer["stale"]["ran"] is True
     assert _after_xbsl(_words(answer["cli"])) == [
         "translate", str(tmp_path), "--drift", "--filter", "Задач", "--limit", "50",
         "--format", "json"]
+
+
+def test_a_pull_between_releases_is_refused_before_the_tool_runs(mcp_module, disk, tmp_path):
+    """The number on disk stays and the code changes: the tool does not start on a mix.
+
+    Found only after a failure, such a change let the first call run half on the old code and
+    half on the new; the refusal says `ran: false`, so the supervisor answers the same call from
+    a new process, and without it the refusal names the CLI command as for a new version.
+    """
+    freshness.remember()
+    called = []
+
+    def lint_paths(paths: list[str], root: str | None = None, select: list[str] | None = None):
+        called.append(paths)
+        return {"diagnostics": []}
+
+    guarded = mcp_module._stale_guard(lint_paths)
+    assert guarded(paths=["a.xbsl"], root=str(tmp_path)) == {"diagnostics": []}
+    _pull(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+
+    answer = guarded(paths=["acme/Задачи.xbsl"], root=str(tmp_path), select=["code"])
+
+    assert called == [["a.xbsl"]]  # the second call never started
+    assert list(answer) == ["error", "cli", "stale"]
+    stale = answer["stale"]
+    assert (stale["reason"], stale["ran"], stale["on_disk"]) == ("sources", False, freshness.__version__)
+    assert stale["fingerprint"] and stale["location"]
+    assert "номер версии тот же" in answer["error"] and "Перезапустите сервер MCP" in answer["error"]
+    assert _after_xbsl(_words(answer["cli"])) == [
+        str(tmp_path / "acme" / "Задачи.xbsl"), "--select", "code", "--format", "json"]
+    (event,) = _stale_events()
+    assert event["reason"] == "sources" and event["tool"] == "lint_paths"
+
+
+def _count_walks(monkeypatch) -> list:
+    walks: list = []
+    real = freshness._code_rows
+    monkeypatch.setattr(freshness, "_code_rows",
+                        lambda root, marks=None: walks.append(root) or real(root, marks))
+    return walks
+
+
+def test_the_check_before_a_call_walks_the_files_only_when_a_folder_moved(disk, monkeypatch):
+    """A stat of the folders per call; the files are walked when git replaced one of them."""
+    monkeypatch.setattr(freshness, "_SOURCES_TTL", 3600.0)
+    freshness.remember()
+    walks = _count_walks(monkeypatch)
+    for _call in range(3):
+        assert freshness.call_state() is None
+    assert walks == []
+
+    _pull(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+    found = freshness.call_state()
+
+    assert found["reason"] == "sources" and len(walks) == 1
+    assert freshness.call_state() == found and len(walks) == 1  # the verdict stands, unwalked
+
+
+def test_a_file_rewritten_in_place_is_found_once_the_last_walk_is_old(disk, monkeypatch):
+    """An editor leaves the folder's time as it was: the next walk is due by the clock."""
+    monkeypatch.setattr(freshness, "_SOURCES_TTL", 3600.0)
+    freshness.remember()
+    _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+    assert freshness.engine_sources_state() is None  # the last walk is fresh: no new one
+
+    freshness._engine.walked -= 3600.0
+
+    assert freshness.engine_sources_state()["reason"] == "sources"
+
+
+def test_a_package_moved_aside_is_no_verdict_before_a_call(disk):
+    """self-update renames the package aside for a moment: a call then is not refused."""
+    freshness.remember()
+    aside = disk.with_name("xbsl-aside")
+    disk.rename(aside)
+    try:
+        assert freshness.call_state() is None and freshness.engine_sources_state() is None
+    finally:
+        aside.rename(disk)
+    assert freshness.call_state() is None
+
+
+def test_version_info_names_a_change_of_the_sources(mcp_module, disk):
+    freshness.remember()
+    _pull(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+
+    info = mcp_module.version_info()
+
+    assert info["engine_on_disk"] == info["engine"]
+    assert info["stale"]["reason"] == "sources" and "Перезапустите" in info["stale"]["message"]
 
 
 def test_the_journal_hears_the_state_once_not_per_call(mcp_module, disk, tmp_path):
@@ -279,16 +387,20 @@ def test_the_journal_hears_the_state_once_not_per_call(mcp_module, disk, tmp_pat
 
 
 def test_a_failure_after_the_sources_moved_is_explained(mcp_module, disk):
+    """A pull that lands while the call runs: the failure names the restart."""
     freshness.remember()
+    pulled = []
 
     def broken(**kwargs):
+        if pulled:
+            _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
         raise TypeError("register_row() takes 3 positional arguments but 4 were given")
 
     guarded = mcp_module._stale_guard(broken)
     with pytest.raises(TypeError):  # the same code on disk: a failure is a failure
         guarded()
 
-    _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+    pulled.append(True)
     answer = guarded()
 
     assert "TypeError: register_row()" in answer["error"] and "номер версии тот же" in answer["error"]
@@ -299,13 +411,16 @@ def test_a_failure_after_the_sources_moved_is_explained(mcp_module, disk):
 
 def test_a_rule_crash_noted_during_a_call_reaches_the_journal(mcp_module, disk):
     freshness.remember()
-    _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
 
-    answer = mcp_module._stale_guard(lambda: {"crash": _crash()})()
+    def crashing():
+        _touch(disk / "rules" / "catalog.py", "def register_row(a, b, c):\n    pass\n")
+        return {"crash": _crash()}
+
+    answer = mcp_module._stale_guard(crashing)()
 
     assert "Перезапустите процесс" in answer["crash"]
     (event,) = _stale_events()
-    assert event["reason"] == "sources" and event["tool"] == "<lambda>"
+    assert event["reason"] == "sources" and event["tool"] == "crashing"
 
 
 def test_mcp_log_tells_the_stale_state_in_words(capsys):

@@ -1014,6 +1014,8 @@ _STUB_SERVICE_CONTRACT = """\
 # РегистрНакопления - a non-empty list of resources ("Список ресурсов не может быть
 # пустым"); the mandatory Регистратор attribute is added by hand (its type is a union of
 # references to registrar documents, which do not exist yet at creation time).
+# ConstantsSet - a non-empty list of constants ("Empty constant sets are not supported");
+# a string constant needs neither a length nor a default value.
 _DOC_EXTRA = (
     "Реквизиты:",
     "    -",
@@ -1040,6 +1042,17 @@ _ACC_REGISTER_NOTE = (
     "(Тип: объединение ссылок на документы-регистраторы, напр. Накладная.Ссылка|?), "
     "иначе регистр не компилируется"
 )
+_CONSTANTS_SET_EXTRA = (
+    "Константы:",
+    "    -",
+    "        Ид: {uuid}",
+    "        Имя: Константа1",
+    "        Тип: Строка",
+)
+_CONSTANTS_SET_NOTE = (
+    "Константа1 – заготовка (пустой набор констант не компилируется): первая константа, "
+    "добавленная через add-field, займет ее место"
+)
 
 KIND_SPECS: dict[str, KindSpec] = {
     "Справочник": KindSpec(),
@@ -1050,7 +1063,7 @@ KIND_SPECS: dict[str, KindSpec] = {
     "РегистрСведений": KindSpec(extra=_INFO_REGISTER_EXTRA),
     "РегистрНакопления": KindSpec(extra=_ACC_REGISTER_EXTRA, note=_ACC_REGISTER_NOTE),
     "ПланОбмена": KindSpec(),
-    "НаборКонстант": KindSpec(),
+    "НаборКонстант": KindSpec(extra=_CONSTANTS_SET_EXTRA, note=_CONSTANTS_SET_NOTE),
     "ХранилищеНастроек": KindSpec(),
     # The paired file is NOT a module but a .xbql query: "наличие файла и запроса в нем
     # обязательно". The IDE creates it empty - we do the same and state the requirement
@@ -1299,6 +1312,13 @@ _KIND_SECTION_LINES: dict[tuple[str, str], tuple[str, ...]] = {
 }
 
 FIELD_KINDS = tuple(_SECTION_SPECS)
+#: The field kinds each operation takes - the one list the refusals and the CLI help name, so
+#: the help cannot fall behind the operation again (it once left out `константа`, `операция`,
+#: `индекс` and `параметр-запроса`). op_add_field also writes the key-value entries of
+#: localized strings; op_set_field_property does not: such an entry is a key and a value,
+#: with no properties to set.
+ADD_FIELD_KINDS = FIELD_KINDS + tuple(_MAPPING_SPECS)
+SET_PROPERTY_KINDS = FIELD_KINDS
 
 
 # --- project discovery ------------------------------------------------------------------
@@ -2377,11 +2397,13 @@ def _noted(result: ScaffoldResult, notes: list[str]) -> ScaffoldResult:
 _STARTER_ATTRIBUTE = "Реквизит1"
 
 #: The same trick a register is born with: the platform refuses an information register
-#: without a dimension and an accumulation register without a resource, so the new object
-#: carries a placeholder. Section -> (its stub name, the stub's own type).
+#: without a dimension, an accumulation register without a resource and a constants set
+#: without a constant, so the new object carries a placeholder. Section -> (its stub name,
+#: the stub's own type).
 _STARTER_ITEMS = {
     "Измерения": ("Измерение1", ("Строка", "String")),
     "Ресурсы": ("Ресурс1", ("Число", "Number")),
+    "Константы": ("Константа1", ("Строка", "String")),
 }
 
 #: Field kinds of a register that a caller mixes up: its data lives in `Dimensions` and
@@ -2571,12 +2593,14 @@ def op_add_field(
         path = (("ТабличныеЧасти", tabular), ("Реквизиты", name))
         extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"), lang)
         resolved = _item_type(kind, path, name, type_, lang)
+        extra = _boolean_default(extra, resolved, lang)
         if doc_lines:
             _check_doc_slot(kind, path)
         lines = doc_lines + spelled_lines(
             _reconciled_id(
                 _reconciled_type(
-                    [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {resolved}"], resolved,
+                    [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {_type_scalar(resolved)}"],
+                    resolved,
                 ),
                 kind, path,
             ) + _prop_lines(extra), lang
@@ -2611,7 +2635,7 @@ def op_add_field(
     spec = _SECTION_SPECS.get(field_kind)
     if spec is None:
         raise ScaffoldError(
-            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(FIELD_KINDS)}"
+            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(ADD_FIELD_KINDS)}"
         )
     allowed = KIND_SECTIONS.get(kind)
     if allowed is None:
@@ -2641,10 +2665,11 @@ def op_add_field(
     path = ((spec["section"], name),)
     extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"), lang)
     resolved = _item_type(kind, path, name, type_, lang, spec.get("type", "Строка"))
+    extra = _boolean_default(extra, resolved, lang)
     if doc_lines:
         _check_doc_slot(kind, path)
     lines = doc_lines + spelled_lines(_reconciled_id(_reconciled_type([
-        line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=resolved or "")
+        line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=_type_scalar(resolved))
         for line in template
     ], resolved), kind, path) + _prop_lines(extra), lang)
     starter = _starter_item_span(text, spec["section"])
@@ -2744,22 +2769,24 @@ def op_add_fields(
 # avoid. The names are checked against the metamodel class of the section item (the same source
 # metadata_schema answers from), so a typo is refused rather than written into the file.
 
-#: Characters that make a bare yaml scalar ambiguous.
-_AMBIGUOUS_SCALAR = re.compile(r"""[:#\[\]{}&*!|>'"%@`]""")
-
-
 def _yaml_scalar(value: str) -> str:
-    """A property value as it goes into yaml: quoted only where a bare scalar would lie.
+    """A property value as it goes into yaml: quoted only where the YAML grammar needs it.
 
-    The measure is the sources themselves - an address is written quoted
-    (`ЗначениеПоУмолчанию: "https://..."`), a plain word bare (`client-code`). A value the
+    Inside a value an indicator character is an ordinary one. The sources of the
+    distribution write `Type: CommandWithParameter<JobDescription>`, a namespaced type and
+    `DefaultValue: https://...` bare, and so does this tool: the `Type` line of op_add_field
+    passes through here too, so a type set by set-field-property reads the way add-field
+    writes it. Quoted is what a reader takes for something else (_reads_back_bare): an
+    indicator in front (`>x`, `[x]`), a colon before a blank, a hash after one, a tab, blanks
+    at the edges - and the empty text, and a colon that a YAML 1.1 reader turns into a number
+    or a time stamp (`14:53` is a sexagesimal number there, see _survives_bare). A value the
     caller already quoted is left as it is: quoting it twice would store the quotes.
     """
     if len(value) > 1 and value[0] in "\"'" and value[-1] == value[0]:
         return value
-    if value == "" or value != value.strip() or value[0] in "-?" or _AMBIGUOUS_SCALAR.search(value):
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    return value
+    if value and _reads_back_bare(value) and (":" not in value or _survives_bare(value)):
+        return value
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def item_property_forms(kind: str, path: tuple[tuple[str, str | None], ...]) -> dict[str, str]:
@@ -2890,6 +2917,17 @@ def _reconciled_type(lines: list[str], resolved: str | None) -> list[str]:
     if resolved is not None:
         return lines
     return [line for line in lines if not line.startswith("Тип:")]
+
+
+def _type_scalar(resolved: str | None) -> str:
+    """The value of the `Type` line, quoted by the rule every property value follows.
+
+    One rule for the two ways a type gets into the file - the `type` of add-field and a
+    `Type` among the properties of set-field-property - so the same type never reads two
+    ways (_yaml_scalar leaves a type expression bare, as the sources write it). Empty for an
+    item that carries no `Type` at all: _reconciled_type drops that line.
+    """
+    return _yaml_scalar(resolved) if resolved else ""
 
 
 def _nested(props: Mapping[str, object]) -> dict[str, object]:
@@ -3051,26 +3089,68 @@ def _checked_value(
         if any(isinstance(item, (Mapping, list, tuple)) for item in value):
             raise ScaffoldError(f"Список '{name}' у {label} принимает только скаляры")
         return [_scalar_text(item, name, lang) for item in value]
-    return _scalar_text(value, name, lang)
+    return _scalar_text(value, name, lang, boolean=kind == "boolean")
 
 
-def _scalar_text(value: object, name: str, lang: str = "ru") -> str:
+#: The words of a boolean value in either language, lower-cased: the language keywords the
+#: sources write (`True`, `False` and their Russian pair) and the lower-case YAML pair a
+#: hand-written file may carry.
+_BOOLEAN_WORDS = {"истина": True, "true": True, "ложь": False, "false": False}
+
+
+def _boolean_word(flag: bool, lang: str) -> str:
+    """A boolean in the words of the file: the pair of the language keywords.
+
+    The sources of the distribution write `True`/`False` in an English file and the Russian
+    pair of the words in a Russian one, the pair the translator writes as well.
+    """
+    return _spelled("Истина" if flag else "Ложь", lang)
+
+
+def _scalar_text(value: object, name: str, lang: str = "ru", boolean: bool = False) -> str:
     """A scalar property value as text: a boolean in the spelling of the file, anything else as is.
 
-    A boolean arrives as one through the MCP, which passes JSON. The sources of the
-    distribution write `True`/`False` in an English file and the Russian pair of the words in
-    a Russian one - the pair of the language keywords, which the translator writes as well. A
-    value given as text is the author's and stays as written.
+    A boolean arrives as one through the MCP, which passes JSON, and as a word through the
+    CLI (`--prop Многострочная=Истина`). `boolean` says the property holds a boolean - its
+    metamodel class records it so - and then a boolean word of either language is written in
+    the words of the file (_boolean_word). Any other text is the author's and stays as written:
+    the word `True` in either language is a boolean only where the property takes one.
     """
     if isinstance(value, bool):
-        return _spelled("Истина" if value else "Ложь", lang)
+        return _boolean_word(value, lang)
     text = "" if value is None else str(value)
     if "\n" in text or "\r" in text:
         raise ScaffoldError(
             f"Значение свойства '{name}' многострочное – вложенный блок передаётся "
             "словарём, остальное пишется в yaml вручную"
         )
-    return text
+    flag = _BOOLEAN_WORDS.get(text.lower()) if boolean else None
+    return text if flag is None else _boolean_word(flag, lang)
+
+
+#: The spellings of the boolean type an item declares (`Булево?` admits the empty value too).
+_BOOLEAN_TYPES = frozenset({"Булево", "Boolean"})
+
+
+def _boolean_default(
+    props: dict[str, object], item_type: str | None, lang: str,
+) -> dict[str, object]:
+    """`props` with the default value of a boolean item in the words of the file.
+
+    The metamodel records `DefaultValue` as a value of any type: the item's own `Type` tells
+    what it holds. The default of a boolean item (a constant, a property of a component) is a
+    boolean like any boolean property and is spelled the same way (_scalar_text); the default
+    of any other item is the author's text and stays as written.
+    """
+    value = props.get("ЗначениеПоУмолчанию")
+    if not isinstance(value, str) or not item_type:
+        return props
+    if item_type.strip().strip("\"'").removesuffix("?") not in _BOOLEAN_TYPES:
+        return props
+    flag = _BOOLEAN_WORDS.get(value.lower())
+    if flag is None:
+        return props
+    return {**props, "ЗначениеПоУмолчанию": _boolean_word(flag, lang)}
 
 
 def _prop_lines(props: Mapping[str, object], indent: str = "") -> list[str]:
@@ -3178,7 +3258,7 @@ def op_set_field_property(
     spec = _SECTION_SPECS.get(field_kind)
     if spec is None:
         raise ScaffoldError(
-            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(FIELD_KINDS)}"
+            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(SET_PROPERTY_KINDS)}"
         )
     allowed = KIND_SECTIONS.get(kind)
     if allowed is None or field_kind not in allowed:
@@ -3213,12 +3293,24 @@ def op_set_field_property(
     block = text[offset:end]
     indent = " " * field_indent
 
+    def own_line(key: str) -> re.Match | None:
+        """The item's own line of a property, either spelling; the value is group 1."""
+        spellings = "|".join(re.escape(form) for form in key_forms(key))
+        return re.search(rf"^{indent}(?:{spellings}):[ \t]*(.*?)[ \t]*\r?$", block, re.M)
+
+    # What the default holds is told by the item's type: the one this call sets, otherwise
+    # the one the item already declares.
+    given_type = checked.get("Тип")
+    declared = own_line("Тип")
+    item_type = given_type if isinstance(given_type, str) else (
+        declared.group(1) if declared else None)
+    checked = _boolean_default(checked, item_type, lang)
+
     edits: list[TextEdit] = []
     appended: list[str] = []
     for key, value in checked.items():
         lines = spelled_lines(_prop_lines({key: value}), lang)
-        spellings = "|".join(re.escape(form) for form in key_forms(key))
-        m = re.search(rf"^{indent}(?:{spellings}):[ \t]*(.*?)[ \t]*\r?$", block, re.M)
+        m = own_line(key)
         if m is None:
             appended.extend(lines)
             continue
@@ -3268,6 +3360,26 @@ def _survives_bare(value: str) -> bool:
         return False
     try:
         parsed = _yaml.safe_load("k: " + value)
+    except _yaml.YAMLError:
+        return False
+    return isinstance(parsed, dict) and parsed.get("k") == value
+
+
+def _reads_back_bare(value: str) -> bool:
+    """Would a YAML reader take this value, written without quotes, for the same text?
+
+    The grammar alone, with no typing: `100` and `True` read back as the text they are - the
+    platform types a value by the property it is written to - while `a: b` opens a mapping,
+    `x #y` loses its tail to a comment and `[x]` becomes a list. Asked of the parser, like
+    _survives_bare, and for the same reason: it knows the corners a pattern forgets (a tab
+    inside a bare value is refused by the scanner).
+    """
+    try:
+        import yaml as _yaml
+    except ImportError:  # pragma: no cover - the parser is a hard dependency of the linter
+        return False
+    try:
+        parsed = _yaml.load("k: " + value, Loader=_yaml.BaseLoader)
     except _yaml.YAMLError:
         return False
     return isinstance(parsed, dict) and parsed.get("k") == value
@@ -8654,7 +8766,8 @@ def _line_text(text: str, offset: int) -> str:
     return text[start:end if end != -1 else len(text)].rstrip("\r")
 
 
-def resource_references(root: Path, resource_path: Path, *, reader=None) -> dict:
+def resource_references(root: Path, resource_path: Path, *, reader=None,
+                        limit: int | None = None) -> dict:
     """Every place in the sources under a root that names a resource file or a folder of them.
 
     The reading is the one a move of the resource makes (see _ResourceScan), so the answer names
@@ -8674,6 +8787,10 @@ def resource_references(root: Path, resource_path: Path, *, reader=None) -> dict
     For a folder, every file under it counts, and so does a string that spells the folder's
     path. A place comes with its file, a zero-based LSP range and the text of its line, sorted
     by file and position.
+
+    `limit` keeps the first so many places in `references` (none for a negative one), and
+    `total` still counts them all: the MCP tool and the CLI `--limit` cut the list the same way.
+    Without it every place is listed.
 
     Refused: the resources folder itself, its description (`Resources.yaml`) and a folder
     without files - a key names none of them.
@@ -8711,5 +8828,5 @@ def resource_references(root: Path, resource_path: Path, *, reader=None) -> dict
         "folder": is_folder,
         "resourcesDir": str(folder.directory),
         "total": len(places),
-        "references": places,
+        "references": places if limit is None else places[:max(0, limit)],
     }

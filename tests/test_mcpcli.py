@@ -346,7 +346,6 @@ _SHAPE_ONLY = {
     ("lint_paths", "list_info"),             # the info findings listed, not counted
     ("translate_status", "full"),            # every duplicate the ref has, instead of a count
     ("translate_unused", "budget_seconds"),  # the CLI walks every file, with no clock
-    ("meta_resource_references", "limit"),   # the CLI lists every place, the tool the first ones
 }
 
 
@@ -459,8 +458,9 @@ def test_baseline_prune_names_the_entries_and_counts_the_findings(same, tmp_path
     assert looking.stale_baseline and not looking.prune_baseline and looking.summary
 
 
-def test_lint_source_reads_the_saved_text_on_stdin(same):
+def test_lint_source_reads_the_saved_text_on_stdin(same, monkeypatch, tmp_path):
     content = "метод Ф()\r\n    возврат  \r\n;\n"
+    monkeypatch.chdir(tmp_path)
 
     answer = same("lint_source", filename="Задачи.xbsl", content=content, ignore=["code"])
     _assigned, words, stdin = _one(answer)
@@ -468,8 +468,45 @@ def test_lint_source_reads_the_saved_text_on_stdin(same):
 
     assert Path(stdin).read_bytes() == content.encode("utf-8")  # the line endings as they were
     assert stdin.endswith(".xbsl") and stdin in answer["cli_note"]
-    assert args.stdin and args.filename == "Задачи.xbsl" and args.no_baseline
+    # The name against the server's folder, where the tool reads it from (see below).
+    assert args.stdin and args.filename == str(tmp_path / "Задачи.xbsl") and args.no_baseline
     assert args.ignore == ["code"] and args.format == "json"
+    absolute = str(tmp_path / "Склад" / "Задачи.xbsl")
+    _assigned, words, _stdin = _one(same("lint_source", filename=absolute, content=content))
+    assert cli.build_parser().parse_args(_tail(words)).filename == absolute  # as it is
+
+
+_LONE_MODULE = "метод Ф()\n;\n"
+
+
+@pytest.mark.needs_data  # the CLI reads the Element data before a check of a text
+def test_lint_source_looks_next_to_the_name_where_the_tool_looks(
+        mcp_module, same, python, monkeypatch, tmp_path, capsys):
+    """A relative name is read by the tool against the server's folder: the rules look there for
+    the paired yaml. The command starts from another folder - on Python 3.10 always the folder
+    of the staged data, on a newer one wherever the shell stands - and looks in the same place:
+    both find the module under the name in the server's folder, and both miss its yaml."""
+    server = tmp_path / "server"
+    module = server / "Склад" / "Остатки.xbsl"
+    module.parent.mkdir(parents=True)
+    module.write_text(_LONE_MODULE, encoding="utf-8")
+    shell = tmp_path / "shell"
+    shell.mkdir()
+    monkeypatch.chdir(server)
+    call = {"filename": "Склад/Остатки.xbsl", "content": _LONE_MODULE,
+            "select": ["structure/xbsl-pair"]}
+    tool = mcp_module.lint_source(**call)
+    ((_assigned, words, stdin, folder),) = _parsed(same("lint_source", **call)["cli"])
+
+    monkeypatch.chdir(folder or shell)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(Path(stdin).read_bytes())))
+    capsys.readouterr()
+    cli.main(_tail(words))
+    printed = json.loads(capsys.readouterr().out)
+
+    assert [finding["rule"] for finding in tool["diagnostics"]] == ["structure/xbsl-pair"]
+    assert [(finding["rule"], finding["path"]) for finding in printed["diagnostics"]] == [
+        ("structure/xbsl-pair", str(module))]
 
 
 def test_lint_source_refused_twice_saves_one_file(same):
@@ -588,6 +625,9 @@ def test_the_resource_readers_parse_back(same, tmp_path):
 
     assert references.command == "resource-references" and references.root == str(tmp_path)
     assert references.resource_path == str(tmp_path / "Склад" / "Ресурсы" / "logo.svg")
+    assert references.limit == 5
+    assert _scaffolding(same("meta_resource_references", root=str(tmp_path),
+                             resource_path="logo.svg")).limit == 100
     assert unused.command == "unused-resources" and unused.include_protected and unused.limit == 7
     assert not default.include_protected and default.limit == 100
 
@@ -684,7 +724,8 @@ _NO_PAIR = ["structure/xbsl-pair"]  # a temporary .xbsl has no paired yaml
 
 @pytest.mark.needs_data
 def test_the_lint_source_command_answers_what_the_tool_answers(
-        mcp_module, same, monkeypatch, capsys):
+        mcp_module, same, monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
     tool = mcp_module.lint_source("Ч.xbsl", _TRAILING, select=["whitespace"])
     _assigned, words, stdin = _one(same("lint_source", filename="Ч.xbsl", content=_TRAILING,
                                         select=["whitespace"]))
@@ -694,7 +735,9 @@ def test_the_lint_source_command_answers_what_the_tool_answers(
     assert cli.main(_tail(words)) == 0
     printed = json.loads(capsys.readouterr().out)
 
-    assert tool["diagnostics"] and printed["diagnostics"] == tool["diagnostics"]
+    # The same findings, filed under the name made absolute against the server's folder.
+    assert tool["diagnostics"] and printed["diagnostics"] == [
+        {**finding, "path": str(tmp_path / finding["path"])} for finding in tool["diagnostics"]]
 
 
 @pytest.mark.needs_data
@@ -945,19 +988,18 @@ def test_the_unused_resources_command_answers_what_the_tool_answers(
     assert "logo.svg" in unused and "a.css" not in unused  # a module names the styles
 
 
-def test_the_references_command_lists_every_place_the_limit_cuts(
+def test_the_references_command_cuts_the_list_as_the_tool_does(
         mcp_module, same, tmp_path, capsys):
+    """`limit` reaches the CLI as `--limit`: the same first places, and `total` counts all."""
     repo = _warehouse(tmp_path / "repo")
     call = {"root": str(repo), "resource_path": f"{_STOCK}/Ресурсы/Стили", "limit": 1}
-    answer = mcp_module.meta_resource_references(**call)
-    _assigned, words, _stdin = _one(same("meta_resource_references", **call))
-    capsys.readouterr()
 
-    assert cli.main(_tail(words)) == 0
-    printed = json.loads(capsys.readouterr().out)
+    printed = _answered_alike(mcp_module, same, capsys, "limit", "meta_resource_references", call)
 
-    assert printed["total"] == answer["total"] == len(printed["references"]) > 1
-    assert printed["references"][:1] == answer["references"]
+    assert printed["total"] > len(printed["references"]) == 1
+    assert cli.main(["resource-references", str(repo), f"{repo}/{_STOCK}/Ресурсы/Стили",
+                     "--limit", "-1"]) == 0
+    assert json.loads(capsys.readouterr().out)["references"] == []  # none below zero, as there
 
 
 def test_a_tree_the_tool_cannot_find_is_refused_by_the_command_too(

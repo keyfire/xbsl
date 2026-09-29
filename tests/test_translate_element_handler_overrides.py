@@ -46,6 +46,10 @@ _ELEMENTS = {
         "НаборЗаписей": {"handlers": ({"ru": "ПослеПересчетаОстатков", "en": "AfterStockRecount"},),
                          "dynamic": ()},
     },
+    "Проект": {
+        "": {"handlers": ({"ru": "ВычислитьСистемныеРазрешенияДоступа",
+                           "en": "ComputeSystemAccessPermissions"},), "dynamic": ()},
+    },
 }
 
 
@@ -181,3 +185,24 @@ def test_control_without_the_element_lists_the_override_waits_for_the_dictionary
                                              "ОстаткиСкладов.НаборЗаписей.xbsl": module})
     assert written["StockBalances.RecordSet.xbsl"] == (
         "@Handler\nmethod ПослеПересчетаОстатков()\n;\n")
+
+
+PROJECT = "Ид: 9c7e2b15-3d80-4a01-8f5e-4b8c9d0e1f26\nИмя: Склады\nЯзыкРазработки: Русский\n"
+PROJECT_MODULE = "@Обработчик\nметод ВычислитьСистемныеРазрешенияДоступа()\n;\n"
+
+
+def test_the_module_of_the_project_takes_the_platform_spelling(tmp_path):
+    """The project description names no kind: its module is the module of the project."""
+    report, written = _translate(tmp_path, {"Проект.yaml": PROJECT, "Проект.xbsl": PROJECT_MODULE})
+    assert list(written.values()) == ["@Handler\nmethod ComputeSystemAccessPermissions()\n;\n"]
+    assert not {name for file in report.files.values() for name in file.missing_tokens}
+
+
+def test_control_without_the_project_slot_the_handler_waits_for_the_dictionary(
+        tmp_path, monkeypatch):
+    _use(monkeypatch, {kind: slots for kind, slots in _ELEMENTS.items() if kind != "Проект"})
+    report, written = _translate(tmp_path, {"Проект.yaml": PROJECT, "Проект.xbsl": PROJECT_MODULE})
+    assert list(written.values()) == [
+        "@Handler\nmethod ВычислитьСистемныеРазрешенияДоступа()\n;\n"]
+    assert "ВычислитьСистемныеРазрешенияДоступа" in {
+        name for file in report.files.values() for name in file.missing_tokens}

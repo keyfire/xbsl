@@ -256,6 +256,8 @@ extension. Seed data names a picture by its code this way, and the code adds the
 time; the JSON files of the project's resources are read for it too. The metadata tree of the VS Code extension shows the answer in the References
 view. Resources of the current subsystem take priority over imported namesakes. The root and
 packages of that subsystem have equal priority; two matching local namespaces remain ambiguous.
+`--limit` (MCP `limit`, 100 by default) keeps the first places in the list, and `total` counts
+all of them.
 
 `xbsl unused-resources <root>` and MCP `meta_unused_resources` list candidates with no
 known uses. They scan resource literals, image properties, resource-loading wrappers,

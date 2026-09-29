@@ -275,6 +275,37 @@ def test_xbsl_pair_module_named_after_no_tabular_section(tmp_path):
     assert any("Товары.Строки.yaml" in x.message for x in d)
 
 
+def test_tabular_row_owner_goes_by_the_declaration_not_by_the_tails_of_all_kinds(tmp_path):
+    # `Parameters` is the tail of a type a report generates, and a catalog does not; the
+    # section the catalog declares under that name is what decides, as code/undefined-name
+    # decides. The list of the tails of every kind used to turn such a module away.
+    from xbsl.rules.structure import _module_suffixes, tabular_row_owner
+
+    assert "Параметры" in _module_suffixes()
+    owner = tmp_path / "Товары.yaml"
+    owner.write_text(_CATALOG_WITH_ROWS.replace("Имя: Позиции", "Имя: Параметры"), encoding="utf-8")
+    assert tabular_row_owner(tmp_path / "Товары.Параметры.xbsl") == owner
+    # the controls: a word the yaml does not declare, and a declared one on another element
+    assert tabular_row_owner(tmp_path / "Товары.Позиции.xbsl") is None
+    assert tabular_row_owner(tmp_path / "Цены.Параметры.xbsl") is None
+
+
+def test_xbsl_pair_leaves_the_row_module_of_an_unreadable_owner_to_its_yaml(tmp_path):
+    # whether the broken yaml declares the section is unknown: its own yaml/valid is the
+    # finding, and the module is not reported as orphaned on top of it
+    (tmp_path / "Товары.yaml").write_text(
+        "ВидЭлемента: Справочник\nИмя: Товары\nТабличныеЧасти: [\n", encoding="utf-8",
+    )
+    (tmp_path / "Товары.Позиции.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    assert engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair"}) == []
+    # the control: the same module beside a yaml that reads and declares no such section
+    (tmp_path / "Товары.yaml").write_text(
+        _CATALOG_WITH_ROWS.replace("Имя: Позиции", "Имя: Прочее"), encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair"})
+    assert any("Товары.Позиции.yaml" in x.message for x in d)
+
+
 def test_xbsl_pair_module_of_missing_owner(tmp_path):
     # no owner at all - the module is orphaned, and that is what we report
     (tmp_path / "Цены.НаборЗаписей.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")

@@ -122,11 +122,15 @@ MESSAGES = {
     "datadiff.term.query": {"ru": "язык запросов", "en": "query language"},
     "datadiff.term.query-reserved": {"ru": "зарезервированные слова языка запросов",
                                      "en": "reserved words of the query language"},
+    "datadiff.term.query-reserved-types": {"ru": "типы литералов языка запросов",
+                                           "en": "types of the query language literals"},
 }
 i18n.register(MESSAGES)
 
-#: Sections of terms.json worth diffing (russian -> english pairs).
-_TERM_SECTIONS = ("types", "facets", "properties", "enums", "query", "query_reserved")
+#: Sections of terms.json worth diffing: pairs keyed by the Russian name (its English spelling,
+#: or the type of a literal of the query language).
+_TERM_SECTIONS = ("types", "facets", "properties", "enums", "query", "query_reserved",
+                  "query_reserved_types")
 #: uischema property attributes that make a "changed" entry (doc texts excluded - noise).
 _UISCHEMA_PROP_KEYS = ("types", "enum", "event", "slot", "readonly", "since", "default")
 #: uischema component attributes compared as flags.

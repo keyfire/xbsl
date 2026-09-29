@@ -14,7 +14,11 @@ Scope model (per the platform semantics):
   the stdlib contributes its global names - both via the helpers of rules/semantics.py.
 - the module of a tabular-section row type (`Товары.Позиции.xbsl`) has the scope of the row:
   the attributes the section declares in the yaml of its owner and what every structure type
-  has, never the attributes of the owner itself (see _row_owner).
+  has, never the attributes of the owner itself (see _row_owner); a method of the structure
+  type answers only as the callee of a call (see _row_type_scope).
+
+A spelling hint is the closest name of the whole scope - the module, the element, the project
+and the global names compete, and a tie goes to the nearer group (see _ScopeHints).
 
 Only the ROOT of a member chain is checked (`Х` in `Х.Поле[0].Метод()`): member names need
 type inference (stage 3). Qualified roots (`Подсистема::Имя`) and method references are
@@ -38,7 +42,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 
 from xbsl import dataset, i18n, metamodel, parser as P, terms
@@ -61,6 +65,12 @@ MESSAGES = {
     "code/undefined-name.found-hint": {
         "ru": "Имя '{name}' нигде не объявлено – возможно, имелось в виду '{hint}'.",
         "en": "Name '{name}' is not declared anywhere - did you mean '{hint}'?",
+    },
+    "code/undefined-name.found-method": {
+        "ru": "Имя '{name}' – метод, а не значение: без скобок компилятор его не находит. "
+              "Вызовите: '{name}()'.",
+        "en": "Name '{name}' is a method, not a value: without the parentheses the compiler "
+              "does not find it. Call it: '{name}()'.",
     },
     "code/undefined-name.found-interp": {
         "ru": "'{sign}{name}' в строке – интерполяция имени '{name}', а оно нигде не "
@@ -246,16 +256,42 @@ def _pair_key(rel: str) -> tuple[str, str, str]:
 
 
 #: The kind whose module a row module is scoped like, beyond the fields. The help page on
-#: tabular sections calls the row type of a section a structure type, and the module of a
-#: `Structure` element already gets the members every structure type has (`ToString`,
-#: `GetType`, `Presentation`) from the catalog.
+#: tabular sections calls the row type of a section a structure type, and the catalog gives
+#: every structure type the same members (`ToString`, `GetType`, `Presentation`).
 #:
 #: The standard fields the same page names - `Owner`, `Index`, `LineNumber`, and the
 #: container of the stored row - are not added: the page gives them to the TABLES of a section,
 #: the table of the query language and the one in the database, and the compiler dictionary
 #: files them under the view of that table, not under a type of the code. A row built by
-#: `new` is not in any section yet, so it has no number to answer with.
+#: `new` is not in any section yet, so it has no number to answer with. The probe agrees: in
+#: the module of a row all three got "Variable ... is not defined".
 _ROW_TYPE_KIND = "Структура"
+
+
+def _row_type_scope(object_members: dict, manager_members: dict) -> tuple[set[str], set[str]]:
+    """What a row module sees of its structure type: (names read bare, methods called).
+
+    A method of the type answers only in the position of a call. The probe compiled a row
+    module with each name on a line of its own: `Presentation()` and `ToString()` passed, and
+    a bare `Presentation` got "Variable ... is not defined" - the compiler looks a bare name up
+    among the values, and a method is not one.
+
+    Data generated before the manager members were split into properties and methods cannot
+    tell the two apart. There every member stays a bare name, as before: narrowing blindly
+    would cost errors on code that compiles, widening only a missed finding.
+
+    The module of a `Structure` element keeps every member as a bare name: no probe has
+    compiled a bare method name there yet.
+    """
+    entry = manager_members.get(_ROW_TYPE_KIND)
+    names = set(object_members.get(_ROW_TYPE_KIND, ()))
+    calls: set[str] = set()
+    if isinstance(entry, dict):
+        for member_kind in dataset.MEMBER_KINDS:
+            (calls if member_kind == "methods" else names).update(entry.get(member_kind) or ())
+    else:
+        names.update(dataset.manager_member_names(entry))
+    return _both_spellings(names), _both_spellings(calls)
 
 
 def _row_attributes(data) -> dict[str, list[str]]:
@@ -453,8 +489,8 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         return None
     lm = linemap(source)
     cands = [
-        (*lm.linecol(offset), name, sign)
-        for offset, name, sign in findings
+        (*lm.linecol(offset), name, sign, call)
+        for offset, name, sign, call in findings
     ]
     obj = source.rel.endswith(OBJECT_MODULE_SUFFIXES)
     return {
@@ -471,11 +507,13 @@ def _undef_mapper(source: SourceFile) -> dict | None:
 
 def _module_candidates(
     module: P.Module, known_global: set[str],
-) -> tuple[list[tuple[int, str, str]], list[str]]:
+) -> tuple[list[tuple[int, str, str, bool]], list[str]]:
     """Names unknown to the module and to `known_global`, plus the module's hint pool.
 
-    The last element of a candidate is the interpolation sign ("%"/"$") for a name found
-    inside a string literal, and "" for an ordinary one - the reduce picks the message by it.
+    A candidate is (offset, name, sign, call). The sign is the interpolation sign ("%"/"$")
+    for a name found inside a string literal, and "" for an ordinary one - the reduce picks the
+    message by it. `call` marks the callee of a call, the one position where a method of the
+    scope may stand by its bare name.
 
     The walk collects everything unknown to the LOCAL scopes; the big static set filters
     afterwards. Hints are NOT computed here: most survivors are project names the reduce
@@ -486,7 +524,7 @@ def _module_candidates(
     for m in module.members:
         if isinstance(m, (P.Method, P.Structure, P.Enum, P.ObjectField)):
             module_names.add(m.name)
-    findings: list[tuple[int, str]] = []
+    findings: list[tuple[int, str, str, bool]] = []
     hint_pool: set[str] = set(module_names)
     for m in module.members:
         if isinstance(m, P.Method):
@@ -514,11 +552,7 @@ def _module_candidates(
     if not findings:
         return [], []
     _collect_declared(module, hint_pool)
-    out: list[tuple[int, str, str]] = [
-        (offset, name, sign)
-        for offset, name, sign in findings
-        if name not in known_global
-    ]
+    out = [finding for finding in findings if finding[1] not in known_global]
     if not out:
         return [], []
     return out, sorted(hint_pool)
@@ -588,11 +622,8 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     object_members = catalog.get("object_members", {})
     manager_members = catalog.get("manager_members", {})
     generated_members = catalog.get("generated_members", {})
-    # What a row module sees beyond the attributes of its section (see _ROW_TYPE_KIND).
-    row_members = _both_spellings(
-        set(object_members.get(_ROW_TYPE_KIND, ()))
-        | set(dataset.manager_member_names(manager_members.get(_ROW_TYPE_KIND)))
-    )
+    # What a row module sees beyond the attributes of its section (see _row_type_scope).
+    row_names, row_calls = _row_type_scope(object_members, manager_members)
 
     # The project model from the yaml facts: names, the (directory, file) map for the
     # module pairing, the by-name map for the Наследует chain of interface components.
@@ -608,18 +639,22 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["name"]:
             by_name[fact["name"]] = fact
 
+    hints = _Hints(project_names)
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
         pair = by_dir.get((fact["dir"], fact["pair"]))
         owner = _row_owner(fact, by_dir) if pair is None else None
         extras: set[str] = set()
+        # Names of the scope that answer only as the callee of a call.
+        calls: set[str] = set()
         if owner is not None:
             if owner["bad"] or owner["ext"]:
                 continue  # the blind spots of an element's own pair hold for its rows too
             # The attributes of the section and the members of a structure type. The attributes
             # of the owner stay out: the row is a type of its own, and they are not its fields.
-            extras = set(owner["rows"][fact["row"][1]]) | row_members
+            extras = set(owner["rows"][fact["row"][1]]) | row_names
+            calls = row_calls
         elif pair is not None:
             if pair["bad"]:
                 continue  # the pair is unreadable: its own yaml/valid is the finding to read
@@ -647,19 +682,21 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                          | set(dataset.manager_member_names(manager_members.get(kind))))
                 extras = set(pair["sections"]) | _both_spellings(
                     names - set(pair["withheld"][_MANAGER_SCOPE]))
-        for line, col, name, sign in fact["cands"]:
-            if name in project_names or name in extras:
+        scope = hints.module(fact.get("pool") or (), extras, calls)
+        for line, col, name, sign, call in fact["cands"]:
+            if name in project_names or name in extras or call and name in calls:
                 continue
             if sign:
                 # Inside a string the fix is usually the escape, not a declaration - the
                 # spelling hint would send the reader the wrong way.
                 message = i18n.t("code/undefined-name.found-interp", name=name, sign=sign)
+            elif name in calls:
+                # The name is right and the parentheses are missing: a spelling hint would
+                # offer the very same name.
+                message = i18n.t("code/undefined-name.found-method", name=name)
             else:
-                # difflib runs only for a true finding: the module's own pool first
-                # (a local typo), then the project-wide names.
-                hint = _closest(name, fact.get("pool") or ())
-                if hint is None:
-                    hint = _closest(name, project_names | extras)
+                # difflib runs only for a true finding, over the whole scope at once.
+                hint = scope.closest(name, call)
                 message = (
                     i18n.t("code/undefined-name.found-hint", name=name, hint=hint)
                     if hint else i18n.t("code/undefined-name.found", name=name)
@@ -766,6 +803,15 @@ def _interpolations(raw: str) -> list[tuple[int, str, str]]:
         pos = ident.end()
 
 
+def _walk_name(expr: P.Name, scope: set[str], findings: list, call: bool) -> None:
+    # Qualified roots (`Subsystem::Name`) are not checked: the contents of foreign namespaces
+    # are not visible to this rule. No hints here: the walk sees many names that later turn
+    # out known (project objects), and difflib per candidate would dominate the run - hints
+    # are computed after the static filter.
+    if "::" not in expr.name and expr.name and expr.name not in scope:
+        findings.append((expr.start, expr.name, "", call))
+
+
 def _walk_expr(expr: P.Expr | None, scope: set[str], findings: list) -> None:
     if expr is None:
         return
@@ -775,21 +821,21 @@ def _walk_expr(expr: P.Expr | None, scope: set[str], findings: list) -> None:
         if expr.kind == "STRING":
             for offset, sign, name in _interpolations(expr.text):
                 if name not in scope:
-                    findings.append((expr.start + offset, name, sign))
+                    findings.append((expr.start + offset, name, sign, False))
         return
     if isinstance(expr, P.Name):
-        # Qualified roots (Подсистема::Имя) are not checked: the contents of foreign
-        # namespaces are not visible to this rule. No hints here: the walk sees many
-        # names that later turn out known (project objects), and difflib per candidate
-        # would dominate the run - hints are computed after the static filter.
-        if "::" not in expr.name and expr.name and expr.name not in scope:
-            findings.append((expr.start, expr.name, ""))
+        _walk_name(expr, scope, findings, call=False)
         return
     if isinstance(expr, P.Member):
         _walk_expr(expr.obj, scope, findings)  # the member name is a type-inference stage
         return
     if isinstance(expr, P.Call):
-        _walk_expr(expr.callee, scope, findings)
+        # The callee of a call is marked: a method of the scope answers there and only there
+        # (see _row_type_scope), while a bare name is looked up among the values.
+        if isinstance(expr.callee, P.Name):
+            _walk_name(expr.callee, scope, findings, call=True)
+        else:
+            _walk_expr(expr.callee, scope, findings)
         for arg in expr.args:
             _walk_expr(arg.value, scope, findings)
         return
@@ -855,6 +901,171 @@ def _walk_expr(expr: P.Expr | None, scope: set[str], findings: list) -> None:
     # Literal, This, GlobalAccess, MethodRef are atoms (method references - stage 3)
 
 
-def _closest(name: str, scope: Iterable[str]) -> str | None:
-    hits = difflib.get_close_matches(name, scope, n=1, cutoff=0.75)
-    return hits[0] if hits else None
+#: The least similarity (difflib's ratio) a spelling hint needs - the cutoff the hints were
+#: taken with before they were ranked over the whole scope.
+_HINT_CUTOFF = 0.75
+
+#: Candidates of a hint by their length: (name, the mask of its distinct characters, the count
+#: of its characters that repeat an earlier one).
+_Table = dict[int, list[tuple[str, int, int]]]
+
+#: The bit of every character met in a hint so far; the masks of all tables share it.
+_CHAR_BITS: dict[str, int] = {}
+
+
+def _char_mask(chars: Iterable[str]) -> int:
+    mask = 0
+    for char in chars:
+        mask |= 1 << _CHAR_BITS.setdefault(char, len(_CHAR_BITS))
+    return mask
+
+
+def _hint_table(names: Iterable[str]) -> _Table:
+    """The candidates by their length, each with the mask of its characters and its repeats."""
+    table: _Table = {}
+    for name in names:
+        chars = set(name)
+        table.setdefault(len(name), []).append((name, _char_mask(chars), len(name) - len(chars)))
+    return table
+
+
+def _least_shared(total: int) -> int:
+    """The fewest matching characters that bring a pair `total` long to the cutoff.
+
+    Settled by the very expression difflib compares with the cutoff, so the float rounding of
+    the two agrees.
+    """
+    shared = int(_HINT_CUTOFF * total / 2)
+    while shared > 0 and 2.0 * (shared - 1) / total >= _HINT_CUTOFF:
+        shared -= 1
+    while 2.0 * shared / total < _HINT_CUTOFF:
+        shared += 1
+    return shared
+
+
+def _closest_in(name: str, table: _Table) -> tuple[float, str] | None:
+    """The best (ratio, candidate) of a table, the one difflib.get_close_matches would pick.
+
+    difflib scores the same candidates and orders them the same way: the ratio first, then the
+    greater string. Two cheap bounds come first, and each only skips a candidate difflib turns
+    down as well: the length (difflib's `real_quick_ratio`) and the characters the two can
+    share - at most the distinct characters they have in common plus the repeats of the side
+    that repeats less (a bound on its `quick_ratio`). Over the global names that leaves difflib
+    a handful of candidates out of thousands.
+
+    The name itself is no hint: declared out of reach (a local of another method), it would
+    only be offered back to the reader.
+    """
+    length = len(name)
+    chars = set(name)
+    mask = _char_mask(chars)
+    repeats = length - len(chars)
+    matcher = difflib.SequenceMatcher()
+    matcher.set_seq2(name)
+    best: tuple[float, str] | None = None
+    # The window only has to cover every length the bound below lets through.
+    low = int(length * _HINT_CUTOFF / (2 - _HINT_CUTOFF))
+    high = int(length * (2 - _HINT_CUTOFF) / _HINT_CUTOFF) + 1
+    for size in range(max(low, 1), high + 1):
+        bucket = table.get(size)
+        if not bucket:
+            continue
+        need = _least_shared(length + size)
+        if min(length, size) < need:
+            continue
+        for candidate, candidate_mask, candidate_repeats in bucket:
+            shared = (mask & candidate_mask).bit_count()
+            shared += candidate_repeats if candidate_repeats < repeats else repeats
+            if shared < need or candidate == name:
+                continue
+            matcher.set_seq1(candidate)
+            if matcher.quick_ratio() < _HINT_CUTOFF:
+                continue
+            score = matcher.ratio()
+            if score >= _HINT_CUTOFF and (best is None or (score, candidate) > best):
+                best = (score, candidate)
+    return best
+
+
+@lru_cache(maxsize=1)
+def _global_table() -> _Table:
+    return _hint_table(_static_globals() or ())
+
+
+@lru_cache(maxsize=4096)
+def _closest_global(name: str) -> tuple[float, str] | None:
+    """The best global candidate of a name - the same for every module, so kept per name."""
+    return _closest_in(name, _global_table())
+
+
+dataset.register_reset(_global_table.cache_clear)
+dataset.register_reset(_closest_global.cache_clear)
+
+#: The groups of a scope, from the nearest to the farthest; a tie goes to the nearer one.
+_MODULE_RANK, _ELEMENT_RANK, _PROJECT_RANK, _GLOBAL_RANK = range(4)
+
+
+class _ScopeHints:
+    """Spelling hints over the scope of one module, built for the first finding that needs one.
+
+    Every group of the scope competes: the names of the module, what the element gives it, the
+    objects of the project and the global names. The closest candidate wins whichever group it
+    is in, and a tie goes to the nearer group. The hint used to stop at the first group that
+    had any candidate at all, so a module name barely over the cutoff hid the attribute the typo
+    was one letter away from (`Пасажир` got the parameter `Пассажиры` rather than the attribute
+    `Пассажир`), and a misspelled global name got no hint at all.
+
+    The table of the project names is the same for every module and is built once per run
+    (`project`); the global names are ranked per name, once per process (_closest_global).
+    """
+
+    def __init__(self, project: Callable[[], _Table], pool: Iterable[str], extras: set[str],
+                 calls: set[str]) -> None:
+        self._project = project
+        self._names = (pool, extras, calls)
+        self._tables: tuple[_Table, _Table, _Table] | None = None
+        self._memo: dict[tuple[str, bool], str | None] = {}
+
+    def closest(self, name: str, call: bool) -> str | None:
+        """The hint for a name, or None.
+
+        A method that answers only to a call competes as well; offered for a bare name, it
+        comes with its parentheses, so the hint is the code to write.
+        """
+        key = (name, call)
+        if key in self._memo:
+            return self._memo[key]
+        if self._tables is None:
+            pool, extras, calls = self._names
+            self._tables = (_hint_table(pool), _hint_table(extras), _hint_table(calls))
+        pool_table, extras_table, calls_table = self._tables
+        groups = ((_MODULE_RANK, pool_table, ""), (_ELEMENT_RANK, extras_table, ""),
+                  (_ELEMENT_RANK, calls_table, "" if call else "()"),
+                  (_PROJECT_RANK, self._project(), ""))
+        best: tuple[float, int, str] | None = None
+        written = ""
+        for rank, table, tail in groups:
+            found = _closest_in(name, table)
+            if found is not None and (best is None or (found[0], -rank, found[1]) > best):
+                best, written = (found[0], -rank, found[1]), found[1] + tail
+        found = _closest_global(name)
+        if found is not None and (best is None or (found[0], -_GLOBAL_RANK, found[1]) > best):
+            best, written = (found[0], -_GLOBAL_RANK, found[1]), found[1]
+        self._memo[key] = written or None
+        return self._memo[key]
+
+
+class _Hints:
+    """The spelling hints of one run: the part shared by the modules is built once."""
+
+    def __init__(self, project_names: set[str]) -> None:
+        self._project_names = project_names
+        self._project_table: _Table | None = None
+
+    def _project(self) -> _Table:
+        if self._project_table is None:
+            self._project_table = _hint_table(self._project_names)
+        return self._project_table
+
+    def module(self, pool: Iterable[str], extras: set[str], calls: set[str]) -> _ScopeHints:
+        return _ScopeHints(self._project, pool, extras, calls)

@@ -7,10 +7,11 @@ engine, starts a new one, replays the handshake to it and sends it the same requ
 gets the answer of the new code instead of the refusal (xbsl/mcp_supervisor.py).
 
 Most tests run the supervisor as the client does - a process of its own spoken to over pipes -
-in front of a fake worker: a small script that answers line by line, reads the version it
-"loaded" from a file at start and refuses a call when the file says another one, as the engine
-does. The last test runs the real server behind it, on a copy of the package whose version is
-bumped under the running worker. No Element data and no plugins are needed.
+in front of a fake worker: a small script that answers line by line, reads the version and the
+"code files" it loaded from files at start and refuses a call when a file says otherwise, as the
+engine does. The last tests run the real server behind it, on a copy of the package whose
+version is bumped, or one of whose modules is replaced, under the running worker. No Element
+data and no plugins are needed.
 """
 
 from __future__ import annotations
@@ -43,16 +44,27 @@ FAKE_WORKER = r'''
 import json, os, sys, threading, time
 
 VERSION = os.environ["FAKE_VERSION"]
+SOURCES = os.environ["FAKE_SOURCES"]
+PROTOCOL = os.environ["FAKE_PROTOCOL"]
 LOG = os.environ["FAKE_LOG"]
 lock = threading.Lock()
 
 
+def read(path, default=""):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except FileNotFoundError:
+        return default
+
+
 def disk():
-    with open(VERSION, encoding="utf-8") as handle:
-        return handle.read().strip()
+    return read(VERSION)
 
 
 LOADED = disk()
+#: The "code files" as they were at start: a change under the same version is refused too.
+STARTED = read(SOURCES)
 
 
 def note(entry):
@@ -73,21 +85,26 @@ def result(request_id, payload):
 
 
 def call(request_id, name, arguments):
-    on_disk = disk()
-    stale = {"reason": "version", "loaded": LOADED, "on_disk": on_disk}
+    on_disk, sources = disk(), read(SOURCES)
+    if on_disk != LOADED:
+        stale = {"reason": "version", "loaded": LOADED, "on_disk": on_disk}
+    elif sources != STARTED:
+        stale = {"reason": "sources", "loaded": LOADED, "on_disk": LOADED, "fingerprint": sources}
+    else:
+        stale = None
     if name == "exit":
         os._exit(3)
     if name == "version_info":
         payload = {"engine": LOADED, "pid": os.getpid()}
-        if on_disk != LOADED:
+        if stale:
             payload["stale"] = stale
         return result(request_id, payload)
-    if on_disk != LOADED and name != "write":
+    if stale and name != "write":
         return result(request_id, {"error": "refused", "stale": {**stale, "ran": False}})
     note({"ran": name})
     if name == "sleep":
         time.sleep(arguments["seconds"])
-    if on_disk != LOADED:
+    if stale:
         return result(request_id, {"error": "failed on a mix", "stale": {**stale, "ran": True}})
     result(request_id, {"pid": os.getpid(), "engine": LOADED, "name": name,
                         "arguments": arguments})
@@ -99,8 +116,9 @@ for raw in sys.stdin:
     method = message.get("method")
     note({"method": method, "id": message.get("id"), "params": message.get("params")})
     if method == "initialize":
+        # The version asked for, unless the test says this server agrees on another one.
         say({"jsonrpc": "2.0", "id": message["id"], "result": {
-            "protocolVersion": message["params"]["protocolVersion"],
+            "protocolVersion": read(PROTOCOL, message["params"]["protocolVersion"]),
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": "fake", "version": LOADED}}})
     elif method == "notifications/initialized":
@@ -184,7 +202,8 @@ def payload(answer: dict) -> dict:
 
 
 class Fake:
-    """The fake worker's files: the version "on disk", the log of what it heard."""
+    """The fake worker's files: the version and the "code files" on disk, the protocol version
+    a new worker agrees on (absent: the one asked for), the log of what it heard."""
 
     def __init__(self, tmp_path: Path) -> None:
         self.folder = tmp_path
@@ -192,11 +211,18 @@ class Fake:
         self.script.write_text(FAKE_WORKER, encoding="utf-8")
         self.version = tmp_path / "version.txt"
         self.version.write_text("1.0.0", encoding="utf-8")
+        self.sources = tmp_path / "sources.txt"
+        self.sources.write_text("start", encoding="utf-8")
+        self.protocol = tmp_path / "protocol.txt"
         self.log = tmp_path / "fake-log.jsonl"
         self.sessions: list[Session] = []
 
     def bump(self, version: str) -> None:
         self.version.write_text(version, encoding="utf-8")
+
+    def pull(self, sources: str) -> None:
+        """The code files change, the version stays: a pull between two releases."""
+        self.sources.write_text(sources, encoding="utf-8")
 
     def heard(self) -> list[dict]:
         if not self.log.exists():
@@ -204,7 +230,8 @@ class Fake:
         return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
 
     def session(self, worker: list[str] | None = None) -> Session:
-        env = dict(os.environ, FAKE_VERSION=str(self.version), FAKE_LOG=str(self.log))
+        env = dict(os.environ, FAKE_VERSION=str(self.version), FAKE_SOURCES=str(self.sources),
+                   FAKE_PROTOCOL=str(self.protocol), FAKE_LOG=str(self.log))
         command = [sys.executable, "-m", "xbsl.mcp_supervisor", "--",
                    *(worker or [sys.executable, str(self.script)])]
         session = Session(command, env=env, cwd=ROOT,
@@ -298,10 +325,15 @@ def test_self_update_stops_the_worker_and_leaves_the_supervisor():
 def test_the_mcp_journal_tells_a_replacement_in_words(capsys):
     mcpjournal.record("restart", target=101, reason="version", loaded="0.120.0", on_disk="0.121.0")
     mcpjournal.record("restart", target=102, reason="exited", code=3)
+    mcpjournal.record("restart", target=103, reason="sources", loaded="0.121.0",
+                      on_disk="0.121.0", fingerprint="0123456789ab")
+    mcpjournal.record("protocol", target=104, client="2025-06-18", worker="2025-11-25")
     assert cli.main(["mcp-log"]) == 0
     out = capsys.readouterr().out
     assert "супервизор заменяет процесс сервера 101: движок на диске 0.120.0 -> 0.121.0" in out
     assert "процесс сервера 102: процесс завершился с кодом 3" in out
+    assert "процесс сервера 103: исходники движка на диске изменились" in out
+    assert "клиент продолжает говорить по 2025-06-18" in out
     i18n.set_lang("en")
     try:
         assert cli.main(["mcp-log"]) == 0
@@ -309,6 +341,8 @@ def test_the_mcp_journal_tells_a_replacement_in_words(capsys):
     finally:
         i18n.set_lang("ru")
     assert "the supervisor replaces the server process 101: the engine on disk 0.120.0" in english
+    assert ("the new server process 104 agreed on protocol version 2025-11-25, while the client "
+            "was answered 2025-06-18") in english
 
 
 def test_a_refusal_says_that_the_tool_did_not_run(mcp_module, monkeypatch, tmp_path):
@@ -377,6 +411,53 @@ def test_a_refusal_over_a_replaced_engine_is_answered_by_a_new_worker(fake):
     (event,) = [event for event in mcpjournal.read() if event["event"] == "restart"]
     assert event["target"] == first["pid"] and event["reason"] == "version"
     assert (event["loaded"], event["on_disk"]) == ("1.0.0", "2.0.0")
+    # the new worker agreed on the protocol version the client speaks: nothing to tell
+    assert not [event for event in mcpjournal.read() if event["event"] == "protocol"]
+
+
+def test_each_change_of_the_sources_gets_a_new_worker(fake):
+    """A pull between two releases keeps the number, and so does the next pull.
+
+    The worker started after the first pull reports the second one with the same version on
+    both sides; the fingerprint of the files tells the second change from the first, so that
+    worker is replaced too instead of being taken for one started over this very change.
+    """
+    session = fake.session()
+    session.initialize()
+    first = payload(session.call(1, "echo"))
+
+    fake.pull("after the first pull")
+    second = payload(session.call(2, "echo"))
+    fake.pull("after the second pull")
+    third = payload(session.call(3, "echo"))
+
+    assert "error" not in second and "error" not in third, third
+    assert len({first["pid"], second["pid"], third["pid"]}) == 3
+    assert first["engine"] == second["engine"] == third["engine"] == "1.0.0"
+    assert session.close() == 0
+    restarts = [event for event in mcpjournal.read() if event["event"] == "restart"]
+    assert [(event["target"], event["reason"]) for event in restarts] == [
+        (first["pid"], "sources"), (second["pid"], "sources")]
+
+
+def test_another_protocol_version_of_a_new_worker_is_written_down(fake, capsys):
+    """The client keeps the version it was answered at the start; the journal tells the rest."""
+    session = fake.session()
+    answered = session.initialize()
+    fake.protocol.write_text("2024-11-05", encoding="utf-8")
+    fake.bump("2.0.0")
+
+    fresh = payload(session.call(1, "echo"))
+
+    assert answered["result"]["protocolVersion"] == PROTOCOL
+    assert fresh["engine"] == "2.0.0"  # the call is answered as ever
+    assert session.close() == 0
+    (event,) = [event for event in mcpjournal.read() if event["event"] == "protocol"]
+    assert (event["target"], event["client"], event["worker"]) == (
+        fresh["pid"], PROTOCOL, "2024-11-05")
+    assert cli.main(["mcp-log"]) == 0
+    assert (f"новый процесс сервера {fresh['pid']} согласовал версию протокола 2024-11-05, а "
+            f"клиенту в начале сессии ответили {PROTOCOL}") in capsys.readouterr().out
 
 
 def test_version_info_on_a_stale_worker_is_answered_by_a_new_one(fake):
@@ -530,3 +611,50 @@ def test_the_real_server_is_replaced_when_its_engine_is_updated_on_disk(fake, tm
         "version", loaded["engine"], "9.9.9")
     assert [event["version"] for event in events if event["event"] == "start"] == [
         loaded["engine"], "9.9.9"]
+
+
+def test_the_real_server_is_replaced_when_its_sources_change_under_the_same_version(
+        fake, tmp_path):
+    """A pull between two releases: the code changes on disk, the number does not.
+
+    The test replaces a module of the copy the way git does - removes it and writes it anew,
+    one line longer - under the running worker. The worker refuses the next call before it runs
+    it, and the client gets the answer of a new worker on the same version instead.
+    """
+    pytest.importorskip("mcp")
+    init = _copy_package(tmp_path / "site")
+    empty = tmp_path / "no-data"
+    empty.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    env = dict(os.environ, PYTHONPATH=str(tmp_path / "site"), XBSL_NO_PLUGINS="1",
+               XBSL_DATA_DIR=str(empty), PYTHONIOENCODING="utf-8")
+    session = Session([sys.executable, "-m", "xbsl.mcp_supervisor"], env=env, cwd=work,
+                      stderr=tmp_path / "stderr-real.txt")
+    fake.sessions.append(session)
+    session.initialize()
+    rules = {"select": ["code/brackets"]}
+    before = session.call(1, "list_rules", rules)
+    loaded = payload(session.call(2, "version_info"))
+
+    module = init.parent / "report.py"
+    source = module.read_bytes()
+    module.unlink()
+    module.write_bytes(source + b"\n# a line the pull brought\n")
+    after = session.call(3, "list_rules", rules)
+    info = payload(session.call(4, "version_info"))
+
+    assert payload(before)["id"] == "code/brackets"
+    assert Path(loaded["location"]).resolve() == (tmp_path / "site").resolve()
+    assert payload(after).get("id") == "code/brackets", payload(after)  # not a refusal
+    assert info["engine"] == loaded["engine"] and "stale" not in info
+    assert {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"} in session.other
+    assert session.close() == 0
+    events = mcpjournal.read()
+    (stale,) = [event for event in events if event["event"] == "stale"]
+    assert (stale["tool"], stale["reason"]) == ("list_rules", "sources")
+    assert stale["loaded"] == stale["on_disk"] == loaded["engine"] and stale["fingerprint"]
+    (restart,) = [event for event in events if event["event"] == "restart"]
+    assert restart["reason"] == "sources"
+    assert [event["version"] for event in events if event["event"] == "start"] == [
+        loaded["engine"]] * 2

@@ -1663,6 +1663,32 @@ def test_new_sections_of_added_kinds(tmp_path):
     assert action["Имя"] == "ИзменениеЦены" and action["Ид"]
 
 
+def test_constants_set_is_born_with_a_placeholder_constant(tmp_path):
+    """An empty constants set does not compile ("Empty constant sets are not supported").
+
+    The set is born with a placeholder string constant, the way a register is born with a
+    placeholder dimension, and the first real constant takes its place instead of joining it.
+    """
+    result = scaffold.op_new_object(tmp_path, "НаборКонстант", "НастройкиОбмена")
+    apply_result(result)
+    path = tmp_path / "НастройкиОбмена.yaml"
+    constants = _valid_yaml(path.read_text(encoding="utf-8"))["Константы"]
+    assert len(constants) == 1
+    assert constants[0]["Имя"] == "Константа1" and constants[0]["Тип"] == "Строка"
+    assert constants[0]["Ид"]
+    assert any("Константа1" in note for note in result.notes)
+
+    added = scaffold.op_add_field(path, "константа", "АдресОбмена", type_="Строка")
+    apply_result(added)
+    constants = _valid_yaml(path.read_text(encoding="utf-8"))["Константы"]
+    assert [c["Имя"] for c in constants] == ["АдресОбмена"]
+    assert any("Константа1" in note for note in added.notes)
+    # The second constant joins the first one: the placeholder is gone already.
+    apply_result(scaffold.op_add_field(path, "константа", "Период", type_="Число"))
+    constants = _valid_yaml(path.read_text(encoding="utf-8"))["Константы"]
+    assert [c["Имя"] for c in constants] == ["АдресОбмена", "Период"]
+
+
 def test_new_project_version_follows_standard(tmp_path):
     apply_result(scaffold.op_new_project(tmp_path, "vendor", "Приложение"))
     project = _valid_yaml(
@@ -2728,8 +2754,9 @@ def test_add_field_writes_item_properties(tmp_path):
     assert constant["Имя"] == "АдресExtApi"
     assert constant["ЗначениеПоУмолчанию"] == "https://example.com/a/adm/hs/ext_api"
     assert constant["Представление"] == "Адрес ExtAPI"
-    # An address carries a colon - a bare scalar would lie about the value; a plain word does not.
-    assert 'ЗначениеПоУмолчанию: "https://example.com/a/adm/hs/ext_api"' in text
+    # The colon of an address is not followed by a blank: a bare scalar reads back as the
+    # address itself, and the sources of the distribution write a default address bare.
+    assert "ЗначениеПоУмолчанию: https://example.com/a/adm/hs/ext_api\n" in text
 
 
 @pytest.mark.needs_data

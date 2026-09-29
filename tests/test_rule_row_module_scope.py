@@ -12,13 +12,17 @@ The scope is the row now: the attributes its section declares, the members of a 
 the methods of the module and the global names. The attributes of the owner and those of its
 other sections are not there - the row is a type of its own. The owner is looked up among the
 facts of the run, so a module read from memory is judged like one on the disk.
+
+A method of the structure type answers only to a call: the probe compiled `Presentation()` and
+`ToString()` in the module of a row and refused a bare `Presentation` ("Variable ... is not
+defined"), the same answer it gave the standard fields of a section table.
 """
 
 import pytest
 
 from xbsl import engine
 from xbsl.cli import discover
-from xbsl.rules.undefined_names import _row_candidate
+from xbsl.rules.undefined_names import _row_candidate, _row_type_scope
 
 pytestmark = pytest.mark.needs_data
 
@@ -158,6 +162,82 @@ def test_an_english_row_module_reads_the_english_keys_of_its_owner():
     assert _lint(files) == []
     files["Orders.Lines.xbsl"] = "@InProject\nmethod Total(): Number\n    return Customer\n;\n"
     assert _names(files) == ["Customer"]
+
+
+# --- a method of the structure type answers only to a call ---------------------------------
+
+@pytest.mark.parametrize("call", ["Представление()", "ВСтроку()", "ПолучитьТип().ВСтроку()"])
+def test_a_method_of_the_structure_type_is_called(call):
+    assert _lint({
+        "Заказы.yaml": _owner(),
+        "Заказы.Строки.xbsl": _method(f"возврат {call}", "Строка"),
+    }) == []
+
+
+def test_a_bare_method_of_the_structure_type_is_reported_with_the_call_to_write():
+    # The regression: the members were taken as names, so the bare one passed. The control is
+    # the test above - the same name with the parentheses.
+    found = _lint({
+        "Заказы.yaml": _owner(),
+        "Заказы.Строки.xbsl": _method("возврат Представление", "Строка"),
+    })
+    assert [d.line for d in found] == [3]
+    assert "'Представление()'" in found[0].message
+
+
+def test_a_bare_method_is_reported_in_an_english_row_module_too():
+    files = {
+        "Orders.yaml": _OWNER_EN,
+        "Orders.Lines.xbsl": "@InProject\nmethod Total(): String\n    return Presentation()\n;\n",
+    }
+    assert _lint(files) == []
+    files["Orders.Lines.xbsl"] = "@InProject\nmethod Total(): String\n    return Presentation\n;\n"
+    found = _lint(files)
+    assert len(found) == 1 and "'Presentation()'" in found[0].message
+
+
+def test_an_attribute_named_like_a_method_is_read_bare():
+    # The section may call an attribute by the name of a method of the type: the attribute is a
+    # value, so the bare name is its own.
+    owner = _owner().replace("Имя: Цена", "Имя: Представление")
+    assert _lint({
+        "Заказы.yaml": owner,
+        "Заказы.Строки.xbsl": _method("возврат Представление", "Строка"),
+    }) == []
+
+
+@pytest.mark.parametrize("name", ["НомерСтроки", "Индекс", "Владелец"])
+def test_the_standard_fields_of_a_section_table_are_not_names_of_its_row(name):
+    # The probe answered "Variable ... is not defined" for each of them in the module of a row.
+    assert _names({
+        "Заказы.yaml": _owner(),
+        "Заказы.Строки.xbsl": _method(f"возврат {name}"),
+    }) == [name]
+
+
+def test_the_module_of_a_structure_element_keeps_the_members_as_names():
+    # The row took its members from the structure type, but no probe has compiled a bare method
+    # name in the module of a `Structure` element, so that module keeps them as they were.
+    structure = (
+        "ВидЭлемента: Структура\nИд: 1d1f5c60-0000-4000-8000-00000000f021\nИмя: Точка\n"
+        "ОбластьВидимости: ВПроекте\nПоля:\n    -\n        Имя: Икс\n        Тип: Число\n"
+    )
+    assert _lint({
+        "Точка.yaml": structure,
+        "Точка.xbsl": _method("возврат Представление", "Строка"),
+    }) == []
+
+
+def test_data_that_does_not_split_the_members_keeps_every_member_a_name():
+    # Data generated before the manager members were split cannot tell a method from a
+    # property: narrowing blindly would report code that compiles.
+    names, calls = _row_type_scope({}, {"Структура": ["ВСтроку", "Представление"]})
+    assert {"ВСтроку", "Представление"} <= names and calls == set()
+    names, calls = _row_type_scope(
+        {}, {"Структура": {"properties": ["Индекс"], "methods": ["Представление"]}},
+    )
+    assert "Индекс" in names and "Представление" in calls
+    assert "Представление" not in names
 
 
 # --- the controls: a module that is no row module ------------------------------------------

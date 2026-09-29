@@ -29,8 +29,12 @@ Three checks, by cost:
 - the SOURCES: a fingerprint of the code files of the engine and of the plugin packages - path,
   size, modification time - taken when the process starts (`remember`) against one taken now
   (`sources_state`). A walk over some two hundred files, a couple of milliseconds: it covers
-  the pull between two releases, where the number stays while the code changes. The MCP server
-  checks it only after something failed; the language server every few seconds at most.
+  the pull between two releases, where the number stays while the code changes. The language
+  server checks it every few seconds at most, the MCP server after something failed. Before
+  every call the MCP server checks the engine's own files (`engine_sources_state`), and that
+  check is a stat of the few folders they lie in: the files are walked again only when a
+  folder changed or the last walk is a few seconds old (see _Sources). The plugins stay out of
+  it - a plugin changed on disk is no reason to refuse, see below.
 
 The plugins and the sources are judged only in a process that called `remember` at its start:
 the CLI lives for one run and has nothing to compare.
@@ -116,12 +120,19 @@ _VERSION_RE = re.compile(r"""^__version__\s*=\s*["']([^"']+)["']""", re.M)
 _SKIP_DIRS = frozenset({"data", "__pycache__"})
 _CODE_SUFFIXES = (".py", ".pyd", ".so")
 #: How long a verdict on the sources is reused: a rule that crashes on every file of a run
-#: walks the package once, not once per file.
+#: walks the package once, not once per file. The check before a call walks the files of the
+#: engine at least this often, and at once when a folder of them changed (see _Sources).
 _SOURCES_TTL = 5.0
+#: How many characters of a digest a sources state carries as its `fingerprint`.
+_SHORT_DIGEST = 12
 
 #: The fingerprint taken by `remember`; None in a process that never took one (the CLI).
 _started: str | None = None
-_checked: tuple[float, bool] | None = None
+#: When the sources were last walked for `sources_state` and their digest then.
+_checked: tuple[float, str] | None = None
+#: The engine's own code files as `remember` found them: the check before a call (see
+#: `engine_sources_state`); None in a process that never took a start.
+_engine: _Sources | None = None
 #: The stale state a crash noted since the last `take_noted`.
 _noted: dict | None = None
 #: The folders the plugin check watches and their modification times at the last walk (see
@@ -155,10 +166,26 @@ def disk_version(package: Path | None = None) -> str:
 
 def version_state() -> dict | None:
     """{"reason": "version", "loaded", "on_disk"} when the disk declares another version."""
-    on_disk = disk_version()
+    return _version_state(disk_version())
+
+
+def _version_state(on_disk: str) -> dict | None:
     if on_disk and on_disk != __version__:
         return {"reason": "version", "loaded": __version__, "on_disk": on_disk}
     return None
+
+
+def call_state() -> dict | None:
+    """The check before a call of a tool: the version on disk, then the engine's code files.
+
+    Either one refuses the call (xbsl/mcp_server.py): the modules the process loads from now on
+    would come from the new code. An `__init__.py` that cannot be read is no verdict on either
+    (see disk_version). The plugins have a check of their own and are not judged here.
+    """
+    on_disk = disk_version()
+    if not on_disk:
+        return None
+    return _version_state(on_disk) or engine_sources_state()
 
 
 def _code_roots() -> list[Path]:
@@ -176,8 +203,12 @@ def _code_roots() -> list[Path]:
     return roots
 
 
-def _code_rows(root: Path) -> list[tuple[str, int, int]]:
-    """(path, size, modification time) of every code file under a folder, or of a single module."""
+def _code_rows(root: Path, marks: dict[str, int] | None = None) -> list[tuple[str, int, int]]:
+    """(path, size, modification time) of every code file under a folder, or of a single module.
+
+    `marks`, when given, collects the modification time of every folder walked, taken before
+    the folder is listed: a change made while the walk runs moves a time a later stat sees.
+    """
     if root.is_file():
         try:
             stat = root.stat()
@@ -188,6 +219,8 @@ def _code_rows(root: Path) -> list[tuple[str, int, int]]:
     stack = [root]
     while stack:
         folder = stack.pop()
+        if marks is not None:
+            marks.update(_folder_marks([str(folder)]))
         try:
             entries = list(os.scandir(folder))
         except OSError:
@@ -215,8 +248,60 @@ def fingerprint(package: Path | None = None) -> str:
     rows: list[tuple[str, int, int]] = []
     for root in ([package] if package is not None else _code_roots()):
         rows.extend(_code_rows(root))
-    rows.sort()
-    return hashlib.sha256(repr(rows).encode("utf-8")).hexdigest()
+    return _digest(rows)
+
+
+def _digest(rows: list[tuple[str, int, int]]) -> str:
+    return hashlib.sha256(repr(sorted(rows)).encode("utf-8")).hexdigest()
+
+
+class _Sources:
+    """The code files of one package as they were at the start, and a cheap way to tell a change.
+
+    A walk over the files costs a millisecond or two, a stat of the folders they lie in a small
+    part of that. So a check stats the folders and walks the files again only when a folder
+    changed - git replaces a file by removing it and writing it anew, which moves the time of
+    its folder - or when the last walk is older than _SOURCES_TTL: an editor may rewrite a file
+    in place and leave its folder as it was. Files found different from the start stay the
+    verdict, and nothing is walked after that.
+    """
+
+    def __init__(self, package: Path) -> None:
+        self.package = package
+        #: The folders of the last walk and their modification times then.
+        self.marks: dict[str, int] = {}
+        self.walked = 0.0
+        #: The digest of the last walk; None before one, or when the files could not be walked.
+        self.found: str | None = None
+        self.start = self._walk() or ""
+
+    def _walk(self) -> str | None:
+        marks: dict[str, int] = {}
+        rows = _code_rows(self.package, marks)
+        if not rows:
+            # The package is not there: self-update moves it aside for a moment (see
+            # disk_version). No verdict, and the next check walks again.
+            self.found = None
+            return None
+        self.marks, self.walked, self.found = marks, time.monotonic(), _digest(rows)
+        return self.found
+
+    def now(self) -> str | None:
+        """The digest of the files now; None when they cannot be walked."""
+        if self.found is not None and self.found != self.start:
+            return self.found
+        if (self.found is not None and time.monotonic() - self.walked < _SOURCES_TTL
+                and _folder_marks(list(self.marks)) == self.marks):
+            return self.found
+        return self._walk()
+
+
+def _sources_found(digest: str) -> dict:
+    """The sources state. The version is the same on both sides; `fingerprint`, a digest of the
+    files on disk, tells one change from the next - the supervisor goes by it (see
+    xbsl/mcp_supervisor.py) not to take a new change for the one a worker was started after."""
+    return {"reason": "sources", "loaded": __version__, "on_disk": __version__,
+            "fingerprint": digest[:_SHORT_DIGEST]}
 
 
 def _key(folder: str) -> str:
@@ -250,8 +335,11 @@ def remember() -> None:
     The plugins are not walked here: at start the disk holds what was just loaded, so the
     modification times of the watched folders are enough to tell a later change by.
     """
-    global _started, _checked, _marks, _plugins_found, _unsettled
+    global _started, _checked, _engine, _marks, _plugins_found, _unsettled
     _started, _checked = fingerprint(), None
+    _engine = _Sources(PACKAGE)
+    if not _engine.start:
+        _engine = None  # nothing to compare with: no verdict before a call
     _marks, _plugins_found, _unsettled = _folder_marks(_watched()), None, False
 
 
@@ -300,7 +388,8 @@ def plugins_state() -> dict | None:
 
 
 def sources_state() -> dict | None:
-    """{"reason": "sources", "loaded", "on_disk"} when the code files changed since `remember`.
+    """{"reason": "sources", "loaded", "on_disk", "fingerprint"} when the code files of the
+    engine or of the plugins changed since `remember`.
 
     None in a process that took no fingerprint. The verdict is reused for a few seconds.
     """
@@ -309,10 +398,25 @@ def sources_state() -> dict | None:
         return None
     now = time.monotonic()
     if _checked is None or now - _checked[0] >= _SOURCES_TTL:
-        _checked = (now, fingerprint() != _started)
-    if _checked[1]:
-        return {"reason": "sources", "loaded": __version__, "on_disk": __version__}
+        _checked = (now, fingerprint())
+    if _checked[1] != _started:
+        return _sources_found(_checked[1])
     return None
+
+
+def engine_sources_state() -> dict | None:
+    """The sources state of the engine package alone: the check made before every call.
+
+    None in a process that took no start, while the files are the ones of the start, and while
+    the package cannot be walked. The plugins are left to `plugins_state`: a plugin changed on
+    disk is no reason to refuse a call.
+    """
+    if _engine is None:
+        return None
+    digest = _engine.now()
+    if digest is None or digest == _engine.start:
+        return None
+    return _sources_found(digest)
 
 
 def state(*, sources: bool = False) -> dict | None:

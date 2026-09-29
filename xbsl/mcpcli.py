@@ -21,6 +21,9 @@ that interpreter has no other way to keep the shell's own folder off the import 
 A call whose input is data rather than a path - the text of `lint_source`, the inline edits of
 `translate_set` - has that data written into a temporary folder of this process, and the command
 reads it from there: `--stdin` without a redirection checks an empty text and calls it clean.
+The name `lint_source` files the text under goes into the command as an absolute path, a
+relative one taken against this process's folder: the rules look for the paired yaml next to
+the name, the tool reads a relative name from here, and the command may start from any folder.
 The folder outlives its server, since the command may run after the restart; a folder older
 than a day is taken out by the next server that stages anything (`sweep_old_folders`).
 
@@ -72,11 +75,12 @@ MESSAGES = {
     "mcpcli.stdin-staged": {
         "ru": "Команда читает текст со stdin (--stdin): текст этого вызова записан в {path}, и "
               "команда подает его перенаправлением <. Другой текст подается так же; --filename "
-              "задает только вид файла и путь в находках, сам файл не нужен",
+              "задает вид файла и путь в находках, рядом с ним правила ищут парный yaml, а сам "
+              "файл не нужен",
         "en": "The command reads the text from stdin (--stdin): the text of this call is saved "
               "to {path}, and the command feeds it in with <. Another text goes in the same "
-              "way; --filename only sets the kind of the file and the path in the findings, the "
-              "file itself is not needed",
+              "way; --filename sets the kind of the file and the path in the findings, the rules "
+              "look for the paired yaml next to it, and the file itself is not needed",
     },
     "mcpcli.stdin-unstaged": {
         "ru": "Команда читает текст со stdin (--stdin): запишите текст вызова в файл и допишите "
@@ -186,8 +190,8 @@ def _start_folder() -> str:
     together with the folder. So the command starts from the folder of the staged data
     (`_folder`): `mkdtemp` made it private, and its files are named by a digest, so no import
     finds a module there. The paths of the command are absolute and read the same from any
-    folder; only the name lint_source files its findings under stays as the call gave it. When
-    the folder cannot be made the command goes without it, as it did before.
+    folder, the name lint_source files its findings under included (`_lint_source`). When the
+    folder cannot be made the command goes without it, as it did before.
     """
     return "" if _takes_safe_path() else _folder()
 
@@ -401,8 +405,15 @@ def _lint_source(arguments: dict) -> Built:
     filename, content = arguments.get("filename"), arguments.get("content")
     if not filename or not isinstance(content, str):
         return None
+    name = filename
+    if not os.path.isabs(name):
+        # The rules read the disk next to the name - the paired yaml, the element a module
+        # belongs to - and the tool reads a relative name against the server's folder. The
+        # command starts elsewhere (on Python 3.10 always, see _start_folder), so it gets the
+        # name made absolute here, and files its findings under that name.
+        name = _under(_base(None), name)
     # --no-baseline: the tool applies none, and the CLI would look for one above the name.
-    argv = ("--stdin", *_option("--filename", filename), "--no-baseline",
+    argv = ("--stdin", *_option("--filename", name), "--no-baseline",
             *_rules(arguments, "select", "ignore"), "--format", "json")
     staged = _stage(content.encode("utf-8"), os.path.splitext(filename)[1])
     if staged:
@@ -477,8 +488,9 @@ def _resource_references(arguments: dict) -> Built:
     if not arguments.get("resource_path"):
         return None
     base = _base(arguments.get("root"))
-    # Every place: the CLI has no limit, and the tool's `limit` only cuts the list it answers.
-    return [Run(("resource-references", base, _under(base, arguments["resource_path"])))], ""
+    argv = ("resource-references", base, _under(base, arguments["resource_path"]))
+    # Named even at the default, as for unused-resources below.
+    return [Run((*argv, *_option("--limit", arguments.get("limit", 100))))], ""
 
 
 def _unused_resources(arguments: dict) -> Built:
