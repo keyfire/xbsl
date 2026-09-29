@@ -241,6 +241,12 @@ that wants the bare server starts `xbsl-mcp --no-supervisor`, which runs it in t
 or `python -m xbsl.mcp_server`; then an update of the engine ends in a refusal that asks for a
 restart, as described above.
 
+`self-update` replaces the package but not the command stubs, and a stub made by an older release
+starts the bare server. Such a stub hands its process over to the supervisor before the engine
+loads, so after an update `xbsl-mcp` runs the supervisor as well. A command that a newer release
+adds, such as `xbsl-mcp-supervisor`, gets its stub only from `pip install --upgrade` or
+`pipx reinstall`.
+
 The worker decides when it has to go, and the supervisor reads that from its answers:
 
 - a refusal with `stale.ran: false` means the tool did not run: the engine on disk has another
@@ -259,7 +265,8 @@ The worker decides when it has to go, and the supervisor reads that from its ans
 
 The supervisor itself loads no engine and keeps no file of the package open. `self-update` does
 not count it as a holder and does not stop it, and it never runs old code of its own; the holders
-are the worker and a server started with `--no-supervisor`. An old
+are the worker and a server started with `--no-supervisor`. An `xbsl-mcp` still running the bare
+server of an older release has no worker under it, and `self-update` stops it as a holder. An old
 worker is not killed in the middle of a call: it gets no new calls, finishes the ones it has and
 then ends. After a new worker takes over, the client is told that the tools list changed and asks
 for it again, so the tools and parameters an update brings are there without a restart. `xbsl

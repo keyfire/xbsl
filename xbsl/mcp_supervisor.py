@@ -640,6 +640,31 @@ class Supervisor:
 #: The flag that runs the bare server in this process instead of the supervisor. `self-update`
 #: counts such a process as a holder of the package, and a supervisor as none.
 NO_SUPERVISOR = "--no-supervisor"
+#: The commands that run the supervisor. A stub of one of them made by an older release imports
+#: the bare server instead: `self-update` replaces the package and leaves the stubs as they are.
+_STUB_NAMES = ("xbsl-mcp", "xbsllint-mcp")
+#: Set while `main` runs: the bare server it starts on `--no-supervisor` is let through.
+_running = False
+
+
+def hand_over_from_old_stub() -> None:
+    """Run the supervisor when an old stub of `xbsl-mcp` has started the bare server.
+
+    A stub imports the module of its entry and calls it, and one made before the supervisor
+    became the default imports xbsl/mcp_server.py. That module calls this first, before it
+    imports the engine: the process becomes the supervisor and ends with it, holding nothing
+    of the package. `--no-supervisor` and the bare server started by `main` pass through, and
+    so does `xbsl mcp`: the command line has loaded the engine, and a supervisor would hold it.
+    """
+    if _running or not sys.argv or NO_SUPERVISOR in sys.argv[1:] or _engine_loaded():
+        return
+    # Either separator: the stub name is judged the same way whatever system wrote the path.
+    if Path(sys.argv[0].replace("\\", "/")).stem.lower() in _STUB_NAMES:
+        sys.exit(main())
+
+
+def _engine_loaded() -> bool:
+    return any(name in sys.modules for name in ("xbsl.cli", "xbsl.engine"))
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -663,6 +688,8 @@ def _bare_server() -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    global _running
+    _running = True
     arguments = sys.argv[1:] if argv is None else list(argv)
     command: list[str] = []
     if "--" in arguments:
