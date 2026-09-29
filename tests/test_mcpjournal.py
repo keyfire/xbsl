@@ -56,7 +56,8 @@ def test_the_default_place_is_the_user_state_folder(monkeypatch, tmp_path):
 
 
 def test_a_forced_stop_is_written_for_the_process_it_ends(monkeypatch):
-    monkeypatch.setattr(selfupdate.subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(selfupdate.subprocess, "run",
+                        lambda *a, **k: selfupdate.subprocess.CompletedProcess(a[0], 0))
     monkeypatch.setattr(selfupdate.os, "kill", lambda pid, sig: None)
     selfupdate.stop_holders([{"pid": 4242, "name": "python.exe"}], lambda text: None,
                             reason="self-update 1.0.0 -> 1.1.0")

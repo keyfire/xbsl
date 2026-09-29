@@ -24,8 +24,9 @@ that cannot be read that far is not judged.
 yaml/compute-permissions-by-unknown reads the names of the list: each has to be a field of the
 element, and the build answers any other with "Attribute "X" is not found" at that name. The
 fields are what the element declares in its attributes (a standard attribute included), its
-dimensions and resources, and the service fields it has without a declaration; see the rule for
-what a probe settled and for the kinds it covers.
+dimensions and resources, the service fields it has without a declaration and the built-in
+fields of its kind (the numbers of the messages of an exchange plan node, the system attributes
+of a settings storage); see the rule for what a probe settled. It judges every kind above.
 """
 
 from __future__ import annotations
@@ -176,13 +177,60 @@ MESSAGES_UNKNOWN = {
               "standard attribute ({n[Наименование]}, {n[Код]}, {n[Номер]}) is declared in "
               "{n[Реквизиты]} too, and a tabular section does not fit here.",
     },
+    f"{UNKNOWN}.computed": {
+        "ru": "РасчетРазрешенийПо называет '{name}' – это поле вычисляемое, по нему разрешения "
+              "не рассчитать. Сборка не применится: сервер откажет в создании или обновлении "
+              "приложения, ответив только \"Contact administrator for details\". Уберите поле "
+              "из списка.",
+        "en": "{n[РасчетРазрешенийПо]} names '{name}', a computed field the permissions cannot "
+              "be calculated by. The build will not apply: the server refuses to create or "
+              "update the application, answering nothing but \"Contact administrator for "
+              "details\". Remove the field from the list.",
+    },
 }
 i18n.register(MESSAGES_UNKNOWN)
 
-#: The kinds whose fields a probe on a server settled. The others with the list - an exchange
-#: plan, a settings storage, an integrable application - carry built-in fields of their own
-#: that no probe has named yet, and a guess there would report a field the build accepts.
-_UNKNOWN_KINDS = ("Справочник", "Документ", "РегистрСведений", "РегистрНакопления")
+#: The kinds whose fields a probe on a server settled: every kind whose access settings have
+#: the list.
+_UNKNOWN_KINDS = ("Справочник", "Документ", "РегистрСведений", "РегистрНакопления", "ПланОбмена",
+                  "ХранилищеНастроек", "ИнтегрируемоеПриложение")
+#: The fields a kind has without declaring them, beyond the service fields every entity has.
+#: A probe on a server took each of them in the list with nothing declared: the code, the
+#: numbers of the sent and the received message and the flag of this node of an exchange plan
+#: (the four the documentation calls mandatory), the system attributes of a settings storage
+#: (the documentation lists them, and its own example computes the permissions by the user
+#: without a declaration) and the connection settings of an integrable application. The name
+#: of an exchange plan and of an integrable application, their files and the code of an
+#: integrable application are declared like those of a catalog: the same probe answered "not
+#: found" for each of them left out.
+_BUILT_IN_FIELDS = {
+    "ПланОбмена": ("Код", "НомерОтправленного", "НомерПринятого", "ЭтотУзел"),
+    "ХранилищеНастроек": ("Вариант", "Значение", "КлючНастройки", "КлючОбъекта", "Наименование",
+                          "Общая", "Пользователь"),
+    "ИнтегрируемоеПриложение": ("НастройкиПрямогоПодключения",),
+}
+#: Standard attributes the query tables know as service fields that a kind still has only when
+#: it declares them: the number of a document. A probe answered "not found" for the number of
+#: a document that does not declare it and took the number of one that does.
+_DECLARED_ONLY = {"Документ": ("Номер",)}
+#: Service fields a kind does not have at all: the build answered "not found" for the deletion
+#: mark of a settings storage.
+_ABSENT = {"ХранилищеНастроек": ("ПометкаУдаления",)}
+#: The computed fields of the query tables. In the list they do not fail the compilation: the
+#: apply of the build fails inside the server instead (a ClassCastException while it builds the
+#: automatic list form), both when it creates the application and when it updates it, and the
+#: application stays on the build it had. Probes gave that answer for each kind named here and
+#: each field it lists; a kind is not judged for a field no probe tried with it.
+_COMPUTED = {
+    "Справочник": ("ПометкаУдаления", "Представление"),
+    "Документ": ("ПометкаУдаления", "Представление"),
+    "ПланОбмена": ("ПометкаУдаления", "Представление"),
+    "ИнтегрируемоеПриложение": ("ПометкаУдаления", "Представление"),
+    "ХранилищеНастроек": ("Представление",),
+}
+#: Service fields the query tables leave out that the element still has without a declaration:
+#: the moment of the deletion mark, which a probe took in the list of a catalog and a document.
+_MORE_SERVICE_FIELDS = ("МоментПометкиУдаления",)
 #: The sections that declare the fields of an element: the attributes, and of a register its
 #: dimensions and resources as well.
 _FIELD_SECTIONS = ("Реквизиты", "Измерения", "Ресурсы")
@@ -199,7 +247,7 @@ def _service_fields() -> frozenset[str]:
     catalog and the period of a periodic register without a declaration. Only a name outside
     them is reported, so the set errs on the wide side.
     """
-    names = set(_SERVICE_FIELDS)
+    names = set(_SERVICE_FIELDS) | set(_MORE_SERVICE_FIELDS)
     catalog = dataset.load_optional("stdlib.json") or {}
     for facet, record in (catalog.get("facet_members") or {}).items():
         owner, _, part = facet.partition(".")
@@ -216,6 +264,52 @@ def _service_fields() -> frozenset[str]:
 
 
 dataset.register_reset(_service_fields.cache_clear)
+
+
+@lru_cache(maxsize=None)
+def _built_in_fields(kind: str) -> frozenset[str]:
+    """The fields the kind has without declaring them (_BUILT_IN_FIELDS), in every spelling the
+    data knows. The set errs on the wide side like _service_fields: it only silences."""
+    spelled: set[str] = set()
+    for name in _BUILT_IN_FIELDS.get(kind, ()):
+        spelled.add(name)
+        spelled.update(terms.key_forms(name))
+        spelled.update(terms.member_spellings(name))
+        english = terms.common_english(name)
+        if english:
+            spelled.add(english)
+    return frozenset(spelled)
+
+
+def _precise_forms(name: str) -> frozenset[str]:
+    """Both spellings of a platform name, the term pair and nothing else: the forms a name is
+    reported by must not reach past it, as the wide silencing sets may."""
+    return frozenset({name, *terms.key_forms(name), terms.common_english(name) or name})
+
+
+@lru_cache(maxsize=None)
+def _declared_only(kind: str) -> tuple[frozenset[str], ...]:
+    """The spellings of each standard attribute the kind has only when it declares it
+    (_DECLARED_ONLY): a name that matches is reported unless declared."""
+    return tuple(_precise_forms(name) for name in _DECLARED_ONLY.get(kind, ()))
+
+
+@lru_cache(maxsize=None)
+def _absent(kind: str) -> frozenset[str]:
+    """The spellings of the service fields the kind does not have (_ABSENT)."""
+    return frozenset(form for name in _ABSENT.get(kind, ()) for form in _precise_forms(name))
+
+
+@lru_cache(maxsize=None)
+def _computed(kind: str) -> frozenset[str]:
+    """The spellings of the computed fields that fail the apply for the kind (_COMPUTED)."""
+    return frozenset(form for name in _COMPUTED.get(kind, ()) for form in _precise_forms(name))
+
+
+dataset.register_reset(_built_in_fields.cache_clear)
+dataset.register_reset(_declared_only.cache_clear)
+dataset.register_reset(_absent.cache_clear)
+dataset.register_reset(_computed.cache_clear)
 
 
 def _declared_fields(data: dict, kind: str) -> set[str] | None:
@@ -235,12 +329,20 @@ def _declared_fields(data: dict, kind: str) -> set[str] | None:
     return names
 
 
-def _known(name: str, declared: set[str]) -> bool:
+def _known(name: str, declared: set[str], kind: str) -> bool:
     """Whether the name is a field of the element, in either spelling of a platform word."""
-    if name in declared or name in _service_fields():
+    if name in declared:
+        return True
+    for forms in _declared_only(kind):
+        if name in forms:
+            return bool(forms & declared)
+    if name in _absent(kind):
+        return False
+    if name in _service_fields() or name in _built_in_fields(kind):
         return True
     russian, english = terms.common_russian(name), terms.common_english(name)
-    return bool(russian and (russian in declared or russian in _service_fields())
+    return bool(russian and (russian in declared or russian in _service_fields()
+                             or russian in _built_in_fields(kind))
                 or english and english in declared)
 
 
@@ -255,10 +357,13 @@ def compute_permissions_by_unknown(source: SourceFile) -> Iterable[Diagnostic]:
     attribute of a register compiled. The standard attributes are declared in the attributes
     like any other (the metamodel dispatches the item by its name), so the declared names are
     the fields - together with the service fields the element has without a declaration
-    (_service_fields). That set is wide on purpose and costs findings: the number is a service
-    field of the query tables, so an undeclared number of a document is left to the build, and
-    so is the deletion mark, which the same probe took and then failed the whole apply inside
-    the server.
+    (_service_fields) and the built-in fields of its kind (_BUILT_IN_FIELDS). The service set
+    is wide on purpose and costs findings; it makes three exceptions. The number of a document
+    is known to the query tables as a service field, yet the document has it only when it
+    declares it (_DECLARED_ONLY); a settings storage has no deletion mark (_ABSENT); and the
+    deletion mark and the presentation are computed fields, which the compiler takes and the
+    apply of the build then fails on inside the server (_COMPUTED, reported apart as
+    `.computed`).
     """
     if source.kind != "yaml" or not _HAVE_YAML:
         return
@@ -285,7 +390,13 @@ def compute_permissions_by_unknown(source: SourceFile) -> Iterable[Diagnostic]:
             continue
         # Only a plain name is judged: no probe has asked the build about a path through a
         # reference, and a guess about it would be a finding on a list the build may take.
-        if not _IDENTIFIER_RE.fullmatch(item.value) or _known(item.value, declared):
+        if not _IDENTIFIER_RE.fullmatch(item.value):
             continue
+        if item.value in _computed(kind) and item.value not in declared:
+            key = f"{UNKNOWN}.computed"
+        elif _known(item.value, declared, kind):
+            continue
+        else:
+            key = f"{UNKNOWN}.unknown"
         yield Diagnostic(source.rel, item.start_mark.line + 1, item.start_mark.column + 1,
-                         UNKNOWN, Severity.ERROR, i18n.t(f"{UNKNOWN}.unknown", name=item.value))
+                         UNKNOWN, Severity.ERROR, i18n.t(key, name=item.value))

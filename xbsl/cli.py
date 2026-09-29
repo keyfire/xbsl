@@ -363,10 +363,14 @@ _META_COMMANDS = (
 
 
 def _selfupdate_parser() -> argparse.ArgumentParser:
+    from xbsl.selfupdate import STOP_MODES, STOP_SERVERS
+
     parser = i18n.ArgumentParser(prog="xbsl self-update",
                                  description=i18n.t("cli.help.commands.self-update"))
     parser.add_argument("--version", help=i18n.t("cli.help.selfupdate-version"))
-    parser.add_argument("--stop-holders", action="store_true",
+    # The bare flag stops the servers alone; the running commands of other sessions are ended
+    # only when asked for by name, `--stop-holders=all`.
+    parser.add_argument("--stop-holders", nargs="?", const=STOP_SERVERS, choices=STOP_MODES,
                         help=i18n.t("cli.help.selfupdate-stop"))
     return parser
 
@@ -377,7 +381,7 @@ def _selfupdate_main(argv: list[str]) -> int:
 
     args = _selfupdate_parser().parse_args(argv)
     try:
-        old, new = selfupdate.self_update(version=args.version, stop_busy=args.stop_holders,
+        old, new = selfupdate.self_update(version=args.version, stop=args.stop_holders or "",
                                           log=lambda msg: print(msg, file=sys.stderr))
     except selfupdate.SelfUpdateError as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
@@ -794,6 +798,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--presentation", help=i18n.t("cli.help.scaf.no-presentation"))
     p.add_argument("--object-presentation",
                    help=i18n.t("cli.help.scaf.no-object-presentation"))
+    p.add_argument("--record-presentation",
+                   help=i18n.t("cli.help.scaf.no-record-presentation"))
     p.add_argument("--base", help=i18n.t("cli.help.scaf.no-base"))
 
     p = command("add-field")
@@ -1209,6 +1215,7 @@ def _scaffold_main(argv: list[str]) -> int:
                 routes=args.routes, presentation=args.presentation, base=args.base,
                 report=json.loads(args.report) if args.report else None,
                 object_presentation=args.object_presentation,
+                record_presentation=args.record_presentation,
             )
         elif args.command == "add-field":
             result = scaffold.op_add_field(

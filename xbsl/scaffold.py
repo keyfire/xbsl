@@ -914,6 +914,71 @@ def _expand_extra(lines: tuple[str, ...], name: str) -> list[str]:
     return out
 
 
+def _project_mode(directory: Path) -> tuple[int, ...] | None:
+    """The compatibility mode of the project around `directory`, None when it is not known.
+
+    Read the way the build reads it (resources.project_compatibility): a mode the platform does
+    not support, or none at all, is the newest one. A folder the new object creates does not
+    exist yet, so the search starts wherever the path does.
+    """
+    for candidate in (directory, *directory.parents):
+        if project_file_in(candidate) is not None:
+            return resource_model.project_compatibility(candidate)
+    return None
+
+
+def _mode_numbers(text: object) -> tuple[int, ...] | None:
+    """A mode written as `8.0` as numbers, None for anything else."""
+    parts = str(text or "").split(".")
+    return tuple(int(part) for part in parts) if all(part.isdigit() for part in parts) else None
+
+
+def _lines_for_mode(
+    kind: str, lines: list[str], mode: tuple[int, ...] | None,
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """The template lines a project in `mode` takes, and the properties it does not.
+
+    A top-level property the metamodel dates to a newer mode (`since`) is dropped together with
+    the lines nested under it: the build of an older mode refuses it as an unknown property.
+    The pairs returned are (the key, the mode it appeared in), for the notes. An unknown mode
+    keeps every line - a project read without a mode is read in the newest one.
+    """
+    if mode is None:
+        return lines, []
+    props = metamodel.properties(kind)
+    kept: list[str] = []
+    dropped: list[tuple[str, str]] = []
+    skipping = False
+    for line in lines:
+        if not line.startswith((" ", "\t")):
+            key = line.split(":", 1)[0].strip()
+            since = (props.get(key) or {}).get("since")
+            appeared = _mode_numbers(since)
+            skipping = appeared is not None and mode < appeared
+            if skipping:
+                dropped.append((key, str(since)))
+        if not skipping:
+            kept.append(line)
+    return kept, dropped
+
+
+def _booleans_spelled(kind: str, lines: list[str], lang: str) -> list[str]:
+    """The template lines with the value of every top-level boolean property in the words of
+    the file (_boolean_word): the metamodel says which property holds a boolean."""
+    if lang == "ru":
+        return lines
+    props = metamodel.properties(kind)
+    out: list[str] = []
+    for line in lines:
+        key, sep, value = line.partition(":")
+        flag = _BOOLEAN_WORDS.get(value.strip().lower()) if sep else None
+        if (not line.startswith((" ", "\t")) and flag is not None
+                and (props.get(key.strip()) or {}).get("kind") == "boolean"):
+            line = f"{key}: {_boolean_word(flag, lang)}"
+        out.append(line)
+    return out
+
+
 @dataclass(frozen=True)
 class KindSpec:
     # The platform defaults to visibility within the element's own subsystem. Access from
@@ -1127,7 +1192,16 @@ KIND_SPECS: dict[str, KindSpec] = {
             "            Компоновка: Вертикальная",
         ),
     ),
-    "КлючДоступа": KindSpec(module=True, module_stub=_STUB_ACCESS_KEY),
+    # The flavour of a key is chosen by `ManualGrant`, and a project in the newest compatibility
+    # mode refuses a key that does not choose - a probe build named the missing setting. The stub is
+    # the handler of a COMPUTED key, so the key is born computed; a mode older than the
+    # property does not get the line (_lines_for_mode).
+    "КлючДоступа": KindSpec(
+        module=True, module_stub=_STUB_ACCESS_KEY, extra=("РучнаяВыдача: Ложь",),
+        note="Ключ вычисляемый: экземпляры ключа с пользователями сопоставляет обработчик "
+             "ПроверитьНаличиеКлючейДоступа в модуле. У выдаваемого ключа (РучнаяВыдача: "
+             "Истина) этого обработчика быть не должно – с ним сборка ключ не примет",
+    ),
     "ЛокализованныеСтроки": KindSpec(),
     "Отчет": KindSpec(needs_args=True),
     # Privileges: an ON-ELEMENT privilege has no module ("Не имеет модуля" - it is an
@@ -2220,6 +2294,10 @@ def resolve_kind(kind: str) -> str:
 #: The caption written as the top-level property.
 _TOP_CAPTION: tuple[str, ...] = ("Представление",)
 
+#: Where the record caption is written: of a register beside its list caption, and the one
+#: caption of a constants set.
+_RECORD_CAPTION: tuple[str, ...] = ("Интерфейс", "Запись", "Представление")
+
 
 def _block_props(record: dict | None) -> dict[str, dict]:
     """The properties of the class a block property of the metamodel is typed with."""
@@ -2231,16 +2309,21 @@ def caption_path(kind: str) -> tuple[str, ...]:
     """Where the caption of an element of `kind` is written: the keys from the root down.
 
     The top-level Presentation means two different things, and the metamodel says which: a
-    TEXT caption (a report, a command, a constants set - type String/Localizable, or a kind
-    with no Attributes at all), or the NAME of a string attribute whose value the platform
-    shows for a record (a catalog, a document, an exchange plan - type AttributeName; "Field
-    specified as a presentation field is not found" answers a caption written there). Such a
-    kind carries its caption in the interface section: `Interface.List.Presentation` names
-    the list and the command that opens it, `Interface.Object.Presentation` the object (the
-    help topic on a catalog in the interface), and a live probe applied both with no
-    attribute declared - as it did the list caption of a document, an exchange plan, a
-    settings storage and an information register, and `Interface.Presentation` of a
-    processing, the kinds with no top-level Presentation at all.
+    TEXT caption (a report, a command - type String/Localizable), or the NAME of a field whose
+    value the platform shows for a record (a catalog, a document, an exchange plan - type
+    AttributeName; "Field specified as a presentation field is not found" answers a caption
+    written there). Such a kind carries its caption in the interface section:
+    `Interface.List.Presentation` names the list and the command that opens it,
+    `Interface.Object.Presentation` the object (the help topic on a catalog in the interface),
+    and a live probe applied both with no attribute declared - as it did the list caption of a
+    document, an exchange plan, a settings storage and an information register, and
+    `Interface.Presentation` of a processing, the kinds with no top-level Presentation at all.
+
+    A constants set names a CONSTANT there (the help page of the kind: the constant whose
+    value presents the record), and the commands that open its forms carry the name of the
+    set until its interface captions them (the help topic on a constants set in the
+    interface). Its form is the record one - a list exists for a periodic set alone, and the
+    tool creates none - so its caption is `Interface.Record.Presentation`.
 
     Without the metamodel the top-level key is answered - what the tool wrote before it could
     tell; a kind with no caption anywhere is refused.
@@ -2249,9 +2332,12 @@ def caption_path(kind: str) -> tuple[str, ...]:
         return _TOP_CAPTION
     props = metamodel.properties(kind)
     top = props.get("Представление")
-    if top is not None and (top.get("type") != "AttributeName" or "Реквизиты" not in props):
+    if top is not None and top.get("type") != "AttributeName":
         return _TOP_CAPTION
     ui = _block_props(props.get("Интерфейс"))
+    if top is not None and "Реквизиты" not in props:
+        # A field name with no attributes to name - the constants set, see above.
+        return _RECORD_CAPTION if "Представление" in _block_props(ui.get("Запись")) else _TOP_CAPTION
     if "Представление" in _block_props(ui.get("Список")):
         return ("Интерфейс", "Список", "Представление")
     if "Представление" in ui:
@@ -2264,6 +2350,12 @@ _OBJECT_CAPTION: tuple[str, ...] = ("Интерфейс", "Объект", "Пр�
 
 #: How a note names the parameter that writes the object caption, on every surface at once.
 _OBJECT_CAPTION_PARAMETER = "параметр object_presentation, в командной строке --object-presentation"
+
+#: How a note names the parameter that writes the record caption of a register.
+_RECORD_CAPTION_PARAMETER = "параметр record_presentation, в командной строке --record-presentation"
+
+#: The parameter that writes each singular caption beside the list one, by its block.
+_SINGULAR_PARAMETERS = {"Объект": _OBJECT_CAPTION_PARAMETER, "Запись": _RECORD_CAPTION_PARAMETER}
 
 
 def _singular_captions(kind: str) -> list[str]:
@@ -2280,6 +2372,19 @@ def _has_object_caption(kind: str) -> bool:
     return all("Представление" in _block_props(ui.get(block)) for block in ("Список", "Объект"))
 
 
+def _has_record_caption(kind: str) -> bool:
+    """Whether `kind` takes a record caption BESIDE the list one: its interface carries both,
+    and its own caption (caption_path) is the list one - an information register. A constants
+    set carries both as well, but its caption is the record one already."""
+    ui = _block_props(metamodel.properties(kind).get("Интерфейс"))
+    if not all("Представление" in _block_props(ui.get(block)) for block in ("Список", "Запись")):
+        return False
+    try:
+        return caption_path(kind) != _RECORD_CAPTION
+    except ScaffoldError:
+        return False
+
+
 def object_caption_path(kind: str) -> tuple[str, ...]:
     """Where the object caption of an element of `kind` is written: `Interface.Object.Presentation`.
 
@@ -2288,56 +2393,103 @@ def object_caption_path(kind: str) -> tuple[str, ...]:
     beside it (a catalog, a document, an exchange plan, a settings storage); naming/presentation
     asks such a kind for both, and the tool cannot derive the singular from the plural. Any
     other kind is refused: its caption is one, or its singular caption names something else
-    (the record of an information register). Without the metamodel the path is answered
-    unchecked - the caller asked for it, and there is nothing to judge it by.
+    (the record of an information register, see record_caption_path). Without the metamodel
+    the path is answered unchecked - the caller asked for it, and there is nothing to judge it
+    by.
     """
     if not metamodel.available() or _has_object_caption(kind):
         return _OBJECT_CAPTION
-    try:
-        caption_path(kind)
-        captioned = True
-    except ScaffoldError:
-        captioned = False  # the kind has no caption at all - presentation is refused too
-    others = [key for key in _singular_captions(kind) if key != "Объект"]
     raise ScaffoldError(
         f"У вида {kind} нет заголовка объекта (Интерфейс.Объект.Представление) – параметр "
         "object_presentation неприменим; его принимают виды с парой заголовков в интерфейсе: "
         + ", ".join(sorted(k for k in KIND_SPECS if _has_object_caption(k)))
-        + (". Заголовок элемента задает параметр presentation" if captioned else "")
-        + "".join(f"; заголовок в единственном числе у вида {kind} – Интерфейс.{key}.Представление, "
-                  "его инструмент не пишет" for key in others)
+        + _other_captions(kind, "Объект")
     )
 
 
-def _caption_note(kind: str, path: tuple[str, ...], object_written: bool = False) -> str:
+def record_caption_path(kind: str) -> tuple[str, ...]:
+    """Where the record caption of an element of `kind` is written: `Interface.Record.Presentation`.
+
+    Taken by a kind whose own caption is the list one and whose interface carries the record
+    caption beside it - an information register, where the list caption is written in the
+    plural and the record one in the singular (the help topic on a register in the interface:
+    the first names the command that opens the list, the second the one that creates a
+    record). naming/presentation asks such a kind for both. A constants set is refused - its
+    record caption is its caption, written by presentation - and so is any other kind; without
+    the metamodel the path is answered unchecked, as object_caption_path does.
+    """
+    if not metamodel.available() or _has_record_caption(kind):
+        return _RECORD_CAPTION
+    raise ScaffoldError(
+        f"У вида {kind} нет заголовка записи рядом с заголовком списка "
+        "(Интерфейс.Запись.Представление) – параметр record_presentation неприменим; его "
+        "принимают: " + ", ".join(sorted(k for k in KIND_SPECS if _has_record_caption(k)))
+        + _other_captions(kind, "Запись")
+    )
+
+
+def _other_captions(kind: str, refused: str) -> str:
+    """The tail of a refusal: what writes the captions `kind` does have.
+
+    `refused` is the block the caller asked for. The element caption is named with the
+    parameter that writes it, and so is a singular caption that another parameter writes.
+    """
+    try:
+        own = caption_path(kind)
+    except ScaffoldError:
+        return ""  # the kind has no caption at all - presentation is refused too
+    tail = ". Заголовок элемента задает параметр presentation"
+    if own != _TOP_CAPTION:
+        tail += f" (он ложится в {'.'.join(own)})"
+    for key in _singular_captions(kind):
+        path = ("Интерфейс", key, "Представление")
+        if key == refused or path == own:
+            continue
+        writer = _SINGULAR_PARAMETERS.get(key) if (
+            _has_object_caption(kind) if key == "Объект" else _has_record_caption(kind)
+        ) else None
+        tail += (f"; заголовок в единственном числе у вида {kind} – {'.'.join(path)}, "
+                 + (f"его пишет {writer}" if writer else "его инструмент не пишет"))
+    return tail
+
+
+def _caption_note(kind: str, path: tuple[str, ...], singular_written: tuple[str, ...] = ()) -> str:
     """What the caller learns when the caption did not go into the top-level property.
 
     The singular caption beside the list one is named with the parameter that writes it, or
-    as written when the caller passed it.
+    as written when the caller passed it (`singular_written` is its path then).
     """
     note = f"Заголовок записан в {'.'.join(path)}"
+    props = metamodel.properties(kind)
     if path[1:2] == ("Список",):
         note += " – так называются список и команда его открытия"
-        if object_written:
-            note += f", заголовок объекта – в {'.'.join(_OBJECT_CAPTION)}"
+        if singular_written:
+            what = "объекта" if singular_written == _OBJECT_CAPTION else "записи"
+            note += f", заголовок {what} – в {'.'.join(singular_written)}"
         else:
             others = _singular_captions(kind)
             if others:
                 note += "; заголовок в единственном числе задается в " + " и ".join(
                     f"Интерфейс.{key}.Представление"
-                    + (f" ({_OBJECT_CAPTION_PARAMETER})" if key == "Объект" else "")
+                    + (f" ({_SINGULAR_PARAMETERS[key]})" if key in _SINGULAR_PARAMETERS else "")
                     for key in others
                 )
-    if metamodel.properties(kind).get("Представление") is not None:
-        note += (f". Представление верхнего уровня у вида {kind} – не заголовок, а имя "
-                 "строкового реквизита, которым платформа обозначает элемент")
+    elif path == _RECORD_CAPTION:
+        note += (" – так называются форма записи и команда, которая ее открывает; список есть "
+                 "только у периодического набора, и его заголовок задается в "
+                 "Интерфейс.Список.Представление")
+    if (props.get("Представление") or {}).get("type") == "AttributeName":
+        field = ("строкового реквизита, которым платформа обозначает элемент" if "Реквизиты" in props
+                 else "константы, значение которой платформа показывает как представление записи")
+        note += f". Представление верхнего уровня у вида {kind} – не заголовок, а имя {field}"
     return note
 
 
-def _object_caption_note(kind: str) -> str:
-    """What the caller learns when the object caption came without the list one."""
+def _singular_caption_note(kind: str, path: tuple[str, ...]) -> str:
+    """What the caller learns when the object or record caption came without the list one."""
     list_caption = "Интерфейс.Список.Представление"
-    return (f"Заголовок объекта записан в {'.'.join(_OBJECT_CAPTION)}; заголовок списка во "
+    what = "объекта" if path == _OBJECT_CAPTION else "записи"
+    return (f"Заголовок {what} записан в {'.'.join(path)}; заголовок списка во "
             f"множественном числе задается в {list_caption} (параметр presentation, в командной "
             f"строке --presentation) – у вида {kind} naming/presentation ждет оба")
 
@@ -2409,6 +2561,7 @@ def op_new_object(
     presentation: str | None = None,
     base: str | None = None,
     object_presentation: str | None = None,
+    record_presentation: str | None = None,
 ) -> ScaffoldResult:
     """Create a configuration object: Имя.yaml (+ Имя.xbsl for kinds with a module).
 
@@ -2417,13 +2570,18 @@ def op_new_object(
     Разрешения.ПоУмолчанию; individual rights are set by op_set_access); routes -
     the service's routes ("GET /, POST /, GET /{id}"); report - the report source and layout;
     presentation - the caption of the element, written where the kind keeps it: the top-level
-    Presentation of a report, a command, a constants set, and the interface section of a kind
-    whose top-level Presentation names an attribute (a catalog, a document) or is absent (a
-    register, a processing) - see caption_path. A caption the kind writes by default (a
+    Presentation of a report or a command, and the interface section of a kind whose
+    top-level Presentation names a field (a catalog, a document, a constants set) or is absent
+    (a register, a processing) - see caption_path. A caption the kind writes by default (a
     command's own name) gives way to it. For a kind with the pair of interface captions it is
     the list caption, and object_presentation is the object caption in the singular, written
-    into `Interface.Object.Presentation` beside it - see object_caption_path; any other kind
-    refuses object_presentation. Given both, the new element passes naming/presentation.
+    into `Interface.Object.Presentation` beside it - see object_caption_path; record_presentation
+    is the same for the record caption of an information register (`Interface.Record.Presentation`,
+    see record_caption_path). A kind without such a caption refuses the parameter. Given the
+    pair, the new element passes naming/presentation.
+
+    Properties the kind is born with (KindSpec.extra) are written only where the compatibility
+    mode of the project knows them (_lines_for_mode); a property left out is named in the notes.
 
     A folder that does not exist yet is created with the object, and inside a subsystem that
     is how a package is born - a package has no descriptor, and a folder without objects is
@@ -2461,14 +2619,17 @@ def op_new_object(
 
     caption = caption_path(kind) if presentation else None
     # Checked before the kinds with a generator of their own: none of them has the pair. The
-    # metamodel refuses them in object_caption_path; without it they are refused here, since
-    # their generators would drop the caption without a word.
+    # metamodel refuses them in object_caption_path and record_caption_path; without it they
+    # are refused here, since their generators would drop the caption without a word.
     object_caption = object_caption_path(kind) if object_presentation else None
-    if object_caption and kind in ("HttpСервис", "SoapСервис", "Отчет"):
-        raise ScaffoldError(
-            f"У вида {kind} нет заголовка объекта (Интерфейс.Объект.Представление) – параметр "
-            "object_presentation неприменим"
-        )
+    record_caption = record_caption_path(kind) if record_presentation else None
+    for singular, path, parameter in (("объекта", object_caption, "object_presentation"),
+                                      ("записи", record_caption, "record_presentation")):
+        if path and kind in ("HttpСервис", "SoapСервис", "Отчет"):
+            raise ScaffoldError(
+                f"У вида {kind} нет заголовка {singular} ({'.'.join(path)}) – параметр "
+                f"{parameter} неприменим"
+            )
 
     result = ScaffoldResult()
     if access in ("РазрешенияВычисляются", _PER_OBJECT):
@@ -2496,7 +2657,14 @@ def op_new_object(
         ), born)
 
     lang = project_language(directory)
-    extra = _expand_extra(spec.extra, name)
+    mode = _project_mode(directory)
+    extra, withheld = _lines_for_mode(kind, _expand_extra(spec.extra, name), mode)
+    extra = _booleans_spelled(kind, extra, lang)
+    for key, since in withheld:
+        result.notes.append(
+            f"{key} не записано: режим совместимости проекта {'.'.join(map(str, mode or ()))} "
+            f"его не знает – свойство появилось в режиме {since}"
+        )
     if base:
         if kind != "КомпонентИнтерфейса":
             raise ScaffoldError(
@@ -2521,11 +2689,13 @@ def op_new_object(
         extra = [line for line in extra if not line.startswith("Представление:")]
     elif presentation and caption:
         captions.append((caption, presentation))
-        result.notes.append(_caption_note(kind, caption, object_written=bool(object_caption)))
-    if object_presentation and object_caption:
-        captions.append((object_caption, object_presentation))
-        if not presentation:
-            result.notes.append(_object_caption_note(kind))
+        result.notes.append(_caption_note(kind, caption, object_caption or record_caption or ()))
+    for singular_value, singular_path in ((object_presentation, object_caption),
+                                          (record_presentation, record_caption)):
+        if singular_value and singular_path:
+            captions.append((singular_path, singular_value))
+            if not presentation:
+                result.notes.append(_singular_caption_note(kind, singular_path))
     if captions:
         extra = _caption_lines(*captions) + extra
     content = new_object_yaml(
@@ -4313,15 +4483,57 @@ _ERROR_HELPER = """\
 ;"""
 
 
+#: Russian letters in Latin for a public address: the scheme of the passports, the hard and the
+#: soft sign left out.
+_URL_LATIN = dict(zip(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    ("a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r",
+     "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"),
+))
+#: The border of two words of a CamelCase name: before a capital that follows a small letter or
+#: a digit, and before the last capital of a run that starts a word (`APIЗаказы`).
+_CAMEL_BREAK_RE = re.compile(r"(?<=[a-zа-яё\d])(?=[A-ZА-ЯЁ])|(?<=[A-ZА-ЯЁ])(?=[A-ZА-ЯЁ][a-zа-яё])")
+
+
+def latin_url(text: str) -> str:
+    """A segment of a public address in Latin letters.
+
+    A service whose `RootUrl` holds Cyrillic letters compiles and applies, and still no request
+    reaches it: a probe on a server answered "Handler of HTTP request ... not found" for the
+    percent-encoded path, the HTTP service and the SOAP one alike. So a name with Cyrillic
+    letters turns into lower-case words in Latin joined by hyphens (`ПроверкаЗаказов` ->
+    `proverka-zakazov`); a text without Cyrillic is returned as it is.
+    """
+    if not _CYRILLIC_RE.search(text):
+        return text
+    words = [word for part in re.split(r"[_\s-]+", text)
+             for word in _CAMEL_BREAK_RE.split(part) if word]
+    return "-".join("".join(_URL_LATIN.get(char, char) for char in word.lower())
+                    for word in words)
+
+
+def latin_url_path(path: str) -> str:
+    """A public address with every Cyrillic segment in Latin letters (see latin_url)."""
+    return "/".join(latin_url(segment) for segment in path.split("/"))
+
+
 def _root_url(name: str) -> str:
     """Public URL prefix from the service name: without the kind suffix (naming/prefix-by-kind
-    requires the HttpСервис suffix on an HttpСервис, but in the URL it is redundant - a real
-    deployment uses /site, not /siteHttpСервис).
+    wants the `HttpService` suffix on the name of such a service, but in the URL it is
+    redundant - a real deployment uses /site, not /siteHttpService), and in Latin letters (see
+    latin_url).
     """
     for suffix in ("HttpСервис", "HttpService"):
         if name.endswith(suffix) and len(name) > len(suffix):
-            return name[: -len(suffix)]
-    return name
+            return latin_url(name[: -len(suffix)])
+    return latin_url(name)
+
+
+def _latin_url_note(root_url: str, name: str) -> str:
+    """The note of a service whose address was written in Latin letters for a Cyrillic name."""
+    return (f"КорневойUrl /{root_url} записан латиницей по имени {name}: адрес с кириллицей "
+            "сборка принимает, но запрос до сервиса не доходит. Поправьте адрес, если нужен "
+            "другой")
 
 
 def _new_http_service(
@@ -4350,11 +4562,8 @@ def _new_http_service(
         # The kind and the scope are the platform's own words - it spells them in English too.
         lines = [spelled_type(line, lang) if line.startswith(("ElementKind:", "VisibilityScope:"))
                  else line for line in lines]
-    if any("а" <= c.lower() <= "я" for c in root_url):
-        result.notes.append(
-            f"КорневойUrl /{root_url} содержит кириллицу – это публичный префикс URL, "
-            "обычно его задают латиницей (например, Имя КаталогHttpСервис, КорневойUrl /catalog)"
-        )
+    if _CYRILLIC_RE.search(name):
+        result.notes.append(_latin_url_note(root_url, name))
     if access:
         method = _spelled(access, lang, "enums")
         lines += spelled_lines(
@@ -4415,11 +4624,8 @@ def _new_soap_service(
     )
     result.changes.append(FileChange(yaml_path, "\n".join(lines) + "\n", created=True))
     result.changes.append(FileChange(yaml_path.with_suffix(".xbsl"), module + "\n", created=True))
-    if any("а" <= c.lower() <= "я" for c in root_url):
-        result.notes.append(
-            f"КорневойUrl /{root_url} и ПространствоИменСервиса содержат кириллицу – "
-            "публичные адреса SOAP-сервиса обычно задают латиницей"
-        )
+    if _CYRILLIC_RE.search(name):
+        result.notes.append(_latin_url_note(root_url, name))
     result.notes.append(
         f"Обработчик-пример {handler} с методом {operation}: задайте сигнатуру метода и "
         "опишите типы ошибок в Обработчики.Ошибки (типы-исключения) – по контракту сервиса; "

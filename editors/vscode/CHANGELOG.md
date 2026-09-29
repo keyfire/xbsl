@@ -16,6 +16,8 @@
 - **Three more rules link to the documentation:** `code/constant-unavailable`,
   `yaml/document-date-required` and `yaml/soap-handler-name` open their pages from the
   Problems panel. ([#163](https://github.com/keyfire/xbsl/pull/163))
+- **Two more rules link to the documentation:** `code/module-type-unavailable` and
+  `code/qualified-member-unavailable` open the page on module execution from the Problems panel. ([#164](https://github.com/keyfire/xbsl/pull/164))
 
 ## 0.78.0
 

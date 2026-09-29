@@ -12,7 +12,7 @@ import pytest
 import yaml as pyyaml
 
 import xbsl.engine  # noqa: F401 - breaks the scaffold <-> rules import cycle
-from xbsl import scaffold
+from xbsl import scaffold, typeinfer
 from xbsl.scaffold import (
     FileRename,
     ScaffoldError,
@@ -281,8 +281,11 @@ def test_new_soap_service(tmp_path):
     parsed = _valid_yaml((tmp_path / "СервисМагазина.yaml").read_text(encoding="utf-8"))
     # Structure per the SoapСервис documentation - namespace, service name, URL, handlers.
     assert parsed["ИмяСервиса"] == "СервисМагазина"
-    assert parsed["КорневойUrl"] == "/СервисМагазина"
-    assert "ПространствоИменСервиса" in parsed
+    # The address and the namespace go in Latin: a Cyrillic root address builds, and no
+    # request reaches the service. The service name answered in Cyrillic and stays.
+    assert parsed["КорневойUrl"] == "/servis-magazina"
+    assert parsed["ПространствоИменСервиса"] == "https://example.com/servis-magazina"
+    assert any("/servis-magazina записан латиницей" in note for note in result.notes)
     # The handler is the WSDL operation and takes Latin letters only; the method keeps
     # the language of the module.
     assert parsed["Обработчики"][0]["Имя"] == "Operation1"
@@ -367,9 +370,19 @@ def test_http_root_url_drops_kind_suffix(tmp_path):
     result = scaffold.op_new_object(tmp_path, "HttpСервис", "КаталогHttpСервис", routes="GET /")
     apply_result(result)
     parsed = _valid_yaml((tmp_path / "КаталогHttpСервис.yaml").read_text(encoding="utf-8"))
-    assert parsed["КорневойUrl"] == "/Каталог"
-    # Cyrillic in a public URL warrants a warning (production URLs use Latin).
-    assert any("латиницей" in note for note in result.notes)
+    # A Cyrillic root address builds, and no request reaches the service: it goes in Latin,
+    # and the note says so.
+    assert parsed["КорневойUrl"] == "/katalog"
+    assert any("/katalog записан латиницей" in note for note in result.notes)
+
+
+def test_latin_url_turns_a_cyrillic_name_into_latin_words():
+    assert scaffold.latin_url("ПроверкаЗаказов") == "proverka-zakazov"
+    assert scaffold.latin_url("ЗаказыApi") == "zakazy-api"
+    assert scaffold.latin_url("HTTPСервисЗаказов") == "http-servis-zakazov"
+    assert scaffold.latin_url("Подъезд_Ёлки") == "podezd-elki"
+    assert scaffold.latin_url("OrdersApi") == "OrdersApi"  # no Cyrillic, left as it is
+    assert scaffold.latin_url_path("/Каталог/v1/Заказы") == "/katalog/v1/zakazy"
 
 
 def test_http_stub_has_no_dead_locals(tmp_path):
@@ -3322,13 +3335,14 @@ def test_set_field_property_keeps_crlf(tmp_path):
 
 
 def test_new_object_presentation(tmp_path):
+    # An enumeration keeps its caption in the top-level property, with the data and without.
     apply_result(scaffold.op_new_object(
-        tmp_path, "НаборКонстант", "НастройкиПриложения", presentation="Настройки приложения",
+        tmp_path, "Перечисление", "ВидЗаказа", presentation="Вид заказа",
     ))
-    text = (tmp_path / "НастройкиПриложения.yaml").read_text(encoding="utf-8")
-    assert _valid_yaml(text)["Представление"] == "Настройки приложения"
+    text = (tmp_path / "ВидЗаказа.yaml").read_text(encoding="utf-8")
+    assert _valid_yaml(text)["Представление"] == "Вид заказа"
     # Right after Name, the order the platform serializes the header in.
-    assert "Имя: НастройкиПриложения\nПредставление: Настройки приложения\nОбластьВидимости:" in text
+    assert "Имя: ВидЗаказа\nПредставление: Вид заказа\nОбластьВидимости:" in text
 
 
 def test_new_object_presentation_for_a_generated_kind(tmp_path):
@@ -3363,7 +3377,7 @@ def test_new_object_caption_of_an_attribute_name_kind_goes_into_the_interface(tm
     identifier as much as a phrase, since a new catalog declares no attribute to name. Its
     caption lives in the interface section, and a live probe applied a catalog, a document, an
     exchange plan and a settings storage captioned there with no attribute declared. A
-    constants set has no attributes at all - there the top-level value is the caption.
+    constants set names a constant at the top level, and its caption is the record one.
     """
     result = scaffold.op_new_object(tmp_path, "Справочник", "Товары", presentation="Товары склада")
     apply_result(result)
@@ -3379,10 +3393,16 @@ def test_new_object_caption_of_an_attribute_name_kind_goes_into_the_interface(tm
     apply_result(scaffold.op_new_object(tmp_path, "Документ", "Заказы", presentation="Заказы"))
     data = _valid_yaml((tmp_path / "Заказы.yaml").read_text(encoding="utf-8"))
     assert "Представление" not in data and data["Интерфейс"]["Список"]["Представление"] == "Заказы"
-    apply_result(scaffold.op_new_object(
+    result = scaffold.op_new_object(
         tmp_path, "НаборКонстант", "Настройки", presentation="Настройки приложения",
-    ))
-    assert "Представление: Настройки приложения" in (tmp_path / "Настройки.yaml").read_text(encoding="utf-8")
+    )
+    apply_result(result)
+    data = _valid_yaml((tmp_path / "Настройки.yaml").read_text(encoding="utf-8"))
+    assert "Представление" not in data
+    assert data["Интерфейс"] == {"Запись": {"Представление": "Настройки приложения"}}
+    assert data["Константы"]  # the starter constant stays
+    assert "имя константы" in result.notes[0]
+    assert xbsl.engine.run([tmp_path / "Настройки.yaml"], select={"naming/presentation"}) == []
 
 
 @pytest.mark.needs_data
@@ -3481,6 +3501,120 @@ def test_new_object_object_caption_in_an_english_project(tmp_path):
     data = _valid_yaml((subsystem / "Orders.yaml").read_text(encoding="utf-8"))
     assert data["Interface"] == {"List": {"Presentation": "Orders"}, "Object": {"Presentation": "Order"}}
     assert xbsl.engine.run([subsystem / "Orders.yaml"], select={"naming/presentation"}) == []
+
+
+@pytest.mark.needs_data
+def test_new_object_register_with_both_captions_passes_the_naming_rule(tmp_path):
+    """An information register captions its list in the plural (presentation) and its record
+    in the singular (record_presentation); naming/presentation asks for both."""
+    result = scaffold.op_new_object(
+        tmp_path, "РегистрСведений", "Курсы", presentation="Курсы валют",
+        record_presentation="Курс валюты",
+    )
+    apply_result(result)
+    text = (tmp_path / "Курсы.yaml").read_text(encoding="utf-8")
+    assert (
+        "Интерфейс:\n    Список:\n        Представление: Курсы валют\n"
+        "    Запись:\n        Представление: Курс валюты\n"
+    ) in text
+    assert _valid_yaml(text)["Измерения"]  # the starter dimension stays
+    assert xbsl.engine.run([tmp_path / "Курсы.yaml"], select={"naming/presentation"}) == []
+    assert "заголовок записи – в Интерфейс.Запись.Представление" in result.notes[0]
+
+
+@pytest.mark.needs_data
+def test_new_object_register_list_caption_names_the_record_parameter(tmp_path):
+    result = scaffold.op_new_object(tmp_path, "РегистрСведений", "Курсы", presentation="Курсы валют")
+    assert "Интерфейс.Запись.Представление" in result.notes[0]
+    assert "record_presentation" in result.notes[0] and "--record-presentation" in result.notes[0]
+
+
+@pytest.mark.needs_data
+def test_new_object_record_caption_alone_names_the_list_one(tmp_path):
+    result = scaffold.op_new_object(tmp_path, "РегистрСведений", "Курсы", record_presentation="Курс")
+    apply_result(result)
+    data = _valid_yaml((tmp_path / "Курсы.yaml").read_text(encoding="utf-8"))
+    assert data["Интерфейс"] == {"Запись": {"Представление": "Курс"}}
+    assert "Интерфейс.Список.Представление" in result.notes[0] and "--presentation" in result.notes[0]
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("kind, name", [
+    ("РегистрНакопления", "Остатки"), ("НаборКонстант", "Настройки"), ("Справочник", "Товары"),
+    ("ОбщийМодуль", "Цены"), ("Отчет", "Остатки"),
+])
+def test_new_object_record_caption_only_for_an_information_register(tmp_path, kind, name):
+    """A kind without a record caption beside its list one refuses the parameter and says
+    what writes the captions it does have."""
+    with pytest.raises(ScaffoldError, match="record_presentation неприменим") as info:
+        scaffold.op_new_object(tmp_path, kind, name, record_presentation="Запись")
+    message = str(info.value)
+    assert "его принимают: РегистрСведений" in message
+    # The record caption of a constants set is its own caption - presentation writes it.
+    assert ("presentation (он ложится в Интерфейс.Запись.Представление)" in message) == (kind == "НаборКонстант")
+    assert ("object_presentation" in message) == (kind == "Справочник")
+    assert not (tmp_path / f"{name}.yaml").exists()
+
+
+@pytest.mark.needs_data
+def test_new_object_record_caption_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    apply_result(scaffold.op_new_object(
+        subsystem, "InformationRegister", "Rates", presentation="Rates", record_presentation="Rate",
+    ))
+    data = _valid_yaml((subsystem / "Rates.yaml").read_text(encoding="utf-8"))
+    assert data["Interface"] == {"List": {"Presentation": "Rates"}, "Record": {"Presentation": "Rate"}}
+    assert xbsl.engine.run([subsystem / "Rates.yaml"], select={"naming/presentation"}) == []
+
+
+def _project_in_mode(tmp_path, mode: str | None) -> Path:
+    """A project declaring the compatibility `mode` (none when None); returns its subsystem."""
+    project = tmp_path / "Acme" / "Proba"
+    (project / "Основное").mkdir(parents=True)
+    head = f"РежимСовместимости: {mode}\n" if mode else ""
+    (project / "Проект.yaml").write_text(
+        head + "Ид: 6f0b6a44-0000-4000-8000-0000000000b0\nПоставщик: Acme\nИмя: Proba\n"
+        "Версия: 1.0.0\n", encoding="utf-8",
+    )
+    return project / "Основное"
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("mode", ["newest", "8.0", None])
+def test_new_object_access_key_chooses_its_flavour(tmp_path, mode):
+    """A project in the newest compatibility mode refuses a key that does not choose its flavour -
+    a probe build answered with the missing `ManualGrant` setting; the property is known
+    from mode 8.0, and a project without a mode is read in the newest one.
+    The module stub is the handler of a computed key, and the key is born computed."""
+    if mode == "newest":
+        mode = ".".join(map(str, max(typeinfer.supported_modes())))
+    subsystem = _project_in_mode(tmp_path, mode)
+    result = scaffold.op_new_object(subsystem, "КлючДоступа", "КлючДоступаПробы")
+    apply_result(result)
+    path = subsystem / "КлючДоступаПробы.yaml"
+    assert "\nРучнаяВыдача: Ложь\n" in path.read_text(encoding="utf-8")
+    assert "ПроверитьНаличиеКлючейДоступа" in path.with_suffix(".xbsl").read_text(encoding="utf-8")
+    assert any("Ключ вычисляемый" in note for note in result.notes)
+    # The flavour and the module agree: the handler of a computed key is where it belongs.
+    found = xbsl.engine.run([path, path.with_suffix(".xbsl")], select={"code/access-key-handler-flavour"})
+    assert found == []
+
+
+@pytest.mark.needs_data
+def test_new_object_access_key_in_a_mode_before_the_flavour(tmp_path):
+    subsystem = _project_in_mode(tmp_path, "7.0")
+    result = scaffold.op_new_object(subsystem, "КлючДоступа", "КлючДоступаПробы")
+    apply_result(result)
+    assert "РучнаяВыдача" not in (subsystem / "КлючДоступаПробы.yaml").read_text(encoding="utf-8")
+    assert ("РучнаяВыдача не записано: режим совместимости проекта 7.0 его не знает – свойство "
+            "появилось в режиме 8.0") in result.notes
+
+
+@pytest.mark.needs_data
+def test_new_object_access_key_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "AccessKey", "ProbeKey"))
+    assert "\nManualGrant: False\n" in (subsystem / "ProbeKey.yaml").read_text(encoding="utf-8")
 
 
 # --- routes_for: the verbs are checked, not just upper-cased -------------------------------

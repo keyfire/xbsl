@@ -504,21 +504,20 @@ def test_presentation_deprecated_marked_silent():
 @pytest.mark.needs_data
 def test_presentation_deprecated_skips_attribute_name_kinds():
     # A catalog's Представление is an attribute NAME (metamodel type AttributeName): no
-    # "(не используется)" prefix can be written into it - the branch must stay silent.
+    # "(не используется)" prefix can be written into it, so the mark is asked of the
+    # interface captions alone.
     tail = (
         "Представление: Наименование\n" + _section("Реквизиты", ("Наименование", ""))
-        + _BOTH_CAPTIONS
+        + _BOTH_CAPTIONS.replace("Представление: Парти", "Представление: (не используется) Парти")
     )
     assert _lint(_PRESENTATION, "Справочник", "УстарелоПартии", tail) == []
 
 
 @pytest.mark.needs_data
 def test_presentation_skips_kind_without_property():
-    # A common module has no Представление property - nothing to require.
+    # A common module has neither a `Presentation` property nor captions in an interface
+    # section - nothing to require.
     assert _lint(_PRESENTATION, "ОбщийМодуль", "Общее") == []
-    # Nor has an information register: its captions live in the interface section alone, and
-    # the rule does not require them there.
-    assert _lint(_PRESENTATION, "РегистрСведений", "Цены") == []
 
 
 @pytest.mark.needs_data
@@ -600,6 +599,139 @@ def test_presentation_english_message_names_the_english_paths():
         "The element of kind 'Catalog' has no object caption in the interface: "
         "Interface.Object.Presentation - "
     )
+
+
+_REGISTER_LIST = "Интерфейс:\n    Список:\n        Представление: Цены товаров\n"
+_REGISTER_RECORD = "    Запись:\n        Представление: Цена товара\n"
+
+
+@pytest.mark.needs_data
+def test_presentation_information_register_needs_the_list_and_the_record():
+    """2.3 names the registers too: an information register captions its list in the plural
+    and its record in the singular. It has no top-level property, so the interface section is
+    the only place to caption it."""
+    d = _lint(_PRESENTATION, "РегистрСведений", "Цены")
+    assert len(d) == 1
+    assert d[0].message.startswith("У элемента вида 'РегистрСведений' нет заголовков в интерфейсе.")
+    assert "Интерфейс.Список.Представление" in d[0].message
+    assert "Интерфейс.Запись.Представление" in d[0].message
+    assert _lint(_PRESENTATION, "РегистрСведений", "Цены", _REGISTER_LIST + _REGISTER_RECORD) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("tail, headline, missing", [
+    (_REGISTER_LIST, "нет заголовка записи", "Интерфейс.Запись.Представление"),
+    ("Интерфейс:\n" + _REGISTER_RECORD, "нет заголовка списка", "Интерфейс.Список.Представление"),
+])
+def test_presentation_register_caption_alone_names_the_other(tail, headline, missing):
+    d = _lint(_PRESENTATION, "РегистрСведений", "Цены", tail)
+    assert len(d) == 1
+    assert d[0].message.startswith(f"У элемента вида 'РегистрСведений' {headline} в интерфейсе: {missing} ")
+    # A register has no top-level property, and the message does not talk about one.
+    assert "верхнего уровня" not in d[0].message
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("vid", ["РегистрНакопления", "ЖурналДанных"])
+def test_presentation_list_only_kinds_need_the_list_caption(vid):
+    """An accumulation register and a data journal have a list and no record form: the list
+    caption is the one presentation they have, and 2.1 wants it filled in."""
+    d = _lint(_PRESENTATION, vid, "Остатки")
+    assert len(d) == 1
+    assert "нет заголовка списка в интерфейсе: Интерфейс.Список.Представление" in d[0].message
+    listed = "Интерфейс:\n    Список:\n        Представление: Остатки товаров\n"
+    assert _lint(_PRESENTATION, vid, "Остатки", listed) == []
+
+
+_SET_RECORD = "Интерфейс:\n    Запись:\n        Представление: Настройки приложения\n"
+
+
+@pytest.mark.needs_data
+def test_presentation_constants_set_is_captioned_by_its_record():
+    """The top-level property of a constants set names a constant (a probe build took any
+    value there, a phrase included), and the commands keep the name of the set until the
+    interface captions them: the record caption is what the standard asks for."""
+    d = _lint(_PRESENTATION, "НаборКонстант", "Настройки", "Представление: Настройки приложения\n")
+    assert len(d) == 1
+    assert "нет заголовка записи в интерфейсе: Интерфейс.Запись.Представление" in d[0].message
+    # A filled top-level property is named for what it is.
+    assert "у набора констант в нем указывается константа" in d[0].message
+    bare = _lint(_PRESENTATION, "НаборКонстант", "Настройки")
+    assert len(bare) == 1 and "константа" not in bare[0].message
+    assert _lint(_PRESENTATION, "НаборКонстант", "Настройки", _SET_RECORD) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("periodicity", ["День", "Day"])
+def test_presentation_periodic_constants_set_needs_its_list_caption(periodicity):
+    # The list form of a constants set exists for a periodic set alone - and then it is owed.
+    head = f"Периодичность: {periodicity}\n"
+    d = _lint(_PRESENTATION, "НаборКонстант", "Курс", head + _SET_RECORD)
+    assert len(d) == 1 and "нет заголовка списка в интерфейсе" in d[0].message
+    both = ("Интерфейс:\n    Список:\n        Представление: Курсы\n"
+            "    Запись:\n        Представление: Курс\n")
+    assert _lint(_PRESENTATION, "НаборКонстант", "Курс", head + both) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("periodicity", ["Непериодический", "NonPeriodic"])
+def test_presentation_non_periodic_constants_set_has_no_list_to_caption(periodicity):
+    tail = f"Периодичность: {periodicity}\n" + _SET_RECORD
+    assert _lint(_PRESENTATION, "НаборКонстант", "Настройки", tail) == []
+
+
+@pytest.mark.needs_data
+def test_presentation_register_captions_in_an_english_file():
+    head = f"ElementKind: InformationRegister\nId: {_ID}\nName: Prices\n"
+
+    def lint(tail):
+        return engine.run_sources([engine.load_text("Prices.yaml", head + tail)], select={_PRESENTATION})
+
+    both = "Interface:\n    List:\n        Presentation: Prices\n    Record:\n        Presentation: Price\n"
+    assert lint(both) == []
+    assert len(lint("Interface:\n    List:\n        Presentation: Prices\n")) == 1
+    i18n.set_lang("en")
+    d = lint("Interface:\n    List:\n        Presentation: Prices\n")
+    assert d[0].message.startswith(
+        "The element of kind 'InformationRegister' has no record caption in the interface: "
+        "Interface.Record.Presentation - "
+    )
+
+
+_DEPRECATED_CAPTIONS = (
+    "Интерфейс:\n"
+    "    Список:\n        Представление: (не используется) Партии\n"
+    "    Объект:\n        Представление: {object}\n"
+)
+
+
+@pytest.mark.needs_data
+def test_presentation_deprecated_caption_without_the_mark():
+    """1.6 marks the presentation of a deprecated element, and an element captioned in its
+    interface section keeps its presentation there: every caption starts with the mark."""
+    d = _lint(_PRESENTATION, "Справочник", "УстарелоПартии", _DEPRECATED_CAPTIONS.format(object="Партия"))
+    assert len(d) == 1
+    assert "заголовок Интерфейс.Объект.Представление не начинается с '(не используется)'" in d[0].message
+    # Reported at the caption itself, the eighth line of the description.
+    assert (d[0].line, d[0].col) == (8, 24)
+    register = _REGISTER_LIST.replace("Цены товаров", "(не используется) Цены товаров")
+    d = _lint(_PRESENTATION, "РегистрСведений", "УстарелоЦены", register + _REGISTER_RECORD)
+    assert len(d) == 1 and "Интерфейс.Запись.Представление" in d[0].message
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("caption", ["(не используется) Партия", "$Словарь.Партия", "Batch"])
+def test_presentation_deprecated_caption_judged_on_a_russian_text(caption):
+    # A marked caption passes; a localized-string reference and an English caption carry no
+    # text the Russian mark could head.
+    tail = _DEPRECATED_CAPTIONS.format(object=caption)
+    assert _lint(_PRESENTATION, "Справочник", "УстарелоПартии", tail) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("value", ["$Отчеты.Сверка", "Reconciliation"])
+def test_presentation_deprecated_text_judged_on_a_russian_text(value):
+    assert _lint(_PRESENTATION, "Отчет", "УстарелоСверка", f"Представление: {value}\n") == []
 
 
 # --- mandatory prefixes and postfixes by kind -----------------------------------------

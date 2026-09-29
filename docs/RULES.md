@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 276 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 279 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -113,8 +113,9 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/dynlist-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same for a dynamic list whose hierarchy is left to the main table (`UsedHierarchy` not written): over a catalog without a hierarchy, a document or a register the list is flat and `Navigation: None` drops the tail [details](#a-yaml-dynlist-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
 | `yaml/hierarchy-bare-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare `Disabled`, `Default` or `Auto` in `UsedHierarchy` of a dynamic list: the apply refuses the value as one whose type is not specified. The fix writes the typed node, or takes `Auto` out [details](#a-yaml-hierarchy-bare-value) |
 | `yaml/compute-permissions-by` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | `ComputePermissionsBy` against the access settings of an entity: no list while a privilege computes its permissions for each object, or a list while none does - the build refuses both [details](#a-yaml-compute-permissions-by) |
-| `yaml/compute-permissions-by-unknown` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name in `ComputePermissionsBy` that is no field of the element - a misspelt or undeclared attribute, a standard attribute left out of `Attributes`, a tabular section: the build answers that the attribute is not found [details](#a-yaml-compute-permissions-by-unknown) |
-| `yaml/soap-handler-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A SOAP service handler whose `Name` holds a letter outside Latin, a whitespace or a leading digit: the name becomes an operation of the WSDL description, and the build refuses it [docs](https://1cmycloud.com/docs/help/topics/soap-service/) |
+| `yaml/compute-permissions-by-unknown` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name in `ComputePermissionsBy` that is no field of the element - a misspelt or undeclared attribute, a standard attribute left out of `Attributes`, a tabular section: the build answers that the attribute is not found. A computed field (`DeletionMark`, `Presentation`) fails the apply of the build [details](#a-yaml-compute-permissions-by-unknown) |
+| `yaml/soap-handler-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A SOAP service handler whose `Name` holds a letter outside Latin, a whitespace or a punctuation character the build refuses, or starts with a digit, a hyphen or a dot: the name becomes an operation of the WSDL description, and the build refuses it [docs](https://1cmycloud.com/docs/help/topics/soap-service/) |
+| `yaml/root-url-cyrillic` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `RootUrl` of an HTTP or a SOAP service with Cyrillic letters: the build takes it, and no request reaches the service. The quick fix writes the address in Latin letters [details](#a-yaml-root-url-cyrillic) |
 | `yaml/component-member-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A name repeated among the own `Properties` and `Events` of an interface component: the two lists are one namespace, and the build refuses the name as not unique [details](#a-yaml-component-member-unique) |
 | `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
 | `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a standard attribute such as `Code` or `Name`, a command, a dynamic list field). It is lost the same way a `#` comment is. A separate case is an instance of a project or a library component in a list: with a `##` block on such a node the server does not apply the project, and the rule names this reason |
@@ -289,11 +290,26 @@ server gave that answer for a misspelt attribute, for the `Name` of a catalog an
 `Number` of a document left out of `Attributes`, for `Id` and for a tabular section, and
 took a declared attribute, the dimensions, resources and attributes of a register, the
 reference, the `Parent` of a hierarchical catalog and the `Period` of a periodic register.
-The fields are what the element declares and the service fields it has without a
-declaration. That set errs on the wide side, so an undeclared `Number` of a document is left
-to the build, and so is `DeletionMark`: the probe passed the name and then failed the whole
-apply inside the server. The rule judges a catalog, a document and the registers, the kinds
-the probe settled.
+The fields are what the element declares, the service fields it has without a declaration
+(`DeletionMarkInstant` among them) and the built-in fields of its kind: `Code`, `SentNumber`,
+`ReceivedNumber` and `ThisNode` of an exchange plan, the system attributes of a settings
+storage (`Variant`, `Value`, `SettingKey`, `ObjectKey`, `Name`, `Shared`, `User`) and
+`DirectConnectionSettings` of an integrable application. The name and the files of an exchange
+plan and of an integrable application, and the code of the latter, are declared like those of a
+catalog. The service set errs on the wide side, with three exceptions: an undeclared `Number` of
+a document is reported, and so is `DeletionMark` of a settings storage, which has none, while
+`DeletionMark` and `Presentation` of the other kinds are computed fields - the compiler takes
+them, the apply of the build then fails inside the server, and the rule says so in a message of
+its own.
+
+<a id="a-yaml-root-url-cyrillic"></a>**`yaml/root-url-cyrillic`.** Probes on a server
+published an HTTP service and a SOAP service with a Cyrillic `RootUrl` next to Latin ones. The
+build took them all and the application ran; the Latin addresses answered, while a request to
+the percent-encoded Cyrillic one got `Handler of HTTP request ... not found`, and the raw one did
+not get past the front server. The service name and the namespace of a SOAP service worked in
+Cyrillic and are not judged. The quick fix writes the address in Latin letters the way
+`new-object` does for a Cyrillic service name: lower-case transliterated words joined by
+hyphens, such as `/zadachi-proekta`.
 
 <a id="a-yaml-component-member-unique"></a>**`yaml/component-member-unique`.** An interface
 component declares its own properties and its own events by name, and the compiler keeps the two
@@ -660,6 +676,8 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A call of a global name outside its environment: `Message` in a server module, the dynamic evaluation globals in a client method without `@OnServer` [details](#d-code-global-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/type-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A standard type used where its documentation says it does not exist: a server-only type such as `Encodings` in a client method, and the reverse [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/constant-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A module constant read by a method compiled for an environment the constant does not exist in: a constant of a form module without an annotation lives on the client, and an `@OnServer` method of the same module does not see it. The quick fix gives the constant the missing side [details](#d-code-constant-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/module-type-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A structure, an exception or an enumeration of the module used by a method compiled for an environment the type does not exist in: a type of a form module without an annotation lives on the client, and an `@OnServer` method of the same module can neither declare, create and catch it nor read an item of it. The quick fix gives the type the missing side [details](#d-code-module-type-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/qualified-member-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | `Module.NAME` of a common module of both environments whose constant, structure or enumeration exists on one side only, used by a method compiled for the other one [details](#d-code-qualified-member-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable, parameter or method named like a project element: the declaration shadows the element for that scope [details](#d-style-shadow-project-name) [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A `val`, `var` or `use` variable named like a property of the object its method works on: the name resolves to the variable, so neither a read nor an assignment reaches the property [details](#d-style-shadow-own-property) [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A member of a union type that another member already covers: a repeat, a second empty value, or a member under a wider neighbour [details](#d-style-redundant-union-member) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
@@ -1066,6 +1084,28 @@ The quick fix never takes a side away: an unannotated constant of a client modul
 `@OnServer @OnClient`, an annotated one the missing annotation beside its own, and the
 probe project fixed that way compiled.
 
+<a id="d-code-module-type-unavailable"></a>**`code/module-type-unavailable`.** A structure,
+an exception or an enumeration of a module exists where a constant would: in the environment its
+annotations name, or else in the environment of the module. A method compiled for the other side
+gets `Type "X" is unavailable in the current environment` wherever it names the type - a
+variable, a parameter and a result, a constructor, `throw`, a catch clause, a type check, a
+generic argument, a lambda - and `Variable "X" is not defined` for an enumeration read as a
+value, in the code or inside `%{...}`. Probe projects settled it in a form, a command and a
+common module of both environments, the mirror case included. The quick fix adds the missing
+annotation, and the fixed project compiled. It is withheld when a field of the type would not
+exist on the other side - a client-only type such as `Component`, a project type, a call in an
+initializer: the compiler refused a structure widened that way at the field.
+
+<a id="d-code-qualified-member-unavailable"></a>**`code/qualified-member-unavailable`.**
+Another module reaches a constant, a structure or an enumeration of a common module by the
+qualified name. In a common module of both environments a declaration annotated for one side
+exists on that side only, and a method compiled for the other one is refused: `Unknown property
+"Module.NAME"` for a constant or an enumeration read as a value, `Type "Module.Name" is
+unavailable in the current environment` in a type position. A probe settled it for a server
+common module, an HTTP service, a form, a command, the declaring module itself and the
+interpolation `%{Module.NAME}`. A declaration without a visibility annotation fails outside its
+module on the visibility first, and the rule leaves it alone.
+
 <a id="d-style-shadow-project-name"></a>**`style/shadow-project-name`.** An example: a
 `Warehouses` variable next to the `Warehouses` catalog. Platform handler parameter names never
 collide with project names.
@@ -1220,6 +1260,11 @@ empty `Presentation`, and the prefixes required for certain kinds - access key, 
 navigation. A catalog, a document and the other kinds whose top-level `Presentation` names an
 attribute are captioned in the interface section instead, and both captions are required:
 `Interface.List.Presentation` for the list and `Interface.Object.Presentation` for the object.
+An information register has no top-level `Presentation` and captions the list and the record
+(`Interface.Record.Presentation`), an accumulation register and a data journal the list alone. A
+constants set names a constant in its top-level `Presentation` and is captioned by the record, and
+by the list as well when it is periodic. A deprecated element marks every caption with the same
+prefix as its presentation.
 
 ### Code style conventions (the `style/` rules)
 

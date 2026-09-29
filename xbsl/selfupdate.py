@@ -9,20 +9,27 @@ built so that the same situation ends with a working installation instead:
 
 1. **Holders are named before anything is touched.** The package directory is renamed
    first - a rename fails fast while a file inside is open, and nothing has been deleted
-   yet at that point. The processes are then listed by name and pid; `--stop-holders`
-   ends them, otherwise the command stops and says who to close. The command's own
-   process tree is never offered: the shim that started it looks like a holder by name,
-   and stopping it would end the update midway. The mypyc shared libraries living in the
-   site-packages ROOT are renamed aside as well - a rename of a loaded module passes
-   where an overwrite fails, and the running command itself keeps them loaded.
-2. **The wheel matches the platform, not the current install.** The wheel built for this
+   yet at that point. The processes are then listed by pid and command line, and the
+   command stops and says who to close. The command's own process tree is never offered:
+   the shim that started it looks like a holder by name, and stopping it would end the
+   update midway. The mypyc shared libraries living in the site-packages ROOT are renamed
+   aside as well - a rename of a loaded module passes where an overwrite fails, and the
+   running command itself keeps them loaded.
+2. **Only servers are stopped.** `--stop-holders` ends the servers - the LSP server, the MCP
+   server or the worker of its supervisor, the web server: they live as long as their client
+   and keep running the old code anyway. A running xbsl command of another session (a lint,
+   a scaffolding call) is somebody's work in progress, so it is named and left alone, and
+   while it keeps the compiled modules loaded the update is refused with the advice to wait
+   for it. `--stop-holders=all` stops the commands too, and such a command ends without a
+   result.
+3. **The wheel matches the platform, not the current install.** The wheel built for this
    interpreter and platform is preferred even when the installed copy is portable: deciding
    by the install would turn one portable update (a release without a native wheel, a bug
    in wheel picking) into a ratchet - every later update stays portable, silently, and the
    compiled `lexer`/`parser` never come back. Caught live on the 0.53.0 release. Without a
    native wheel for the platform the portable one is used - out loud when that demotes a
    native install.
-3. **A failure rolls back.** The previous installation is kept aside until the new one has
+4. **A failure rolls back.** The previous installation is kept aside until the new one has
    been PROVEN to import in a separate process (the current one still runs the old code in
    memory and cannot judge). Anything unexpected - the old installation is put back.
 
@@ -38,7 +45,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import signal
 import subprocess
 import sys
 import sysconfig
@@ -79,19 +88,43 @@ _HOLDER_EXECUTABLES = frozenset({
     "xbsl", "xbsl-lsp", "xbsl-mcp", "xbsl-web",
     "xbsllint", "xbsllint-lsp", "xbsllint-mcp", "xbsllint-web",
 })
-# ... and a plain interpreter counts only when it RUNS one of our modules. The command line
-# alone is not enough on its own: an editor or an agent mentions "xbsl" in its arguments
-# (a project path, a baseline file) without holding anything - and such a process must
-# never be offered for stopping. Caught live: the client of the agent itself matched.
-_HOLDER_MODULES = ("xbsl.mcp_server", "xbsl.lsp", "xbsl.web", "xbsllint.mcp_server")
+# ... and a plain interpreter counts only when it RUNS our code: a module of the package or our
+# console script handed to it as a file. The command line alone is not enough on its own: an
+# editor or an agent mentions "xbsl" in its arguments (a project path, a baseline file) without
+# holding anything - and such a process must never be offered for stopping. Caught live: the
+# client of the agent itself matched.
+_PACKAGES = ("xbsl", "xbsllint")
+#: `python`, `python3.12`, `pythonw`, the `py` launcher and the like.
+_INTERPRETER = re.compile(r"(?:python|pythonw|pypy|pyw|py)(?:\d+(?:\.\d+)*[a-z]?)?")
+#: The command line of the package: its first argument tells what it runs...
+_CLI_EXECUTABLES = frozenset({"xbsl", "xbsllint"})
+_CLI_MODULES = frozenset({
+    "xbsl", "xbsl.cli", "xbsl.__main__", "xbsllint", "xbsllint.cli", "xbsllint.__main__",
+})
+#: ... and these first arguments start a server (`xbsl lsp`); anything else is a command.
+_SERVER_SUBCOMMANDS = frozenset({"lsp", "mcp", "web"})
+#: The modules a plain interpreter runs as a server; the worker of the supervisor is one of them.
+_SERVER_MODULES = frozenset({
+    "xbsl.mcp_server", "xbsl.lsp", "xbsl.web",
+    "xbsllint.mcp_server", "xbsllint.lsp", "xbsllint.web",
+})
 # `xbsl-mcp` runs the supervisor (xbsl/mcp_supervisor.py), which holds nothing of the package:
 # it is a holder only when started with `--no-supervisor`, as the bare server.
 _SUPERVISOR_EXECUTABLES = frozenset({"xbsl-mcp", "xbsllint-mcp"})
-_SUPERVISOR_MODULE = "xbsl.mcp_supervisor"
+_SUPERVISOR_MODULES = frozenset({"xbsl.mcp_supervisor", "xbsllint.mcp_supervisor"})
 _NO_SUPERVISOR = "--no-supervisor"
 #: The worker of the supervisor: the one process under it that loads the engine.
 _WORKER_MODULE = "xbsl.mcp_server"
-_INTERPRETERS = ("python", "python3", "pythonw", "py", "pypy", "pypy3")
+#: How much of a command line a message quotes: enough to recognize the command.
+_LINE_LIMIT = 200
+
+#: What `--stop-holders` stops: the servers alone, or every holder, the running commands of
+#: other sessions included.
+STOP_SERVERS, STOP_ALL = "servers", "all"
+STOP_MODES = (STOP_SERVERS, STOP_ALL)
+#: The two kinds of a holder. A server lives as long as its client and keeps running the old
+#: code after the update, so ending it belongs to the update; a command is somebody's work.
+SERVER, COMMAND = "server", "command"
 
 
 class SelfUpdateError(RuntimeError):
@@ -403,28 +436,32 @@ def _latest(files: list[dict], log) -> tuple[str, list[dict]]:
 
 
 def holders() -> list[dict]:
-    """Live processes that look like holders of the installation: {"pid", "name"}.
+    """Live processes of ours that may hold the installation.
 
-    Best effort by design: the answer only makes the message useful ("close these"), it is
-    never a precondition. `psutil` is used when it happens to be installed, otherwise the
-    system process listing is read - and if neither works, the caller still reports the
-    lock itself, just without names. The command's own process tree is excluded: started
-    via the installed shim, the command is a python child of an `xbsl.exe` launcher that
-    looks exactly like a holder by name - and stopping it ends the update midway.
+    Each is {"pid", "ppid", "name", "kind", "command_line"}, the kind being SERVER or COMMAND
+    (`holder_kind`). Best effort by design: the answer only makes the message useful ("close
+    these"), it is never a precondition. `psutil` is used when it happens to be installed,
+    otherwise the system process listing is read - and if neither works, the caller still
+    reports the lock itself, just without names. The command's own process tree is excluded:
+    started via the installed shim, the command is a python child of an `xbsl.exe` launcher
+    that looks exactly like a holder by name - and stopping it ends the update midway.
     """
     rows = _psutil_listing()
     if rows is None:
         rows = _process_listing()
     family = _family_pids(rows)
     supervising = _above_workers(rows)
-    return [
-        {"pid": pid, "name": name}
-        for pid, _ppid, name, line in rows
-        if pid not in family and (
-            is_holder(name, line)
-            or (_started_by_stub(name, line) and pid not in supervising)
-        )
-    ]
+    found = []
+    for pid, ppid, name, line in rows:
+        if pid in family:
+            continue
+        kind = holder_kind(name, line)
+        if not kind and _started_by_stub(name, line) and pid not in supervising:
+            kind = SERVER  # an `xbsl-mcp` still running the bare server of an older release
+        if kind:
+            found.append({"pid": pid, "ppid": ppid, "name": name, "kind": kind,
+                          "command_line": " ".join(line.split())})
+    return found
 
 
 def _started_by_stub(name: str, command_line: str) -> bool:
@@ -434,17 +471,9 @@ def _started_by_stub(name: str, command_line: str) -> bool:
     the bare server under the same name and command line. What tells the two apart is the
     worker: only a supervisor runs one under itself.
     """
-    stem = Path((name or "").strip()).stem.lower()
-    lowered = (command_line or "").lower()
-    if _NO_SUPERVISOR in lowered:
-        return False
-    if stem in _SUPERVISOR_EXECUTABLES:
-        return True
-    if stem not in _INTERPRETERS:
-        return False
-    return any(
-        f"{script}.exe" in lowered or lowered.endswith(script) for script in _SUPERVISOR_EXECUTABLES
-    )
+    found = _runs(name, command_line)
+    return (found is not None and found[0] in _SUPERVISOR_EXECUTABLES
+            and _NO_SUPERVISOR not in found[1])
 
 
 def _above_workers(rows: list[tuple[int, int, str, str]]) -> set[int]:
@@ -452,9 +481,8 @@ def _above_workers(rows: list[tuple[int, int, str, str]]) -> set[int]:
     parent_of = {pid: ppid for pid, ppid, _name, _line in rows}
     above: set[int] = set()
     for pid, _ppid, name, line in rows:
-        if Path((name or "").strip()).stem.lower() not in _INTERPRETERS:
-            continue
-        if f"-m {_WORKER_MODULE}" not in (line or "").lower():
+        found = _runs(name, line)
+        if found is None or found[0] != f"-m {_WORKER_MODULE}":
             continue
         cursor = pid
         for _hop in range(64):  # bounded walk, as in _family_pids
@@ -466,13 +494,19 @@ def _above_workers(rows: list[tuple[int, int, str, str]]) -> set[int]:
 
 
 def _psutil_listing() -> list[tuple[int, int, str, str]] | None:
-    """The process listing via psutil, or None when psutil is absent or broken."""
+    """The process listing via psutil, or None when psutil is absent or broken.
+
+    The arguments are joined back with quotes where a word has spaces: a path under
+    `Program Files` joined with bare spaces would read as several words, and the script of a
+    holder would not be recognized in it.
+    """
     try:  # psutil comes with some extras; when absent, fall back to the OS listing
         import psutil  # noqa: PLC0415 - optional dependency, imported on demand
 
         return [
             (process.info["pid"], process.info.get("ppid") or 0,
-             process.info.get("name") or "", " ".join(process.info.get("cmdline") or []))
+             process.info.get("name") or "",
+             subprocess.list2cmdline(process.info.get("cmdline") or []))
             for process in psutil.process_iter(["pid", "ppid", "name", "cmdline"])
         ]
     except Exception:  # noqa: BLE001 - any psutil trouble degrades to the OS listing
@@ -509,35 +543,129 @@ def _family_pids(rows: list[tuple[int, int, str, str]]) -> set[int]:
 
 
 def is_holder(name: str, command_line: str) -> bool:
-    """Is this process one of ours - and therefore worth offering for a stop?
+    """Is this process one of ours - a server or a command that may hold the installation?
 
-    Our own executable by name, or an interpreter running one of our modules. Anything
-    else that merely mentions xbsl in its arguments is left alone: the wrong answer here
-    is not a missed holder but an offer to kill someone else's process.
+    Our own executable by name, or an interpreter running our code. Anything else that
+    merely mentions xbsl in its arguments is left alone: the wrong answer here is not a
+    missed holder but an offer to kill someone else's process.
     """
-    stem = Path((name or "").strip()).stem.lower()
-    lowered = (command_line or "").lower()
-    if stem in _HOLDER_EXECUTABLES:
-        # `xbsl-mcp` is the supervisor of the server: it loads no engine and is not stopped -
-        # the session it keeps is the point of it. Its worker (`-m xbsl.mcp_server`) and a bare
-        # server (`--no-supervisor`) hold the package and are. An `xbsl-mcp` still running the
-        # bare server from before its stub handed over is told by `holders`, by the missing worker.
-        if stem in _SUPERVISOR_EXECUTABLES:
-            return _NO_SUPERVISOR in lowered
-        return True
-    if stem not in _INTERPRETERS:
-        return False
-    if any(f"-m {module}" in lowered for module in _HOLDER_MODULES):
-        return True
-    if f"-m {_SUPERVISOR_MODULE}" in lowered:
-        return _NO_SUPERVISOR in lowered
-    # A console script started by its path (`.../Scripts/xbsl-lsp.exe`, `.../bin/xbsl-mcp`).
-    for script in _HOLDER_EXECUTABLES:
-        if f"{script}.exe" in lowered or lowered.endswith(script):
-            if script in _SUPERVISOR_EXECUTABLES:
-                return _NO_SUPERVISOR in lowered
-            return True
-    return False
+    return bool(holder_kind(name, command_line))
+
+
+def holder_kind(name: str, command_line: str) -> str:
+    """SERVER or COMMAND for a process of ours, "" for anything else.
+
+    A server is what an update has to end: the LSP, MCP and web servers live as long as their
+    client and keep running the old code. Anything else of ours is a command - a lint, a
+    scaffolding call, another self-update - and a command of another session is never ended
+    by default: the wrong answer here kills that work with no verdict. So a server is
+    recognized positively, by its program, module or first argument, and whatever is not
+    certain stays a command.
+
+    `xbsl-mcp` is the supervisor of the server: it loads no engine and is not stopped - the
+    session it keeps is the point of it. Its worker (`-m xbsl.mcp_server`) and a bare server
+    (`--no-supervisor`) hold the package and are. An `xbsl-mcp` still running the bare server
+    from before its stub handed over is told by `holders`, by the missing worker.
+    """
+    found = _runs(name, command_line)
+    if found is None:
+        return ""
+    what, args = found
+    if what.startswith("-m "):
+        module = what[3:]
+        if module in _SERVER_MODULES:
+            return SERVER
+        if module in _SUPERVISOR_MODULES:
+            return SERVER if _NO_SUPERVISOR in args else ""
+        if module not in _CLI_MODULES:
+            return COMMAND
+    elif what in _SUPERVISOR_EXECUTABLES:
+        return SERVER if _NO_SUPERVISOR in args else ""
+    elif what not in _CLI_EXECUTABLES:
+        return SERVER  # xbsl-lsp, xbsl-web and their twins under the old name
+    return SERVER if args[:1] and args[0] in _SERVER_SUBCOMMANDS else COMMAND
+
+
+def _runs(name: str, command_line: str) -> tuple[str, list[str]] | None:
+    """What of ours a process runs and the arguments after it; None when nothing of ours.
+
+    The first is our console script (`xbsl-lsp`) or, for an interpreter, `-m` with the module
+    (`-m xbsl.mcp_server`). An interpreter handed our console script as a file (the launcher of
+    a venv starts `python.exe ...\\Scripts\\xbsl-lsp.exe`) runs the script. `-c` code, a script
+    of somebody else's and a module of another package are not ours, whatever their arguments
+    mention.
+    """
+    words = _words(command_line)
+    own = _base(name)
+    if own in _HOLDER_EXECUTABLES:
+        start = next((index + 1 for index, word in enumerate(words) if _base(word) == own), 1)
+        return own, words[start:]
+    if not _INTERPRETER.fullmatch(own):
+        return None
+    # The arguments start after the interpreter's own word. A listing that lost the quotes
+    # (ps) splits a path with spaces, and the interpreter ends it.
+    index = next((position + 1 for position, word in enumerate(words)
+                  if _INTERPRETER.fullmatch(_base(word))), 1)
+    while index < len(words):
+        word = words[index]
+        if word == "-" or not word.startswith("-"):
+            break
+        if word.startswith("--"):
+            index += 2 if word == "--check-hash-based-pycs" else 1
+            continue
+        letters = word[1:]  # a cluster of one-letter options: `-P`, `-uB`, `-Xutf8`, `-m module`
+        for position, letter in enumerate(letters):
+            rest = letters[position + 1:]
+            if letter == "c":
+                return None
+            if letter == "m":
+                module = (rest or (words[index + 1] if index + 1 < len(words) else "")).lower()
+                if not any(module == package or module.startswith(package + ".")
+                           for package in _PACKAGES):
+                    return None
+                return f"-m {module}", words[index + (1 if rest else 2):]
+            if letter in "XW":
+                index += 0 if rest else 1  # the value is the rest of the word or the next one
+                break
+        index += 1
+    if index >= len(words) or words[index] == "-":
+        return None
+    script = _base(words[index])
+    return (script, words[index + 1:]) if script in _HOLDER_EXECUTABLES else None
+
+
+def _words(command_line: str) -> list[str]:
+    """The words of a command line, the double quotes around a path taken off.
+
+    Not a shell parser: a process listing is read here, not a command run, and the words only
+    have to show the program, its module and its first argument.
+    """
+    words: list[str] = []
+    word: list[str] = []
+    quoted = started = False
+    for char in command_line or "":
+        if char == '"':
+            quoted, started = not quoted, True
+        elif char.isspace() and not quoted:
+            if started:
+                words.append("".join(word))
+            word, started = [], False
+        else:
+            word.append(char)
+            started = True
+    if started:
+        words.append("".join(word))
+    return words
+
+
+def _base(path: str) -> str:
+    """The file name a word or a process name points at, lowercased and without `.exe`.
+
+    Both separators count whatever the system: a listing from Windows is read by the tests
+    on any of them.
+    """
+    name = re.split(r"[\\/]", (path or "").strip())[-1].lower()
+    return name[:-4] if name.endswith(".exe") else name
 
 
 def _process_listing() -> list[tuple[int, int, str, str]]:
@@ -577,38 +705,104 @@ def _process_listing() -> list[tuple[int, int, str, str]]:
     ]
 
 
+def _launches(processes: list[dict]) -> list[dict]:
+    """One process per launch: those whose parent is not on the list.
+
+    A console script on Windows runs as a chain - the launcher and the interpreter it starts -
+    both with nearly the same command line. The head of the chain names the launch; the rest
+    are its parts.
+    """
+    pids = {item["pid"] for item in processes}
+    return [item for item in processes if item.get("ppid") not in pids]
+
+
+def _described(process: dict) -> str:
+    """The pid and the command line of a process, the way a message names it."""
+    line = process.get("command_line") or process.get("name") or i18n.t("selfupdate.process")
+    if len(line) > _LINE_LIMIT:
+        line = line[: _LINE_LIMIT - 3].rstrip() + "..."
+    return f"pid {process['pid']} – {line}"
+
+
+def _listed(processes: list[dict]) -> str:
+    return "; ".join(_described(item) for item in processes)
+
+
+def _end(pid: int) -> str:
+    """Stop one process: "" when it ended or was gone already, the reason when it was not."""
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True,
+                                    timeout=30, stdin=subprocess.DEVNULL)
+            # 128 is "not found": the launcher stopped a moment ago took its interpreter along.
+            if result.returncode not in (0, 128):
+                return f"taskkill {result.returncode}"
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return ""
+    except (OSError, subprocess.SubprocessError) as error:
+        return str(error)
+    return ""
+
+
 def stop_holders(processes: list[dict], log, reason: str = "self-update --stop-holders") -> list[dict]:
     """End the listed processes; returns those that survived.
 
     A forced stop leaves the stopped server no chance to write its own end, so the MCP
     journal gets the record from here: a client of that server sees only a closed transport,
-    and `xbsl mcp-log` then names the update that ended it.
+    and `xbsl mcp-log` then names the update that ended it. A launch gets one line in the log,
+    the one of its head (see `_launches`): the parts of the chain go with it.
     """
+    heads = {item["pid"] for item in _launches(processes)}
     alive = []
     for process in processes:
         pid = int(process["pid"])
-        try:
-            if sys.platform == "win32":
-                subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True,
-                               timeout=30, stdin=subprocess.DEVNULL)
-            else:
-                os.kill(pid, 15)
-            mcpjournal.record("stopped", target=pid, name=process.get("name") or "", reason=reason)
-            log(i18n.t("selfupdate.holder-stopped", name=process.get("name") or "", pid=pid))
-        except (OSError, subprocess.SubprocessError) as error:
-            alive.append({**process, "error": str(error)})
+        error = _end(pid)
+        if error:
+            alive.append({**process, "error": error})
+            log(i18n.t("selfupdate.stop-failed", process=_described(process), error=error))
+            continue
+        mcpjournal.record("stopped", target=pid, name=process.get("name") or "", reason=reason)
+        if process["pid"] in heads:
+            stopped = ("selfupdate.command-stopped" if process.get("kind") == COMMAND
+                       else "selfupdate.server-stopped")
+            log(i18n.t(stopped, process=_described(process)))
     return alive
 
 
-def _holders_message(processes: list[dict]) -> str:
-    """Who to close - by name and pid, or an honest "could not tell"."""
-    if not processes:
-        return i18n.t("selfupdate.holders-unknown")
-    listed = ", ".join(
-        f"{item.get('name') or i18n.t('selfupdate.process')} (pid {item['pid']})"
-        for item in processes
-    )
-    return i18n.t("selfupdate.holders", list=listed)
+def _stop_for_update(stop: str, log, reason: str) -> None:
+    """End what `stop` covers, and name the running commands it leaves alone."""
+    busy = holders()
+    ending = [item for item in busy if stop == STOP_ALL or item.get("kind") == SERVER]
+    if ending:
+        stop_holders(ending, log, reason=reason)
+    for item in _launches([item for item in busy if item not in ending]):
+        log(i18n.t("selfupdate.command-spared", process=_described(item)))
+
+
+def _holders_message(processes: list[dict], stop: str = "") -> str:
+    """Who holds the installation and what to do about it, the servers apart from the commands.
+
+    A server can be closed or stopped with `--stop-holders`. A command is somebody's work, so
+    the advice is to wait for it, and the way to stop it anyway is named with its price. What
+    the mode of this run was meant to stop and is still listed did not go: closing it by hand is
+    the advice left. With nothing listed, the message says so honestly.
+    """
+    servers = _launches([item for item in processes if item.get("kind") != COMMAND])
+    commands = _launches([item for item in processes if item.get("kind") == COMMAND])
+    if not servers and not commands:
+        return f"{i18n.t('selfupdate.holders-unknown')}. {i18n.t('selfupdate.advice-servers')}"
+    parts = []
+    if servers:
+        parts.append(i18n.t("selfupdate.holders", list=_listed(servers)))
+        parts.append(i18n.t("selfupdate.advice-close" if stop else "selfupdate.advice-servers"))
+    if commands:
+        parts.append(i18n.t("selfupdate.holders-commands", list=_listed(commands)))
+        parts.append(i18n.t(
+            "selfupdate.advice-close" if stop == STOP_ALL else "selfupdate.advice-commands"
+        ))
+    return ". ".join(parts)
 
 
 # -- the update itself ---------------------------------------------------------------------
@@ -743,8 +937,13 @@ def verify_install(site: Path, expected: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def self_update(version: str | None = None, log=print, *, stop_busy: bool = False) -> tuple[str, str]:
-    """Update xbsl in site-packages by unpacking the wheel. Return (old, new)."""
+def self_update(version: str | None = None, log=print, *, stop: str = "") -> tuple[str, str]:
+    """Update xbsl in site-packages by unpacking the wheel. Return (old, new).
+
+    `stop` is what `--stop-holders` asked for: STOP_SERVERS ends the servers holding the
+    installation and names the running commands without touching them, STOP_ALL ends the
+    commands as well, and "" ends nothing.
+    """
     site = _site_packages()
     _ensure_regular_install(site)
     was_native = is_native(site)
@@ -770,16 +969,14 @@ def self_update(version: str | None = None, log=print, *, stop_busy: bool = Fals
     except OSError as error:
         raise SelfUpdateError(i18n.t("selfupdate.download-failed", error=error)) from error
 
-    if stop_busy:
-        busy = holders()
-        if busy:
-            stop_holders(busy, log, reason=f"self-update {__version__} -> {target}")
+    if stop:
+        _stop_for_update(stop, log, reason=f"self-update {__version__} -> {target}")
 
     try:
         moved = _move_aside(site)
     except OSError as error:
         raise SelfUpdateError(
-            i18n.t("selfupdate.busy", error=error, holders=_holders_message(holders()))
+            i18n.t("selfupdate.busy", error=error, holders=_holders_message(holders(), stop))
         ) from error
 
     log(i18n.t("selfupdate.extracting", site=site))

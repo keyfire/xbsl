@@ -50,6 +50,20 @@ def test_mcp_meta_new_object_with_both_captions_lints_clean(mcp_module, tmp_path
     assert not (tmp_path / "Остатки.yaml").exists()
 
 
+@pytest.mark.needs_data  # the record caption is read from the metamodel
+def test_mcp_meta_new_object_register_with_both_captions_lints_clean(mcp_module, tmp_path):
+    res = mcp_module.meta_new_object(
+        str(tmp_path), "РегистрСведений", "Курсы", presentation="Курсы",
+        record_presentation="Курс",
+    )
+    assert res["lint"] == {"files": 1, "diagnostics": 0}, res["lint"]
+    text = (tmp_path / "Курсы.yaml").read_text(encoding="utf-8")
+    assert "    Запись:\n        Представление: Курс\n" in text
+    refused = mcp_module.meta_new_object(str(tmp_path), "Справочник", "Товары", record_presentation="Товар")
+    assert "record_presentation неприменим" in refused["error"]
+    assert not (tmp_path / "Товары.yaml").exists()
+
+
 def test_mcp_meta_field_and_info(mcp_module, tmp_path):
     mcp_module.meta_new_object(str(tmp_path), "Справочник", "Товары")
     res = mcp_module.meta_add_field(str(tmp_path / "Товары.yaml"), "реквизит", "Цвет")
@@ -195,6 +209,23 @@ def test_cli_new_object_with_both_captions_lints_clean(tmp_path, capsys):
     assert code == 2 and "object_presentation неприменим" in out["error"]
 
 
+@pytest.mark.needs_data  # the record caption is read from the metamodel
+def test_cli_new_object_register_with_both_captions_lints_clean(tmp_path, capsys):
+    code, out = _run_cli(
+        capsys, "new-object", str(tmp_path), "РегистрСведений", "Курсы",
+        "--presentation", "Курсы", "--record-presentation", "Курс",
+    )
+    assert code == 0 and out["lint"]["diagnostics"] == [], out["lint"]
+    # The list caption alone: the lint names the record caption, the note the parameter.
+    code, out = _run_cli(capsys, "new-object", str(tmp_path), "РегистрСведений", "Цены",
+                         "--presentation", "Цены")
+    assert code == 0 and [d["rule"] for d in out["lint"]["diagnostics"]] == ["naming/presentation"]
+    assert "--record-presentation" in out["notes"][0]
+    code, out = _run_cli(capsys, "new-object", str(tmp_path), "РегистрНакопления", "Остатки",
+                         "--record-presentation", "Остаток")
+    assert code == 2 and "record_presentation неприменим" in out["error"]
+
+
 def test_cli_dry_run_writes_nothing(tmp_path, capsys):
     code, out = _run_cli(capsys, "new-object", str(tmp_path), "Справочник", "Товары", "--dry-run")
     assert code == 0
@@ -276,6 +307,17 @@ def test_lsp_meta_new_object_writes_the_object_caption(tmp_path):
         "directory": str(tmp_path), "kind": "Отчет", "name": "Остатки", "objectPresentation": "Остаток",
     })
     assert "object_presentation неприменим" in refused["error"]
+
+
+@pytest.mark.needs_data  # the record caption is read from the metamodel
+def test_lsp_meta_new_object_writes_the_record_caption(tmp_path):
+    _, features = _server_features()
+    result = features["xbsl/metaNewObject"]({
+        "directory": str(tmp_path), "kind": "РегистрСведений", "name": "Курсы",
+        "presentation": "Курсы", "recordPresentation": "Курс",
+    })
+    content = result["files"][0]["content"]
+    assert "    Список:\n        Представление: Курсы\n    Запись:\n        Представление: Курс\n" in content
 
 
 def test_lsp_meta_add_field_error_shape(tmp_path):

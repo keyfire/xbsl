@@ -911,10 +911,14 @@ _CORE_MESSAGES = {
         "en": "target version (default: the latest from PyPI)",
     },
     "cli.help.selfupdate-stop": {
-        "ru": "снять процессы, держащие установку (LSP-сервер редактора, MCP-сессии), "
-              "и обновиться; без флага команда только назовёт их",
-        "en": "stop the processes holding the installation (the editor's LSP server, MCP "
-              "sessions) and update; without the flag the command only names them",
+        "ru": "снять серверы, держащие установку (LSP-сервер редактора, MCP-сессии), и "
+              "обновиться. Идущие команды xbsl других сессий называются по pid и не трогаются; "
+              "со значением all снимаются и они, и такая команда обрывается без результата. "
+              "Без флага держатели только называются",
+        "en": "stop the servers holding the installation (the editor's LSP server, MCP "
+              "sessions) and update. Running xbsl commands of other sessions are named by pid "
+              "and left alone; with the value all they are stopped too, and such a command "
+              "ends without a result. Without the flag the holders are only named",
     },
     # -- self-update (selfupdate.py): everything the command says to the user --
     "selfupdate.editable": {
@@ -996,25 +1000,55 @@ _CORE_MESSAGES = {
     },
     "selfupdate.busy": {
         "ru": "установку сейчас не заменить – файлы заняты ({error}). {holders}. "
-              "Закройте их и повторите, либо запустите с --stop-holders. "
               "Прежняя установка НЕ ТРОНУТА и работает",
         "en": "the installation cannot be replaced right now – files are held ({error}). "
-              "{holders}. Close them and repeat, or run with --stop-holders. The previous "
-              "installation is UNTOUCHED and working",
+              "{holders}. The previous installation is UNTOUCHED and working",
     },
     "selfupdate.holders": {
-        "ru": "держат установку: {list}",
-        "en": "holding the installation: {list}",
+        "ru": "Держат установку серверы: {list}",
+        "en": "Servers holding the installation: {list}",
+    },
+    "selfupdate.holders-commands": {
+        "ru": "Идут команды: {list}",
+        "en": "Commands are running: {list}",
     },
     "selfupdate.holders-unknown": {
-        "ru": "определить держателей не удалось; обычно это LSP-сервер открытого редактора "
+        "ru": "Определить держателей не удалось; обычно это LSP-сервер открытого редактора "
               "и MCP-сессии агента",
-        "en": "could not tell which processes hold it; usually the open editor's LSP server "
+        "en": "Could not tell which processes hold it; usually the open editor's LSP server "
               "and the agent's MCP sessions",
     },
-    "selfupdate.holder-stopped": {
-        "ru": "снят держатель {name} (pid {pid})",
-        "en": "stopped the holder {name} (pid {pid})",
+    "selfupdate.advice-servers": {
+        "ru": "Закройте их и повторите, либо запустите с --stop-holders",
+        "en": "Close them and repeat, or run with --stop-holders",
+    },
+    "selfupdate.advice-close": {
+        "ru": "Закройте их и повторите",
+        "en": "Close them and repeat",
+    },
+    "selfupdate.advice-commands": {
+        "ru": "Это чужая работа, и --stop-holders ее не трогает: дождитесь конца команд и "
+              "повторите. Ключ --stop-holders=all снимет и их, но такая команда оборвется без "
+              "результата",
+        "en": "That is someone else's work, and --stop-holders leaves it alone: wait for the "
+              "commands to finish and repeat. --stop-holders=all stops them as well, and such "
+              "a command ends without a result",
+    },
+    "selfupdate.server-stopped": {
+        "ru": "остановлен сервер: {process}",
+        "en": "stopped the server: {process}",
+    },
+    "selfupdate.command-stopped": {
+        "ru": "остановлена команда: {process}",
+        "en": "stopped the command: {process}",
+    },
+    "selfupdate.stop-failed": {
+        "ru": "не удалось остановить {process}: {error}",
+        "en": "could not stop {process}: {error}",
+    },
+    "selfupdate.command-spared": {
+        "ru": "не трогаю идущую команду: {process}",
+        "en": "leaving a running command alone: {process}",
     },
     "selfupdate.process": {"ru": "процесс", "en": "process"},
     "selfupdate.extract-failed": {
@@ -1310,13 +1344,15 @@ _CORE_MESSAGES = {
     },
     "cli.help.scaf.no-presentation": {
         "ru": "заголовок элемента: пишется туда, где его держит вид – в Представление или, у "
-              "справочника, документа, регистра и обработки, в раздел Интерфейс; у справочника "
-              "и документа это заголовок списка, а заголовок объекта задает "
-              "--object-presentation (без заголовка первый же линт дает naming/presentation)",
+              "справочника, документа, регистра, набора констант и обработки, в раздел "
+              "Интерфейс; у справочника, документа и регистра это заголовок списка, а заголовок "
+              "объекта задает --object-presentation, заголовок записи регистра сведений – "
+              "--record-presentation (без заголовка первый же линт дает naming/presentation)",
         "en": "the element caption: written where the kind keeps it - into Presentation or, "
-              "for a catalog, a document, a register and a processing, into the Interface "
-              "section; for a catalog and a document it is the list caption, and "
-              "--object-presentation gives the object one (without a caption the very first "
+              "for a catalog, a document, a register, a constants set and a processing, into "
+              "the Interface section; for a catalog, a document and a register it is the list "
+              "caption, and --object-presentation gives the object one, --record-presentation "
+              "the record one of an information register (without a caption the very first "
               "lint answers naming/presentation)",
     },
     "cli.help.scaf.no-object-presentation": {
@@ -1326,6 +1362,16 @@ _CORE_MESSAGES = {
         "en": "the object caption in the singular: written into Interface.Object.Presentation "
               "of a catalog, a document, an exchange plan and a settings storage, any other "
               "kind refuses it; with --presentation the new object passes naming/presentation",
+    },
+    "cli.help.scaf.no-record-presentation": {
+        "ru": "заголовок записи в единственном числе: пишется в Интерфейс.Запись.Представление "
+              "регистра сведений, другой вид его не принимает (у набора констант заголовок "
+              "записи пишет --presentation); вместе с --presentation новый регистр проходит "
+              "naming/presentation",
+        "en": "the record caption in the singular: written into Interface.Record.Presentation "
+              "of an information register, any other kind refuses it (the record caption of a "
+              "constants set is what --presentation writes); with --presentation the new "
+              "register passes naming/presentation",
     },
     "cli.help.scaf.no-base": {
         "ru": "базовый тип компонента интерфейса (Группа, ФормаОбъекта<Товар.Объект>); "

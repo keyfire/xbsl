@@ -1161,6 +1161,7 @@ def meta_new_object(
     base: str | None = None,
     root: str | None = None,
     object_presentation: str | None = None,
+    record_presentation: str | None = None,
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
@@ -1176,18 +1177,21 @@ def meta_new_object(
     routes like "GET /, POST /, GET /{id}" (handlers are stubbed in the module);
     report_spec - for Report: {source, rows: [...], columns: [...], measures: [{expr, title}], title};
     presentation - the caption of the element, written where the kind keeps it: the top-level
-    Presentation of a report, a command or a constants set; for a catalog, a document, an
-    exchange plan, an integrable application and a settings storage - whose top-level
-    Presentation is the NAME of a string attribute, a caption there fails to compile - the
-    list caption `Interface.List.Presentation` (the notes name the object caption beside it),
-    as for a register, which has no top-level one; `Interface.Presentation` of a processing.
-    Pass it: without one the very first lint of the
-    new file answers naming/presentation.
+    Presentation of a report or a command; for a catalog, a document, an exchange plan, an
+    integrable application and a settings storage - whose top-level Presentation is the NAME
+    of a string attribute, a caption there fails to compile - the list caption
+    `Interface.List.Presentation` (the notes name the object caption beside it), as for a
+    register, which has no top-level one; `Interface.Record.Presentation` of a constants set
+    (its top-level Presentation names a constant); `Interface.Presentation` of a processing.
+    Pass it: without one the very first lint of the new file answers naming/presentation.
     object_presentation - the object caption in the singular, `Interface.Object.Presentation`,
     of a kind with the pair of interface captions (a catalog, a document, an exchange plan, a
     settings storage), where presentation is the list caption in the plural; any other kind
     refuses it. The tool cannot derive the singular from the plural, and naming/presentation
     asks such a kind for both: given both, the new object lints clean.
+    record_presentation - the record caption in the singular, `Interface.Record.Presentation`,
+    of an information register, beside the list caption presentation writes; any other kind
+    refuses it (a constants set takes its record caption as presentation).
     base - for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
@@ -1205,7 +1209,7 @@ def meta_new_object(
         _under(root_dir, directory), kind, name,
         scope=scope, environment=environment, access=access,
         routes=routes, report=report_spec, presentation=presentation, base=base,
-        object_presentation=object_presentation,
+        object_presentation=object_presentation, record_presentation=record_presentation,
     )
 
 

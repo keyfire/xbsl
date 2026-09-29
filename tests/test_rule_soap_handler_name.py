@@ -3,7 +3,9 @@
 The cases are the verdict of a probe build: a Cyrillic name, a name with a whitespace, one
 starting with a digit and a Latin name with one Cyrillic letter were refused with "Handler
 name ... contains invalid characters" at the value; `AddToCart` and `Add_Item` compiled, and so
-did `Add-Item` and `Add.Item`.
+did `Add-Item` and `Add.Item`. A second probe put every other printable ASCII character between
+two Latin words and in the first place: the ones reported below were refused, the ones in the
+controls compiled.
 """
 
 import pytest
@@ -48,6 +50,35 @@ def test_the_names_the_build_refused_are_reported_at_the_value():
 
 def test_control_the_names_the_build_took_are_silent():
     text = _SERVICE.format(handlers=_handlers("AddOrder", "Add_Order", "Add-Order", "Add.Order"))
+    assert _lint(text) == []
+
+
+def test_the_punctuation_the_build_refused_is_reported():
+    # One service per character on a server: these were refused between two Latin words,
+    # `%` even as a valid escape.
+    names = ["'Add\"Order'", "Add%Order", "Add%41Order", "Add<Order", "Add>Order",
+             "Add\\Order", "Add^Order", "Add`Order", "Add{Order", "Add|Order", "Add}Order"]
+    diags = _lint(_SERVICE.format(handlers=_handlers(*names)))
+    assert len(diags) == len(names)
+    assert "символ '\"'" in diags[0].message and "символ '\\'" in diags[5].message
+    assert all("которого сборка не принимает" in d.message for d in diags)
+
+
+def test_a_hyphen_or_a_dot_in_the_first_place_is_reported():
+    diags = _lint(_SERVICE.format(handlers=_handlers("-AddOrder", ".AddOrder")))
+    assert [(d.line, d.col) for d in diags] == [(9, 14), (12, 14)]
+    assert "начинается с '-'" in diags[0].message and "начинается с '.'" in diags[1].message
+
+
+def test_control_the_punctuation_the_build_took_is_silent():
+    names = ["Add!Order", "Add#Order", "Add$Order", "Add&Order", "Add'Order", "Add(Order",
+             "Add)Order", "Add*Order", "Add+Order", "Add,Order", "Add/Order", "Add:Order",
+             "Add;Order", "Add=Order", "Add?Order", "Add@Order", "Add[Order", "Add]Order",
+             "Add~Order", "_AddOrder"]
+    text = _SERVICE.format(handlers=_handlers(*names))
+    # The silence means something only while every name reads back as written.
+    yaml = pytest.importorskip("yaml")
+    assert [item["Имя"] for item in yaml.safe_load(text)["Обработчики"]] == names
     assert _lint(text) == []
 
 

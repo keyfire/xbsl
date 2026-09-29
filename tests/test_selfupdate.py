@@ -16,12 +16,15 @@ from __future__ import annotations
 import io
 import json
 import os
+import subprocess
+import sys
+import types
 import zipfile
 
 import pytest
 
 import xbsl
-from xbsl import cli, selfupdate
+from xbsl import cli, i18n, mcpjournal, selfupdate
 
 
 def _fake_wheel(version: str) -> bytes:
@@ -143,13 +146,16 @@ def test_busy_installation_is_refused_before_anything_is_removed(fake_site, monk
         return original(self, target)
 
     monkeypatch.setattr(selfupdate.Path, "rename", refuse)
-    monkeypatch.setattr(selfupdate, "holders", lambda: [{"pid": 4242, "name": "xbsl-lsp.exe"}])
+    monkeypatch.setattr(selfupdate, "holders", lambda: [
+        {"pid": 4242, "ppid": 1, "name": "xbsl-lsp.exe", "kind": selfupdate.SERVER,
+         "command_line": "xbsl-lsp --project-root app"},
+    ])
 
     with pytest.raises(selfupdate.SelfUpdateError) as error:
         selfupdate.self_update(log=lambda *a: None)
 
     message = str(error.value)
-    assert "xbsl-lsp.exe" in message and "4242" in message
+    assert "pid 4242 – xbsl-lsp --project-root app" in message
     assert "--stop-holders" in message and "НЕ ТРОНУТА" in message
     # Главное: старая установка на месте и работоспособна.
     assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.1"'
@@ -162,7 +168,7 @@ def test_unknown_holders_still_produce_an_honest_message(fake_site, monkeypatch)
     monkeypatch.setattr(selfupdate.Path, "rename",
                         lambda self, target: (_ for _ in ()).throw(OSError("занято")))
     monkeypatch.setattr(selfupdate, "holders", list)
-    with pytest.raises(selfupdate.SelfUpdateError, match="определить держателей не удалось"):
+    with pytest.raises(selfupdate.SelfUpdateError, match="Определить держателей не удалось"):
         selfupdate.self_update(log=lambda *a: None)
 
 
@@ -301,6 +307,282 @@ def test_family_pids_survives_a_parent_loop():
         (51, 50, "cmd.exe", "cmd"),  # кольцо 50 <-> 51
     ]
     assert selfupdate._family_pids(rows) == {own, 50, 51}
+
+
+# -- servers and commands --------------------------------------------------------------------
+#
+# `--stop-holders` of one session used to end whatever of the package ran on the machine, the
+# commands of other sessions included, and such a command died with no verdict. The update has
+# to end the servers - they outlive it on the old code anyway - and nothing else unless asked
+# by name. A running lint keeps the compiled modules loaded, so it can refuse the update; the
+# refusal then names it and says to wait.
+
+SERVER, COMMAND = selfupdate.SERVER, selfupdate.COMMAND
+
+
+@pytest.mark.parametrize(
+    ("name", "line", "kind"),
+    [
+        # servers by program, by the first argument of the command line, by module
+        ("xbsl-lsp.exe", "xbsl-lsp --project-root app", SERVER),
+        ("python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-lsp.exe", SERVER),
+        ("xbsllint-web.exe", r"C:\venv\Scripts\xbsllint-web.exe --port 8000", SERVER),
+        ("xbsl.exe", r'"C:\venv\Scripts\xbsl.exe" lsp', SERVER),
+        ("xbsl.exe", "xbsl mcp", SERVER),
+        ("python3", "/usr/bin/python3 /venv/bin/xbsl web --port 8000", SERVER),
+        ("python.exe", r"C:\Python314\python.exe -P -m xbsl.mcp_server", SERVER),
+        ("python3", "/usr/bin/python3 -m xbsl lsp", SERVER),
+        ("python3", "/usr/bin/python3 -m xbsllint.lsp", SERVER),
+        ("xbsl-mcp.exe", r"C:\venv\Scripts\xbsl-mcp.exe --no-supervisor", SERVER),
+        ("python3", "/usr/bin/python3 -m xbsl.mcp_supervisor --no-supervisor", SERVER),
+        ("xbsl-lsp", "/usr/bin/python3 /home/u/.local/bin/xbsl-lsp", SERVER),
+        # a path with spaces, its quotes lost by the listing
+        ("python.exe", r"C:\Program Files\Python\python.exe -m xbsl.lsp", SERVER),
+        # commands: a lint, a scaffolding call, another self-update
+        ("xbsl.exe", r'"C:\venv\Scripts\xbsl.exe" src --format json', COMMAND),
+        ("python.exe", r'"C:\venv\Scripts\python.exe" "C:\venv\Scripts\xbsl.exe" src', COMMAND),
+        ("xbsllint.exe", r"C:\venv\Scripts\xbsllint.exe new-object Catalog Goods", COMMAND),
+        ("python3", "/usr/bin/python3 -m xbsl self-update", COMMAND),
+        ("python.exe", "python.exe -Pm xbsl.cli translate src", COMMAND),
+        ("python3", "/usr/bin/python3 -m xbsl.extract --dist /opt/element", COMMAND),
+        # the first argument has to be the subcommand itself, as `xbsl` dispatches it
+        ("xbsl.exe", "xbsl --format json lsp", COMMAND),
+        ("xbsl.exe", "xbsl LSP", COMMAND),
+        ("xbsl.exe", "", COMMAND),
+        # the supervisor holds nothing of the package and keeps the session of its client
+        ("xbsl-mcp.exe", r"C:\venv\Scripts\xbsl-mcp.exe", ""),
+        ("python.exe", r"C:\venv\Scripts\python.exe -m xbsl.mcp_supervisor", ""),
+        ("xbsl-mcp-supervisor.exe", "xbsl-mcp-supervisor", ""),
+        # not ours, whatever the arguments mention
+        ("claude.exe", "claude.exe --baseline /repo/.xbsllint-baseline", ""),
+        ("python.exe", "python.exe -m http.server", ""),
+        ("python.exe", 'python.exe -c "import xbsl.lsp" lsp', ""),
+        ("python.exe", r"python.exe tools\run.py C:\venv\Scripts\xbsl-lsp.exe", ""),
+        ("Code.exe", "Code.exe --folder-uri file:///d:/repo/xbsl", ""),
+    ],
+)
+def test_a_server_is_told_from_a_command_by_its_command_line(name, line, kind):
+    assert selfupdate.holder_kind(name, line) == kind
+    assert selfupdate.is_holder(name, line) is bool(kind)
+
+
+def _listing(monkeypatch):
+    """A machine with an agent's MCP session and an editor, and a lint of another session.
+
+    The supervisor keeps the session and runs the worker; the LSP server and the lint are
+    console scripts, each a launcher with the interpreter it starts.
+    """
+    monkeypatch.setattr(
+        selfupdate, "_process_listing",
+        lambda: [
+            (10, 1, "claude.exe", "claude.exe"),
+            (11, 10, "python.exe", r"C:\Python314\python.exe -m xbsl.mcp_supervisor"),
+            (12, 11, "python.exe", r"C:\Python314\python.exe -P -m xbsl.mcp_server"),
+            (20, 1, "Code.exe", "Code.exe"),
+            (21, 20, "xbsl-lsp.exe", r"C:\venv\Scripts\xbsl-lsp.exe"),
+            (22, 21, "python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-lsp.exe"),
+            (30, 1, "pwsh.exe", "pwsh.exe"),
+            (31, 30, "xbsl.exe", r'"C:\venv\Scripts\xbsl.exe" src --format json'),
+            (32, 31, "python.exe",
+             r'C:\venv\Scripts\python.exe "C:\venv\Scripts\xbsl.exe" src --format json'),
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "psutil", None)
+
+
+def test_holders_carry_the_kind_and_the_command_line(monkeypatch):
+    _listing(monkeypatch)
+    found = {item["pid"]: item for item in selfupdate.holders()}
+    assert {pid: item["kind"] for pid, item in found.items()} == {
+        12: SERVER, 21: SERVER, 22: SERVER, 31: COMMAND, 32: COMMAND,
+    }
+    assert found[31]["command_line"] == r'"C:\venv\Scripts\xbsl.exe" src --format json'
+    assert found[32]["ppid"] == 31
+
+
+def _ended(monkeypatch):
+    """Record the pids the update asks to stop, stopping nothing."""
+    ended: list[int] = []
+    monkeypatch.setattr(selfupdate, "_end", lambda pid: ended.append(pid) or "")
+    return ended
+
+
+def test_stop_holders_ends_the_servers_and_leaves_the_commands_running(fake_site, monkeypatch):
+    _stub_download(monkeypatch)
+    _listing(monkeypatch)
+    ended = _ended(monkeypatch)
+    said: list[str] = []
+
+    old, new = selfupdate.self_update(log=said.append, stop=selfupdate.STOP_SERVERS)
+
+    assert new == "9.9.9"
+    assert sorted(ended) == [12, 21, 22]  # the supervisor stays: the session is its point
+    text = "\n".join(said)
+    assert r"остановлен сервер: pid 12 – C:\Python314\python.exe -P -m xbsl.mcp_server" in text
+    assert r"остановлен сервер: pid 21 – C:\venv\Scripts\xbsl-lsp.exe" in text
+    assert "pid 22" not in text  # a part of the launch of pid 21
+    assert (r'не трогаю идущую команду: pid 31 – "C:\venv\Scripts\xbsl.exe" src --format json'
+            in text)
+    assert "pid 32" not in text
+
+
+def test_a_command_holding_the_files_ends_in_a_refusal_that_names_it(fake_site, monkeypatch):
+    """A lint keeps the compiled lexer loaded: the rename of the package fails under it."""
+    _stub_download(monkeypatch)
+    _listing(monkeypatch)
+    ended = _ended(monkeypatch)
+    original = selfupdate.Path.rename
+
+    def refuse(self, target):
+        if self.name == "xbsl":
+            raise PermissionError(13, "The process cannot access the file")
+        return original(self, target)
+
+    monkeypatch.setattr(selfupdate.Path, "rename", refuse)
+
+    with pytest.raises(selfupdate.SelfUpdateError) as error:
+        selfupdate.self_update(log=lambda *a: None, stop=selfupdate.STOP_SERVERS)
+
+    message = str(error.value)
+    assert r'Идут команды: pid 31 – "C:\venv\Scripts\xbsl.exe" src --format json' in message
+    assert "дождитесь конца команд и повторите" in message and "--stop-holders=all" in message
+    assert "НЕ ТРОНУТА" in message
+    assert 31 not in ended and 32 not in ended  # the lint lives on
+    assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.1"'
+    assert not list(fake_site.glob("*" + selfupdate._BACKUP_SUFFIX))
+
+
+def test_stop_holders_all_ends_the_commands_too(fake_site, monkeypatch):
+    _stub_download(monkeypatch)
+    _listing(monkeypatch)
+    ended = _ended(monkeypatch)
+    said: list[str] = []
+
+    selfupdate.self_update(log=said.append, stop=selfupdate.STOP_ALL)
+
+    assert sorted(ended) == [12, 21, 22, 31, 32]
+    text = "\n".join(said)
+    assert (r'остановлена команда: pid 31 – "C:\venv\Scripts\xbsl.exe" src --format json'
+            in text)
+    assert "не трогаю" not in text
+
+
+def test_without_the_flag_nothing_is_stopped(fake_site, monkeypatch):
+    _stub_download(monkeypatch)
+    _listing(monkeypatch)
+    ended = _ended(monkeypatch)
+    selfupdate.self_update(log=lambda *a: None)
+    assert ended == []
+
+
+def test_stop_holders_tells_a_process_it_could_not_end(monkeypatch):
+    """A process gone already counts as ended; a refusal is named and journals no stop."""
+    ended: list[int] = []
+
+    def fake_run(command, **kwargs):
+        pid = int(command[command.index("/PID") + 1])
+        ended.append(pid)
+        return subprocess.CompletedProcess(command, {22: 128, 31: 1}.get(pid, 0))
+
+    def fake_kill(pid, sig):
+        ended.append(pid)
+        if pid == 22:
+            raise ProcessLookupError(pid)
+        if pid == 31:
+            raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(selfupdate.subprocess, "run", fake_run)
+    monkeypatch.setattr(selfupdate.os, "kill", fake_kill)
+    said: list[str] = []
+    processes = [
+        {"pid": 21, "ppid": 1, "name": "xbsl-lsp.exe", "kind": SERVER, "command_line": "xbsl-lsp"},
+        {"pid": 22, "ppid": 21, "name": "python.exe", "kind": SERVER,
+         "command_line": "python xbsl-lsp"},
+        {"pid": 31, "ppid": 1, "name": "xbsl.exe", "kind": COMMAND, "command_line": "xbsl src"},
+    ]
+    alive = selfupdate.stop_holders(processes, said.append, reason="self-update 1.0.0 -> 1.1.0")
+
+    assert ended == [21, 22, 31]
+    assert [item["pid"] for item in alive] == [31]
+    assert said[0] == "остановлен сервер: pid 21 – xbsl-lsp"
+    assert said[1].startswith("не удалось остановить pid 31 – xbsl src: ")
+    assert len(said) == 2
+    assert [event["target"] for event in mcpjournal.read()] == [21, 22]
+
+
+def test_refusals_advise_by_the_kind_of_holder():
+    server = {"pid": 21, "ppid": 1, "kind": SERVER, "command_line": "xbsl-lsp"}
+    command = {"pid": 31, "ppid": 1, "kind": COMMAND, "command_line": "xbsl src"}
+    both = selfupdate._holders_message([server, command])
+    assert both.index("Держат установку серверы: pid 21 – xbsl-lsp") < both.index(
+        "либо запустите с --stop-holders") < both.index("Идут команды: pid 31") < both.index(
+        "дождитесь конца команд")
+    # asked to stop the servers and they are still listed: closing them by hand is what is left
+    assert "Закройте их и повторите. Идут команды" in selfupdate._holders_message(
+        [server, command], selfupdate.STOP_SERVERS)
+    assert selfupdate._holders_message([command], selfupdate.STOP_ALL).endswith(
+        "Закройте их и повторите")
+    long = {**command, "command_line": "xbsl " + "x" * 400}
+    assert selfupdate._holders_message([long]).count("x") < 200
+
+
+def test_a_psutil_listing_keeps_a_path_with_spaces_whole(monkeypatch):
+    """psutil gives the arguments as a list; joined with bare spaces, the script was lost."""
+    process = types.SimpleNamespace(info={
+        "pid": 41, "ppid": 1, "name": "python.exe",
+        "cmdline": [r"C:\Program Files\Python\python.exe",
+                    r"C:\Program Files\Python\Scripts\xbsl-lsp.exe"],
+    })
+    monkeypatch.setitem(sys.modules, "psutil",
+                        types.SimpleNamespace(process_iter=lambda attrs: [process]))
+    assert [(item["pid"], item["kind"]) for item in selfupdate.holders()] == [(41, SERVER)]
+
+
+@pytest.mark.parametrize(
+    ("argv", "stop"),
+    [
+        ([], ""),
+        (["--stop-holders"], selfupdate.STOP_SERVERS),
+        (["--stop-holders=servers"], selfupdate.STOP_SERVERS),
+        (["--stop-holders=all"], selfupdate.STOP_ALL),
+        (["--stop-holders", "all"], selfupdate.STOP_ALL),
+        (["--stop-holders", "--version", "9.9.9"], selfupdate.STOP_SERVERS),
+    ],
+)
+def test_the_bare_flag_stops_the_servers_and_all_has_to_be_named(monkeypatch, capsys, argv, stop):
+    """A running command of another session is ended only when the call says so by name."""
+    asked = {}
+
+    def update(version=None, log=print, stop=""):
+        asked["stop"] = stop
+        return "0.5.0", "0.5.0"
+
+    monkeypatch.setattr(selfupdate, "self_update", update)
+    assert cli.main(["self-update", *argv]) == 0
+    assert asked["stop"] == stop
+
+
+def test_an_unknown_stop_mode_is_refused_by_the_parser(capsys):
+    with pytest.raises(SystemExit) as refusal:
+        cli.main(["self-update", "--stop-holders=everything"])
+    assert refusal.value.code == 2
+    assert "everything" in capsys.readouterr().err
+
+
+def test_messages_of_the_holders_are_in_english_too(fake_site, monkeypatch):
+    _stub_download(monkeypatch)
+    _listing(monkeypatch)
+    _ended(monkeypatch)
+    i18n.set_lang("en")
+    said: list[str] = []
+    selfupdate.self_update(log=said.append, stop=selfupdate.STOP_SERVERS)
+    message = selfupdate._holders_message(selfupdate.holders())
+    # the lines about processes only: the line naming the site quotes a path of the machine
+    text = "\n".join(line for line in said if "pid" in line) + "\n" + message
+    assert "stopped the server: pid 12" in text
+    assert "leaving a running command alone: pid 31" in text
+    assert "Servers holding the installation" in text and "wait for the commands to finish" in text
+    assert not any("а" <= char <= "я" for char in text.lower())
 
 
 # -- корневые нативные модули mypyc ---------------------------------------------------------
@@ -566,7 +848,7 @@ def test_interpreter_tag_is_the_wheel_spelling():
 def test_stop_holders_reports_what_it_ended(monkeypatch):
     calls = []
     monkeypatch.setattr(selfupdate.subprocess, "run",
-                        lambda *a, **k: calls.append(a[0]) or None)
+                        lambda *a, **k: calls.append(a[0]) or subprocess.CompletedProcess(a[0], 0))
     monkeypatch.setattr(selfupdate.os, "kill", lambda pid, sig: calls.append(("kill", pid)))
     said = []
     alive = selfupdate.stop_holders([{"pid": 11, "name": "xbsl-lsp.exe"}], said.append)
@@ -585,7 +867,7 @@ def test_every_message_is_translated(monkeypatch, fake_site, capsys):
     try:
         message = selfupdate._holders_message([{"pid": 7, "name": "xbsl-lsp.exe"}])
         assert "holding the installation" in message and "держ" not in message
-        assert "could not tell" in selfupdate._holders_message([])
+        assert "Could not tell" in selfupdate._holders_message([])
         _stub_download(monkeypatch)
         said = []
         selfupdate.self_update(log=said.append)

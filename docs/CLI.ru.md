@@ -279,7 +279,7 @@ usage: xbsl baseline add [-h] --rule ID/ГРУППА/ТИР [--reason REASON] [-
 обновить xbsl распаковкой колеса с PyPI
 
 ```bash
-usage: xbsl self-update [-h] [--version VERSION] [--stop-holders]
+usage: xbsl self-update [-h] [--version VERSION] [--stop-holders [{servers,all}]]
 ```
 
 **Параметры**
@@ -288,7 +288,7 @@ usage: xbsl self-update [-h] [--version VERSION] [--stop-holders]
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
 | `--version VERSION` | целевая версия (по умолчанию – последняя с PyPI) |
-| `--stop-holders` | снять процессы, держащие установку (LSP-сервер редактора, MCP-сессии), и обновиться; без флага команда только назовёт их |
+| `--stop-holders [{servers,all}]` | снять серверы, держащие установку (LSP-сервер редактора, MCP-сессии), и обновиться. Идущие команды xbsl других сессий называются по pid и не трогаются; со значением all снимаются и они, и такая команда обрывается без результата. Без флага держатели только называются |
 
 ## `xbsl mcp-log`
 
@@ -373,7 +373,8 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
-                       [--object-presentation OBJECT_PRESENTATION] [--base BASE] [--dry-run]
+                       [--object-presentation OBJECT_PRESENTATION]
+                       [--record-presentation RECORD_PRESENTATION] [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -395,8 +396,9 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | способ доступа, русским или английским именем (РазрешеноВсем или PermitEveryone): у HttpСервис пишется в Разрешения.Вызов, у объектов данных – в Разрешения.ПоУмолчанию (отдельные права ставит set-access) |
 | `--routes ROUTES` | маршруты HttpСервис: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | описание отчёта (JSON: source, rows, columns, measures) |
-| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра и обработки, в раздел Интерфейс; у справочника и документа это заголовок списка, а заголовок объекта задает `--object-presentation` (без заголовка первый же линт дает naming/presentation) |
+| `--presentation PRESENTATION` | заголовок элемента: пишется туда, где его держит вид – в Представление или, у справочника, документа, регистра, набора констант и обработки, в раздел Интерфейс; у справочника, документа и регистра это заголовок списка, а заголовок объекта задает `--object-presentation`, заголовок записи регистра сведений – `--record-presentation` (без заголовка первый же линт дает naming/presentation) |
 | `--object-presentation OBJECT_PRESENTATION` | заголовок объекта в единственном числе: пишется в Интерфейс.Объект.Представление справочника, документа, плана обмена и хранилища настроек, другой вид его не принимает; вместе с `--presentation` новый объект проходит naming/presentation |
+| `--record-presentation RECORD_PRESENTATION` | заголовок записи в единственном числе: пишется в Интерфейс.Запись.Представление регистра сведений, другой вид его не принимает (у набора констант заголовок записи пишет `--presentation`); вместе с `--presentation` новый регистр проходит naming/presentation |
 | `--base BASE` | базовый тип компонента интерфейса (Группа, ФормаОбъекта&lt;Товар.Объект&gt;); только для вида КомпонентИнтерфейса |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 

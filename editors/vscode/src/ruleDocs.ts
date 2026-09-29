@@ -211,6 +211,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "code/global-unavailable"
       || r === "code/type-unavailable"
       || r === "code/constant-unavailable"
+      || r === "code/module-type-unavailable"
+      || r === "code/qualified-member-unavailable"
       || r === "code/image-binding-server-call",
     page: EXEC,
   },
