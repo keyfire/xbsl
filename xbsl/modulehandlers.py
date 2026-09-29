@@ -44,6 +44,12 @@ common module: every name is wrong there. A row with `per` is declared once per 
 collection the element's description fills, and not at all when the description leaves it
 empty (PER_ITEM_PROPERTIES, per_item_split). The module of the project declares its handler in
 the project of an application alone (project_rows).
+
+Some handlers the compiler requires as well: a module that does not declare one is refused
+with "Mandatory handler X is not defined". A row marked `required` is required wherever it is
+declared, a row with `needs` makes the handlers it names required once the module declares it,
+and the access handlers are required exactly when the settings use them (required_rows,
+needs_of).
 """
 
 from __future__ import annotations
@@ -408,6 +414,65 @@ def per_item_property(row: dict) -> str | None:
     """The property of the description a row is declared once per item of, None for a row
     declared unconditionally or by a collection PER_ITEM_PROPERTIES does not know."""
     return PER_ITEM_PROPERTIES.get(str(row.get("per") or ""))
+
+
+def _is_access_handler(row: dict) -> bool:
+    """Whether the row is one of the handlers the access-control provider declares."""
+    return row["ru"] in {ACCESS_PERMISSIONS["ru"], *(item["ru"] for item in RECORD_SECURITY)}
+
+
+def required_rows(kind: str, module: str, settings: AccessSettings | None,
+                  given: frozenset[str] | None, mode: tuple[int, ...] | None,
+                  controlled: bool = False) -> tuple[dict, ...]:
+    """The handlers the compiler requires in the module `module` of an element of `kind`: a
+    module that does not declare one of them is refused ("Mandatory handler X is not defined").
+
+    Three sources. A row the data marks `required` is required wherever it is declared - the
+    handler of a command or of a scheduled job, the permissions handler of an action privilege.
+    Such a row with `per` is required once per item of its collection, so only when the
+    description fills it (`given`, see per_item_split); a description that cannot be read that
+    far requires none of them. And the access-control provider builds each handler it declares
+    with `enabled(x).required(x)` of one value: the handlers the settings use (access_slot) are
+    the ones required. Settings that cannot be read (None) require none of those. A row is
+    required only in the modes it is declared in (declared_in).
+    """
+    slot = _elements().get(kind, {}).get(module)
+    if slot is None:
+        return ()
+    rows = [row for row in slot["handlers"] if row.get("required")]
+    split = access_slot(kind, module, settings, controlled) if settings is not None else None
+    if split is not None:
+        known = {row["ru"] for row in rows}
+        rows += [row for row in split[0] if _is_access_handler(row) and row["ru"] not in known]
+    out = []
+    for row in rows:
+        prop = per_item_property(row)
+        if row.get("per") and (prop is None or given is None or prop not in given):
+            continue
+        if declared_in(row, mode):
+            out.append(row)
+    return tuple(out)
+
+
+def needs_of(kind: str, module: str) -> dict[str, tuple[dict, ...]]:
+    """{the name of a handler in either spelling: the rows it makes required along with it}
+    of the module `module` of an element of `kind` - the rows with `needs` in the data.
+
+    The provider builds such a handler with `requiredHandlers`: a module that declares one of
+    a pair has to declare the other (the link to an external navigation link and back), and a
+    probe on a server refused the first alone with "Mandatory handler X is not defined" for
+    the second.
+    """
+    slot = _elements().get(kind, {}).get(module)
+    if slot is None:
+        return {}
+    by_name = {row["ru"]: row for row in slot["handlers"]}
+    out: dict[str, tuple[dict, ...]] = {}
+    for row in slot["handlers"]:
+        needed = tuple(by_name[name] for name in row.get("needs") or () if name in by_name)
+        if needed:
+            out.update(dict.fromkeys((row["ru"], row["en"]), needed))
+    return out
 
 
 @lru_cache(maxsize=1)

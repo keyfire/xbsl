@@ -248,7 +248,11 @@ def _kinds_in_help(command: str) -> list[str]:
                       if isinstance(action, argparse._SubParsersAction))
     field_kind = next(action for action in subparsers.choices[command]._actions
                       if action.dest == "field_kind")
-    return field_kind.help.split(", ")
+    items = field_kind.help.split(", ")
+    # Every word comes with its English twin: `реквизит (attribute)`.
+    assert all(item.endswith(f" ({scaffold.FIELD_KINDS_EN[item.split(' (')[0]]})")
+               for item in items), items
+    return [item.split(" (")[0] for item in items]
 
 
 def test_the_help_names_every_kind_the_operation_takes():

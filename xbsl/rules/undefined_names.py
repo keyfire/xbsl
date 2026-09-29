@@ -21,8 +21,9 @@ Scope model (per the platform semantics):
 
 A spelling hint is the closest name of the whole scope - the module, the element, the project
 and the global names compete, and a tie goes to the nearer group. A call is offered what can be
-called, a bare name what holds a value, and a short name only a candidate one edit away (see
-_ScopeHints and _SHORT_NAME).
+called, a bare name what holds a value, a short name only a candidate one edit away, and a long
+one, when the two are barely similar, only a candidate that differs by scattered letters rather
+than by a word (see _ScopeHints, _SHORT_NAME and _TYPO_BAND).
 
 Only the ROOT of a member chain is checked (`Х` in `Х.Поле[0].Метод()`): member names need
 type inference (stage 3). Qualified roots (`Подсистема::Имя`) and method references are
@@ -1028,7 +1029,8 @@ def _closest_in(name: str, table: _Table, one_edit: bool = False) -> tuple[float
     `one_edit` takes only a candidate one edit away - a character missing, extra, changed or
     swapped with its neighbour: every character of the longer of the two but one is matched
     (see _SHORT_NAME). The check is made on each candidate, not on the winner, so a closer
-    candidate two edits away does not hide the one a single typo away.
+    candidate two edits away does not hide the one a single typo away. Without it, a candidate
+    below _TYPO_BAND has to differ the way a typo does (see _typo_shaped), checked the same way.
     """
     length = len(name)
     chars = set(name)
@@ -1063,6 +1065,8 @@ def _closest_in(name: str, table: _Table, one_edit: bool = False) -> tuple[float
             # The ratio is twice the matched characters over both lengths.
             if one_edit and round(score * (length + size) / 2) < max(length, size) - 1:
                 continue
+            if not one_edit and score < _TYPO_BAND and not _typo_shaped(matcher):
+                continue
             if best is None or (score, candidate) > best:
                 best = (score, candidate)
     return best
@@ -1073,6 +1077,33 @@ def _closest_in(name: str, table: _Table, one_edit: bool = False) -> tuple[float
 #: and the function `Cos` score exactly 0.75, `Header` and `Handler` 0.77. Over the whole scope a
 #: short word almost always has such a neighbour, while a typo in a short name is a single edit.
 _SHORT_NAME = 7
+
+#: The ratio below which a longer name is offered only a candidate that differs from it the way a
+#: typo does (see _typo_shaped). One or two edits keep a name of eight letters or more at 0.75 or
+#: over, and the only such typos under 0.8 replace or swap two letters of a name of eight or nine.
+#: Anything else that scores there differs by a word: over the distribution's own modules
+#: `Condition` was offered `ConditionString` at exactly the cutoff, `DateTimeBegin` `DateTime`,
+#: `Integration` `IntegrationProcess` - 336 hints of 1115, while none of 1930 planted typos of one
+#: or two edits needed such a candidate.
+_TYPO_BAND = 0.8
+
+#: The longest run of characters a typo leaves unmatched on either side (see _typo_shaped).
+_TYPO_GAP = 2
+
+
+def _typo_shaped(matcher: difflib.SequenceMatcher) -> bool:
+    """Do the two strings of the matcher differ by scattered letters rather than by a word?
+
+    The difference is what lies between the matching blocks. One or two edits leave runs of one
+    or two characters on either side; a word added, dropped or swapped leaves a run of its
+    length. The last block of difflib is empty and closes the tail.
+    """
+    a = b = 0
+    for block in matcher.get_matching_blocks():
+        if block.a - a > _TYPO_GAP or block.b - b > _TYPO_GAP:
+            return False
+        a, b = block.a + block.size, block.b + block.size
+    return True
 
 
 def _stdlib_catalog() -> dict:

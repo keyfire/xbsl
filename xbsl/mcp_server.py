@@ -1221,6 +1221,9 @@ def meta_add_field(
     DEFAULT-language text - the text of a translation is written by meta_set_localization,
     which takes the values by language, and a call aimed at a translation file itself is
     refused naming it).
+    Every kind has an English name too, for a project written in English: attribute, dimension,
+    resource, value, parameter, field, constant, property, event, tabular-part, operation,
+    index, query-parameter, string, template (case and hyphens do not matter).
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected. The item joins the end of the section of its kind; a
     section the file lacks is created at the end of the file (a component's `Properties` in
@@ -1300,7 +1303,8 @@ def meta_set_field_property(
 ) -> dict:
     """Set properties on a section item that already exists (a constant, an attribute, a
     dimension, an enumeration value...): an existing property is replaced in place, a new
-    one is appended to the item.
+    one is appended to the item. field_kind takes the words of meta_add_field, Russian or
+    English.
 
     The metadata counterpart of meta_set_component_property, which serves interface
     components only. Names are checked against the item's metamodel class - a built-in
@@ -1608,6 +1612,9 @@ def meta_set_access(
     for individual rights, e.g. {"Чтение": "РазрешеноВсем"} (custom rights of a ПравоНаЭлемент
     are written as "ПравоНаX.ИмяПрава"). Methods: РазрешеноВсем, РазрешеноАутентифицированным,
     РазрешеноАдминистраторам, РазрешенияВычисляются, РазрешенияВычисляютсяДляКаждогоОбъекта.
+    Rights and methods are taken in English as well, the way an English yaml spells them -
+    {"Read": "PermitEveryone"}, default="PermitAuthenticated" - and written in the language of
+    the file either way.
     calc_by sets the calculation basis - mandatory when permissions are calculated per object
     (per-object/RLS rights).
 

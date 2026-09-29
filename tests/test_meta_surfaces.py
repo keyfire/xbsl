@@ -744,6 +744,31 @@ def test_cli_set_access(capsys, tmp_path):
     assert code == 2 and "ПРАВО=СПОСОБ" in err["error"]
 
 
+@pytest.mark.needs_data  # the English access words are the platform's term pairs
+def test_cli_takes_the_english_words(capsys, tmp_path):
+    _run_cli(capsys, "new-object", str(tmp_path), "Справочник", "Задачи")
+    code, _out = _run_cli(capsys, "add-field", str(tmp_path / "Задачи.yaml"), "attribute",
+                          "Срок", "--type", "Дата")
+    assert code == 0
+    code, _out = _run_cli(capsys, "set-access", str(tmp_path), "--name", "Задачи",
+                          "--default", "PermitAuthenticated", "--permission", "Read=PermitEveryone")
+    assert code == 0
+    parsed = _yaml.safe_load((tmp_path / "Задачи.yaml").read_text(encoding="utf-8"))
+    assert [a["Имя"] for a in parsed["Реквизиты"]] == ["Срок"]
+    assert parsed["КонтрольДоступа"]["Разрешения"] == {
+        "ПоУмолчанию": "РазрешеноАутентифицированным", "Чтение": "РазрешеноВсем"}
+
+
+def test_the_field_kind_surfaces_name_the_english_words(mcp_module):
+    """The MCP description lists the English words by hand, and the CLI help builds them from
+    the table: both have to name every word the operation takes."""
+    doc = " ".join((mcp_module.meta_add_field.__doc__ or "").split())
+    for english in scaffold.FIELD_KINDS_EN.values():
+        assert re.search(rf"\b{re.escape(english)}\b", doc), english
+    help_line = scaffold.field_kinds_named(scaffold.ADD_FIELD_KINDS)
+    assert all(f"{ru} ({en})" in help_line for ru, en in scaffold.FIELD_KINDS_EN.items())
+
+
 @pytest.mark.needs_data  # linting the written Проект.xbsl tokenizes it - needs language.json
 def test_mcp_meta_add_dependency(mcp_module, tmp_path):
     mcp_module.meta_new_project(str(tmp_path), "vendor", "Приложение")

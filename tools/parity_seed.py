@@ -2496,6 +2496,63 @@ _POINT_RU = """\
 _POINT_TOKENS = {"Точка": "Point", "Абсцисса": "Abscissa", "Проверить": "Check"}
 
 
+#: A register that names a contract under the options of its record type - `{entry}` is the
+#: contract entry. A register implements type contracts only.
+_REGISTER_CONTRACT_RU = _REGISTER_RU + """\
+НастройкиТипов:
+    РегистрСведений.Запись:
+        Контракты:
+            - {entry}
+"""
+_REGISTER_CONTRACT_EN = """\
+ElementKind: InformationRegister
+Id: 1d1f5c60-0000-4000-8000-000000000f01
+Name: Prices
+VisibilityScope: InProject
+TypeOptions:
+    InformationRegister.Record:
+        Contracts:
+            - {entry}
+"""
+#: A type contract a register may implement.
+_PRICED_RU = """\
+ВидЭлемента: КонтрактТипа
+Ид: 1d1f5c60-0000-4000-8000-000000000fe1
+Имя: Оцениваемое
+ОбластьВидимости: ВПроекте
+Окружение: Сервер
+"""
+_PRICED_EN = """\
+ElementKind: TypeContract
+Id: 1d1f5c60-0000-4000-8000-000000000fe1
+Name: Priced
+VisibilityScope: InProject
+Environment: Server
+"""
+#: A report whose query parameters stand under `{key}`.
+_SUMMARY_REPORT_RU = """\
+ВидЭлемента: Отчет
+Ид: 1d1f5c60-0000-4000-8000-000000000fe2
+Имя: СводкаЗаявок
+ОбластьВидимости: ВПроекте
+{key}:
+    -
+        Имя: ПериодСводки
+        Тип: Дата
+"""
+_SUMMARY_REPORT_EN = """\
+ElementKind: Report
+Id: 1d1f5c60-0000-4000-8000-000000000fe2
+Name: ApplicationSummary
+VisibilityScope: InProject
+{key}:
+    -
+        Name: SummaryPeriod
+        Type: Date
+"""
+_SUMMARY_TOKENS = {"СводкаЗаявок": "ApplicationSummary", "ПериодСводки": "SummaryPeriod"}
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -6144,6 +6201,92 @@ SEEDS: list[Seed] = [
         needs_section="element_module_handlers",
     ),
     Seed(
+        rule="code/mandatory-handler-missing",
+        expect=FINDING,
+        note="the module of a scheduled job without its handler - the compiler requires it",
+        files={"ОчисткаСкладов.yaml": _OVERRIDE_JOB_RU,
+               "ОчисткаСкладов.xbsl": "метод Очистить()\n;\n"},
+        english={"StockCleanup.yaml": _OVERRIDE_JOB_EN,
+                 "StockCleanup.xbsl": "method Clean()\n;\n"},
+        tokens={"ОчисткаСкладов": "StockCleanup", "Очистить": "Clean"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/mandatory-handler-missing",
+        expect=CLEAN,
+        note="the same module with the handler - the English tree spells it the platform's way",
+        files={"ОчисткаСкладов.yaml": _OVERRIDE_JOB_RU,
+               "ОчисткаСкладов.xbsl": "@Обработчик\nметод Обработчик()\n;\n"},
+        english={"StockCleanup.yaml": _OVERRIDE_JOB_EN,
+                 "StockCleanup.xbsl": "@Handler\nmethod Handler()\n;\n"},
+        tokens={"ОчисткаСкладов": "StockCleanup"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/mandatory-handler-missing",
+        expect=FINDING,
+        note="a catalog computing the permissions of each object whose module has the "
+             "permissions handler alone - the record-level one is required by the settings",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_ACCESS_RU,
+               "Склады.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_ACCESS_EN,
+                 "Stock.xbsl": "@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n"},
+        tokens={"Склады": "Stock"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/mandatory-handler-missing",
+        expect=CLEAN,
+        note="the same catalog declaring both access handlers",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_ACCESS_RU,
+               "Склады.xbsl": "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n;\n\n"
+                              "@Обработчик\nметод ВычислитьРазрешенияДоступаДляОбъектов()\n;\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_ACCESS_EN,
+                 "Stock.xbsl": "@Handler\nmethod ComputeAccessPermissions(): Array<AccessPermission>\n;\n\n"
+                               "@Handler\nmethod ComputeAccessPermissionsForObjects()\n;\n"},
+        tokens={"Склады": "Stock"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="code/mandatory-handler-missing",
+        expect=FINDING,
+        note="a document created on basis of another one with no create-on-basis handler in its "
+             "object module",
+        files={"Накладные.yaml": _OVERRIDE_DOCUMENT_BASIS_RU,
+               "Накладные.Объект.xbsl": "метод Заполнить()\n;\n"},
+        english={"Invoices.yaml": _OVERRIDE_DOCUMENT_BASIS_EN,
+                 "Invoices.Object.xbsl": "method Fill()\n;\n"},
+        tokens={"Накладные": "Invoices", "Заполнить": "Fill"},
+        needs_section="element_module_handlers",
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by",
+        expect=FINDING,
+        note="a catalog computing the permissions of each object with no attributes to compute "
+             "them by",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_ACCESS_RU},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_ACCESS_EN},
+        tokens={"Склады": "Stock"},
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by",
+        expect=CLEAN,
+        note="the same catalog listing the attribute the permissions are computed by",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_ACCESS_RU + "    РасчетРазрешенийПо: [Код]\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_ACCESS_EN + "    ComputePermissionsBy: [Code]\n"},
+        tokens={"Склады": "Stock"},
+    ),
+    Seed(
+        rule="yaml/compute-permissions-by",
+        expect=FINDING,
+        note="the attributes listed while no permission is computed for each object",
+        files={"Склады.yaml": _OVERRIDE_CATALOG_RU + "КонтрольДоступа:\n"
+               "    РасчетРазрешенийПо: [Код]\n    Разрешения:\n        Чтение: РазрешенияВычисляются\n"},
+        english={"Stock.yaml": _OVERRIDE_CATALOG_EN + "AccessControl:\n"
+                 "    ComputePermissionsBy: [Code]\n    Permissions:\n        Read: PermissionsComputed\n"},
+        tokens={"Склады": "Stock"},
+    ),
+    Seed(
         rule="code/local-method-cross-component",
         expect=FINDING,
         note="a component method at the default visibility called through an instance from another component",
@@ -8076,6 +8219,92 @@ SEEDS: list[Seed] = [
                                   "ОбластьВидимости: ВПроекте\nОкружение: Сервер\nСвойства:\n"
                                   "    -\n        Имя: Пометка\n        Тип: Строка|Число\n"},
         tokens={"Отмечаемое": "Markable", "Пометка": "Remark"},
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=FINDING,
+        note="a write parameter of a single type without the empty value - the composition "
+             "must contain it anyway",
+        files={"Заявки.yaml": _CATALOG_RU + "ПараметрыЗаписи:\n    -\n        Имя: Пометка\n"
+                                            "        Тип: Булево\n"},
+        english={"Applications.yaml": _CATALOG_EN + "WriteParameters:\n    -\n        Name: Remark\n"
+                                                    "        Type: Boolean\n"},
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/union-needs-nullable",
+        expect=CLEAN,
+        note="the same write parameter with the empty value compiles",
+        files={"Заявки.yaml": _CATALOG_RU + "ПараметрыЗаписи:\n    -\n        Имя: Пометка\n"
+                                            "        Тип: Булево?\n"},
+        english={"Applications.yaml": _CATALOG_EN + "WriteParameters:\n    -\n        Name: Remark\n"
+                                                    "        Type: Boolean?\n"},
+        tokens=_CONTRACT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/register-entity-contract",
+        expect=FINDING,
+        note="a register naming the object type of an entity contract - a type contract is "
+             "expected",
+        files={
+            "Цены.yaml": _REGISTER_CONTRACT_RU.format(entry="КонтрактЗаявки.Объект"),
+            "КонтрактЗаявки.yaml": _CONTRACT_RU.format(
+                prop="        Имя: Пометка\n        Тип: Строка\n"),
+        },
+        english={
+            "Prices.yaml": _REGISTER_CONTRACT_EN.format(entry="ApplicationContract.Object"),
+            "ApplicationContract.yaml": _CONTRACT_EN.format(
+                prop="        Name: Remark\n        Type: String\n"),
+        },
+        tokens={**_CONTRACT_TOKENS, "Цены": "Prices"},
+    ),
+    Seed(
+        rule="yaml/register-entity-contract",
+        expect=CLEAN,
+        note="a register implementing a type contract compiles",
+        files={
+            "Цены.yaml": _REGISTER_CONTRACT_RU.format(entry="Оцениваемое"),
+            "Оцениваемое.yaml": _PRICED_RU,
+        },
+        english={
+            "Prices.yaml": _REGISTER_CONTRACT_EN.format(entry="Priced"),
+            "Priced.yaml": _PRICED_EN,
+        },
+        tokens={"Цены": "Prices", "Оцениваемое": "Priced"},
+    ),
+    Seed(
+        rule="yaml/report-parameters-alias",
+        expect=FINDING,
+        note="the query parameters of a report under the alias the server rejects",
+        files={"СводкаЗаявок.yaml": _SUMMARY_REPORT_RU.format(key="Параметры")},
+        english={"ApplicationSummary.yaml": _SUMMARY_REPORT_EN.format(key="Parameters")},
+        tokens=_SUMMARY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/report-parameters-alias",
+        expect=CLEAN,
+        note="the same parameters under their own key compile",
+        files={"СводкаЗаявок.yaml": _SUMMARY_REPORT_RU.format(key="ПараметрыЗапроса")},
+        english={"ApplicationSummary.yaml": _SUMMARY_REPORT_EN.format(key="QueryParameters")},
+        tokens=_SUMMARY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/enum-needs-nullable",
+        expect=CLEAN,
+        note="an enumeration in a write parameter is left to yaml/union-needs-nullable, which "
+             "reports it with the refusal of the section",
+        files={
+            "Состояния.yaml": _ENUM_RU,
+            "Заявки.yaml": _CATALOG_RU + "ПараметрыЗаписи:\n    -\n        Имя: Состояние\n"
+                                         "        Тип: Состояния\n",
+        },
+        english={
+            "States.yaml": _ENUM_EN,
+            "Applications.yaml": _CATALOG_EN + "WriteParameters:\n    -\n        Name: State\n"
+                                               "        Type: States\n",
+        },
+        tokens={"Заявки": "Applications", "Состояния": "States", "Открыт": "Open",
+                "Состояние": "State"},
     ),
 ]
 

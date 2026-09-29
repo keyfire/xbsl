@@ -796,9 +796,10 @@ def _scaffold_parser() -> argparse.ArgumentParser:
 
     p = command("add-field")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
-    # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose -
-    # taken from the operation itself, so the help names exactly what it takes.
-    p.add_argument("field_kind", help=", ".join(scaffold.ADD_FIELD_KINDS))
+    # field_kind help lists the literal accepted kind names - the tool's words, each with its
+    # English twin, not prose - taken from the operation itself, so the help names exactly what
+    # it takes.
+    p.add_argument("field_kind", help=scaffold.field_kinds_named(scaffold.ADD_FIELD_KINDS))
     p.add_argument("name", help=i18n.t("cli.help.scaf.af-name"))
     p.add_argument("--type", help=i18n.t("cli.help.scaf.af-type"))
     p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
@@ -808,7 +809,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
 
     p = command("set-field-property")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.sfp-yaml"))
-    p.add_argument("field_kind", help=", ".join(scaffold.SET_PROPERTY_KINDS))
+    p.add_argument("field_kind", help=scaffold.field_kinds_named(scaffold.SET_PROPERTY_KINDS))
     p.add_argument("name", help=i18n.t("cli.help.scaf.sfp-name"))
     p.add_argument("--prop", action="append", required=True, metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))

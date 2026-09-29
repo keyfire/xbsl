@@ -131,6 +131,72 @@ def test_the_dictionary_still_answers_the_reference_member_first():
     assert "return WorkOrder.Href" in out
 
 
+# --- a list of types -----------------------------------------------------------------------------
+
+
+def test_the_bases_an_object_is_created_on_are_types_and_take_the_facet_word():
+    """`CreateOnBasis` lists TYPES (the metamodel types its items `Type`), so after a dot
+    there stands a facet: `Наряды.Ссылка` is `WorkOrders.Reference`, the way the platform
+    writes it. Read as a name, the item came out as the property `WorkOrders.Link`."""
+    out, report = _yaml(
+        "ВидЭлемента: Документ\n"
+        "Имя: Наряды\n"
+        "СозданиеНаОсновании:\n"
+        "    - Наряды.Ссылка\n"
+        "    - Основное::Табличка\n",
+        name="Наряды.yaml",
+        tokens={**_TOKENS, "Основное": "Main"},
+    )
+    assert "CreateOnBasis:\n    - WorkOrders.Reference\n    - Main::Plate\n" in out
+    assert "Link" not in out
+    assert not report.missing_tokens and not report.missing_platform
+
+
+def test_the_faults_of_a_soap_service_are_types_too():
+    """The other list of types the metamodel declares: the faults of a SOAP service."""
+    out, _report = _yaml(
+        "ВидЭлемента: SoapСервис\n"
+        "Имя: Наряды\n"
+        "Ошибки:\n"
+        "    - Табличка.Ссылка\n",
+        name="Наряды.yaml",
+        tokens=_TOKENS,
+    )
+    assert "Faults:\n    - Plate.Reference\n" in out
+
+
+def test_the_contracts_of_a_type_are_types_and_their_facet_is_the_platform_s():
+    """`Contracts` of the type options lists type names (`TypeNameHolder`): the facet after the
+    dot is the platform's word even when the dictionary carries an entry for it, and the entry
+    is not counted as a surface of the project."""
+    out, report = _yaml(
+        "ВидЭлемента: Справочник\n"
+        "Имя: Наряды\n"
+        "НастройкиТипов:\n"
+        "    Справочник.Объект:\n"
+        "        Контракты:\n"
+        "            - Табличка.Объект\n",
+        name="Наряды.yaml",
+        tokens={**_TOKENS, "Объект": "Thing"},
+    )
+    assert "Contracts:\n            - Plate.Object\n" in out
+    assert report.user_done == 2  # `Наряды` and `Табличка`, not the facet
+
+
+def test_a_list_of_attribute_names_keeps_reading_its_items_as_names():
+    """A list whose items are NAMES (`InputByString` of attributes) is not a list of types: an
+    item there is a project name and follows the dictionary as before."""
+    out, _report = _yaml(
+        "ВидЭлемента: Справочник\n"
+        "Имя: Наряды\n"
+        "ВводПоСтроке:\n"
+        "    - Ярлычок\n",
+        name="Наряды.yaml",
+        tokens=_TOKENS,
+    )
+    assert "InputByString:\n    - Tag\n" in out
+
+
 # --- the qualified enumeration default -------------------------------------------------------
 
 

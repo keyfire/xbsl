@@ -54,12 +54,14 @@ xbsl project-info . --package <package>                # the objects of one pack
 
 The object kind is taken in either spelling, and `xbsl new-object --help` lists the kinds a
 project can hold. The item kind of `add-field` and `set-field-property` is a word of the tool
-itself, the same in a project of either language: `реквизит`, `табличная-часть`, `строка` and
-the rest that `xbsl add-field --help` lists. The annotations and every identifier reach the CLI
-in the spelling the platform uses for the project's development language, and the access
-methods and rights of `set-access` in their Russian names. The prose of this page names them by
-their English equivalents - `Catalog`, `Attributes`, `OnServer`, `PermitAuthenticated` - which
-is why the examples above use placeholders.
+itself: `реквизит`, `табличная-часть`, `строка` and the rest that `xbsl add-field --help` lists.
+Each has an English twin for a project written in English, the platform's own term for the same
+item - `attribute`, `tabular-part`, `string` - and case and hyphens do not matter. The access
+methods and rights of `set-access` are taken in either language too, the way a yaml file of that
+language spells them: `PermitAuthenticated` or its Russian name, `Read` or `Чтение`. The
+annotations and every identifier reach the CLI in the spelling the platform uses for the
+project's development language. The prose of this page names them by their English equivalents -
+`Catalog`, `Attributes`, `OnServer` - which is why the examples above use placeholders.
 
 `project-info` answers narrowly. `--kind`, `--subsystem` and `--package` narrow the list of objects,
 `--brief` leaves the lists out and keeps the counts, and `--project` walks only the named project -
@@ -79,10 +81,12 @@ attribute of an English object gets `Name:` and `Type:`, a missing section is cr
 pairs come from the platform data, from the metamodel's own English name of every property. So a
 name the platform spells differently depending on the class keeps its original spelling in both
 reading and writing, with nothing left to guess: the enumeration values section is `Items` there
-and `Elements` elsewhere. Values such as types and access methods are yours and are written as
-given. A boolean an MCP call passes as `true` or `false` is written in the word of the file's
-language: `Истина` and `Ложь` in a Russian file, `True` and `False` in an English one, as the
-sources of the distribution write it.
+and `Elements` elsewhere. In a value, the names of the author stay as given and the words of the
+platform follow the file: the platform types of a type expression, an access method
+(`PermitEveryone` in an English file, its Russian name in a Russian one). A boolean an MCP call
+passes as `true` or `false` is written in the word of the file's language: `Истина` and `Ложь`
+in a Russian file, `True` and `False` in an English one, as the sources of the distribution
+write it.
 
 `add-field` puts a new item at the end of the section of its kind, and creates that section only
 when the file has none. A register keeps its data in `Dimensions` and `Resources`. So an
@@ -171,12 +175,15 @@ qualified type names of a library come from parsing its archive:
 
 `set-access` edits `AccessControl.Permissions` of an object in place, and it knows what each kind
 allows. `--default` sets the `Default` right. `--permission Read=PermitEveryone` sets an
-individual one, custom rights of a `PrivilegeOnElement` included. `--calc-by` fills
+individual one, custom rights of a `PrivilegeOnElement` included. Either language is taken, and
+the file gets its own: an English object is written `Read: PermitEveryone` even when the call
+spoke Russian. `--calc-by` fills
 `ComputePermissionsBy`, which is mandatory for `PermissionsComputedForEachObject`. Wrong methods,
 rights a kind does not have, and per-object rights on a `ConstantsSet` are all rejected. The
 computed-permission handlers stay yours to write, and the `notes` field says which ones you need.
 `object-info` reports the current permissions and the kind's rights, `project-info` the `Default`
-of every object. No section there means the platform falls back to `PermitAdmins`.
+of every object, both in the Russian names whichever language the file is written in. No section
+there means the platform falls back to `PermitAdmins`.
 
 `rename-object` renames the object's files, including its forms, the generated `ListRow<Name>`
 component of a card list and the WSDL descriptions of a SOAP service client. A description keeps its
