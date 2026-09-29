@@ -658,7 +658,8 @@ def hand_over_from_old_stub() -> None:
     """
     if _running or not sys.argv or NO_SUPERVISOR in sys.argv[1:] or _engine_loaded():
         return
-    if Path(sys.argv[0]).stem.lower() in _STUB_NAMES:
+    # Either separator: the stub name is judged the same way whatever system wrote the path.
+    if Path(sys.argv[0].replace("\\", "/")).stem.lower() in _STUB_NAMES:
         sys.exit(main())
 
 
