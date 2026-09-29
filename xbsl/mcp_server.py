@@ -16,6 +16,13 @@ Registration in Claude Code:
 
 from __future__ import annotations
 
+# An `xbsl-mcp` stub made by an older release imports this module to start the bare server.
+# The supervisor takes over its process here, before anything of the engine is imported
+# (xbsl/mcp_supervisor.py); every other import of the module goes on as usual.
+from xbsl import mcp_supervisor
+
+mcp_supervisor.hand_over_from_old_stub()
+
 import argparse
 import difflib
 import functools
@@ -2949,12 +2956,15 @@ _forbid_unknown_arguments()
 def main() -> None:
     # The server takes no flags, but --help must still answer as a command: without a parser
     # `xbsl mcp --help` started the server and waited on stdin - a hang, not a help screen.
-    i18n.ArgumentParser(
+    parser = i18n.ArgumentParser(
         prog="xbsl mcp",
         description=i18n.t("cli.help.mcp.description"),
         epilog=i18n.t("cli.help.mcp.epilog"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-    ).parse_args()
+    )
+    # `xbsl-mcp --no-supervisor` reaches this parser through a stub made by an older release.
+    parser.add_argument(mcp_supervisor.NO_SUPERVISOR, action="store_true", help=argparse.SUPPRESS)
+    parser.parse_args()
     # The journal answers what "Transport closed" on the client side cannot: whether the
     # server failed, the client closed its end, or a self-update stopped the process.
     mcpjournal.record("start", version=__version__, parent=os.getppid(), executable=sys.executable)

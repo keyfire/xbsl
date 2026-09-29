@@ -695,3 +695,86 @@ def test_the_real_server_is_replaced_when_its_sources_change_under_the_same_vers
     assert restart["reason"] == "sources"
     assert [event["version"] for event in events if event["event"] == "start"] == [
         loaded["engine"]] * 2
+
+
+# -- stubs made by an older release ----------------------------------------------------------
+
+
+def test_an_old_stub_hands_over_to_the_supervisor(monkeypatch):
+    """`self-update` leaves the stubs, and an old `xbsl-mcp` stub imports the bare server."""
+    started = []
+    monkeypatch.setattr(mcp_supervisor, "_running", False)
+    monkeypatch.setattr(mcp_supervisor, "_engine_loaded", lambda: False)
+    monkeypatch.setattr(mcp_supervisor, "main", lambda argv=None: started.append(list(sys.argv)) or 0)
+    for argv0 in (r"C:\venv\Scripts\xbsl-mcp.exe", "/venv/bin/xbsllint-mcp"):
+        monkeypatch.setattr(sys, "argv", [argv0])
+        with pytest.raises(SystemExit) as stop:
+            mcp_supervisor.hand_over_from_old_stub()
+        assert stop.value.code == 0
+    assert started == [[r"C:\venv\Scripts\xbsl-mcp.exe"], ["/venv/bin/xbsllint-mcp"]]
+
+
+def test_the_bare_server_is_let_through(monkeypatch):
+    """The worker, `xbsl mcp`, `--no-supervisor` and the bare server of `main` stay the server."""
+    started = []
+    monkeypatch.setattr(mcp_supervisor, "main", lambda argv=None: started.append(1))
+    monkeypatch.setattr(mcp_supervisor, "_running", False)
+    monkeypatch.setattr(mcp_supervisor, "_engine_loaded", lambda: False)
+    for argv in (
+        ["/venv/lib/site-packages/xbsl/mcp_server.py"],
+        [r"C:\venv\Scripts\xbsl-mcp.exe", "--no-supervisor"],
+        [],
+    ):
+        monkeypatch.setattr(sys, "argv", argv)
+        mcp_supervisor.hand_over_from_old_stub()
+    # `xbsl mcp` names its server `xbsl-mcp` too, but the command line has loaded the engine.
+    monkeypatch.setattr(sys, "argv", ["xbsl-mcp"])
+    monkeypatch.setattr(mcp_supervisor, "_engine_loaded", lambda: True)
+    mcp_supervisor.hand_over_from_old_stub()
+    monkeypatch.setattr(mcp_supervisor, "_engine_loaded", lambda: False)
+    monkeypatch.setattr(mcp_supervisor, "_running", True)
+    monkeypatch.setattr(sys, "argv", [r"C:\venv\Scripts\xbsl-mcp.exe"])
+    mcp_supervisor.hand_over_from_old_stub()
+    assert started == []
+
+
+def test_an_old_stub_loads_no_engine():
+    """Live: the import an old stub makes answers as the supervisor and loads no engine."""
+    code = (
+        "import atexit, sys\n"
+        "sys.argv = ['xbsl-mcp.exe', '--help']\n"
+        "atexit.register(lambda: print('engine' if 'xbsl.engine' in sys.modules else 'no engine'))\n"
+        "from xbsl.mcp_server import main\n"
+    )
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "XBSL_LANG": "en"}
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8",
+        cwd=Path(__file__).resolve().parents[1], env=env, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert mcp_supervisor.NO_SUPERVISOR in result.stdout
+    assert result.stdout.rstrip().endswith("no engine")
+
+
+def test_the_bare_server_takes_the_flag_of_an_old_stub(mcp_module, monkeypatch):
+    """`xbsl-mcp --no-supervisor` through an old stub reaches the parser of the bare server."""
+    monkeypatch.setattr(sys, "argv", ["xbsl-mcp", mcp_supervisor.NO_SUPERVISOR])
+    monkeypatch.setattr(mcp_module.mcp, "run", lambda: None, raising=False)
+    mcp_module.main()
+
+
+def test_holders_tell_a_supervisor_from_the_old_code_under_its_name(monkeypatch):
+    """Both run as `xbsl-mcp`; only the supervisor has its worker under it."""
+    monkeypatch.setattr(
+        selfupdate, "_process_listing",
+        lambda: [
+            (21, 1, "xbsl-mcp.exe", r"C:\venv\Scripts\xbsl-mcp.exe"),
+            (22, 21, "python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsl-mcp.exe"),
+            (23, 22, "python.exe", r"C:\venv\Scripts\python.exe -P -m xbsl.mcp_server"),
+            (31, 1, "xbsllint-mcp.exe", r"C:\venv\Scripts\xbsllint-mcp.exe"),
+            (32, 31, "python.exe", r"C:\venv\Scripts\python.exe C:\venv\Scripts\xbsllint-mcp.exe"),
+            (41, 1, "python.exe", r"C:\venv\Scripts\python.exe -m xbsl.mcp_supervisor"),
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "psutil", None)
+    assert {item["pid"] for item in selfupdate.holders()} == {23, 31, 32}

@@ -89,6 +89,8 @@ _HOLDER_MODULES = ("xbsl.mcp_server", "xbsl.lsp", "xbsl.web", "xbsllint.mcp_serv
 _SUPERVISOR_EXECUTABLES = frozenset({"xbsl-mcp", "xbsllint-mcp"})
 _SUPERVISOR_MODULE = "xbsl.mcp_supervisor"
 _NO_SUPERVISOR = "--no-supervisor"
+#: The worker of the supervisor: the one process under it that loads the engine.
+_WORKER_MODULE = "xbsl.mcp_server"
 _INTERPRETERS = ("python", "python3", "pythonw", "py", "pypy", "pypy3")
 
 
@@ -414,11 +416,53 @@ def holders() -> list[dict]:
     if rows is None:
         rows = _process_listing()
     family = _family_pids(rows)
+    supervising = _above_workers(rows)
     return [
         {"pid": pid, "name": name}
         for pid, _ppid, name, line in rows
-        if pid not in family and is_holder(name, line)
+        if pid not in family and (
+            is_holder(name, line)
+            or (_started_by_stub(name, line) and pid not in supervising)
+        )
     ]
+
+
+def _started_by_stub(name: str, command_line: str) -> bool:
+    """Is this an `xbsl-mcp` started by its command stub - a supervisor, unless it runs old code?
+
+    A process started before its stub handed over to the supervisor (xbsl/mcp_server.py) runs
+    the bare server under the same name and command line. What tells the two apart is the
+    worker: only a supervisor runs one under itself.
+    """
+    stem = Path((name or "").strip()).stem.lower()
+    lowered = (command_line or "").lower()
+    if _NO_SUPERVISOR in lowered:
+        return False
+    if stem in _SUPERVISOR_EXECUTABLES:
+        return True
+    if stem not in _INTERPRETERS:
+        return False
+    return any(
+        f"{script}.exe" in lowered or lowered.endswith(script) for script in _SUPERVISOR_EXECUTABLES
+    )
+
+
+def _above_workers(rows: list[tuple[int, int, str, str]]) -> set[int]:
+    """Pids of every process that has a worker of the MCP supervisor among its descendants."""
+    parent_of = {pid: ppid for pid, ppid, _name, _line in rows}
+    above: set[int] = set()
+    for pid, _ppid, name, line in rows:
+        if Path((name or "").strip()).stem.lower() not in _INTERPRETERS:
+            continue
+        if f"-m {_WORKER_MODULE}" not in (line or "").lower():
+            continue
+        cursor = pid
+        for _hop in range(64):  # bounded walk, as in _family_pids
+            cursor = parent_of.get(cursor, 0)
+            if cursor <= 0 or cursor in above:
+                break
+            above.add(cursor)
+    return above
 
 
 def _psutil_listing() -> list[tuple[int, int, str, str]] | None:
@@ -476,7 +520,8 @@ def is_holder(name: str, command_line: str) -> bool:
     if stem in _HOLDER_EXECUTABLES:
         # `xbsl-mcp` is the supervisor of the server: it loads no engine and is not stopped -
         # the session it keeps is the point of it. Its worker (`-m xbsl.mcp_server`) and a bare
-        # server (`--no-supervisor`) hold the package and are.
+        # server (`--no-supervisor`) hold the package and are. An `xbsl-mcp` still running the
+        # bare server from before its stub handed over is told by `holders`, by the missing worker.
         if stem in _SUPERVISOR_EXECUTABLES:
             return _NO_SUPERVISOR in lowered
         return True
