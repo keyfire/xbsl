@@ -2346,6 +2346,38 @@ def test_the_kind_of_a_dispatched_block_is_translated():
     assert not report.platform_tokens
 
 
+def test_translating_the_same_source_twice_gives_the_same_text():
+    """The translation reads the composed graph of the file and must leave it as it found it.
+
+    The graph is cached on the source, and a long-lived server translates the same sources
+    again and again. When the kind of a schedule was written back into the graph, the second
+    pass found it English already, made no edit, and the schedule came out Russian.
+    """
+    text = (
+        "ВидЭлемента: ЗапланированноеЗадание\n"
+        "Ид: cf45e060-3049-480b-9cea-fb780a2a8ef9\n"
+        "Имя: Обновление\n"
+        "Расписание:\n"
+        "    -\n"
+        "        Вид: Ежедневно\n"
+        "        ЗапуститьВ: 04:00\n"
+        "ПовторыПриОшибке:\n"
+        "    Вид: Интервал\n"
+        "    Попытки: 3\n"
+    )
+    source = engine.load_text("Обновление.yaml", text)
+    passes = []
+    for _ in range(2):
+        report = FileReport(path=source.rel)
+        out = translate_yaml(source, Resolver(_dictionary({"Обновление": "Refresh"}, None)),
+                             report)
+        passes.append((out, dict(report.platform_tokens)))
+
+    assert passes[0] == passes[1]
+    assert "Kind: Daily" in passes[1][0] and "Kind: Interval" in passes[1][0]
+    assert source.text == text
+
+
 def test_a_method_name_collision_is_reported_by_the_project_pass(tmp_path: Path):
     """Two methods of one module under one English name is a module the compiler refuses.
 

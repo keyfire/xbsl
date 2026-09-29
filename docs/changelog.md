@@ -66,6 +66,9 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`xbsl extract` no longer pairs a name of an element model with its neighbour.** Such a class
   writes the Russian name first, and this node of an exchange plan read as `ReceivedNumber`; a dozen
   words of the compiler dictionary were wrong as well. Run `xbsl extract --dist ... --only terms`.
+- **A second translation of the same file no longer leaves the schedule kind Russian.** The
+  translator wrote the English kind back into the parsed file kept with the source, so the next
+  pass in the same process found nothing to change. It now leaves the parsed file as it was.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 

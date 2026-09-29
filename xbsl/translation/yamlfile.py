@@ -620,7 +620,12 @@ def _walk_object(root, kind: str, resolver, report, edits, *, localized_strings:
 def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner: str = "",
                        namespace: str = "",
                        localized_strings: bool = False, scope: str = "",
-                       field_kind: str = "") -> None:
+                       field_kind: str = "", dispatch_key: str = "") -> None:
+    """Walk one mapping of the metamodel class `cls`.
+
+    `dispatch_key` names the key the mapping was dispatched to `cls` by, when it was: its value
+    is spelled by that class (see _dispatch_scalar) and not read again as an ordinary value.
+    """
     # The node's own `Type`: what a default value standing next to it is judged against.
     sibling_type = _mapping_value(node, "Тип") or _mapping_value(node, "Type") or ""
     for knode, vnode in node.value:
@@ -633,6 +638,10 @@ def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner
             canonical = metamodel.canonical_key(kind, key) if kind else key
             record = props.get(canonical)
             key = canonical
+        # The value this mapping was dispatched by, spelled by the class it chose. The key is
+        # not always a property of that class, so this comes before either branch below.
+        spelled = (bool(dispatch_key) and key == dispatch_key
+                   and _dispatch_scalar(vnode, cls, edits))
         if record is not None:
             english = record.get("en")
             if english and english != knode.value:
@@ -643,13 +652,15 @@ def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner
             if localized_strings and key in ("Строки", "Шаблоны"):
                 _walk_localization_section(vnode, resolver, report, edits, scope=scope)
                 continue
+            if spelled:
+                continue
             _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner, namespace,
                         sibling_type=sibling_type, field_kind=field_kind)
         else:
             # A key the class does not describe - the default of an interface component's
             # property among them: the class knows the name and the type, nothing else.
             _component_key_value(knode, vnode, None, resolver, report, edits, owner,
-                                 sibling_type=sibling_type)
+                                 sibling_type=sibling_type, value_spelled=spelled)
 
 
 def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: str = "",
@@ -675,14 +686,15 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
             _walk_component_mapping(vnode, resolver, report, edits, owner)
             return
         inner = declared if value_kind == "block" and metamodel.has_class(declared) else None
+        dispatched_by = ""
         if inner and record.get("dispatch"):
             resolved = _dispatched_class(inner, record["dispatch"], vnode)
             if resolved:
-                _dispatch_value(vnode, record["dispatch"], resolved, edits)
-                inner = resolved
+                inner, dispatched_by = resolved, record["dispatch"]
         if inner:
             _walk_meta_mapping(vnode, inner, metamodel.properties_of_class(inner), None,
-                               resolver, report, edits, owner=owner, field_kind=field_kind)
+                               resolver, report, edits, owner=owner, field_kind=field_kind,
+                               dispatch_key=dispatched_by)
         else:
             _walk_component_mapping(vnode, resolver, report, edits, owner)
         return
@@ -693,8 +705,6 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                 dispatch_key = record.get("dispatch") or "Имя"
                 name = _mapping_value(item, dispatch_key)
                 target = metamodel.collection_item_class(cls, key, name) if cls else None
-                if target:
-                    _dispatch_value(item, dispatch_key, target, edits)
                 # The items of one collection share a namespace: two names translated into
                 # one word is what the platform refuses on apply.
                 name_node = _mapping_value_node(item, "Имя")
@@ -716,7 +726,9 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                     inner_namespace = f"{namespace}.{own_name}" if own_name else namespace
                     _walk_meta_mapping(item, target, target_props, None, resolver, report, edits,
                                        owner=owner, namespace=inner_namespace,
-                                       field_kind=inner_fields)
+                                       field_kind=inner_fields,
+                                       dispatch_key=("" if dispatch_key in ("Имя", "Name")
+                                                     else dispatch_key))
                 else:
                     _walk_component_mapping(item, resolver, report, edits, owner)
             elif isinstance(item, yaml.ScalarNode):
@@ -806,29 +818,26 @@ def _mapping_value_node(node, key: str):
     return None
 
 
-def _dispatch_value(node, dispatch_key: str, target: str, edits) -> None:
-    """Spell the value a dispatched block is CHOSEN by the way the metamodel names it.
+def _dispatch_scalar(vnode, target: str, edits) -> bool:
+    """Spell the value a block was dispatched by the way the metamodel names it; True if it did.
 
     A schedule kind (`Daily`) is neither a type, nor a property, nor an enumeration value, so
     no term dictionary pairs it and the translator used to leave it Russian and report a
     platform gap. The metamodel annotation states both spellings - that is where this comes
-    from. The name of a built-in item is not touched here: it goes through the identifier path
-    like every other name.
+    from. The name of a built-in item is not spelled here: the name keys never reach it.
+
+    The walk calls this for the dispatch key and passes the node over when it answers True, so
+    the Russian value is never read as an ordinary one. The composed graph stays as it was: it
+    is cached on the source, and a value written back into it read as English on the next pass,
+    which then made no edit and left the kind Russian.
     """
-    if dispatch_key in ("Имя", "Name"):
-        return
+    if not isinstance(vnode, yaml.ScalarNode) or not has_cyrillic(str(vnode.value)):
+        return False
     english = metamodel.dispatch_english(target)
     if not english:
-        return
-    for knode, vnode in node.value:
-        if (isinstance(knode, yaml.ScalarNode) and knode.value == dispatch_key
-                and isinstance(vnode, yaml.ScalarNode) and has_cyrillic(str(vnode.value))):
-            _set_scalar(vnode, english, edits)
-            # The walk of the block passes over this very node afterwards, and an edit alone
-            # is invisible to it: it would read the Russian value again, find no pair for it
-            # and report a platform gap the run has just closed.
-            vnode.value = english
-            return
+        return False
+    _set_scalar(vnode, english, edits)
+    return True
 
 
 def _dispatched_class(item: str, dispatch_key: str, node) -> str | None:
@@ -965,9 +974,11 @@ def _typed_value(node, type_name: str, resolver, report, edits) -> None:
 
 def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner: str = "",
                          sibling_type: str = "",
-                         query_aliases: frozenset[str] = frozenset()) -> None:
+                         query_aliases: frozenset[str] = frozenset(),
+                         value_spelled: bool = False) -> None:
     """One key of a node below the metamodel's reach; `sibling_type` is the node's own `Type`
-    as written - the type a default value is judged against when the node is a property."""
+    as written - the type a default value is judged against when the node is a property.
+    `value_spelled` says the caller has spelled the value already: only the key is left."""
     key = knode.value
     if has_cyrillic(key):
         # A property of a PROJECT component belongs to the project: the platform vocabulary
@@ -1009,6 +1020,8 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
             else:
                 line, col = _at(knode)
                 report.note_token(key, line, col)
+    if value_spelled:
+        return
     if isinstance(vnode, yaml.MappingNode):
         aliases = query_aliases
         if uischema.canonical_property(key) == "Источник" and _dynamic_list_type(sibling_type):
