@@ -69,6 +69,9 @@ entry either - say what the behaviour was, not which class name was compared.
 - **A second translation of the same file no longer leaves the schedule kind Russian.** The
   translator wrote the English kind back into the parsed file kept with the source, so the next
   pass in the same process found nothing to change. It now leaves the parsed file as it was.
+- **The translator names a declared standard attribute the way its kind does.** An exchange
+  plan that declared the number of the sent message kept it Russian and asked the project for
+  an entry, while its own list already said `SentNumber`. An entry of the project still wins.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 

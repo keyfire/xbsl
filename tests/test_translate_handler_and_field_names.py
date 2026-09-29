@@ -174,3 +174,42 @@ def test_an_index_of_a_tabular_section_names_the_fields_of_the_section():
     declared = next(line for line in out.splitlines() if line.startswith("                Name: "))
     indexed = next(line for line in out.splitlines() if line.startswith("                    - "))
     assert declared.split(": ", 1)[1] == indexed.split("- ", 1)[1]
+
+
+_NODES_DECLARED = """\
+ВидЭлемента: ПланОбмена
+Ид: 1d1f5c60-0000-4000-8000-000000000e09
+Имя: Узлы
+ОбластьВидимости: ВПроекте
+КонтрольДоступа:
+    РасчетРазрешенийПо: [НомерОтправленного, ЭтотУзел]
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+Реквизиты:
+    -
+        Имя: НомерОтправленного
+        ВажностьПриОтображении: Высокая
+    -
+        Имя: ЭтотУзел
+"""
+
+
+def test_a_declared_standard_attribute_is_named_as_the_kind_names_it():
+    """The declaration of a standard attribute names the platform's item, and the metamodel
+    spells it; it used to stay Russian and wait for an entry of the project, while the list
+    of the same file already named the English field."""
+    out, report = _yaml(_NODES_DECLARED, {"Узлы": "Nodes"})
+
+    assert "        Name: SentNumber\n        DisplayImportance: High\n" in out
+    assert "        Name: ThisNode\n" in out
+    assert "    ComputePermissionsBy: [SentNumber, ThisNode]\n" in out
+    assert not report.missing_tokens
+
+
+def test_an_entry_of_the_dictionary_names_a_declared_standard_attribute_first():
+    """The project dictionary answers first here as everywhere: the declaration and the list
+    both take the entry, so the two still agree."""
+    out, _report = _yaml(_NODES_DECLARED, {"Узлы": "Nodes", "НомерОтправленного": "SentNo"})
+
+    assert "        Name: SentNo\n" in out
+    assert "    ComputePermissionsBy: [SentNo, ThisNode]\n" in out
