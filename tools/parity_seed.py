@@ -1571,7 +1571,8 @@ _CABINET_RU = """\
             Тип: Панель
 """
 _HANDLING_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000f41\nИмя: РаботаСЗадачами\nОкружение: Клиент\n"
-_TASK_CARD_RU = """\
+#: A task card declaring an own property under the name a seed gives it.
+_TASK_CARD_PROPERTY_RU = """\
 ВидЭлемента: КомпонентИнтерфейса
 Ид: 1d1f5c60-0000-4000-8000-000000000f42
 Имя: КарточкаЗадачи
@@ -1614,8 +1615,8 @@ _IN_SUBQUERY_RU = (
     "    возврат 1\n"
     ";\n"
 )
-_QUERY_TOKENS = {"Товары": "Goods", "Фильтры": "Filters", "Бейдж": "Badge", "Метка": "Tag",
-                 "Р": "R", "Т": "T", "Ф": "F", "Проба": "Probe", "Отборы": "Selections"}
+_IN_SUBQUERY_TOKENS = {"Товары": "Goods", "Фильтры": "Filters", "Бейдж": "Badge", "Метка": "Tag",
+                       "Р": "R", "Т": "T", "Ф": "F", "Проба": "Probe", "Отборы": "Selections"}
 _CHECKS_TOKENS = {"Проверки": "Checks", "Проба": "Probe", "Флаг": "Flag"}
 _PRICES_RU = "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f48\nИмя: Цены\n"
 _PRICES_TOKENS = {"Цены": "Prices", "Заявки": "Applications", "Задачи": "Tasks", "Сумма": "Amount",
@@ -6680,14 +6681,14 @@ SEEDS: list[Seed] = [
         rule="yaml/property-shadows-module",
         expect=FINDING,
         note="an own property of a component named after a common module",
-        files={"РаботаСЗадачами.yaml": _HANDLING_RU, "КарточкаЗадачи.yaml": _TASK_CARD_RU.format(prop="РаботаСЗадачами")},
+        files={"РаботаСЗадачами.yaml": _HANDLING_RU, "КарточкаЗадачи.yaml": _TASK_CARD_PROPERTY_RU.format(prop="РаботаСЗадачами")},
         tokens={"РаботаСЗадачами": "TaskHandling", "КарточкаЗадачи": "TaskCard", "Задачи": "Tasks"},
     ),
     Seed(
         rule="yaml/property-shadows-module",
         expect=CLEAN,
         note="the same property under a name of its own",
-        files={"РаботаСЗадачами.yaml": _HANDLING_RU, "КарточкаЗадачи.yaml": _TASK_CARD_RU.format(prop="Задачи")},
+        files={"РаботаСЗадачами.yaml": _HANDLING_RU, "КарточкаЗадачи.yaml": _TASK_CARD_PROPERTY_RU.format(prop="Задачи")},
         tokens={"РаботаСЗадачами": "TaskHandling", "КарточкаЗадачи": "TaskCard", "Задачи": "Tasks"},
     ),
     Seed(
@@ -6696,7 +6697,7 @@ SEEDS: list[Seed] = [
         note="a composite-type field checked with IN over a subquery",
         files={"Товары.yaml": _GOODS_FIELDS_RU, "Фильтры.yaml": _FILTERS_RU,
                "Отборы.xbsl": _IN_SUBQUERY_RU.format(field="Бейдж")},
-        tokens=_QUERY_TOKENS,
+        tokens=_IN_SUBQUERY_TOKENS,
     ),
     Seed(
         rule="query/in-subquery-composite",
@@ -6704,7 +6705,7 @@ SEEDS: list[Seed] = [
         note="the same condition over a field of one type",
         files={"Товары.yaml": _GOODS_FIELDS_RU, "Фильтры.yaml": _FILTERS_RU,
                "Отборы.xbsl": _IN_SUBQUERY_RU.format(field="Метка")},
-        tokens=_QUERY_TOKENS,
+        tokens=_IN_SUBQUERY_TOKENS,
     ),
     Seed(
         rule="code/unused-method",
@@ -6768,7 +6769,8 @@ SEEDS: list[Seed] = [
                "Проект.xbsl": "метод ВычислитьСистемныеРазрешенияДоступа()\n;\n"},
         english={"Project.yaml": _PROJECT_EN.format(mode="9.0"),
                  "Project.xbsl": "method ComputeSystemAccessPermissions()\n;\n"},
-        tokens={"ВычислитьСистемныеРазрешенияДоступа": "ComputeSystemAccessPermissions"},
+        tokens={"Проба": "Probe",
+                "ВычислитьСистемныеРазрешенияДоступа": "ComputeSystemAccessPermissions"},
         needs_section="element_module_handlers",
     ),
     Seed(

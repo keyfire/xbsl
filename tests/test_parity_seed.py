@@ -10,6 +10,7 @@ The tool is a script rather than part of the package, so it is loaded by path - 
 tests/test_claims_registry.py loads the claims tool.
 """
 
+import ast
 import dataclasses
 import importlib.util
 import sys
@@ -155,6 +156,31 @@ def test_the_translator_leaves_no_problem_behind_on_a_seed():
         for seed in _TOOL.SEEDS
     }
     assert {rule: found for rule, found in problems.items() if found} == {}
+
+
+def test_no_constant_of_the_tool_is_bound_twice():
+    """Every module constant of the tool is bound once.
+
+    `SEEDS` is built after all the constants, so every seed reads a name bound twice at its
+    LAST binding - the seeds written for the first binding included. Two names were once bound
+    twice: the seeds of code/query-needs-server got the tokens of the subquery seeds, and their
+    Russian tree came out untranslated; five seeds planted the task card of another rule rather
+    than the object form their English twin describes. Nothing failed - the only trace was a
+    `translator differs` line under seeds that passed.
+    """
+    tree = ast.parse((ROOT / "tools" / "parity_seed.py").read_text(encoding="utf-8"))
+    bound: dict[str, list[int]] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                bound.setdefault(target.id, []).append(node.lineno)
+    assert {name: lines for name, lines in bound.items() if len(lines) > 1} == {}
 
 
 #: One pair of the platform's picture library, as the extractor files it (uiterms.resource_paths).
