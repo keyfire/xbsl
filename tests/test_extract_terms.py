@@ -331,7 +331,9 @@ def test_a_word_written_russian_first_does_not_take_the_english_on_its_left():
     leaves on the left of the word whatever the code pushed before: the key of a map, which is
     the name of an enumeration constant (`DAY`), or the English of the previous parameter
     (`Step`). The class itself says the word is spelled otherwise, so the neighbour is no
-    pair; read without that check, both show up."""
+    pair, and the spelling the class states is; read without that check, the neighbours show
+    up. A phrase the class states (`Task steps`) is no name and pairs nothing, while the key
+    that is the name the phrase makes stays."""
     from unittest import mock
 
     from test_extract_classcode import _class_of
@@ -354,9 +356,38 @@ def test_a_word_written_russian_first_does_not_take_the_english_on_its_left():
     with mock.patch.object(terms, "_russian_first", return_value={}):
         unchecked, _common, _types = _scan_classes({"demo/acme/Periods.class": blob})
 
-    assert members["Periods"] == {"ШагиЗадачи": "TaskSteps"}
-    assert "День" not in common and "Готово" not in common
+    assert members["Periods"] == {
+        "ШагиЗадачи": "TaskSteps", "День": "Day", "Шаг": "Step", "Готово": "Done",
+    }
+    assert common["День"] == "Day" and common["Готово"] == "Done"
     assert unchecked["Periods"] == {"День": "DAY", "ШагиЗадачи": "TaskSteps", "Готово": "Step"}
+
+
+def test_a_pair_written_russian_first_is_screened_as_every_pair_is():
+    """The statement is a source under the rules every pair of the scan follows: a word the
+    class writes with two spellings is left alone, a phrase is no spelling of a name, and a
+    word the class states English first as well keeps that statement."""
+    from test_extract_classcode import TERM, _class_of, _class_of_terms
+
+    two_ways = _class_of([
+        ("demo/acme/Param.of", ["Шаг", "Step"]),
+        ("demo/acme/Param.of", ["Номер", "No"]),
+        ("demo/acme/Param.of", ["Номер", "Number"]),
+        ("demo/acme/Param.of", ["Полугодие", "Half year"]),
+    ], extra_strings=["Шаг", "Step", "Номер", "No", "Полугодие", "Half year"])
+    stated = _class_of_terms([
+        ("DEADLINE_TERM", TERM, ["Deadline", "Срок"]),
+        ("DEADLINE_NOTE", "demo/acme/Log.note", ["Срок", "Due"]),
+        ("STEP_NOTE", "demo/acme/Log.note", ["Этап", "Stage"]),
+    ])
+
+    members, common, _types = _scan_classes({"demo/acme/Params.class": two_ways,
+                                             "demo/acme/Notes.class": stated})
+
+    assert members["Params"] == {"Шаг": "Step"}
+    assert "Номер" not in common and "Полугодие" not in common
+    assert members["Notes"] == {"Срок": "Deadline", "Этап": "Stage"}
+    assert common["Срок"] == "Deadline"
 
 
 def test_an_abbreviation_the_class_states_english_first_stays():

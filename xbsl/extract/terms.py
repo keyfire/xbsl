@@ -317,6 +317,35 @@ def _origin_contradicts(en: str, ru: str, russian_first: dict[str, set[str]],
     return en not in spellings and en not in {_identifier_of(phrase) for phrase in spellings}
 
 
+def _russian_first_pairs(russian_first: dict[str, set[str]],
+                         english_first: set[tuple[str, str]],
+                         kept: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """[(English, Russian)] the class states Russian first: a source of pairs, not only a check.
+
+    A word the class writes Russian first with one English NAME right after it is paired the
+    way the class states it: the code of a parameter of a format string is `SN`, while the
+    neighbour on its left was the English of the previous parameter. The screening is the one
+    every pair of the scan passes: both sides are names (see _names_its_field too), and a word
+    the class writes this way with two spellings is no pair - neither is guessed. A word the
+    class also states English first keeps that statement, and a word a kept neighbour already
+    pairs - with the stated spelling, or with the name a stated phrase makes - is not paired
+    twice. A phrase (`Half year`) is a caption the class localizes, no name: it still tells
+    which neighbour is not a spelling (_origin_contradicts), but in a dictionary of names it
+    would stand as a platform spelling of the word that no identifier can take.
+    """
+    paired = {ru for _en, ru in kept} | {ru for _en, ru in english_first}
+    out: list[tuple[str, str]] = []
+    for russian, spellings in russian_first.items():
+        if russian in paired or len(spellings) != 1:
+            continue
+        english = next(iter(spellings))
+        if (_EN_NAME_RE.match(english) and english not in _CLASS_FILE_NAMES
+                and _RU_NAME_RE.match(russian) and _CYRILLIC_RE.search(russian)
+                and not _names_its_field(english, russian)):
+            out.append((english, russian))
+    return out
+
+
 def _contradicts_language(en: str, ru: str, languages: dict[str, str]) -> bool:
     """Whether the pair names a language other than the language table of the platform does.
 
@@ -502,10 +531,14 @@ def _scan_meta_objects(
             if stated_pairs is not None:
                 pairs = _checked(stated_pairs, pairs)
             elif pairs and (russian_first := _russian_first(data)):
+                # Read where the neighbourhood found a pair: a word written Russian first leaves
+                # one on its left, and over the distribution no class states such a pair
+                # without it - reading every class with a Cyrillic string would cost a minute.
                 english_first = {(en, ru) for _field, en, ru in found}
                 english_first.update((en, ru) for ru, en in declared.items())
                 pairs = [(en, ru) for en, ru in pairs
                          if not _origin_contradicts(en, ru, russian_first, english_first)]
+                pairs += _russian_first_pairs(russian_first, english_first, pairs)
             # Checked last: a package that writes its annotations Russian first has its shifted
             # neighbours spelled by the annotations above, the names of languages among them.
             if languages:
