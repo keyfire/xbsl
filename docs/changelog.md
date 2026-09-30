@@ -25,30 +25,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
-
-### Changed
-
-- **`naming/presentation` expects `(not used)` from an English project.** A deprecated element
-  starts its presentation and captions with that mark, and the rule does not count the mark of
-  the other language. `translate` adds `(not used)` itself when a dictionary entry leaves it out.
-- **The localization tools know every language of the platform.** `localization-info` and
-  `add-localization`, with their MCP and language server twins, take the languages from the data
-  together with the compatibility mode each one needs, so Chinese, Vietnamese and Tajik join
-  Russian and English. A value of `LocalizationLanguages` the data does not know is named in the
-  notes.
-- **`yaml/duplicate-subtree` no longer compares the translations of one localized-strings
-  dictionary.** Two languages of one dictionary repeat each other key for key.
-- **`translate` swaps the base only with the translation into the target language.** Its folder
-  is found in any letter case, and a translation into another language keeps its place on purpose.
-
-### Fixed
-
-- **`xbsl extract` reads the languages of a project.** The data gains the language table and the
-  English names of the newer languages, so `translate --strict` no longer reports a platform gap
-  on a descriptor that lists one of them.
-
-## 2026-09-30 – 0.125.0
+## 2026-09-30 – 0.125.0, 0.126.0
 
 ### Added
 
@@ -60,6 +37,18 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Changed
 
+- **`naming/presentation` expects `(not used)` from an English project.** A deprecated element
+  starts its presentation and captions with that mark, and the rule does not count the mark of
+  the other language. `translate` adds `(not used)` itself when a dictionary entry leaves it out. ([#169](https://github.com/keyfire/xbsl/pull/169))
+- **The localization tools know every language of the platform.** `localization-info` and
+  `add-localization`, with their MCP and language server twins, take the languages from the data
+  together with the compatibility mode each one needs, so Chinese, Vietnamese and Tajik join
+  Russian and English. A value of `LocalizationLanguages` the data does not know is named in the
+  notes. ([#169](https://github.com/keyfire/xbsl/pull/169))
+- **`yaml/duplicate-subtree` no longer compares the translations of one localized-strings
+  dictionary.** Two languages of one dictionary repeat each other key for key. ([#169](https://github.com/keyfire/xbsl/pull/169))
+- **`translate` swaps the base only with the translation into the target language.** Its folder
+  is found in any letter case, and a translation into another language keeps its place on purpose. ([#169](https://github.com/keyfire/xbsl/pull/169))
 - **`naming/presentation` now asks a processing for its caption.** A processing keeps it in
   `Interface.Presentation`: the form and the command that opens it are named by it, and without it
   both carry the element name. The standard lists processings among the elements whose
@@ -71,6 +60,9 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`xbsl extract` reads the languages of a project.** The data gains the language table and the
+  English names of the newer languages, so `translate --strict` no longer reports a platform gap
+  on a descriptor that lists one of them. ([#169](https://github.com/keyfire/xbsl/pull/169))
 - **The cards of the help no longer run together.** The links of a card grid used to merge into one
   line, and an example lost the icon that told a right one from a wrong one. The help now lists link
   cards, labels right and wrong examples, and keeps the code fragment of a card as code. ([#165](https://github.com/keyfire/xbsl/pull/165))
