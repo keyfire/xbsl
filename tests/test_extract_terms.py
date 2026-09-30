@@ -326,6 +326,88 @@ def test_the_name_of_a_constant_is_not_the_english_of_its_value():
     assert not _names_its_field("Recipient", "Получатель")
 
 
+def test_a_word_written_russian_first_does_not_take_the_english_on_its_left():
+    """A class that localizes a word Russian first - the word, then its English, in one call -
+    leaves on the left of the word whatever the code pushed before: the key of a map, which is
+    the name of an enumeration constant (`DAY`), or the English of the previous parameter
+    (`Step`). The class itself says the word is spelled otherwise, so the neighbour is no
+    pair; read without that check, both show up."""
+    from unittest import mock
+
+    from test_extract_classcode import _class_of
+
+    from xbsl.extract import terms
+
+    blob = _class_of([
+        # The key is pushed first and taken by the outer call, after the value is built.
+        ("demo/acme/Periods.localization", ["DAY", "День", "Day"],
+         "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Map;"),
+        ("demo/acme/Periods.put", [], "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+        # A key that is the name the localized phrase makes names the word, and stays.
+        ("demo/acme/Periods.localization", ["TaskSteps", "ШагиЗадачи", "Task steps"],
+         "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Map;"),
+        ("demo/acme/Periods.put", [], "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+        ("demo/acme/Param.of", ["Шаг", "Step"]),
+        ("demo/acme/Param.of", ["Готово", "Done"]),
+    ], extra_strings=["Шаг", "Step", "Готово", "Done"])  # interned in the order first used
+    members, common, _types = _scan_classes({"demo/acme/Periods.class": blob})
+    with mock.patch.object(terms, "_russian_first", return_value={}):
+        unchecked, _common, _types = _scan_classes({"demo/acme/Periods.class": blob})
+
+    assert members["Periods"] == {"ШагиЗадачи": "TaskSteps"}
+    assert "День" not in common and "Готово" not in common
+    assert unchecked["Periods"] == {"День": "DAY", "ШагиЗадачи": "TaskSteps", "Готово": "Step"}
+
+
+def test_an_abbreviation_the_class_states_english_first_stays():
+    """The check reads what the class does with the strings, not their form: an abbreviation
+    the class states English first - a term it keeps in a field - keeps its pair even where
+    another call takes the same Russian word Russian first with a text of its own."""
+    from test_extract_classcode import TERM, _class_of_terms
+
+    blob = _class_of_terms([
+        ("SLA_TERM", TERM, ["SLA", "СрокВыполнения"]),
+        ("DEADLINE_NOTE", "demo/acme/Log.note", ["СрокВыполнения", "Deadline is near"]),
+        ("API_TERM", TERM, ["API", "Интерфейс"]),
+    ])
+
+    members, common, _types = _scan_classes({"demo/acme/TaskApi.class": blob})
+
+    assert members["TaskApi"] == {"СрокВыполнения": "SLA", "Интерфейс": "API"}
+    assert common["СрокВыполнения"] == "SLA"
+
+
+def test_a_call_that_takes_the_english_first_is_no_russian_first_statement():
+    """A type variable is declared by its English name, its Russian name and then its type: the
+    Latin string after the Russian word is the type, not the word's English, and the pair
+    the neighbourhood reads stays."""
+    from test_extract_classcode import _class_of
+
+    blob = _class_of([
+        ("demo/acme/Types.typeVariable", ["Item", "Элемент", "ItemType"]),
+        ("demo/acme/Types.typeVariable", ["Key", "Ключ", "KeyType"]),
+    ])
+
+    members, common, _types = _scan_classes({"demo/acme/TaskListCtMetaObject.class": blob})
+
+    assert members["TaskList"] == {"Элемент": "Item", "Ключ": "Key"}
+    assert common["Элемент"] == "Item"
+
+
+def test_a_key_in_lower_case_after_a_russian_word_is_no_spelling():
+    """A label chosen by the language of the user pushes both names, and the call takes the
+    Russian one with a key in lower case: the key is data, not the word's English, and the
+    pair of the two names stays."""
+    from test_extract_classcode import _class_of
+
+    blob = _class_of([("demo/acme/Groups.<init>", ["Steps", "Шаги", "item"],
+                       "(Ljava/lang/String;Ljava/lang/String;)V")])
+
+    members, _common, _types = _scan_classes({"demo/acme/Groups.class": blob})
+
+    assert members["Groups"] == {"Шаги": "Steps"}
+
+
 def test_a_language_name_is_paired_only_as_the_language_table_says():
     """An enumeration presents each language in its own language, so the pool holds English
     right before the Russian name of Russian; a reader of the descriptor lists the Russian

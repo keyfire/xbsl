@@ -51,10 +51,12 @@ class _Pool:
         return struct.pack(">H", len(self.blobs) + 1) + b"".join(self.blobs)
 
 
-def _class_of(calls: list[tuple[str, list[str]]], extra_strings: list[str] = [],
+def _class_of(calls: list[tuple], extra_strings: list[str] = [],
               switch_between: bool = False) -> bytes:
     """A class whose single method pushes the strings of each call and makes it.
 
+    A call is (owner.name, the strings pushed for it) and, optionally, the descriptor of the
+    method; by default every string pushed is a string parameter of the call.
     `extra_strings` are interned in the pool without being pushed anywhere - the way a name
     that belongs to a parameter or to a neighbouring method sits in a real pool.
     `switch_between` puts a `tableswitch` between the calls: its operand is padded to a
@@ -77,13 +79,14 @@ def _class_of(calls: list[tuple[str, list[str]]], extra_strings: list[str] = [],
         return bytes(out)
 
     body = bytearray()
-    for index, (owner_and_name, pushed) in enumerate(calls):
+    for index, (owner_and_name, pushed, *given) in enumerate(calls):
         owner, name = owner_and_name.rsplit(".", 1)
+        descriptor = given[0] if given else "(" + "Ljava/lang/String;" * len(pushed) + ")V"
         for position, value in enumerate(pushed):
             if switch_between and index and position == 1:
                 body += tableswitch()                      # between the two spellings
             body += bytes([0x13]) + struct.pack(">H", pool.string(value))  # ldc_w
-        body += bytes([0xB8]) + struct.pack(">H", pool.method(owner, name))  # invokestatic
+        body += bytes([0xB8]) + struct.pack(">H", pool.method(owner, name, descriptor))
     body += bytes([0xB1])  # return
     code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
     this_class = pool.klass("Demo")
@@ -188,7 +191,8 @@ def _class_of_terms(entries: list[tuple[str, str, list[str]]], this: str = "Demo
         owner, name = owner_and_name.rsplit(".", 1)
         for value in pushed:
             body += bytes([0x13]) + struct.pack(">H", pool.string(value))  # ldc_w
-        body += bytes([0xB8]) + struct.pack(">H", pool.method(owner, name))  # invokestatic
+        descriptor = "(" + "Ljava/lang/String;" * len(pushed) + ")Lterm;"  # every string an argument
+        body += bytes([0xB8]) + struct.pack(">H", pool.method(owner, name, descriptor))
         body += bytes([0xB3]) + struct.pack(">H", _field(pool, "Demo", field))  # putstatic
     body += bytes([0xB1])  # return
     code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
@@ -739,4 +743,23 @@ def test_each_value_of_an_enumeration_is_built_with_its_name_first():
     assert [(constant.field, constant.strings, constant.modes) for constant in built] == [
         ("DONE", ("DONE", "Done", "Готово"), ()),
         ("SKIPPED", ("SKIPPED", "Skipped", "Пропущен"), ("9.1",)),
+    ]
+
+
+def test_a_call_takes_as_many_strings_as_it_has_string_parameters():
+    """The key of a map is pushed before the value built for it, and the call that builds the
+    value takes only its own two strings; an array of strings is no string parameter."""
+    blob = _class_of([
+        ("demo/acme/Periods.localization", ["DAY", "День", "Day"],
+         "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Map;"),
+        ("demo/acme/Periods.put", [], "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+        ("demo/acme/Log.format", ["Шаг", "Step"], "(Ljava/lang/String;[Ljava/lang/String;I)V"),
+        ("demo/acme/Types.typeVariable", ["Item", "Элемент", "ItemType"]),
+    ])
+
+    assert classcode.string_arguments(blob) == [
+        ("demo/acme/Periods.localization", ("День", "Day")),
+        ("demo/acme/Periods.put", ()),
+        ("demo/acme/Log.format", ("Step",)),
+        ("demo/acme/Types.typeVariable", ("Item", "Элемент", "ItemType")),
     ]

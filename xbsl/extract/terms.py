@@ -118,6 +118,9 @@ _JSON_ALIAS = "Lcom/fasterxml/jackson/annotation/JsonAlias;"
 _JSON_ALIAS_MARK = _JSON_ALIAS[1:-1].encode()
 #: The name of a Java constant: words in capitals joined by underscores (`FINISH_NAME_RU`).
 _CONSTANT_NAME_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
+#: The English a call takes right after a Russian word: a name or a phrase, capital first - a
+#: key or an identifier in lower case (`modules`) is data the call takes, not a spelling.
+_LATIN_WORD_RE = re.compile(r"^[A-Z][A-Za-z0-9_ ]*$")
 #: Jars of the platform itself - the only ones that can hold such classes.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
@@ -252,6 +255,66 @@ def _names_its_field(en: str, ru: str) -> bool:
     that is not capitalized is dropped.
     """
     return bool(_CONSTANT_NAME_RE.match(en)) and not ru.isupper()
+
+
+def _russian_first(blob: bytes) -> dict[str, set[str]]:
+    """{Russian word: the Latin strings a call takes right after it} - a class that writes a
+    pair Russian first.
+
+    Some classes of the platform localize a word by a call that takes the Russian spelling and
+    then the English one: a parameter of a format string is `of(<its Russian code>, "SN")`, a
+    periodicity of a table parameter is keyed by the name of an enumeration constant and
+    localized as `put("YEAR", localization(<the Russian word>, "Year"))`. The pool keeps the
+    strings in the order the code first pushes them, so the neighbour on the left of a Russian
+    word is whatever the code pushed before it: the English of the PREVIOUS parameter (`SN` next
+    to the word for including the fractional part), or the name of the constant used as the key
+    (`YEAR` next to the word for a year). Neither is a spelling of that word, and the class
+    itself says which one is - the string the call takes right after it. The English here may
+    be a phrase (`Half year`): it still tells that the neighbour is not the spelling.
+
+    Only the call's own string arguments count (classcode.string_arguments): the key of the
+    map is pushed before them and is no argument of the call that localizes the word. A word
+    whose English the same call takes BEFORE it is written English first, whatever follows -
+    `typeVariable("Item", <the Russian word>, "ItemType")` names a type variable and then its
+    type.
+    """
+    stated: dict[str, set[str]] = defaultdict(set)
+    try:
+        calls = classcode.string_arguments(blob)
+    except (IndexError, ValueError):  # a class the reader does not follow states nothing
+        return {}
+    for _called, arguments in calls:
+        for at in range(len(arguments) - 1):
+            russian, english = arguments[at], arguments[at + 1]
+            if at and _EN_NAME_RE.match(arguments[at - 1]):
+                continue
+            if (_CYRILLIC_RE.search(russian) and not _CYRILLIC_RE.search(english)
+                    and _LATIN_WORD_RE.match(english)):
+                stated[russian].add(english)
+    return dict(stated)
+
+
+def _identifier_of(phrase: str) -> str:
+    """The name a phrase makes, its words capitalized and joined: `Register records` makes
+    `RegisterRecords`."""
+    return "".join(word[:1].upper() + word[1:] for word in phrase.split())
+
+
+def _origin_contradicts(en: str, ru: str, russian_first: dict[str, set[str]],
+                        english_first: set[tuple[str, str]]) -> bool:
+    """Whether the class says the English neighbour of `ru` came from somewhere else.
+
+    The class writes `ru` Russian first with another English right after it (_russian_first),
+    and states the neighbouring pair nowhere English first - by a term or by a member it
+    declares. A pair the class does state that way stays whatever else it calls, and so does a
+    neighbour that is the name the stated phrase makes: the key `RegisterRecords` before the
+    word localized as `Register records` names that word, while the key `YEAR` before the word
+    localized as `Year` is the name of a constant.
+    """
+    spellings = russian_first.get(ru)
+    if not spellings or (en, ru) in english_first:
+        return False
+    return en not in spellings and en not in {_identifier_of(phrase) for phrase in spellings}
 
 
 def _contradicts_language(en: str, ru: str, languages: dict[str, str]) -> bool:
@@ -433,9 +496,16 @@ def _scan_meta_objects(
                 and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru)
                 and not _names_its_field(en, ru)
             ]
+            found = classcode.declared_terms(data) if _DECLARES_TERMS_RE.search(data) else []
+            declared = classcode.declared_members(data) if _DECLARES_MEMBERS_RE.search(data) else {}
             stated_pairs = _stated_pairs(data)
             if stated_pairs is not None:
                 pairs = _checked(stated_pairs, pairs)
+            elif pairs and (russian_first := _russian_first(data)):
+                english_first = {(en, ru) for _field, en, ru in found}
+                english_first.update((en, ru) for ru, en in declared.items())
+                pairs = [(en, ru) for en, ru in pairs
+                         if not _origin_contradicts(en, ru, russian_first, english_first)]
             # Checked last: a package that writes its annotations Russian first has its shifted
             # neighbours spelled by the annotations above, the names of languages among them.
             if languages:
@@ -451,16 +521,14 @@ def _scan_meta_objects(
                 without = _query_untranslated(names)
                 pairs = [(en, ru) for en, ru in pairs if ru not in without]
             simple = inner.rsplit("/", 1)[-1][:-len(".class")]
-            found = classcode.declared_terms(data) if _DECLARES_TERMS_RE.search(data) else []
             stated = _declared_type(simple, data, found) if found else None
             if not pairs and not found:
                 continue
             owner = _META_SUFFIX.sub("", simple)
-            # A class STATES its members, and a statement beats the neighbourhood: adjacency
-            # named 2 of 2015 members wrongly, both confidently - the `CharAt` of a `String`
-            # came out `Symbol`, which is the fill PARAMETER of `PadFromBegin`. Read only
-            # where such declarations are actually made.
-            declared = classcode.declared_members(data) if _DECLARES_MEMBERS_RE.search(data) else {}
+            # A class STATES its members (`declared` above), and a statement beats the
+            # neighbourhood: adjacency named 2 of 2015 members wrongly, both confidently - the
+            # `CharAt` of a `String` came out `Symbol`, which is the fill PARAMETER of
+            # `PadFromBegin`. Read only where such declarations are actually made.
             resolved = {ru: en for en, ru in pairs}
             resolved.update(declared)
             for ru, en in resolved.items():
