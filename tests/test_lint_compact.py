@@ -4,10 +4,13 @@ The full summary counts findings by rule, file and severity. Compact mode always
 per-file map and keeps complete error-level records; the finding list itself survives as
 one line each ("path:line rule - message") up to COMPACT_FINDINGS_LIMIT, and only past it
 falls back to counts plus a hint on how to read the rest. `as_ci`, when present, narrows to
-one line. The writing tools answer with the lint of what they wrote held shorter still.
+one line. The whole answer is held to COMPACT_ANSWER_LIMIT characters (report.fit): past it
+the lists that grow with the run are cut, the counts stay, and the cut is named. The writing
+tools answer with the lint of what they wrote held shorter still.
 """
 
 import importlib
+import json
 import sys
 import types
 from pathlib import Path
@@ -489,3 +492,81 @@ def test_short_lint_past_the_limit_points_at_lint_paths():
     assert "findings" not in answer
     assert answer["diagnostics"] == report.COMPACT_FINDINGS_LIMIT + 1
     assert "lint_paths" in answer["findings_hint"]
+
+
+# --- the size of a compact answer: held to a limit, every cut named -----------------------
+
+
+def _errors(n: int) -> list[Diagnostic]:
+    return [Diagnostic(f"Модуль{i}.xbsl", i + 1, 1, "code/brackets", Severity.ERROR,
+                       "Незакрытая скобка " + "x" * 200) for i in range(n)]
+
+
+def _stale(n: int) -> list[dict]:
+    return [{"path": f"Модуль{i}.xbsl", "rule": "whitespace/trailing", "message": "m" * 100,
+             "count": 1, "reason": ""} for i in range(n)]
+
+
+def test_an_answer_that_fits_comes_back_as_it_is():
+    answer = report.compact(report.report(_errors(3), 3))
+    assert report.fit(answer) is answer
+    assert "truncated" not in answer
+
+
+def test_the_error_records_are_cut_to_the_limit_and_the_cut_is_named():
+    full = report.report(_errors(500), 500)
+    answer = report.fit(report.compact(full), limit=8000)
+    assert len(json.dumps(answer, ensure_ascii=False)) <= 8000
+    cut = answer["truncated"]["errors"]
+    assert cut["total"] == 500 and 0 < cut["shown"] == len(answer["errors"]) < 500
+    assert answer["errors"] == full["diagnostics"][:cut["shown"]]  # the first ones, in order
+    assert answer["summary"]["errors"] == 500 and answer["findings_hint"]  # counts stay
+    assert answer["truncated_hint"]
+
+
+def test_the_stale_entries_go_before_the_errors():
+    full = report.report(_errors(5), 5)
+    full["summary"]["baseline_stale"] = 300
+    full["summary"]["baseline_stale_entries"] = _stale(300)
+    answer = report.fit(report.compact(full), limit=8000)
+    assert set(answer["truncated"]) == {"summary.baseline_stale_entries"}
+    assert len(answer["errors"]) == 5
+    assert answer["summary"]["baseline_stale"] == 300
+
+
+def test_the_records_of_the_project_roots_are_cut_after_their_rules():
+    full = report.report(_errors(2), 2)
+    full["summary"]["projects"] = [
+        {"project": f"D:/checkouts/wt{i}/Acme/Tasks", "files": 10, "diagnostics": 1,
+         "errors": 1, "warnings": 0, "by_rule": {f"rule/{j}": 1 for j in range(20)},
+         "by_severity": {"error": 1, "warning": 0, "info": 0}}
+        for i in range(60)
+    ]
+    answer = report.fit(report.compact(full), limit=6000)
+    assert len(json.dumps(answer, ensure_ascii=False)) <= 6000
+    shown = answer["truncated"]["summary.projects"]
+    assert shown["total"] == 60 and 0 < shown["shown"] == len(answer["summary"]["projects"])
+    assert all(answer["truncated"][f"summary.projects[{i}].by_rule"]["shown"] == 0
+               for i in range(60))
+
+
+def test_fit_leaves_the_answer_it_was_given_alone():
+    full = report.report(_errors(5), 5)
+    full["summary"]["baseline_stale_entries"] = _stale(300)
+    full["summary"]["projects"] = [{"project": "A", "by_rule": {"r": 1}}]
+    answer = report.compact(full)
+    before = json.dumps(answer, ensure_ascii=False)
+    report.fit(answer, limit=4000)
+    assert json.dumps(answer, ensure_ascii=False) == before
+
+
+def test_compact_names_the_ci_job_of_each_project_root_in_one_line():
+    job = {"adopted": True, "file": "/checkout/.gitlab-ci.yml", "job": "lint", "root": "/checkout",
+           "flags": "--select A", "select": ["A"], "ignore": [], "enable": [], "baseline": None,
+           "no_baseline": False, "other_systems": [], "jobs": [], "unread_includes": []}
+    full = report.report([], 0)
+    full["summary"]["projects"] = [{"project": "/checkout/Acme/Tasks", "as_ci": job}]
+    answer = report.compact(full)
+    assert set(answer["summary"]["projects"][0]["as_ci"]) == {"adopted", "brief"}
+    whole = report.compact(full, as_ci_full=True)
+    assert whole["summary"]["projects"][0]["as_ci"] == job

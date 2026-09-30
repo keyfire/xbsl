@@ -8,6 +8,7 @@ from collections import Counter
 import sys
 import textwrap
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import NamedTuple
@@ -53,15 +54,156 @@ def discover(paths: list[str]) -> list[Path]:
     return uniq
 
 
-def _project_root(start: Path) -> Path | None:
-    """The nearest directory - start itself, then upwards - holding a project descriptor.
+#: The project descriptor in both spellings the platform accepts.
+_PROJECT_FILES = ("Проект.yaml", "Project.yaml")
 
-    The platform accepts either spelling of the file name, so both are looked for.
+
+class _Roots:
+    """The nearest project root above a folder: the folder itself, then upwards.
+
+    A run of a whole project asks this for every file, and the files of one folder share the
+    answer: every folder on the way up is asked once and remembered.
     """
-    for candidate in (start, *start.parents):
-        if any((candidate / name).is_file() for name in ("Проект.yaml", "Project.yaml")):
-            return candidate
-    return None
+
+    def __init__(self) -> None:
+        self._known: dict[Path, Path | None] = {}
+
+    def of(self, folder: Path) -> Path | None:
+        """The root for a RESOLVED folder, or None when no folder above it holds a descriptor."""
+        walked: list[Path] = []
+        found: Path | None = None
+        current = folder
+        while True:
+            if current in self._known:
+                found = self._known[current]
+                break
+            walked.append(current)
+            if any((current / name).is_file() for name in _PROJECT_FILES):
+                found = current
+                break
+            if current.parent == current:
+                break
+            current = current.parent
+        for folder_on_the_way in walked:
+            self._known[folder_on_the_way] = found
+        return found
+
+
+class ProjectPart(NamedTuple):
+    """One project root of a run and what the check reads for it (split_by_project).
+
+    `root` - the folder holding the project descriptor, resolved; None for the sources that
+    lie in no project. `asked` - the requested paths this root answers for: the reach of its
+    baseline and the start of the search for its CI job. `files` and `requested` - what is
+    loaded and the subset reported on, None when the whole load is reported (see
+    discover_with_context).
+    """
+
+    root: Path | None
+    asked: list[str]
+    files: list[Path]
+    requested: list[Path] | None
+
+    @property
+    def counted(self) -> list[Path]:
+        """The files a report counts: the requested ones, or the whole load."""
+        return self.requested if self.requested is not None else self.files
+
+
+def _with_context(root: Path | None, asked: list[str], owned: list[Path],
+                  roots: _Roots) -> ProjectPart:
+    """The part of one root: its requested files plus the rest of its project as context.
+
+    With context added, every file of the run is RESOLVED, the requested ones included. The
+    context comes from the resolved project root, and a requested path left as typed (relative
+    to the working directory, another letter case, a `..` in it) lies under no folder of that
+    root: the placement model found no subsystem for it and code/foreign-not-public took the
+    module for the project module, the resources of the project were not found for it - a list
+    of four files of a subsystem got ten false visibility findings a tree run did not have.
+    The requested paths keep the typed form, and the narrowing reports under it.
+
+    A project nested inside another one is a root of its own: its files are not the context
+    of the outer project.
+    """
+    if root is None:
+        return ProjectPart(None, asked, owned, None)
+    resolved = [f.resolve() for f in owned]
+    seen = set(resolved)
+    added: list[Path] = []
+    for pattern in ("*.xbsl", "*.yaml"):
+        for f in engine.find_sources(root, pattern):
+            rp = f.resolve()
+            if rp not in seen and roots.of(rp.parent) == root:
+                seen.add(rp)
+                added.append(f)
+    if not added:
+        return ProjectPart(root, asked, owned, None)
+    return ProjectPart(root, asked, resolved + added, owned)
+
+
+def _asked_by_root(paths: list[str], groups: dict[Path | None, list[Path]],
+                   roots: _Roots) -> dict[Path | None, list[str]]:
+    """The requested paths each root of a split run answers for.
+
+    A path inside a project (or the project folder itself) belongs to that project. A folder
+    above the projects it holds - the parent of two worktrees - stands for each of them by
+    its root, and for the sources outside every project by itself; when it holds a project as
+    well, by those sources one by one, so the reach of the rest does not take in the project.
+    A project nested in the folder of another answers for itself by its root too.
+    """
+    asked: dict[Path | None, list[str]] = {root: [] for root in groups}
+    loose = [(f, f.resolve()) for f in groups.get(None, [])]
+    for raw in paths:
+        p = Path(raw)
+        if p.is_file():
+            root = roots.of(p.resolve().parent)
+            if root in asked:
+                asked[root].append(raw)
+            continue
+        if not p.is_dir():
+            continue
+        folder = p.resolve()
+        above = roots.of(folder)
+        if above is not None and above in asked:
+            asked[above].append(raw)
+        inner = [root for root in groups if root is not None and folder in root.parents]
+        for root in inner:
+            asked[root].append(str(root))
+        if above is None:
+            outside = [str(typed) for typed, real in loose if folder in real.parents]
+            if outside:
+                asked[None].extend(outside if inner else [raw])
+    return asked
+
+
+def split_by_project(paths: list[str]) -> list[ProjectPart]:
+    """The sources under the paths, split by the project root each of them belongs to.
+
+    A source belongs to the nearest folder above it holding a project descriptor; the sources
+    outside every project make one part of their own. Every part is checked as a project of
+    its own: two worktrees of one project given in one run used to be loaded as ONE project,
+    every name came twice, and every name gave a finding - `yaml/id-unique` on each `Id`,
+    `code/duplicate-method-body` on each method - while the baseline found above the first file
+    judged the files of the other worktree too, and matched none of them.
+
+    The parts come in the order their first source was found. A run over one project (or over
+    no project at all) is one part, with the paths as they were given; with nothing to check
+    it is one empty part.
+    """
+    files = discover(paths)
+    roots = _Roots()
+    folders: dict[Path, Path] = {}
+    groups: dict[Path | None, list[Path]] = {}
+    for f in files:
+        folder = folders.get(f.parent)
+        if folder is None:
+            folder = folders[f.parent] = f.parent.resolve()
+        groups.setdefault(roots.of(folder), []).append(f)
+    if len(groups) <= 1:
+        root = next(iter(groups), None)
+        return [_with_context(root, list(paths), groups.get(root, []), roots)]
+    asked = _asked_by_root(paths, groups, roots)
+    return [_with_context(root, asked[root], owned, roots) for root, owned in groups.items()]
 
 
 def discover_with_context(paths: list[str]) -> tuple[list[Path], list[Path] | None]:
@@ -76,43 +218,22 @@ def discover_with_context(paths: list[str]) -> tuple[list[Path], list[Path] | No
     subset the caller must narrow the diagnostics down to (_filter_requested), or None when no
     context was added and the diagnostics need no filtering.
 
-    With context added, every file of the run is RESOLVED, the requested ones included. The
-    context comes from the resolved project root, and a requested path left as typed (relative
-    to the working directory, another letter case, a `..` in it) lies under no folder of that
-    root: the placement model found no subsystem for it and code/foreign-not-public took the
-    module for the project module, the resources of the project were not found for it - a list
-    of four files of a subsystem got ten false visibility findings a tree run did not have.
-    The requested paths keep the typed form, and the narrowing reports under it."""
-    files = discover(paths)
-    resolved = [f.resolve() for f in files]
-    seen = set(resolved)
-    roots: list[Path] = []
-    for raw in paths:
-        p = Path(raw)
-        if p.is_file():
-            root = _project_root(p.resolve().parent)
-        elif p.is_dir():
-            root = _project_root(p.resolve())
-        else:
-            continue
-        if root is not None and root not in roots:
-            roots.append(root)
-    added: list[Path] = []
-    for root in roots:
-        for pattern in ("*.xbsl", "*.yaml"):
-            for f in engine.find_sources(root, pattern):
-                rp = f.resolve()
-                if rp not in seen:
-                    seen.add(rp)
-                    added.append(f)
-    if not added:
+    This is the load of ONE project. The paths of several project roots are split by
+    split_by_project, and every surface checks the parts one by one; here they are laid end
+    to end, which is how a caller that checks them as one project would read them."""
+    parts = split_by_project(paths)
+    if len(parts) == 1:
+        return parts[0].files, parts[0].requested
+    files = [f for part in parts for f in part.files]
+    if all(part.requested is None for part in parts):
         return files, None
-    return resolved + added, files
+    return files, [f for part in parts for f in part.counted]
 
 
 def _context_of(files, requested):
-    """The files of a discover_with_context run that were loaded for the project picture
-    only: the project rules read them, the file rules skip them (engine.run_sources)."""
+    """The files of a discover_with_context run (or of one part of split_by_project) that
+    were loaded for the project picture only: the project rules read them, the file rules
+    skip them (engine.run_sources)."""
     if requested is None:
         return None
     wanted = {p.resolve() for p in requested}
@@ -126,6 +247,96 @@ def _filter_requested(diagnostics, requested):
     if requested is None:
         return diagnostics
     return engine.narrow_to_requested(diagnostics, requested)
+
+
+def baselines_of(parts: list[ProjectPart]) -> list[Path]:
+    """The baselines found above the parts (baseline.discover), each file once, in order.
+
+    A command that changes a baseline - adds to it, prunes it - changes one file. Two
+    worktrees keep two, and the findings of one of them written into the file of the other
+    would name files that file does not know.
+    """
+    found: dict[Path, Path] = {}
+    for part in parts:
+        path = baseline.discover(part.counted)
+        if path is not None:
+            found.setdefault(path.resolve(), path)
+    return list(found.values())
+
+
+def shared_reach(judged: list[tuple[ProjectPart, Path | None]]) -> dict[Path, list[Path]]:
+    """The requested paths of all the parts one baseline file judges, by the resolved file.
+
+    Two projects of one checkout keep one baseline, and each part spends the entries of its
+    own files. An entry of the other part is not "not checked" for the run as a whole - the
+    other part checked it - so the entries nobody checked are counted against this reach.
+    """
+    reach: dict[Path, list[Path]] = {}
+    for part, found in judged:
+        if found is not None:
+            reach.setdefault(found.resolve(), []).extend(Path(p) for p in part.asked)
+    return reach
+
+
+def nested_roots(part: ProjectPart, parts: list[ProjectPart]) -> list[Path]:
+    """The roots of the other parts that lie inside the root of this one.
+
+    A project in the folder of another is a part of its own, and the files under it are its
+    own. The reach of the outer part takes them in all the same - it is the outer folder - so
+    without this its baseline would call the entries of those files stale: the outer part
+    never saw their findings, and a pruning would take the entries of a live debt away.
+    """
+    if part.root is None:
+        return []
+    return [other.root for other in parts
+            if other.root is not None and part.root in other.root.parents]
+
+
+def without_nested(stale: list[dict], base_dir: Path,
+                   nested: list[Path]) -> tuple[list[dict], int]:
+    """The stale entries outside the nested roots, and the suppressions the rest allowed.
+
+    The entries under a nested root are the business of the part of that root (nested_roots);
+    the count they allowed leaves the unused count of this part with them.
+    """
+    if not nested:
+        return stale, 0
+    kept: list[dict] = []
+    allowed = 0
+    for entry in stale:
+        file = (base_dir / entry["path"]).resolve()
+        if any(root in file.parents for root in nested):
+            allowed += entry.get("count", 0)
+        else:
+            kept.append(entry)
+    return kept, allowed
+
+
+class CheckSettings(NamedTuple):
+    """What one check runs by: the rule lists, the other systems and the baseline."""
+
+    select: list[str] | None
+    ignore: list[str] | None
+    enable: list[str] | None
+    systems: list[str] | None
+    baseline: str | None
+    no_baseline: bool
+
+    def with_job(self, job: cijob.CiLint) -> CheckSettings:
+        """These settings with the set of a CI job on top.
+
+        Merged, not replaced: `--as-ci --enable style/line-length` is "the job's set plus this
+        one", which is how a rule is tried out before it goes into the pipeline. The job's
+        baseline stands unless the caller named one or turned the baseline off.
+        """
+        baseline, no_baseline = self.baseline, self.no_baseline
+        if not baseline and not no_baseline:
+            baseline, no_baseline = job.baseline_file(), job.no_baseline
+        return CheckSettings(
+            (self.select or []) + list(job.select), (self.ignore or []) + list(job.ignore),
+            (self.enable or []) + list(job.enable),
+            (self.systems or []) + list(job.other_systems), baseline, no_baseline,
+        )
 
 
 def _commands_help() -> str:
@@ -611,12 +822,20 @@ def _baseline_main(argv: list[str]) -> int:
         print(i18n.t("cli.missing-paths", paths=", ".join(f"'{p}'" for p in missing)),
               file=sys.stderr)
         return 2
-    files, requested = discover_with_context(args.paths)
-    if not files:
+    parts = split_by_project(args.paths)
+    if not any(part.files for part in parts):
         print(i18n.t("cli.nothing-collected", paths=", ".join(f"'{p}'" for p in args.paths)),
               file=sys.stderr)
         return 2
-    target = Path(args.baseline) if args.baseline else baseline.discover(files)
+    if args.baseline:
+        target: Path | None = Path(args.baseline)
+    else:
+        found = baselines_of(parts)
+        if len(found) > 1:
+            print(i18n.t("cli.baseline-several", paths=", ".join(str(p) for p in found)),
+                  file=sys.stderr)
+            return 2
+        target = found[0] if found else None
     if target is None:
         print(i18n.t("cli.baseline-none-to-extend"), file=sys.stderr)
         return 2
@@ -626,12 +845,16 @@ def _baseline_main(argv: list[str]) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    diagnostics = _filter_requested(
-        run_parallel(files, select=select, jobs=args.jobs,
-                     element_version=args.element_version or None,
-                     context=_context_of(files, requested)),
-        requested,
-    )
+    # Each project root on its own, as the check mode runs them.
+    diagnostics = [
+        d for part in parts
+        for d in _filter_requested(
+            run_parallel(part.files, select=select, jobs=args.jobs,
+                         element_version=args.element_version or None,
+                         context=_context_of(part.files, part.requested)),
+            part.requested,
+        )
+    ]
     added = baseline.add_entries(data, diagnostics, target.parent, reason=args.reason)
     if added:
         baseline.save(target, data)
@@ -1520,6 +1743,187 @@ def _scaffold_main(argv: list[str]) -> int:
     return 0
 
 
+def _refuse_ci(exc: cijob.CiLintError, args) -> int:
+    """The refusal of `--as-ci`: the reason on stderr, and in the json report as well."""
+    print(str(exc), file=sys.stderr)
+    if args.format == "json":
+        # A refusal is where a machine reader needs the reason most, and stderr is not where
+        # it looks. The payload carries no `diagnostics` on purpose: the run never happened,
+        # and an empty list of findings reads like a clean tree.
+        _emit_report(json.dumps(
+            {"error": str(exc), "summary": {"as_ci": cijob.refused(str(exc))}},
+            ensure_ascii=False,
+        ), args.out)
+    return 2
+
+
+def _describe_job(job: cijob.CiLint, args) -> None:
+    """The job a text run adopted, said on stderr before its findings."""
+    print(job.describe(), file=sys.stderr)
+    # A pipeline that runs the linter twice checks two different trees by two different sets,
+    # and a run that took one of them without being asked must not let the reader believe
+    # there was only one.
+    if not args.as_ci_job and job.hint():
+        print(job.hint(), file=sys.stderr)
+    # Said whatever job was asked for: a pipeline whose jobs come from a template nobody
+    # fetched has a blind spot, and only the reader knows if it matters.
+    if job.note():
+        print(job.note(), file=sys.stderr)
+
+
+@dataclass
+class _PartCheck:
+    """One project root of a check-mode run: what it ran by and what it found.
+
+    The baseline fields are filled by _judge_by_baseline; `suppressed` stays None for a root
+    no baseline judged.
+    """
+
+    part: ProjectPart
+    job: cijob.CiLint | None
+    settings: CheckSettings
+    active: list
+    diagnostics: list
+    fix: dict = field(default_factory=dict)
+    accepted: list | None = None
+    baseline: Path | None = None
+    found: bool = False
+    suppressed: int | None = None
+    unused: int = 0
+    stale: list = field(default_factory=list)
+    not_checked: list = field(default_factory=list)
+    reworded: list = field(default_factory=list)
+
+
+def _check_part(part: ProjectPart, job: cijob.CiLint | None, settings: CheckSettings,
+                args) -> _PartCheck:
+    """Check one project root by its settings: the findings before the baseline."""
+    from xbsl.engine import active_rules, run_parallel
+    from xbsl.rules import comment_names
+
+    select, ignore, enable = (_parse_set(settings.select), _parse_set(settings.ignore),
+                              _parse_set(settings.enable))
+    check = _PartCheck(part, job, settings, active_rules(select, ignore, enable), [])
+    with comment_names.other_systems(_parse_systems(settings.systems)):
+        if args.fix:
+            from xbsl import fixer
+
+            target = Path(settings.baseline) if settings.baseline else None
+            if target is None and not settings.no_baseline:
+                target = baseline.discover(part.counted)
+            check.diagnostics, check.fix, check.accepted = fixer.fix_paths(
+                part.files, select=select, ignore=ignore, enable=enable,
+                requested=part.requested, baseline_path=target,
+            )
+        else:
+            check.diagnostics = _filter_requested(
+                run_parallel(
+                    part.files, select=select, ignore=ignore, enable=enable,
+                    jobs=args.jobs, element_version=args.element_version or None,
+                    context=_context_of(part.files, part.requested),
+                ),
+                part.requested,
+            )
+    return check
+
+
+def _judge_by_baseline(check: _PartCheck, reach: dict[Path, list[Path]], nested: list[Path],
+                       args) -> None:
+    """Pass the findings of one root through its baseline; with --prune-baseline, prune it.
+
+    The file is read here, one root after another: two roots of one checkout share a
+    baseline, and the second one must read what the pruning of the first one left.
+    """
+    target = check.baseline
+    data = baseline.load(target)
+    # The rule set the run carried and the paths it reached: an entry of a rule nobody ran, or
+    # of a file nobody asked about, is not stale debt - it is debt nobody looked at, and
+    # pruning it would drop the record silently.
+    carried = {rule.id for rule in check.active}
+    roots = baseline.roots_of([Path(p) for p in check.part.asked], target.parent)
+    check.diagnostics, check.suppressed, check.unused, check.stale = baseline.apply(
+        check.diagnostics, data, target.parent, carried, roots,
+        accepted=check.accepted if args.fix else None, reworded=check.reworded,
+    )
+    check.stale, allowed = without_nested(check.stale, target.parent, nested)
+    check.unused -= allowed
+    joint = baseline.roots_of(reach.get(target.resolve(), []), target.parent)
+    check.not_checked = baseline.not_checked_entries(data, carried, joint)
+    # The stale entries are named, not just counted: without the list the only way to find
+    # them was to rewrite the whole baseline and diff it.
+    if (args.stale_baseline or args.prune_baseline) and args.format == "text":
+        for entry in check.stale:
+            print(i18n.t(
+                "cli.baseline-stale-entry", path=entry["path"], rule=entry["rule"],
+                count=entry["count"], message=entry["message"],
+            ), file=sys.stderr)
+            # The reason is prose a human wrote about a deliberate exclusion, not a counter
+            # the tool keeps - it is read out before the entry goes.
+            if entry.get("reason"):
+                print(i18n.t("cli.baseline-stale-reason", reason=entry["reason"]),
+                      file=sys.stderr)
+    if args.prune_baseline:
+        if check.stale:
+            baseline.save(target, baseline.without_entries(data, check.stale))
+        print(i18n.t("cli.baseline-pruned", path=target, removed=len(check.stale)),
+              file=sys.stderr)
+        # Removing a reasoned entry removes the sentence with it: the file is under version
+        # control, and after the commit that text is only in the history.
+        reasoned = sum(1 for entry in check.stale if entry.get("reason"))
+        if reasoned:
+            print(i18n.t("cli.baseline-pruned-reasons", count=reasoned), file=sys.stderr)
+
+
+def _baseline_record(check: _PartCheck) -> dict:
+    """The json keys that tell what the baseline of one root took."""
+    record = {
+        "baselined": check.suppressed,
+        # Two different units, both useful: `unused` counts the suppressions nobody spent,
+        # `stale` the entries they belong to (one entry may allow several).
+        "baseline_unused": check.unused,
+        "baseline_stale": len(check.stale),
+        "baseline_stale_entries": check.stale,
+        # Entries the run could not judge: their rule was not in the selection. Named apart
+        # so two environments with different rule sets stop contradicting each other about
+        # one and the same baseline.
+        "baseline_not_checked": len(check.not_checked),
+    }
+    split = baseline.not_checked_split(check.not_checked)
+    record["baseline_not_checked_rules"] = split["rules"]
+    record["baseline_not_checked_paths"] = split["paths"]
+    # Entries frozen under an earlier wording of their rule: they hold their findings, and a
+    # rewrite brings their text up to date.
+    if check.reworded:
+        record["baseline_reworded"] = len(check.reworded)
+        record["baseline_reworded_entries"] = check.reworded
+    return record
+
+
+def _part_record(check: _PartCheck, args) -> dict:
+    """The entry of one root in `summary.projects`: its counts, its job and its baseline."""
+    record = report.project_record(check.part.root, check.diagnostics,
+                                   len(check.part.counted))
+    record.update(check.fix)
+    if check.job is not None:
+        record["as_ci"] = check.job.as_dict(hint=not args.as_ci_job)
+    if check.suppressed is not None:
+        record["baseline"] = str(check.baseline)
+        record.update(_baseline_record(check))
+    return record
+
+
+def _part_line(check: _PartCheck) -> str:
+    """The line of one root under the totals of a text run."""
+    root = (str(check.part.root) if check.part.root is not None
+            else i18n.t("cli.project-outside"))
+    errors = sum(1 for d in check.diagnostics if d.severity.value == "error")
+    line = i18n.t("cli.project-line", root=root, files=len(check.part.counted),
+                  diags=len(check.diagnostics), errors=errors)
+    if check.suppressed is not None:
+        line += i18n.t("cli.project-baselined", path=check.baseline, count=check.suppressed)
+    return line
+
+
 def _brief_report(args, diagnostics, checked: int, active, selection: dict,
                   saved: rundiff.Run | None, suppressed: int | None) -> int:
     """The report of `--summary` and `--compare`: the counts by rule, or what changed.
@@ -1619,6 +2023,10 @@ def _check_main(argv: list[str]) -> int:
     )
     from xbsl.rules import comment_names
 
+    # The caller's own settings, before a CI job adds to them: in a run over several project
+    # roots every root takes the job of its own checkout on top of these.
+    own = CheckSettings(args.select, args.ignore, args.enable, args.other_system,
+                        args.baseline, args.no_baseline)
     adopted: cijob.CiLint | None = None
     if args.as_ci is not None or args.as_ci_job:
         # "As in CI" is read from the pipeline file itself, never from a second list of rules
@@ -1627,37 +2035,14 @@ def _check_main(argv: list[str]) -> int:
         try:
             job = cijob.find(args.paths, args.as_ci or None, args.as_ci_job)
         except cijob.CiLintError as exc:
-            print(str(exc), file=sys.stderr)
-            if args.format == "json":
-                # A refusal is where a machine reader needs the reason most, and stderr is
-                # not where it looks. The payload carries no `diagnostics` on purpose: the
-                # run never happened, and an empty list of findings reads like a clean tree.
-                _emit_report(json.dumps(
-                    {"error": str(exc), "summary": {"as_ci": cijob.refused(str(exc))}},
-                    ensure_ascii=False,
-                ), args.out)
-            return 2
+            return _refuse_ci(exc, args)
         adopted = job
-        # Merged, not replaced: `--as-ci --enable style/line-length` is "the job's set plus
-        # this one", which is how a rule is tried out before it goes into the pipeline.
-        args.select = (args.select or []) + list(job.select)
-        args.ignore = (args.ignore or []) + list(job.ignore)
-        args.enable = (args.enable or []) + list(job.enable)
-        args.other_system = (args.other_system or []) + list(job.other_systems)
-        if not args.baseline and not args.no_baseline:
-            args.baseline = job.baseline_file()
-            args.no_baseline = job.no_baseline
+        merged = own.with_job(job)
+        args.select, args.ignore, args.enable = merged.select, merged.ignore, merged.enable
+        args.other_system = merged.systems
+        args.baseline, args.no_baseline = merged.baseline, merged.no_baseline
         if args.format == "text":
-            print(job.describe(), file=sys.stderr)
-            # A pipeline that runs the linter twice checks two different trees by two
-            # different sets, and a run that took one of them without being asked must not
-            # let the reader believe there was only one.
-            if not args.as_ci_job and job.hint():
-                print(job.hint(), file=sys.stderr)
-            # Said whatever job was asked for: a pipeline whose jobs come from a template
-            # nobody fetched has a blind spot, and only the reader knows if it matters.
-            if job.note():
-                print(job.note(), file=sys.stderr)
+            _describe_job(job, args)
 
     select = _parse_set(args.select)
     ignore = _parse_set(args.ignore)
@@ -1746,6 +2131,8 @@ def _check_main(argv: list[str]) -> int:
             print(str(exc), file=sys.stderr)
             return 2
 
+    settings = CheckSettings(args.select, args.ignore, args.enable, args.other_system,
+                             args.baseline, args.no_baseline)
     if args.stdin:
         # Editor mode: one buffer from stdin, checked with per-file rules only (cross-file rules
         # need the whole project). --filename sets the kind (.xbsl/.yaml) and the reported path.
@@ -1753,10 +2140,10 @@ def _check_main(argv: list[str]) -> int:
             print(i18n.t("cli.stdin-needs-filename"), file=sys.stderr)
             return 2
         src = make_source(Path(args.filename), sys.stdin.buffer.read())
-        diagnostics = run_sources(
+        buffer = ProjectPart(None, [args.filename], [Path(args.filename)], None)
+        checks = [_PartCheck(buffer, adopted, settings, active, run_sources(
             [src], select=select, ignore=ignore, enable=enable, scopes=("file",),
-        )
-        files = [Path(args.filename)]
+        ))]
     else:
         # A path that does not exist is a mistake, not an empty check: `xbsl e1c/sit` used to
         # answer "0 files checked, 0 findings" with the exit code of a clean run, so a typo in
@@ -1768,41 +2155,41 @@ def _check_main(argv: list[str]) -> int:
             print(i18n.t("cli.missing-paths", paths=", ".join(f"'{p}'" for p in missing)),
                   file=sys.stderr)
             return 2
-        files, requested = discover_with_context(args.paths or ["."])
-        if not files:
+        parts = split_by_project(args.paths or ["."])
+        if not any(part.files for part in parts):
             # The paths exist but hold no sources at all: not an error (an empty directory is
             # a legitimate state of a fresh project), yet worth saying out loud - silence here
             # reads as "everything is clean".
             asked = args.paths or ["."]
             print(i18n.t("cli.nothing-collected", paths=", ".join(f"'{p}'" for p in asked)),
                   file=sys.stderr)
-        if args.fix:
-            from xbsl import fixer
-
-            target = Path(args.baseline) if args.baseline else None
-            if target is None and not args.no_baseline:
-                target = baseline.discover(requested if requested is not None else files)
+        checks = []
+        for part in parts:
+            job, part_settings = adopted, settings
+            if len(parts) > 1 and adopted is not None and not args.as_ci:
+                # Each root is checked by the job of its own checkout: the job of the first
+                # one would lend the other worktree its baseline, and match none of its files.
+                try:
+                    job = cijob.find(part.asked, None, args.as_ci_job)
+                except cijob.CiLintError as exc:
+                    return _refuse_ci(exc, args)
+                part_settings = own.with_job(job)
+                if args.format == "text" and job.where() != adopted.where():
+                    _describe_job(job, args)
             try:
-                diagnostics, fix_summary, fix_accepted = fixer.fix_paths(
-                    files, select=select, ignore=ignore, enable=enable,
-                    requested=requested, baseline_path=target,
-                )
+                checks.append(_check_part(part, job, part_settings, args))
             except baseline.BaselineError as exc:
                 print(str(exc), file=sys.stderr)
                 return 2
-        else:
-            from xbsl.engine import run_parallel
-
-            diagnostics = _filter_requested(
-                run_parallel(
-                    files, select=select, ignore=ignore, enable=enable,
-                    jobs=args.jobs, element_version=args.element_version or None,
-                    context=_context_of(files, requested),
-                ),
-                requested,
-            )
-        if requested is not None:
-            files = requested  # the counters below speak of what was asked for
+    diagnostics = [d for check in checks for d in check.diagnostics]
+    files = [f for check in checks for f in check.part.counted]
+    if len(checks) > 1:
+        carried = {rule.id for check in checks for rule in check.active}
+        active = [rule for rule in RULES if rule.id in carried]
+    fix_summary: dict[str, int] = {}
+    for check in checks:
+        for key, count in check.fix.items():
+            fix_summary[key] = fix_summary.get(key, 0) + count
 
     if args.write_baseline:
         # Freeze mode: the findings become the baseline instead of a report. Deliberate debt -
@@ -1816,58 +2203,41 @@ def _check_main(argv: list[str]) -> int:
         )
         return 0
 
-    suppressed = unused = None
-    stale: list[dict] = []
-    not_checked: list[dict] = []
-    reworded: list[dict] = []
-    if not args.baseline and not args.no_baseline:
-        found = baseline.discover(files)
-        if found is not None:
-            args.baseline = str(found)
-            # The brief report names the baseline by what it suppressed, in its totals.
-            if args.format == "text" and not brief:
-                print(i18n.t("cli.baseline-found", path=found), file=sys.stderr)
-    if args.baseline:
+    # Every root is judged by its own baseline: the one named, the one of its CI job, or the
+    # one found above its files.
+    for check in checks:
+        if check.settings.baseline:
+            check.baseline = Path(check.settings.baseline)
+        elif not check.settings.no_baseline:
+            check.baseline = baseline.discover(check.part.counted)
+            check.found = check.baseline is not None
+    reach = shared_reach([(check.part, check.baseline) for check in checks])
+    parts = [check.part for check in checks]
+    for check in checks:
+        if check.baseline is None:
+            continue
+        # The brief report names the baseline by what it suppressed, in its totals.
+        if check.found and args.format == "text" and not brief:
+            print(i18n.t("cli.baseline-found", path=check.baseline), file=sys.stderr)
         try:
-            data = baseline.load(Path(args.baseline))
+            _judge_by_baseline(check, reach, nested_roots(check.part, parts), args)
         except baseline.BaselineError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        # The rule set the run carried and the paths it reached: an entry of a rule nobody
-        # ran, or of a file nobody asked about, is not stale debt - it is debt nobody looked
-        # at, and pruning it would drop the record silently.
-        carried = {r.id for r in active}
-        asked = [Path(args.filename)] if args.stdin else [Path(p) for p in (args.paths or ["."])]
-        roots = baseline.roots_of(asked, Path(args.baseline).parent)
-        diagnostics, suppressed, unused, stale = baseline.apply(
-            diagnostics, data, Path(args.baseline).parent, carried, roots,
-            accepted=fix_accepted if args.fix else None, reworded=reworded,
-        )
-        not_checked = baseline.not_checked_entries(data, carried, roots)
-        # The stale entries are named, not just counted: without the list the only way to
-        # find them was to rewrite the whole baseline and diff it.
-        if (args.stale_baseline or args.prune_baseline) and args.format == "text":
-            for entry in stale:
-                print(i18n.t(
-                    "cli.baseline-stale-entry", path=entry["path"], rule=entry["rule"],
-                    count=entry["count"], message=entry["message"],
-                ), file=sys.stderr)
-                # The reason is prose a human wrote about a deliberate exclusion, not a
-                # counter the tool keeps - it is read out before the entry goes.
-                if entry.get("reason"):
-                    print(i18n.t("cli.baseline-stale-reason", reason=entry["reason"]),
-                          file=sys.stderr)
-        if args.prune_baseline:
-            target = Path(args.baseline)
-            if stale:
-                baseline.save(target, baseline.without_entries(data, stale))
-            print(i18n.t("cli.baseline-pruned", path=target, removed=len(stale)),
-                  file=sys.stderr)
-            # Removing a reasoned entry removes the sentence with it: the file is under
-            # version control, and after the commit that text is only in the history.
-            reasoned = sum(1 for entry in stale if entry.get("reason"))
-            if reasoned:
-                print(i18n.t("cli.baseline-pruned-reasons", count=reasoned), file=sys.stderr)
+    diagnostics = [d for check in checks for d in check.diagnostics]
+    judged = [check for check in checks if check.suppressed is not None]
+    suppressed = sum(check.suppressed or 0 for check in judged) if judged else None
+    unused = sum(check.unused for check in judged)
+    stale = [entry for check in judged for entry in check.stale]
+    reworded = [entry for check in judged for entry in check.reworded]
+    # One list per file: the parts that share a baseline count its unchecked entries
+    # against their joint reach, and each of them holds the same list.
+    not_checked: list[dict] = []
+    counted_files: set[Path] = set()
+    for check in judged:
+        if check.baseline.resolve() not in counted_files:
+            counted_files.add(check.baseline.resolve())
+            not_checked.extend(check.not_checked)
 
     if brief:
         selection = {name: sorted(chosen) if chosen else None
@@ -1882,31 +2252,19 @@ def _check_main(argv: list[str]) -> int:
         if args.fix:
             payload["summary"].update(fix_summary)
         payload["summary"].update(environment.provenance(active))
-        if adopted is not None:
-            # The record the MCP server already answered with, now in the terminal's report
-            # too: which job of which file this verdict was judged by. Without it a reader
-            # comparing a local run with a red pipeline had nothing to compare THE SETS by,
-            # and the flag's whole promise is that the two agree.
-            payload["summary"]["as_ci"] = adopted.as_dict(hint=not args.as_ci_job)
-        if suppressed is not None:
-            payload["summary"]["baselined"] = suppressed
-            # Two different units, both useful: `unused` counts the suppressions nobody
-            # spent, `stale` the entries they belong to (one entry may allow several).
-            payload["summary"]["baseline_unused"] = unused
-            payload["summary"]["baseline_stale"] = len(stale)
-            payload["summary"]["baseline_stale_entries"] = stale
-            # Entries the run could not judge: their rule was not in the selection. Named
-            # apart so two environments with different rule sets stop contradicting each
-            # other about one and the same baseline.
-            payload["summary"]["baseline_not_checked"] = len(not_checked)
-            split = baseline.not_checked_split(not_checked)
-            payload["summary"]["baseline_not_checked_rules"] = split["rules"]
-            payload["summary"]["baseline_not_checked_paths"] = split["paths"]
-            # Entries frozen under an earlier wording of their rule: they hold their findings,
-            # and a rewrite brings their text up to date.
-            if reworded:
-                payload["summary"]["baseline_reworded"] = len(reworded)
-                payload["summary"]["baseline_reworded_entries"] = reworded
+        if len(checks) > 1:
+            # A root of its own, a record of its own: the job and the baseline of each root
+            # stand in its entry, the counts above are the sum of them.
+            payload["summary"]["projects"] = [_part_record(check, args) for check in checks]
+        else:
+            if adopted is not None:
+                # The record the MCP server already answered with, now in the terminal's
+                # report too: which job of which file this verdict was judged by. Without it a
+                # reader comparing a local run with a red pipeline had nothing to compare THE
+                # SETS by, and the flag's whole promise is that the two agree.
+                payload["summary"]["as_ci"] = adopted.as_dict(hint=not args.as_ci_job)
+            if checks[0].suppressed is not None:
+                payload["summary"].update(_baseline_record(checks[0]))
         _emit_report(json.dumps(payload, ensure_ascii=False), args.out)
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
@@ -1927,6 +2285,10 @@ def _check_main(argv: list[str]) -> int:
                    diags=len(diagnostics), errors=n_err),
             file=sys.stderr,
         )
+        if len(checks) > 1:
+            print(i18n.t("cli.projects", count=len(checks)), file=sys.stderr)
+            for check in checks:
+                print(_part_line(check), file=sys.stderr)
         print(environment.provenance_note(environment.provenance(active)), file=sys.stderr)
         if suppressed is not None:
             # The count names ENTRIES, as the text promises; `unused` counts the individual
