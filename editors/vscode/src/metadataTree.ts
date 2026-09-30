@@ -18,6 +18,7 @@ import {
   engineProjectInfo,
   ensureSavedForCli,
   ensureSourcesSavedForCli,
+  queryEngine,
   ScaffoldResult,
 } from "./engineMeta";
 import { lspActive, lspRequest } from "./lspClient";
@@ -76,6 +77,8 @@ import {
   existingModule,
   existingRowModules,
   groupResources,
+  localizationChoices,
+  LocalizationInfo,
   MetaField,
   MetaInternals,
   moduleMenuTokens,
@@ -199,9 +202,6 @@ const ALL_CATEGORY_GROUPS: ReadonlyArray<{ group: string; icon: string; order: n
 
 const FORM_KIND = "КомпонентИнтерфейса";
 const LOCALIZED_STRINGS_KIND = "ЛокализованныеСтроки";
-// Localization languages by their folder code - English l10n keys (see KIND_ROWS): the pick
-// shows them through l10n.t, in the language of the editor.
-const LANGUAGE_NAMES: Record<string, string> = { Ru: "Russian", En: "English" };
 // English label keys (see the comment at KIND_ROWS): displayed via l10n.t.
 const OTHER_GROUP = "Other";
 const COMMON_FORMS_GROUP = "Common forms";
@@ -3055,54 +3055,44 @@ async function addObject(provider: XbslMetadataProvider, kind?: string, targetDi
   );
 }
 
-// "Add localization" on a LocalizedStrings element: the language candidates come from the
-// ENGINE (xbsl/localizationInfo) - the declared localization languages minus the default one
-// and minus the translations already present. Without the LSP the pick falls back to the
-// supported folder codes minus the translations the tree itself shows; the engine validates
-// on write either way.
+// "Add localization" on a LocalizedStrings element: the language candidates and their names come
+// from the ENGINE (xbsl/localizationInfo, the CLI `localization-info` without the language server) -
+// the declared localization languages minus the default one and minus the translations already
+// present. A language is named in the language of the editor. With no engine to ask, the command
+// says so and offers nothing: the languages a project may get are the data's, and a list written
+// into the extension would miss the ones the platform added and offer ones the project cannot take.
 async function addLocalization(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
   const yamlPath = node?.yamlPath;
   if (!yamlPath) {
     return;
   }
-  interface LocInfo {
-    candidates?: string[];
-    names?: Record<string, string>;
-    error?: string;
+  const info = await queryEngine<LocalizationInfo>(
+    "xbsl/localizationInfo",
+    { path: yamlPath },
+    "localization-info",
+    [yamlPath],
+    path.dirname(yamlPath)
+  );
+  if (!info) {
+    return; // no engine answered: queryEngine has shown the install prompt
   }
-  const info = lspActive()
-    ? await lspRequest<LocInfo>("xbsl/localizationInfo", { path: yamlPath })
-    : undefined;
-  if (info?.error) {
+  if (info.error) {
     void vscode.window.showWarningMessage(info.error);
     return;
   }
-  let candidates = info?.candidates;
-  if (!candidates) {
-    const existing = new Set(
-      (node.children ?? [])
-        .filter((c) => /\btranslation\b/.test(c.contextValue ?? ""))
-        .map((c) => String(c.label))
-    );
-    candidates = ["Ru", "En"].filter((c) => !existing.has(c));
-  }
-  if (!candidates.length) {
+  const choices = localizationChoices(info, vscode.env.language.toLowerCase().startsWith("ru"));
+  if (!choices.length) {
+    // The notes of the engine say why nothing is offered when the reason is not that every
+    // language is done: a language the compatibility mode lacks, a list the descriptor lacks.
+    const notes = (info.notes ?? []).join(" ");
     void vscode.window.showInformationMessage(
-      vscode.l10n.t("Every declared localization language already has its translation.")
+      notes || vscode.l10n.t("Every declared localization language already has its translation.")
     );
     return;
   }
-  const pick = await vscode.window.showQuickPick(
-    candidates.map((code) => ({
-      // The language name is UI text: shown in the language of the EDITOR, not of the
-      // project (unlike a name that goes into the sources). The engine's own name is the
-      // fallback for a code the editor knows nothing about.
-      label: LANGUAGE_NAMES[code] ? vscode.l10n.t(LANGUAGE_NAMES[code]) : info?.names?.[code] ?? code,
-      description: code,
-      code,
-    })),
-    { placeHolder: vscode.l10n.t("Language of the translation") }
-  );
+  const pick = await vscode.window.showQuickPick(choices, {
+    placeHolder: vscode.l10n.t("Language of the translation"),
+  });
   if (!pick) {
     return;
   }

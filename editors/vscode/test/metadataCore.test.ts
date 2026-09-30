@@ -16,6 +16,8 @@ import {
   existingRowModules,
   hintName,
   insertItemEdit,
+  localizationChoices,
+  LocalizationInfo,
   MODULE_TAIL_ENGLISH,
   MODULE_TAILS,
   moduleMenuTokens,
@@ -431,6 +433,35 @@ test("translationRef: a path without the section is not a translation", () => {
   assert.strictEqual(translationRef("/p/Основное/ОбменЛокализация.yaml"), undefined);
   // A folder named Локализация with the file right in it: no language folder - no translation.
   assert.strictEqual(translationRef("/p/Локализация/Строки.yaml"), undefined);
+});
+
+// The answer of the engine for a project that declares a language the platform added later.
+const LOCALIZATION_INFO: LocalizationInfo = {
+  candidates: ["En", "Vi"],
+  names: { En: "Английский", Vi: "Вьетнамский" },
+  names_en: { En: "English", Vi: "Vietnamese" },
+};
+
+test("localizationChoices: every candidate of the engine, named in the language of the editor", () => {
+  assert.deepStrictEqual(localizationChoices(LOCALIZATION_INFO, true), [
+    { label: "Английский", description: "En", code: "En" },
+    { label: "Вьетнамский", description: "Vi", code: "Vi" },
+  ]);
+  assert.deepStrictEqual(
+    localizationChoices(LOCALIZATION_INFO, false).map((c) => c.label), ["English", "Vietnamese"]
+  );
+});
+
+test("localizationChoices: a name the engine did not send gives way to the other one, then to the code", () => {
+  // An engine older than the English names sends the Russian ones alone.
+  const older: LocalizationInfo = { candidates: ["Vi", "Tg"], names: { Vi: "Вьетнамский" } };
+  assert.deepStrictEqual(localizationChoices(older, false).map((c) => c.label), ["Вьетнамский", "Tg"]);
+  assert.deepStrictEqual(localizationChoices(older, true).map((c) => c.label), ["Вьетнамский", "Tg"]);
+});
+
+test("localizationChoices: nothing is offered without candidates - no list of the extension's own", () => {
+  assert.deepStrictEqual(localizationChoices({ candidates: [] }, true), []);
+  assert.deepStrictEqual(localizationChoices({ error: "не элемент" }, false), []);
 });
 
 test("serializer kind spellings: the kinds of issue #1 resolve to the tree's spelling", () => {

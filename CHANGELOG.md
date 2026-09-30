@@ -20,6 +20,12 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **`localization-info` gives the English name of each candidate language too.** The `names_en`
+  field stands next to `names` in the command, in MCP `meta_localization_info` and in the language
+  server, so a client can name a language in the language of its own interface.
+
 ### Changed
 
 - **`translate` keeps the prefix of a deprecated name.** An entry that does not start with

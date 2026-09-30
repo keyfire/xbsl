@@ -743,6 +743,37 @@ export function translationRef(yamlPath: string): TranslationRef | undefined {
   };
 }
 
+// What the engine answers about the languages a LocalizedStrings element may be translated into
+// (xbsl/localizationInfo, the CLI `localization-info`): the candidate folder codes, and the
+// Russian and the English name of each. An engine older than the English names sends the
+// Russian ones alone.
+export interface LocalizationInfo {
+  candidates?: string[];
+  names?: Record<string, string>;
+  names_en?: Record<string, string>;
+  notes?: string[];
+  error?: string;
+}
+
+export interface LanguageChoice {
+  label: string;
+  description: string;
+  code: string;
+}
+
+// The rows of the "Add localization" pick: one per candidate, in the engine's order, named in
+// the language of the editor - the Russian name in a Russian interface, the English one in any
+// other - with the folder code beside it. The languages are the data's, so the list and the names
+// come from the answer alone; a name missing from it gives way to the other one, then to the code.
+export function localizationChoices(info: LocalizationInfo, russianUi: boolean): LanguageChoice[] {
+  return (info.candidates ?? []).map((code) => {
+    const russian = info.names?.[code];
+    const english = info.names_en?.[code];
+    const label = (russianUi ? russian ?? english : english ?? russian) ?? code;
+    return { label, description: code, code };
+  });
+}
+
 const LINE_INDENT = /^([ \t]*)/;
 
 // Targeted insertion of a new item (a set of field lines itemLines, e.g. ["Ид: ...","Имя: ...",
