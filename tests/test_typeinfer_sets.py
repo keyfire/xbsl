@@ -261,7 +261,9 @@ def test_a_catalog_without_the_current_forms_marker_is_not_trusted_with_plain_pr
     assert ti._trusted_plain("Задачи", "Имя") is False
     catalog["meta"]["member_forms"] = "current"
     assert ti._trusted_plain("Задачи", "Имя") is True
-    assert ti._trusted_plain("ОбсуждениеВзаимодействия", "ИдВнешнегоОбсуждения") is False
+    # A pair the editor disputes is not trusted even by a catalog with the current forms.
+    monkeypatch.setattr(ti, "_DISPUTED_PROPERTIES", frozenset({("Задачи", "Имя")}))
+    assert ti._trusted_plain("Задачи", "Имя") is False
 
 
 @pytest.mark.needs_data
