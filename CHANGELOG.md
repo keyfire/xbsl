@@ -34,6 +34,9 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **Two worktrees of one project in one run are no longer merged into one project.** Shared names
+  gave a finding each, and one tree's baseline judged the other. Each root now gets its own check
+  and record in `summary.projects`, and `lint_paths` with `compact` keeps within 12,000 characters.
 - **`from xbsl import scaffold` works as the first import of a process.** It used to fail on a
   circular import: loading the engine loads the rules, and a rule takes a name from the
   scaffolding module. `import xbsl.resource_usage` failed the same way. ([#170](https://github.com/keyfire/xbsl/pull/170))
