@@ -12,7 +12,7 @@ import pytest
 import yaml as pyyaml
 
 import xbsl.engine  # noqa: F401 - breaks the scaffold <-> rules import cycle
-from xbsl import scaffold, typeinfer
+from xbsl import metamodel, scaffold, typeinfer
 from xbsl.scaffold import (
     FileRename,
     ScaffoldError,
@@ -2779,14 +2779,31 @@ def _loc_element(tmp_path, name="ПробаЛокализация"):
     return path
 
 
-def _loc_descriptor(tmp_path, languages=("Русский", "Английский"), default="Русский"):
+def _loc_descriptor(tmp_path, languages=("Русский", "Английский"), default="Русский",
+                    mode=None):
     lines = [
         "Ид: 6f0b6a44-0000-4000-8000-0000000000b1",
+        *([f"РежимСовместимости: {mode}"] if mode else []),
         "Имя: Проба", "Поставщик: e1c", "Версия: 1.0.0",
         f"ЯзыкПоУмолчанию: {default}", "ЯзыкиЛокализации:",
         *[f"    - {lang}" for lang in languages],
     ]
     (tmp_path / "Проект.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+#: The language table the localization tests pin: the scaffolding takes the languages from the
+#: data, and a test must not depend on the data the machine happens to have. The mode of the
+#: third language is the test's own.
+_PINNED_LANGUAGES = (
+    metamodel.Language("Английский", "English", "en", "1.0"),
+    metamodel.Language("Русский", "Russian", "ru", "1.0"),
+    metamodel.Language("Вьетнамский", "Vietnamese", "vi", "9.1"),
+)
+
+
+@pytest.fixture
+def pinned_languages(monkeypatch):
+    monkeypatch.setattr(metamodel, "languages", lambda: _PINNED_LANGUAGES)
 
 
 def test_add_localization_copies_the_string_sections(tmp_path):
@@ -2866,13 +2883,13 @@ def test_localization_info_candidates(tmp_path):
     assert info["candidates"] == []
 
 
-def test_localization_info_without_a_descriptor(tmp_path):
+def test_localization_info_without_a_descriptor(tmp_path, pinned_languages):
     path = _loc_element(tmp_path)
     info = scaffold.localization_info(path)
-    # No declared languages: every supported language is offered, with the note that the
-    # descriptor must declare them for localization to work at all.
+    # No declared languages: every language of the data is offered, in its order, with the
+    # note that the descriptor must declare them for localization to work at all.
     assert info["languages"] == []
-    assert info["candidates"] == ["Ru", "En"]
+    assert info["candidates"] == ["En", "Ru", "Vi"]
     assert info["notes"]
 
 
@@ -2888,6 +2905,66 @@ def test_localization_info_reads_an_inline_language_list(tmp_path):
     info = scaffold.localization_info(_loc_element(tmp_path))
     assert info["languages"] == ["Ru", "En"]
     assert info["candidates"] == ["En"]
+
+
+def test_a_language_of_the_data_is_offered_and_added_under_its_code(tmp_path, pinned_languages):
+    """The languages are the data's, not a pair written into the tool: a third one declared by
+    the descriptor is a candidate, answers to any of its names, and gets the folder of its
+    code - the way the projects write theirs (`En`, `Vi`)."""
+    _loc_descriptor(tmp_path, languages=("Русский", "Английский", "Вьетнамский"), mode="9.1")
+    path = _loc_element(tmp_path)
+
+    info = scaffold.localization_info(path)
+    assert info["languages"] == ["Ru", "En", "Vi"]
+    assert info["candidates"] == ["En", "Vi"]
+    assert info["names"] == {"En": "Английский", "Vi": "Вьетнамский"}
+    assert info["notes"] == []
+
+    written = apply_result(scaffold.op_add_localization(path, "Vietnamese"))
+    assert written == [str(tmp_path / "Локализация" / "Vi" / "ПробаЛокализация.yaml")]
+    assert scaffold.localization_info(path)["candidates"] == ["En"]
+
+
+def test_a_language_the_mode_does_not_have_is_no_candidate(tmp_path, pinned_languages):
+    """A language a newer compatibility mode added: the notes say why it is not offered, and
+    adding it is refused for the same reason instead of writing a file the build rejects."""
+    _loc_descriptor(tmp_path, languages=("Русский", "Английский", "Вьетнамский"), mode="9.0")
+    path = _loc_element(tmp_path)
+
+    info = scaffold.localization_info(path)
+    assert info["candidates"] == ["En"]
+    assert any("Вьетнамский" in note and "9.1" in note and "9.0" in note
+               for note in info["notes"])
+    with pytest.raises(ScaffoldError, match="режиме совместимости 9.1"):
+        scaffold.op_add_localization(path, "Вьетнамский")
+
+
+def test_a_listed_value_no_language_answers_to_is_named_in_the_notes(tmp_path, pinned_languages):
+    # It used to vanish from the answer without a word - and a language the tool did not know
+    # looked exactly like a project that simply had none.
+    _loc_descriptor(tmp_path, languages=("Русский", "Эльфийский"))
+    info = scaffold.localization_info(_loc_element(tmp_path))
+
+    assert info["languages"] == ["Ru"]
+    assert any("'Эльфийский'" in note for note in info["notes"])
+
+
+def test_a_translation_folder_is_found_whatever_the_case_of_its_name(tmp_path, pinned_languages):
+    """The platform compares the folder with the language code regardless of case, so `vi`
+    is the translation into Vietnamese as much as `Vi` is."""
+    _loc_descriptor(tmp_path, languages=("Русский", "Вьетнамский"), mode="9.1")
+    path = _loc_element(tmp_path)
+    lower = tmp_path / "Локализация" / "vi" / "ПробаЛокализация.yaml"
+    lower.parent.mkdir(parents=True)
+    lower.write_text("Строки:\n    Привет: Xin chào\n    Пока: Tạm biệt\n", encoding="utf-8")
+
+    info = scaffold.localization_info(path)
+    assert info["existing"] == ["Vi"]
+    assert info["candidates"] == []
+    with pytest.raises(ScaffoldError, match="уже существует"):
+        scaffold.op_add_localization(path, "vi")
+    strings = scaffold.localization_strings(tmp_path, "Vi")["strings"]
+    assert strings["ПробаЛокализация.Привет"] == "Xin chào"
 
 
 # --- processing form ----------------------------------------------------------------------

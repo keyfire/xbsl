@@ -20,6 +20,7 @@ type, which the panel renders as plain text editors.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 
 from xbsl import dataset, terms
@@ -121,7 +122,7 @@ def _reset() -> None:
     """Drop the derived tables when the data root or version changes (dataset hook)."""
     for cached in (_data, _class_properties, properties, properties_of_class, _bases, allowed_keys,
                    _english_keys, _common_english, english_name, _english_kinds,
-                   dispatched_classes, key_aliases):
+                   dispatched_classes, key_aliases, languages):
         cached.cache_clear()
 
 
@@ -210,6 +211,85 @@ def enum_values(name: str) -> tuple[str, ...]:
     """Values of a metamodel enumeration, or () when unknown."""
     data = _data()
     return tuple((data.get("enums") or {}).get(name, ())) if data else ()
+
+
+@dataclass(frozen=True)
+class Language:
+    """A language a project may be localized into, as the platform declares it.
+
+    `code` is the ISO 639 code: the platform finds the language of a translation by the name
+    of the folder the translation lies in, compared with the code regardless of case.
+    `since` is the compatibility mode the language appeared in; None - every mode has it.
+    """
+
+    russian: str
+    english: str
+    code: str
+    since: str | None = None
+
+
+#: What stands in for the language table when the data has none - a clone without data, or
+#: data extracted before the table existed: the two languages every compatibility mode has.
+#: The toolkit is built around exactly these two (the translator turns one into the other),
+#: so without the table it works as it always did; every other language comes from the data.
+_BASE_LANGUAGES = (
+    Language("Английский", "English", "en"),
+    Language("Русский", "Russian", "ru"),
+)
+
+
+@lru_cache(maxsize=1)
+def languages() -> tuple[Language, ...]:
+    """The languages a project may be localized into, in the order the platform declares them.
+
+    Read from the `languages` section the extractor takes out of the platform's own
+    enumeration; see _BASE_LANGUAGES for data without that section.
+    """
+    data = _data()
+    rows = data.get("languages") if data else None
+    found = tuple(
+        Language(str(row["ru"]), str(row["en"]), str(row["code"]),
+                 str(row["since"]) if row.get("since") else None)
+        for row in rows or ()
+        if isinstance(row, dict) and row.get("ru") and row.get("en") and row.get("code")
+    )
+    return found or _BASE_LANGUAGES
+
+
+def language_named(value: str) -> Language | None:
+    """The language a value names, or None: its Russian or English name or its code.
+
+    Any letter case and surrounding quotes are forgiven - a descriptor spells the name in the
+    language of the project, a caller may say `english`, a folder is named `Vi` or `vi`, and
+    the platform itself compares the code without regard to case.
+    """
+    key = value.strip().strip("'\"").casefold()
+    if not key:
+        return None
+    for language in languages():
+        if key in (language.russian.casefold(), language.english.casefold(),
+                   language.code.casefold()):
+            return language
+    return None
+
+
+def _mode_key(mode: str) -> tuple[int, ...] | None:
+    """`9.0` -> (9, 0); None for a value that is not a mode."""
+    parts = mode.strip().strip("'\"").split(".")
+    return tuple(int(part) for part in parts) if all(part.isdigit() for part in parts) else None
+
+
+def language_available(language: Language, mode: str | None) -> bool:
+    """Whether a project of this compatibility mode may list the language.
+
+    The platform holds the mode of the project against the one the language appeared in. A
+    project that names no mode is not limited - the platform then goes by its newest mode -
+    and neither is a language, or a mode, the data cannot read.
+    """
+    if not mode or not language.since:
+        return True
+    have, need = _mode_key(mode), _mode_key(language.since)
+    return have is None or need is None or have >= need
 
 
 def has_class(name: str) -> bool:
