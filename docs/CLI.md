@@ -50,7 +50,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does, and `--rules-filter` narrows it further; with `--format` json the same records are printed as data |
 | `--rules-filter WORD` | narrow `--list-rules`. A word that IS a group (the part of an id before '/') lists that group alone; any other word is looked for as an id substring or a word of the title or description - every i18n text registered under the rule's id (the title and its message templates), in either language, plus the English docstring; docs/RULES.md is not read. Case-insensitive; combines with `--select`/`--ignore` |
 | `--where` | show the engine location, interpreter and Element data (path, source, versions) and exit |
-| `--element-version VERSION` | Element data version (default: the latest in the bundle) |
+| `--element-version VERSION` | Element data version (default: env XBSL_ELEMENT_VERSION, otherwise the default in index.json of the data root) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
 | `--lang {ru,en}` | linter output language (default: env XBSL_LANG / system locale / ru) |
 | `--format {text,json,codeclimate}` | output format: text (default), json (machine-readable: diagnostics + summary) or codeclimate (a GitLab Code Quality report – the merge request widget) |
@@ -271,7 +271,7 @@ usage: xbsl baseline add [-h] --rule ID/GROUP/TIER [--reason REASON] [--baseline
 | `--format {text,json}` | output format: text - the list of what was added, json - {baseline, added, findings, written} |
 | `--jobs N` | processes for file-scope rules: 0 – auto (turns on for large runs), 1 – sequential, N – an explicit number of worker processes |
 | `--lang {ru,en}` | linter output language (default: env XBSL_LANG / system locale / ru) |
-| `--element-version VERSION` | Element data version (default: the latest in the bundle) |
+| `--element-version VERSION` | Element data version (default: env XBSL_ELEMENT_VERSION, otherwise the default in index.json of the data root) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
 
 ## `xbsl self-update`
@@ -544,7 +544,7 @@ usage: xbsl add-subsystem [-h] [--representation REPRESENTATION] [--no-auto-inte
 
 ### `xbsl add-dependency`
 
-attach a library to the project (the Библиотеки section of Project.yaml); see also project-info for the libraries already attached
+attach a library to the project (the Libraries section of Project.yaml); see also project-info for the libraries already attached
 
 ```bash
 usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name version
@@ -813,7 +813,7 @@ usage: xbsl delete-resource-folder [-h] [--apply] [--dry-run] root folder_dir
 
 ### `xbsl set-access`
 
-set the object's AccessControl.Разрешения; see also object-info for the current rights and the set this kind has
+set the object's AccessControl.Permissions; see also object-info for the current rights and the set this kind has
 
 ```bash
 usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]

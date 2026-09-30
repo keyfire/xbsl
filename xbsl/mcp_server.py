@@ -85,16 +85,19 @@ mcp = _new_server()
 # the version on disk with the one in memory - one small file per call - and then the engine's
 # code files with the ones of the start, which a pull between two releases changes under the
 # same number - a stat of their few folders per call, a walk over the files when a folder
-# changed or every few seconds. On either change the tool refuses, naming the cure, instead of
-# running on a mix. A tool that fails while the check still passed (a plugin's code changed, or
-# an editor rewrote a file a moment ago) is checked against the fingerprint of all the sources
-# taken at start. The server never exits over it: a client such as Codex does not start a
-# failed server again. The first sighting of each state goes into the journal, where
-# `xbsl mcp-log` shows it.
+# changed or every few seconds - and last the platform data files the server has read, a stat
+# per file: a module takes constants from the term pairs at import, so a data file replaced
+# under the server leaves it answering from the old one. On any change the tool refuses, naming
+# the cure, instead of running on a mix. A tool that fails while the check still passed (a
+# plugin's code changed, or an editor rewrote a file a moment ago) is checked against the
+# fingerprint of all the sources taken at start. The server never exits over it: a client such
+# as Codex does not start a failed server again. The first sighting of each state goes into the
+# journal, where `xbsl mcp-log` shows it.
 #
 # Only the client can restart the server, and an agent calling the tools cannot. A new process
-# can run the new code, though, so the refusal of a tool the CLI can run carries `cli`: the
-# command line of the same call (xbsl/mcpcli.py), started by this server's interpreter.
+# can run the new code and read the new data, though, so the refusal of a tool the CLI can run
+# carries `cli`: the command line of the same call (xbsl/mcpcli.py), started by this server's
+# interpreter.
 #
 # Nor does the server restart itself: it speaks over the stdio of the process the client
 # started, and exec does not keep that conversation. On Windows `os.execv` starts a NEW process
@@ -177,10 +180,8 @@ def _stale_guard(fn):
         found = freshness.call_state()
         if found is not None:
             _journal_stale(found, fn.__name__)
-            return _stale_answer(
-                found, i18n.t("freshness.refusal", state=freshness.describe(found)),
-                same_call(args, kwargs), ran=False,
-            )
+            return _stale_answer(found, freshness.refusal(found), same_call(args, kwargs),
+                                 ran=False)
         freshness.take_noted()  # a crash an earlier call noted is not this call's
         try:
             answer = fn(*args, **kwargs)
@@ -190,9 +191,8 @@ def _stale_guard(fn):
                 raise
             error = f"{type(exc).__name__}: {exc}"
             _journal_stale(found, fn.__name__, error)
-            return _stale_answer(found, i18n.t(
-                "freshness.failure", state=freshness.describe(found), error=error),
-                same_call(args, kwargs), ran=True)
+            return _stale_answer(found, freshness.failure(found, error),
+                                 same_call(args, kwargs), ran=True)
         noted = freshness.take_noted()
         if noted is not None:
             _journal_stale(noted, fn.__name__)
@@ -311,11 +311,15 @@ def version_info() -> dict:
     even when it differs from `engine`, and then it carries `stale`: the others refuse until the
     server is restarted, since the modules it would load next are from another version. The
     same holds when the engine's code files changed on disk under the same number (reason
-    `sources`). The refusal of a tool the CLI can run (lint_paths, lint_source, baseline_prune,
-    list_rules, translate_*, meta_fold_comments and the readers meta_project_info,
-    meta_object_info, meta_localization_info, meta_component_tree, meta_resource_references,
+    `sources`), and when a platform data file the server read changed, appeared or vanished
+    since (reason `data`: `changed` lists the files under `root`, each "modified", "added" or
+    "removed", and `loaded` and `on_disk` name the data versions). The refusal of a tool the
+    CLI can run (lint_paths, lint_source, baseline_prune, list_rules, translate_*,
+    meta_fold_comments and the readers meta_project_info, meta_object_info,
+    meta_localization_info, meta_component_tree, meta_resource_references,
     meta_unused_resources) carries `cli`: the command line of the same call for a POSIX shell
-    (Git Bash on Windows), which runs this server's interpreter on the code now on disk. A
+    (Git Bash on Windows), which runs this server's interpreter on the code and the data now on
+    disk. A
     reader's command prints the tool's data without the `root` and `file` the tool repeats.
     `cli_note` names the file the command reads data from - the text of lint_source, the inline
     edits of translate_set.
@@ -332,11 +336,13 @@ def version_info() -> dict:
     except Exception as exc:  # noqa: BLE001 - the diagnostic tool answers whatever the disk is like
         info["plugins_on_disk"] = {"error": f"{type(exc).__name__}: {exc}"}
     found = freshness.call_state()  # what the other tools refuse over
-    key = "freshness.refusal"
-    if found is None:
-        found, key = freshness.plugins_state(), "freshness.plugins-warning"
     if found is not None:
-        info["stale"] = {**found, "message": i18n.t(key, state=freshness.describe(found))}
+        info["stale"] = {**found, "message": freshness.refusal(found)}
+        return info
+    found = freshness.plugins_state()
+    if found is not None:
+        info["stale"] = {**found, "message": i18n.t(
+            "freshness.plugins-warning", state=freshness.describe(found))}
     return info
 
 

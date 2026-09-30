@@ -20,7 +20,7 @@ import types
 
 import pytest
 
-from xbsl import dataset, i18n
+from xbsl import dataset, freshness, i18n
 
 i18n.set_lang("ru")
 
@@ -40,6 +40,16 @@ def _private_mcp_journal(monkeypatch, tmp_path):
     # A test that starts or stops a server must not write into the developer's own MCP journal:
     # `xbsl mcp-log` would then report test processes as real server lives.
     monkeypatch.setenv("XBSL_MCP_JOURNAL", str(tmp_path / "mcp-journal.jsonl"))
+
+
+@pytest.fixture(autouse=True)
+def _no_data_read_yet(monkeypatch):
+    # Every test stands for a process that has read no platform data yet. A long-lived server
+    # compares the data files it READ with the disk (xbsl/freshness.py), and a file one test
+    # read and then changed would count against every later test; nor does the start one test
+    # takes arm the check for the next.
+    dataset.forget_reads()
+    monkeypatch.setattr(freshness, "_data_watched", False)
 
 
 _DATA_DEPENDENT = {

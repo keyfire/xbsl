@@ -484,15 +484,16 @@ def _make_server() -> "LanguageServer":
     # --- diagnostics ------------------------------------------------------------------
 
     def tell_if_stale() -> None:
-        """Say once per state that the code on disk is not the code this server runs.
+        """Say once per state that the disk no longer holds what this server runs on.
 
         The server lives as long as the editor window, the way the MCP server lives as long as
         an agent session, and goes stale the same way (xbsl/freshness.py): `self-update` or a
         pull in an editable checkout replaces the engine under it, an upgrade replaces a
-        plugin, and the findings stop matching the CLI and CI without a word. The checks go
-        on - the editor has no answer to refuse with - and the user is told by a message and
-        a line of the log. The check costs a small file and a stat per call, the fingerprint
-        of the sources a couple of milliseconds every few seconds at most.
+        plugin, a reinstall rewrites the platform data it read, and the findings stop matching
+        the CLI and CI without a word. The checks go on - the editor has no answer to refuse
+        with - and the user is told by a message and a line of the log. The check costs a
+        small file and a stat per call plus a stat per data file read, the fingerprint of the
+        sources a couple of milliseconds every few seconds at most.
         """
         try:
             found = freshness.state(sources=True)

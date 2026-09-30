@@ -34,12 +34,38 @@ entry either - say what the behaviour was, not which class name was compared.
   `Interface.Presentation`: the form and the command that opens it are named by it, and without it
   both carry the element name. The standard lists processings among the elements whose
   presentation is mandatory, and `new-object --presentation` writes the caption right there.
+- **`data-diff` no longer says "no changes" where the data changed.** It now compares the whole
+  stdlib catalog, module handlers and signatures included, as well as `uiterms.json`,
+  `terms_full.json` and the text of the help pages. The text report keeps to a count and the first
+  names; `--limit 0` lists them all.
 
 ### Fixed
 
 - **The cards of the help no longer run together.** The links of a card grid used to merge into one
   line, and an example lost the icon that told a right one from a wrong one. The help now lists link
   cards, labels right and wrong examples, and keeps the code fragment of a card as code. ([#165](https://github.com/keyfire/xbsl/pull/165))
+- **Servers no longer answer from data replaced under them.** An MCP worker that read the term pairs
+  just before a reinstall rewrote them kept answering from the old ones. Now it refuses with reason
+  `data` and a new worker answers the call; the language server asks for a restart.
+- **`xbsl extract` no longer writes into the package.** The grammar step used to cache the grammar
+  files next to the package code whatever `--data-dir` said; now it reads them from the
+  distribution in memory, and an installed package stays as it was.
+- **The help of `--element-version` names the real default.** It said "the latest in the
+  bundle", while the version comes from `XBSL_ELEMENT_VERSION` or, without it, from the `default`
+  of `index.json` in the data root.
+- **The translator spells the standard attributes of an exchange plan in `ComputePermissionsBy`.**
+  The number of the sent message and this node stayed Russian in the list, so the English exchange
+  plan named fields its object does not have. Now the kind spells them: `SentNumber`, `ThisNode`.
+- **`xbsl extract` no longer pairs a name of an element model with its neighbour.** Such a class
+  writes the Russian name first, and this node of an exchange plan read as `ReceivedNumber`; a dozen
+  words of the compiler dictionary were wrong as well, and the name of a Java constant passed for
+  the English of the word it holds. Run `xbsl extract --dist ... --only terms`.
+- **A second translation of the same file no longer leaves the schedule kind Russian.** The
+  translator wrote the English kind back into the parsed file kept with the source, so the next
+  pass in the same process found nothing to change. It now leaves the parsed file as it was.
+- **The translator names a declared standard attribute the way its kind does.** An exchange
+  plan that declared the number of the sent message kept it Russian and asked the project for
+  an entry, while its own list already said `SentNumber`. An entry of the project still wins.
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 

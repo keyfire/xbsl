@@ -100,3 +100,116 @@ def test_dictionary_entry_answers_before_the_entity_member():
     # An entry for the word is the project's decision, and it is asked first - as in the code.
     out, _report = _yaml(_STOCK, {**_STOCK_TOKENS, "Ссылка": "Ref"})
     assert "    ComputePermissionsBy: [Keeper, Ref, Owner]\n" in out
+
+
+_LISTED = """\
+ВидЭлемента: {kind}
+Ид: 1d1f5c60-0000-4000-8000-000000000e05
+Имя: Узлы
+ОбластьВидимости: ВПроекте
+КонтрольДоступа:
+    РасчетРазрешенийПо: [{listed}]
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+"""
+
+
+def test_the_fields_of_an_exchange_plan_node_are_spelled_as_its_standard_attributes():
+    """The metamodel gives each standard attribute of an exchange plan both spellings. The flat
+    tables may keep none for a word the platform spells two ways, and the list kept the number of
+    the sent message and this node in Russian."""
+    out, report = _yaml(_LISTED.format(kind="ПланОбмена",
+                                       listed="Код, НомерОтправленного, НомерПринятого, ЭтотУзел"),
+                        {"Узлы": "Nodes"})
+    assert "    ComputePermissionsBy: [Code, SentNumber, ReceivedNumber, ThisNode]\n" in out
+    assert not report.missing_tokens
+
+
+def test_the_system_attributes_of_a_settings_storage_are_spelled_in_the_list():
+    out, report = _yaml(_LISTED.format(
+        kind="ХранилищеНастроек",
+        listed="Пользователь, КлючОбъекта, КлючНастройки, Вариант, Общая, Значение, Наименование"),
+        {"Узлы": "Nodes"})
+    assert ("    ComputePermissionsBy: [User, ObjectKey, SettingKey, Variant, Shared, Value, "
+            "Name]\n") in out
+    assert not report.missing_tokens
+
+
+def test_the_connection_settings_of_an_integrable_application_are_spelled_in_the_list():
+    out, report = _yaml(_LISTED.format(kind="ИнтегрируемоеПриложение",
+                                       listed="НастройкиПрямогоПодключения, Код, Наименование"),
+                        {"Узлы": "Nodes"})
+    assert "    ComputePermissionsBy: [DirectConnectionSettings, Code, Name]\n" in out
+    assert not report.missing_tokens
+
+
+_NODES_WITH_ROWS = """\
+ВидЭлемента: ПланОбмена
+Ид: 1d1f5c60-0000-4000-8000-000000000e06
+Имя: Узлы
+ОбластьВидимости: ВПроекте
+ТабличныеЧасти:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000e07
+        Имя: Пакеты
+        Реквизиты:
+            -
+                Ид: 1d1f5c60-0000-4000-8000-000000000e08
+                Имя: НомерОтправленного
+                Тип: Число
+        Индексы:
+            -
+                Имя: ПоНомеру
+                Поля:
+                    - НомерОтправленного
+"""
+
+
+def test_an_index_of_a_tabular_section_names_the_fields_of_the_section():
+    """A tabular section owns the fields its index names, so the word is the section's own
+    attribute there, not the standard attribute of the node: the index and the declaration it
+    points at are spelled alike, whatever the flat tables say about the word."""
+    out, _report = _yaml(_NODES_WITH_ROWS, {"Узлы": "Nodes", "Пакеты": "Packages",
+                                            "ПоНомеру": "ByNumber"})
+    declared = next(line for line in out.splitlines() if line.startswith("                Name: "))
+    indexed = next(line for line in out.splitlines() if line.startswith("                    - "))
+    assert declared.split(": ", 1)[1] == indexed.split("- ", 1)[1]
+
+
+_NODES_DECLARED = """\
+ВидЭлемента: ПланОбмена
+Ид: 1d1f5c60-0000-4000-8000-000000000e09
+Имя: Узлы
+ОбластьВидимости: ВПроекте
+КонтрольДоступа:
+    РасчетРазрешенийПо: [НомерОтправленного, ЭтотУзел]
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+Реквизиты:
+    -
+        Имя: НомерОтправленного
+        ВажностьПриОтображении: Высокая
+    -
+        Имя: ЭтотУзел
+"""
+
+
+def test_a_declared_standard_attribute_is_named_as_the_kind_names_it():
+    """The declaration of a standard attribute names the platform's item, and the metamodel
+    spells it; it used to stay Russian and wait for an entry of the project, while the list
+    of the same file already named the English field."""
+    out, report = _yaml(_NODES_DECLARED, {"Узлы": "Nodes"})
+
+    assert "        Name: SentNumber\n        DisplayImportance: High\n" in out
+    assert "        Name: ThisNode\n" in out
+    assert "    ComputePermissionsBy: [SentNumber, ThisNode]\n" in out
+    assert not report.missing_tokens
+
+
+def test_an_entry_of_the_dictionary_names_a_declared_standard_attribute_first():
+    """The project dictionary answers first here as everywhere: the declaration and the list
+    both take the entry, so the two still agree."""
+    out, _report = _yaml(_NODES_DECLARED, {"Узлы": "Nodes", "НомерОтправленного": "SentNo"})
+
+    assert "        Name: SentNo\n" in out
+    assert "    ComputePermissionsBy: [SentNo, ThisNode]\n" in out

@@ -6,8 +6,10 @@ grammar and token table of the language. The script reads them and builds xbsl/d
 keywords, operators/symbols, and the token identifier map.
 
 The Element version is detected from the distribution automatically (or set via --element-version).
-Vendor files are not committed to the repository (cached in .refs/, see .gitignore) - only
-the derived JSON is. The linter itself works off that JSON and needs no distribution at runtime.
+The grammar files are read from the distribution in memory and copied nowhere: the step
+writes language.json and the index into the data root and nothing else, so with an external
+--data-dir the clone and the installed package stay as they were. The linter itself works off
+that JSON and needs no distribution at runtime.
 """
 
 from __future__ import annotations
@@ -31,8 +33,15 @@ _NON_OPERATOR_RULES = {"RULE_WS", "RULE_NL", "RULE_UTF8_BOM", "RULE_DQUOTE"}
 # --- Unpacking the grammar from the distribution ------------------------------------------
 
 
-def _extract_from_dist(dist: Path, dest: Path) -> None:
+def _read_from_dist(dist: Path) -> dict[str, str]:
+    """{file name: text} of the grammar files found in the language jar of the .car.
+
+    The files are read in memory. They used to be copied into a cache next to the package
+    code, so every extraction wrote into the package - into an installed one as well -
+    whatever --data-dir said, and the manager had no option to send them elsewhere.
+    """
     car = _distro.find_car(dist)
+    found: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         lang_jars = [
             n for n in z.namelist()
@@ -44,26 +53,27 @@ def _extract_from_dist(dist: Path, dest: Path) -> None:
             for inner in jz.namelist():
                 base = inner.rsplit("/", 1)[-1]
                 if base in (GRAMMAR_INNER_G, GRAMMAR_INNER_TOKENS):
-                    dest.mkdir(parents=True, exist_ok=True)
-                    (dest / base).write_bytes(jz.read(inner))
+                    found[base] = jz.read(inner).decode("utf-8")
+    return found
 
 
-def resolve_grammar(dist: Path | None, grammar_dir: Path | None) -> Path:
-    """Return the directory with InternalBsl.g/.tokens: --grammar-dir, the distribution or .refs cache."""
-    refs = _distro.REPO / ".refs" / "grammar"
+def resolve_grammar(dist: Path | None, grammar_dir: Path | None) -> tuple[str, str]:
+    """The texts of InternalBsl.g and InternalBsl.tokens: from --grammar-dir, else from the distribution.
 
-    def has_both(d: Path) -> bool:
-        return (d / GRAMMAR_INNER_G).is_file() and (d / GRAMMAR_INNER_TOKENS).is_file()
-
-    if grammar_dir and has_both(grammar_dir):
-        return grammar_dir
+    A directory that lacks either file gives way to the distribution, as it always did.
+    Nothing is written anywhere: without a distribution or a directory there is no grammar.
+    """
+    if grammar_dir is not None:
+        grammar, tokens = grammar_dir / GRAMMAR_INNER_G, grammar_dir / GRAMMAR_INNER_TOKENS
+        if grammar.is_file() and tokens.is_file():
+            return grammar.read_text(encoding="utf-8"), tokens.read_text(encoding="utf-8")
     if dist is not None:
-        _extract_from_dist(dist, refs)
-        if has_both(refs):
-            return refs
-    if has_both(refs):
-        return refs
-    raise SystemExit("Грамматика не найдена. Укажите --dist (каталог дистрибутива) или --grammar-dir.")
+        found = _read_from_dist(dist)
+        if GRAMMAR_INNER_G in found and GRAMMAR_INNER_TOKENS in found:
+            return found[GRAMMAR_INNER_G], found[GRAMMAR_INNER_TOKENS]
+        raise SystemExit(f"В jar языка нет {GRAMMAR_INNER_G} и {GRAMMAR_INNER_TOKENS}")
+    raise SystemExit("Грамматика не найдена. Укажите --dist (каталог дистрибутива) или --grammar-dir "
+                     f"(каталог с {GRAMMAR_INNER_G} и {GRAMMAR_INNER_TOKENS}).")
 
 
 # --- Parsing -------------------------------------------------------------------------
@@ -108,10 +118,11 @@ def _canonical(rule_name: str) -> str:
     return name
 
 
-def parse_tokens(path: Path) -> tuple[list[str], dict[str, int]]:
+def parse_tokens(text: str) -> tuple[list[str], dict[str, int]]:
+    """Operators and token ids from the text of InternalBsl.tokens."""
     operators: list[str] = []
     token_ids: dict[str, int] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -125,10 +136,11 @@ def parse_tokens(path: Path) -> tuple[list[str], dict[str, int]]:
     return operators, token_ids
 
 
-def parse_grammar(path: Path) -> tuple[dict[str, dict], list[str]]:
+def parse_grammar(text: str) -> tuple[dict[str, dict], list[str]]:
+    """Keywords and symbols from the text of InternalBsl.g."""
     keywords: dict[str, dict] = {}
     symbols: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         m = _RULE_RE.match(line.strip())
         if not m:
             continue
@@ -168,10 +180,11 @@ def main(argv=None) -> int:
         raise SystemExit("Без --dist укажите --element-version (версию для сохранения данных)")
 
     version = _distro.detect_version(dist, args.element_version) if dist else args.element_version
-    gdir = resolve_grammar(dist, Path(args.grammar_dir) if args.grammar_dir else None)
+    grammar_text, tokens_text = resolve_grammar(
+        dist, Path(args.grammar_dir) if args.grammar_dir else None)
 
-    operators, token_ids = parse_tokens(gdir / GRAMMAR_INNER_TOKENS)
-    keywords, symbols = parse_grammar(gdir / GRAMMAR_INNER_G)
+    operators, token_ids = parse_tokens(tokens_text)
+    keywords, symbols = parse_grammar(grammar_text)
     all_ops = sorted(set(operators) | set(symbols), key=lambda s: (-len(s), s))
 
     data = {

@@ -1,12 +1,12 @@
 """The supervisor of the MCP server: the client's session outlives the process that serves it.
 
 `xbsl-mcp` lives as long as the client session, and the engine on disk can be replaced under
-it: `self-update`, a pull of an editable checkout, a plugin upgrade. The server then refuses
-its tools and asks for a restart (xbsl/freshness.py), which only the client can do - and a
-client such as Codex never starts a stopped server again. Restarting from inside does not work
-either: `os.execv` on Windows starts a new process that the client does not know, and on POSIX
-the new image waits for `initialize` the client sent long ago (see the comment on the stale
-engine in xbsl/mcp_server.py).
+it: `self-update`, a pull of an editable checkout, a plugin upgrade, a reinstall that rewrites
+the platform data. The server then refuses its tools and asks for a restart
+(xbsl/freshness.py), which only the client can do - and a client such as Codex never starts a
+stopped server again. Restarting from inside does not work either: `os.execv` on Windows starts
+a new process that the client does not know, and on POSIX the new image waits for `initialize`
+the client sent long ago (see the comment on the stale engine in xbsl/mcp_server.py).
 
 `xbsl-mcp-supervisor` stands between the client and the server. It owns the stdio the client
 speaks over, runs the server as a worker process behind it and passes the JSON-RPC lines both
@@ -17,13 +17,14 @@ replayed `initialize` stays here, so the client never learns that another proces
 When to replace the worker is the engine's own verdict, read from its answers. The supervisor
 has no check of its own: it imports nothing of the engine (the catalog of messages and the
 journal are leaves), so it never goes stale itself - and the worker sees what the supervisor
-could not: the plugins, the sources behind an unchanged version.
+could not: the plugins, the sources behind an unchanged version, the data files it read.
 
-- A refusal over a replaced engine - another version on disk, or the engine's code files changed
-  under the same one - carries `stale` with `ran: false`: the tool did not run. The supervisor
-  starts a new worker and sends it the same request, and the client gets the answer of the new
-  code instead of the refusal. `version_info` is asked again as well: it only reads. A request
-  goes to a new worker twice at most, then the refusal is passed on.
+- A refusal over a replaced engine - another version on disk, the engine's code files changed
+  under the same one, or a platform data file the worker read changed since - carries `stale`
+  with `ran: false`: the tool did not run. The supervisor starts a new worker and sends it the
+  same request, and the client gets the answer of the new code and data instead of the refusal.
+  `version_info` is asked again as well: it only reads. A request goes to a new worker twice at
+  most, then the refusal is passed on.
 - Any other answer with `stale` - a tool that failed on a mix of the old and the new code, a
   warning about the plugins changed on disk - is passed on as it is: the tool ran and may have
   written files, so it is not repeated. The next request goes to a new worker.
@@ -221,8 +222,8 @@ class _Worker:
         #: Why a start of this worker failed, in words for the answer to a waiting request.
         self.error = ""
         #: The change on disk this worker was started for: (reason, on disk and the fingerprint
-        #: of the sources). A worker that reports the same change again is not replaced over
-        #: it - a new one would see it too.
+        #: of the sources or of the data files). A worker that reports the same change again is
+        #: not replaced over it - a new one would see it too.
         self.cause: tuple[str, str] | None = None
 
 
@@ -393,7 +394,8 @@ class Supervisor:
 
     def _replace(self, worker: _Worker, stale: dict) -> None:
         """Retire the current worker and start a new one; the old one ends when it is idle."""
-        # A change of the sources keeps the number on disk: its fingerprint names the change.
+        # A change of the sources or of the data keeps the number on disk: its fingerprint
+        # names the change.
         cause = (str(stale.get("reason")), json.dumps(
             [stale.get("on_disk"), stale.get("fingerprint")], sort_keys=True))
         if worker is not self.worker or worker.cause == cause:

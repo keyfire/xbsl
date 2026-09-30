@@ -3,24 +3,34 @@
     xbsl data-diff                  # the default version against the closest older one
     xbsl data-diff 1.2.3+4 1.3.0    # explicit versions
     xbsl data-diff --format md      # a full Markdown report (text is capped per list)
+    xbsl data-diff --limit 0        # the text report with every list in full
 
-Reads the RAW versioned files (language/stdlib/metamodel/uischema/terms .json and the
-docs.sqlite page index) from the same data root the linter uses. stdlib members are
-compared in their stored OWN form: a member added to a base type is reported once for
-the base, not for every descendant. Comparing datasets produced by different extractor
-generations can report tooling changes as platform changes - regenerate both versions
-with the current extractors for a clean diff.
+Reads the RAW versioned files (language/stdlib/metamodel/uischema/terms/uiterms/terms_full
+.json and the docs.sqlite page index) from the same data root the linter uses. Every section of
+every file is compared. The sections that need it have a comparison of their own; any other one
+- a section a newer extractor adds included - is compared entry by entry, so a change cannot
+stay silent merely because nobody taught the diff where to look. Only `meta` (the version, the
+counts and the notes of an extraction) and the token numbering of the grammar are left out.
+
+stdlib members are compared with the inheritance expanded, and a change is reported at the type
+that makes it rather than at every descendant (see _diff_expanded_members); the other sections
+kept per type in the same own or fully expanded form - signatures, method type parameters,
+deprecations, checked results, component properties, bases - are lifted the same way.
+Documentation pages are compared by a hash of their HTML besides their ids and titles.
+Comparing datasets produced by different extractor generations can report tooling changes as
+platform changes - regenerate both versions with the current extractors for a clean diff.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
 from pathlib import Path
 
 from xbsl import dataset, i18n
-from xbsl.dataset import MEMBER_KINDS
+from xbsl.dataset import MEMBER_KINDS, nearest_last
 
 MESSAGES = {
     "datadiff.description": {
@@ -83,10 +93,14 @@ MESSAGES = {
     },
     # Section and group titles.
     "datadiff.section.language": {"ru": "Язык", "en": "Language"},
-    "datadiff.section.stdlib": {"ru": "Типы stdlib", "en": "stdlib types"},
+    "datadiff.section.stdlib": {"ru": "Каталог stdlib", "en": "stdlib catalog"},
     "datadiff.section.metamodel": {"ru": "Метамодель конфигурации", "en": "Configuration metamodel"},
     "datadiff.section.uischema": {"ru": "Компоненты интерфейса", "en": "Interface components"},
     "datadiff.section.terms": {"ru": "Термины (ru/en пары)", "en": "Terms (ru/en pairs)"},
+    "datadiff.section.uiterms": {"ru": "Написания интерфейса (ru/en)",
+                                 "en": "Interface spellings (ru/en)"},
+    "datadiff.section.terms_full": {"ru": "Словарь компилятора (ru/en)",
+                                    "en": "Compiler dictionary (ru/en)"},
     "datadiff.section.docs": {"ru": "Документация", "en": "Documentation"},
     "datadiff.group.keywords": {"ru": "ключевые слова", "en": "keywords"},
     "datadiff.group.forms": {"ru": "формы ключевых слов", "en": "keyword forms"},
@@ -96,6 +110,8 @@ MESSAGES = {
     "datadiff.group.member-types": {"ru": "типы членов", "en": "member result types"},
     "datadiff.group.globals": {"ru": "глобальные имена", "en": "global names"},
     "datadiff.group.object-members": {"ru": "порождаемые члены объектов", "en": "generated object members"},
+    "datadiff.group.object-kinds": {"ru": "виды объектов с порождаемыми членами",
+                                    "en": "object kinds with generated members"},
     "datadiff.group.managers": {"ru": "виды с членами менеджера", "en": "kinds with manager members"},
     "datadiff.group.manager-members": {"ru": "члены менеджеров", "en": "manager members"},
     "datadiff.group.facets": {"ru": "фасеты", "en": "facets"},
@@ -103,38 +119,89 @@ MESSAGES = {
     "datadiff.group.generated-types": {"ru": "порождаемые типы", "en": "generated types"},
     "datadiff.group.generated-members": {"ru": "члены порождаемых типов",
                                         "en": "members of generated types"},
+    "datadiff.group.names": {"ru": "имена символов", "en": "symbol names"},
+    "datadiff.group.component-props": {"ru": "свойства компонентов", "en": "component properties"},
+    "datadiff.group.retired-components": {"ru": "снятые компоненты", "en": "retired components"},
+    "datadiff.group.component-from": {"ru": "режим совместимости компонентов",
+                                      "en": "compatibility modes of components"},
+    "datadiff.group.module-handlers": {"ru": "обработчики модулей компонентов",
+                                       "en": "component module handlers"},
+    "datadiff.group.element-module-handlers": {"ru": "обработчики модулей элементов",
+                                               "en": "element module handlers"},
+    "datadiff.group.global-availability": {"ru": "доступность глобальных имен",
+                                           "en": "availability of global names"},
+    "datadiff.group.type-availability": {"ru": "доступность типов", "en": "type availability"},
+    "datadiff.group.manager-member-types": {"ru": "типы членов менеджеров",
+                                            "en": "manager member result types"},
+    "datadiff.group.checked-return-methods": {"ru": "методы с проверяемым результатом",
+                                              "en": "methods with a checked result"},
+    "datadiff.group.member-signatures": {"ru": "сигнатуры методов", "en": "method signatures"},
+    "datadiff.group.bases": {"ru": "базовые типы", "en": "base types"},
+    "datadiff.group.generic-bases": {"ru": "аргументы обобщенных баз", "en": "generic base arguments"},
+    "datadiff.group.type-ctors": {"ru": "конструкторы типов", "en": "type constructors"},
+    "datadiff.group.type-params": {"ru": "параметры типов", "en": "type parameters"},
+    "datadiff.group.type-param-variance": {"ru": "вариантность параметров типов",
+                                           "en": "type parameter variance"},
+    "datadiff.group.member-type-params": {"ru": "параметры типов методов",
+                                          "en": "method type parameters"},
+    "datadiff.group.deprecated-members": {"ru": "устаревшие члены", "en": "deprecated members"},
     "datadiff.group.classes": {"ru": "классы", "en": "classes"},
+    "datadiff.group.class-attrs": {"ru": "признаки классов", "en": "class attributes"},
     "datadiff.group.props": {"ru": "свойства", "en": "properties"},
     "datadiff.group.enums": {"ru": "перечисления", "en": "enumerations"},
     "datadiff.group.enum-values": {"ru": "значения перечислений", "en": "enumeration values"},
+    "datadiff.group.enum-packages": {"ru": "пакеты перечислений", "en": "enumeration packages"},
     "datadiff.group.vid2class": {"ru": "виды элементов", "en": "element kinds"},
     "datadiff.group.components": {"ru": "компоненты", "en": "components"},
     "datadiff.group.flags": {"ru": "признаки компонентов", "en": "component flags"},
+    "datadiff.group.yaml-props": {"ru": "ключи yaml компонентов", "en": "component yaml keys"},
     "datadiff.group.pages": {"ru": "страницы", "en": "pages"},
+    "datadiff.group.pages-changed": {"ru": "содержимое страниц", "en": "page content"},
     "datadiff.group.methods": {"ru": "методы", "en": "methods"},
     "datadiff.group.properties": {"ru": "свойства", "en": "properties"},
+    "datadiff.group.events": {"ru": "события", "en": "events"},
+    "datadiff.group.moved": {"ru": "перенесены", "en": "moved"},
     # data that does not say whether a name is a property or a method (see _as_member_lists)
     "datadiff.group.any-members": {"ru": "члены без разделения", "en": "members, undivided"},
+    # Titles a section names its own way; a group without one falls back to datadiff.group.*.
+    "datadiff.metamodel.vetted": {"ru": "проверенные виды", "en": "vetted kinds"},
+    "datadiff.metamodel.common": {"ru": "свойства всех элементов", "en": "properties of every element"},
+    "datadiff.uiterms.packages": {"ru": "пакеты", "en": "packages"},
+    "datadiff.uiterms.member-names": {"ru": "имена членов", "en": "member names"},
+    "datadiff.uiterms.resource-paths": {"ru": "пути ресурсов", "en": "resource paths"},
+    "datadiff.terms-full.common": {"ru": "общий словарь", "en": "common dictionary"},
+    "datadiff.terms-full.manager-owners": {"ru": "владельцы менеджеров", "en": "manager owners"},
     "datadiff.term.types": {"ru": "типы", "en": "types"},
     "datadiff.term.facets": {"ru": "фасеты", "en": "facets"},
     "datadiff.term.properties": {"ru": "свойства", "en": "properties"},
     "datadiff.term.enums": {"ru": "значения перечислений", "en": "enumeration values"},
     "datadiff.term.query": {"ru": "язык запросов", "en": "query language"},
+    "datadiff.term.kinds": {"ru": "виды элементов", "en": "element kinds"},
     "datadiff.term.query-reserved": {"ru": "зарезервированные слова языка запросов",
                                      "en": "reserved words of the query language"},
+    "datadiff.term.query-reserved-english-only": {
+        "ru": "зарезервированные слова языка запросов только по-английски",
+        "en": "reserved words of the query language in English only"},
     "datadiff.term.query-reserved-types": {"ru": "типы литералов языка запросов",
                                            "en": "types of the query language literals"},
 }
 i18n.register(MESSAGES)
 
 #: Sections of terms.json worth diffing: pairs keyed by the Russian name (its English spelling,
-#: or the type of a literal of the query language).
-_TERM_SECTIONS = ("types", "facets", "properties", "enums", "query", "query_reserved",
-                  "query_reserved_types")
+#: or the type of a literal of the query language), and the list of the English-only reserved
+#: words. They come first, in this order; a section the list does not know follows them.
+_TERM_SECTIONS = ("types", "facets", "properties", "enums", "query", "kinds", "query_reserved",
+                  "query_reserved_english_only", "query_reserved_types")
 #: uischema property attributes that make a "changed" entry (doc texts excluded - noise).
-_UISCHEMA_PROP_KEYS = ("types", "enum", "event", "slot", "readonly", "since", "default")
+_UISCHEMA_PROP_KEYS = ("types", "enum", "event", "slot", "nullable", "readonly", "since", "default")
 #: uischema component attributes compared as flags.
-_UISCHEMA_FLAG_KEYS = ("abstract", "container", "since", "package")
+_UISCHEMA_FLAG_KEYS = ("abstract", "container", "since", "package", "retired", "until", "source")
+#: Sections no file is compared by: the version, counts and notes of the extraction itself, and
+#: the numbering of the grammar tokens - it moves with any rule of the grammar, and the engine
+#: reads the keywords and operators, never the numbers.
+_NOT_COMPARED = {"meta", "token_ids"}
+#: The fields that name an item of a list of records, tried in this order (see _keyed).
+_IDENTITY_FIELDS = ("ru", "signature", "name", "id", "term")
 
 
 def _version_key(version: str) -> tuple[int, ...]:
@@ -157,28 +224,40 @@ def _load_json(root: Path, version: str, name: str) -> dict | None:
     return dataset.read_json(path)
 
 
-def _load_doc_pages(root: Path, version: str) -> dict[str, tuple[str, str]] | None:
+def _digest(html: str | None) -> str:
+    return hashlib.sha256((html or "").encode("utf-8")).hexdigest()
+
+
+def _load_doc_pages(root: Path, version: str) -> dict[str, tuple[str, str, str]] | None:
+    """{page id: (title, kind, hash of the HTML)} of the documentation index, or None without one."""
     path = root / version / "docs.sqlite"
     if not path.exists():
         return None
-    con = sqlite3.connect(path)
+    # Read-only: the diff must not touch a data root it only reads. A file URI needs an
+    # absolute path, and --data-dir may be a relative one.
+    con = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
-        rows = con.execute("SELECT id, title, kind FROM pages").fetchall()
+        rows = con.execute("SELECT id, title, kind, html FROM pages").fetchall()
     finally:
         con.close()
-    return {page_id: (title or "", kind or "") for page_id, title, kind in rows}
+    return {page_id: (title or "", kind or "", _digest(html)) for page_id, title, kind, html in rows}
 
 
 # --- Pure diffs ---------------------------------------------------------------------------
+
+
+def _order(values) -> list:
+    """Values sorted for a report: names as they sort, a value of another type beside them."""
+    return sorted(values, key=lambda value: (value is None, str(value)))
 
 
 def _added_removed(old, new) -> dict:
     old_set, new_set = set(old or ()), set(new or ())
     out = {}
     if new_set - old_set:
-        out["added"] = sorted(new_set - old_set)
+        out["added"] = _order(new_set - old_set)
     if old_set - new_set:
-        out["removed"] = sorted(old_set - new_set)
+        out["removed"] = _order(old_set - new_set)
     return out
 
 
@@ -190,12 +269,112 @@ def _prune(value):
     return value
 
 
+def _plain(values: list) -> bool:
+    return all(value is None or isinstance(value, (str, int, float, bool)) for value in values)
+
+
+def _identity(item: dict, field: str):
+    value = item.get(field)
+    if field == "term" and isinstance(value, dict):
+        return value.get("ru") or value.get("en")
+    return value
+
+
+def _keyed(items: list) -> dict | None:
+    """A list of records as {name: record}, or None when no field names every record once.
+
+    Handler rows are named by `ru`, the forms of a member by `signature`, the properties of a
+    retired component by `term` - comparing such lists by name says which record came, went
+    or changed, where comparing them whole could only say that the list is different.
+    """
+    if not all(isinstance(item, dict) for item in items):
+        return None
+    for field in _IDENTITY_FIELDS:
+        names = [_identity(item, field) for item in items]
+        if all(isinstance(name, str) and name for name in names) and len(set(names)) == len(names):
+            return dict(zip(names, items))
+    return None
+
+
+def _delta(old, new, ordered: bool = False):
+    """What changed between two values of the data, or None when nothing did.
+
+    Two mappings give a keyed delta: the keys that came and went and the delta of every key
+    they share. Two lists of records named by a field (see _keyed) compare the same way. Two
+    lists of names give the names that came and went. The order of a list counts only where
+    `ordered` says it is the point (type parameters, generic arguments): then, as for anything
+    else that differs, the delta is the pair [old, new]; elsewhere a list that merely came in
+    another order is no change - the extractors sort what has no order of its own.
+    """
+    if old == new:
+        return None
+    if isinstance(old, dict) and isinstance(new, dict):
+        return _keyed_delta(old, new, ordered)
+    if isinstance(old, list) and isinstance(new, list):
+        old_keyed, new_keyed = _keyed(old), _keyed(new)
+        if old_keyed is not None and new_keyed is not None:
+            return _keyed_delta(old_keyed, new_keyed, ordered) or ([old, new] if ordered else None)
+        if not ordered and _plain(old) and _plain(new):
+            return _added_removed(old, new) or None
+    return [old, new]
+
+
+def _keyed_delta(old: dict | None, new: dict | None, ordered: bool = False,
+                 skip=frozenset()) -> dict:
+    """{"added": [keys], "removed": [keys], "changed": {key: delta}} of two mappings.
+
+    `skip` names keys left out on both sides: a type that came or went is named once, among the
+    types, rather than again in every section keyed by type.
+    """
+    old = {k: v for k, v in (old or {}).items() if k not in skip}
+    new = {k: v for k, v in (new or {}).items() if k not in skip}
+    out = _added_removed(old, new)
+    changed = {}
+    for key in _order(set(old) & set(new)):
+        delta = _delta(old[key], new[key], ordered)
+        if delta is not None:
+            changed[key] = delta
+    if changed:
+        out["changed"] = changed
+    return out
+
+
+def _section_delta(old, new, ordered: bool = False) -> dict:
+    """The delta of one top-level section of any shape; a side that lacks it counts as empty."""
+    if isinstance(old, dict) or isinstance(new, dict):
+        return _keyed_delta(old if isinstance(old, dict) else {},
+                            new if isinstance(new, dict) else {}, ordered)
+    if isinstance(old, list) or isinstance(new, list):
+        old_list = old if isinstance(old, list) else []
+        new_list = new if isinstance(new, list) else []
+        old_keyed, new_keyed = _keyed(old_list), _keyed(new_list)
+        if old_keyed is not None and new_keyed is not None and (old_list or new_list):
+            return _keyed_delta(old_keyed, new_keyed, ordered)
+        if _plain(old_list) and _plain(new_list):
+            return _added_removed(old_list, new_list)
+    return {} if old == new else {"changed": {"value": [old, new]}}
+
+
+def _other_sections(old: dict, new: dict, known) -> dict:
+    """Sections of a file that no dedicated comparison reads, compared entry by entry.
+
+    This is what keeps the diff from going blind to a section: the one a newer extractor adds
+    (or one the list above forgot) is reported like any other instead of being passed over.
+    """
+    out = {}
+    for section in _order(set(old) | set(new)):
+        if section in known or section in _NOT_COMPARED:
+            continue
+        out[section] = _section_delta(old.get(section), new.get(section))
+    return out
+
+
 def _diff_member_lists(old: dict, new: dict) -> dict:
     """Per-name diff of {name: {"methods": [...], "properties": [...]}} sections."""
     out = {}
     for name in sorted(set(old) & set(new)):
         entry = {}
-        for key in ("methods", "properties", "members"):
+        for key in ("methods", "properties", "events", "members"):
             delta = _added_removed(old[name].get(key), new[name].get(key))
             if delta:
                 entry[key] = delta
@@ -239,6 +418,7 @@ def diff_language(old: dict, new: dict) -> dict:
         "keywords": _added_removed(old_kw, new_kw),
         "forms": forms,
         "operators": _added_removed(old.get("operators"), new.get("operators")),
+        **_other_sections(old, new, {"keywords", "operators"}),
     })
 
 
@@ -273,6 +453,80 @@ def _expand_member_types(data: dict) -> dict[str, dict[str, str]]:
         merged.update(members)
         full[name] = merged
     return full
+
+
+def _expand_own(data: dict, section: str) -> dict[str, dict]:
+    """{type: {member: value}} of a section kept in the own form, with the ancestors merged in.
+
+    The same merge the loader does (dataset._expand_inherited): every ancestor's entries, the
+    nearest one last, then the type's own - an overridden member keeps its own value.
+    """
+    bases = data.get("bases") or {}
+    own = data.get(section) or {}
+    full = {}
+    for name in set(own) | set(bases):
+        merged: dict = {}
+        for base in nearest_last(bases.get(name, ()), bases):
+            merged.update(own.get(base) or {})
+        merged.update(own.get(name) or {})
+        if merged:
+            full[name] = merged
+    return full
+
+
+def _as_marks(section) -> dict[str, dict[str, bool]]:
+    """{owner: [names]} as {owner: {name: True}} - a set of names compared like a mapping."""
+    return {owner: {name: True for name in names or ()} for owner, names in (section or {}).items()}
+
+
+def _canonical(value) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _touched(delta: dict) -> list:
+    return [*delta.get("added", ()), *delta.get("removed", ()), *(delta.get("changed") or {})]
+
+
+def _restricted(delta: dict, keys: set) -> dict:
+    out = {sign: [k for k in delta.get(sign, ()) if k in keys] for sign in ("added", "removed")}
+    out["changed"] = {k: v for k, v in (delta.get("changed") or {}).items() if k in keys}
+    return {sign: part for sign, part in out.items() if part}
+
+
+def _diff_lifted(old_map: dict, new_map: dict, old_bases: dict, new_bases: dict,
+                 ordered: bool = False, skip=frozenset()) -> dict:
+    """Keyed delta of {owner: {name: value}} maps, each change kept at the owner that makes it.
+
+    A section stored per type fully expanded (or expanded here from its own form) repeats a
+    change of a base in every descendant. A change is kept only at an owner none of whose bases
+    - in either version - carries the very same change, the way the members above are lifted,
+    so the report stays the size of the platform change.
+    """
+    old_map = {k: v for k, v in old_map.items() if k not in skip}
+    new_map = {k: v for k, v in new_map.items() if k not in skip}
+    out = _added_removed(old_map, new_map)
+    deltas: dict[str, dict] = {}
+    marks: dict[tuple[str, str, str], set[str]] = {}
+
+    def mark(owner: str, name: str) -> tuple[str, str, str]:
+        return (name, _canonical(old_map[owner].get(name)), _canonical(new_map[owner].get(name)))
+
+    for owner in set(old_map) & set(new_map):
+        delta = _keyed_delta(old_map[owner], new_map[owner], ordered)
+        if delta:
+            deltas[owner] = delta
+            for name in _touched(delta):
+                marks.setdefault(mark(owner, name), set()).add(owner)
+    changed = {}
+    for owner in _order(deltas):
+        bases = set(old_bases.get(owner) or ()) | set(new_bases.get(owner) or ())
+        own = {name for name in _touched(deltas[owner])
+               if not any(base in marks.get(mark(owner, name), ()) for base in bases)}
+        if own:
+            changed[owner] = _restricted(deltas[owner], own)
+    if changed:
+        out["changed"] = changed
+    return out
 
 
 def _diff_expanded_members(old_full: dict, new_full: dict,
@@ -351,6 +605,70 @@ def _without_moved(entry: dict, moved: dict[str, list[str]]) -> dict:
     return out
 
 
+def _rows_by_name(rows) -> dict[str, dict]:
+    """Handler rows as {name: row}: a handler is known by its Russian name, the English one
+    standing in for a row that has none."""
+    out = {}
+    for row in rows or ():
+        name = row.get("ru") or row.get("en")
+        if name:
+            out[name] = row
+    return out
+
+
+def _component_handlers(section) -> dict[str, dict]:
+    """module_handlers ({type: [rows]}) as {type: {handler: row}}."""
+    return {owner: _rows_by_name(rows) for owner, rows in (section or {}).items()}
+
+
+def _element_handlers(section) -> dict[str, dict]:
+    """element_module_handlers as {"<kind>.<module>": {handler: row}}; the own module of an
+    element is named by the kind alone.
+
+    One level per module keeps a change readable as "the module lost a handler" instead of a
+    path through the kind, the module and the list. A place the module takes handler names
+    from at build time (`dynamic`) is an entry of its own, `dynamic:<place>`.
+    """
+    out: dict[str, dict] = {}
+    for kind, modules in (section or {}).items():
+        for module, slot in (modules or {}).items():
+            entries: dict = dict(_rows_by_name(slot.get("handlers")))
+            for place in slot.get("dynamic") or ():
+                entries[f"dynamic:{place}"] = True
+            out[f"{kind}.{module}" if module else kind] = entries
+    return out
+
+
+#: stdlib sections kept per type in the own form: expanded by `bases`, then lifted to the type
+#: that makes a change - (section, whether a list value is a sequence rather than a set).
+_STDLIB_OWN_FORM = (
+    ("member_signatures", False),
+    ("member_type_params", True),
+    ("deprecated_members", False),
+)
+#: stdlib sections compared key by key: (section, whether a list value is a sequence, whether
+#: the section is keyed by type - then a type that came or went is left to the "types" group).
+_STDLIB_KEYED = (
+    ("retired_components", False, False),
+    ("component_from", False, False),
+    ("global_availability", False, False),
+    ("type_availability", False, True),
+    ("manager_member_types", False, False),
+    ("generic_bases", True, True),
+    ("type_ctors", False, True),
+    ("type_params", True, True),
+    ("type_param_variance", True, True),
+)
+#: stdlib sections a dedicated part of diff_stdlib reads; the rest go to _other_sections.
+_STDLIB_KNOWN = {
+    "names", "object_members", "component_props", "module_handlers", "element_module_handlers",
+    "type_members", "globals", "manager_members", "facet_members", "generated_members",
+    "member_types", "checked_return_methods", "bases",
+    *(section for section, _ in _STDLIB_OWN_FORM),
+    *(section for section, _, _ in _STDLIB_KEYED),
+}
+
+
 def diff_stdlib(old: dict, new: dict) -> dict:
     old_tm, new_tm = old.get("type_members") or {}, new.get("type_members") or {}
     old_bases, new_bases = old.get("bases") or {}, new.get("bases") or {}
@@ -373,11 +691,15 @@ def diff_stdlib(old: dict, new: dict) -> dict:
                 continue
             member_types[f"{type_name}.{member}"] = [old_type, new_type]
     old_fm, new_fm = old.get("facet_members") or {}, new.get("facet_members") or {}
+    # A type that came or went is named once, in "types"; the sections keyed by type say
+    # what changed about the types both versions have.
+    came_or_went = set(old_tm) ^ set(new_tm)
     return _prune({
         "types": _added_removed(old_tm, new_tm),
         "members": members,
         "member_types": member_types,
         "globals": _added_removed(old.get("globals"), new.get("globals")),
+        "object_kinds": _added_removed(old.get("object_members"), new.get("object_members")),
         "object_members": _diff_name_sets(
             old.get("object_members") or {}, new.get("object_members") or {}),
         # A member list is compared for the names both versions have; a kind or a generated
@@ -392,6 +714,30 @@ def diff_stdlib(old: dict, new: dict) -> dict:
         "generated_types": _added_removed(old.get("generated_members"), new.get("generated_members")),
         "generated_members": _diff_member_lists(
             old.get("generated_members") or {}, new.get("generated_members") or {}),
+        "names": _added_removed(old.get("names"), new.get("names")),
+        "module_handlers": _keyed_delta(_component_handlers(old.get("module_handlers")),
+                                        _component_handlers(new.get("module_handlers"))),
+        "element_module_handlers": _keyed_delta(
+            _element_handlers(old.get("element_module_handlers")),
+            _element_handlers(new.get("element_module_handlers"))),
+        # Stored fully expanded, so a change of a base repeats in every heir - lifted like members.
+        "component_props": _diff_lifted(
+            _as_marks(old.get("component_props")), _as_marks(new.get("component_props")),
+            old_bases, new_bases, skip=came_or_went),
+        "checked_return_methods": _diff_lifted(
+            _as_marks(old.get("checked_return_methods")),
+            _as_marks(new.get("checked_return_methods")),
+            old_bases, new_bases, skip=came_or_went),
+        # The chain is transitively closed: an ancestor that gains a base passes it to every heir.
+        "bases": _diff_lifted(_as_marks(old_bases), _as_marks(new_bases),
+                              old_bases, new_bases, skip=came_or_went),
+        **{section: _diff_lifted(_expand_own(old, section), _expand_own(new, section),
+                                 old_bases, new_bases, ordered, skip=came_or_went)
+           for section, ordered in _STDLIB_OWN_FORM},
+        **{section: _keyed_delta(old.get(section), new.get(section), ordered,
+                                 skip=came_or_went if by_type else frozenset())
+           for section, ordered, by_type in _STDLIB_KEYED},
+        **_other_sections(old, new, _STDLIB_KNOWN),
     })
 
 
@@ -413,6 +759,12 @@ def diff_metamodel(old: dict, new: dict) -> dict:
             entry["changed"] = changed
         if entry:
             props[cls] = entry
+    # Whatever else a class states besides its properties (the classes it extends, how it is
+    # presented) is compared too, for the classes both versions have.
+    common = set(old_cls) & set(new_cls)
+    class_attrs = _keyed_delta(
+        {cls: {k: v for k, v in old_cls[cls].items() if k != "props"} for cls in common},
+        {cls: {k: v for k, v in new_cls[cls].items() if k != "props"} for cls in common})
     old_enums, new_enums = old.get("enums") or {}, new.get("enums") or {}
     enum_values = {}
     for enum in sorted(set(old_enums) & set(new_enums)):
@@ -428,10 +780,17 @@ def diff_metamodel(old: dict, new: dict) -> dict:
     return _prune({
         "classes": _added_removed(old_cls, new_cls),
         "props": props,
+        "class_attrs": class_attrs,
         "enums": _added_removed(old_enums, new_enums),
         "enum_values": enum_values,
         "vid2class": vid,
+        **_other_sections(old, new, {"classes", "enums", "vid2class"}),
     })
+
+
+def _enum_values(entry) -> list:
+    """The values of a ui-schema enumeration: {"package", "values"}, or a plain list of old."""
+    return list(entry.get("values") or ()) if isinstance(entry, dict) else list(entry or ())
 
 
 def diff_uischema(old: dict, new: dict) -> dict:
@@ -456,47 +815,74 @@ def diff_uischema(old: dict, new: dict) -> dict:
                       if (old_comp[comp].get(key) or None) != (new_comp[comp].get(key) or None)}
         if flag_delta:
             flags[comp] = flag_delta
+    common = set(old_comp) & set(new_comp)
+    # The yaml keys a source may write on a component beyond its properties.
+    yaml_props = _keyed_delta({comp: old_comp[comp].get("yaml_props") or [] for comp in common},
+                              {comp: new_comp[comp].get("yaml_props") or [] for comp in common})
     old_enums, new_enums = old.get("enums") or {}, new.get("enums") or {}
     enum_values = {}
+    enum_packages = {}
     for enum in sorted(set(old_enums) & set(new_enums)):
-        delta = _added_removed(old_enums[enum], new_enums[enum])
+        # An enumeration of the schema is {"package", "values"}: comparing the two records as
+        # key sets said "no change" whatever happened to the values.
+        delta = _added_removed(_enum_values(old_enums[enum]), _enum_values(new_enums[enum]))
         if delta:
             enum_values[enum] = delta
+        old_package = old_enums[enum].get("package") if isinstance(old_enums[enum], dict) else None
+        new_package = new_enums[enum].get("package") if isinstance(new_enums[enum], dict) else None
+        if old_package != new_package:
+            enum_packages[enum] = [old_package, new_package]
     return _prune({
         "components": _added_removed(old_comp, new_comp),
         "props": props,
         "flags": flags,
+        "yaml_props": yaml_props,
         "enums": _added_removed(old_enums, new_enums),
         "enum_values": enum_values,
+        "enum_packages": {"changed": enum_packages},
+        "type_params": _keyed_delta(old.get("type_params"), new.get("type_params"), ordered=True),
+        **_other_sections(old, new, {"components", "enums", "type_params"}),
     })
 
 
 def diff_terms(old: dict, new: dict) -> dict:
+    """Pairs keyed by the Russian name, compared by name: a new, a gone and a changed spelling."""
+    sections = [*_TERM_SECTIONS,
+                *_order((set(old) | set(new)) - set(_TERM_SECTIONS) - _NOT_COMPARED)]
     out = {}
-    for section in _TERM_SECTIONS:
-        old_map, new_map = old.get(section) or {}, new.get(section) or {}
-        entry = _added_removed(old_map, new_map)
-        changed = {name: [old_map[name], new_map[name]]
-                   for name in sorted(set(old_map) & set(new_map))
-                   if old_map[name] != new_map[name]}
-        if changed:
-            entry["changed"] = changed
+    for section in sections:
+        entry = _section_delta(old.get(section), new.get(section))
         if entry:
             out[section] = entry
     return out
 
 
+def diff_pairs(old: dict, new: dict) -> dict:
+    """Any file of ru/en pairs (uiterms.json, terms_full.json): every section compared by name."""
+    return _prune(_other_sections(old, new, ()))
+
+
 def diff_docs(old_pages: dict, new_pages: dict) -> dict:
+    """Pages that came, went, got another title or another content.
+
+    A page is (title, kind) or (title, kind, hash of the HTML). The four lists do not overlap:
+    a retitled page is listed among the retitled only, although its HTML - which carries the
+    heading - changed as well.
+    """
     added = sorted(set(new_pages) - set(old_pages))
     removed = sorted(set(old_pages) - set(new_pages))
+    shared = sorted(set(old_pages) & set(new_pages))
     retitled = {page_id: [old_pages[page_id][0], new_pages[page_id][0]]
-                for page_id in sorted(set(old_pages) & set(new_pages))
-                if old_pages[page_id][0] != new_pages[page_id][0]}
+                for page_id in shared if old_pages[page_id][0] != new_pages[page_id][0]}
+    changed = [[page_id, *new_pages[page_id][:2]] for page_id in shared
+               if page_id not in retitled and len(old_pages[page_id]) > 2
+               and len(new_pages[page_id]) > 2 and old_pages[page_id][2] != new_pages[page_id][2]]
     return _prune({
         "pages": {
-            "added": [[pid, *new_pages[pid]] for pid in added],
-            "removed": [[pid, *old_pages[pid]] for pid in removed],
+            "added": [[pid, *new_pages[pid][:2]] for pid in added],
+            "removed": [[pid, *old_pages[pid][:2]] for pid in removed],
             "retitled": retitled,
+            "changed": changed,
         },
         "counts": {"old": len(old_pages), "new": len(new_pages)},
     })
@@ -511,6 +897,8 @@ _JSON_SECTIONS = (
     ("metamodel", "metamodel.json", diff_metamodel),
     ("uischema", "uischema.json", diff_uischema),
     ("terms", "terms.json", diff_terms),
+    ("uiterms", "uiterms.json", diff_pairs),
+    ("terms_full", "terms_full.json", diff_pairs),
 )
 
 
@@ -541,7 +929,15 @@ def build_diff(old_version: str, new_version: str) -> dict:
 # Both renderers work off the same (depth, text) line list; text caps every list at --limit,
 # markdown emits everything as nested bullet lists.
 
-_SECTIONS = ("language", "stdlib", "metamodel", "uischema", "terms", "docs")
+_SECTIONS = ("language", "stdlib", "metamodel", "uischema", "terms", "uiterms", "terms_full",
+             "docs")
+#: Groups of the four original sections that keep a shape of their own; every other group -
+#: the ones added since and the pair files - is a keyed delta and renders through _emit_delta.
+_OWN_SHAPE_SECTIONS = ("language", "stdlib", "metamodel", "uischema")
+_MEMBER_GROUPS = ("members", "facet_members", "manager_members", "generated_members")
+_NAME_SET_GROUPS = ("props", "forms", "enum_values", "object_members")
+#: The i18n prefix a section keeps its own titles under (terms.json predates the rest).
+_TITLE_PREFIX = {"terms": "datadiff.term."}
 
 
 def _cap(names: list, limit: int | None) -> tuple[list, str]:
@@ -550,9 +946,9 @@ def _cap(names: list, limit: int | None) -> tuple[list, str]:
     return names, ""
 
 
-def _join(names: list[str], limit: int | None) -> str:
+def _join(names: list, limit: int | None) -> str:
     shown, more = _cap(names, limit)
-    return ", ".join(shown) + more
+    return ", ".join(str(name) for name in shown) + more
 
 
 def _delta_head(title: str, delta: dict, changed_key: str = "changed") -> str:
@@ -563,8 +959,37 @@ def _delta_head(title: str, delta: dict, changed_key: str = "changed") -> str:
     return f"{title} {joined}:" if joined else f"{title}:"
 
 
+def _value(value) -> str:
+    if isinstance(value, list):
+        return "[" + ", ".join(_value(v) for v in value) + "]"
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def _pair_line(pair: list) -> str:
+    return f"{_value(pair[0])} -> {_value(pair[1])}"
+
+
+def _detail(delta, limit: int | None) -> str:
+    """One line for the delta of an entry: a pair, or what came, went and changed inside it."""
+    if isinstance(delta, list):
+        return _pair_line(delta)
+    parts = []
+    if delta.get("added"):
+        parts.append("+" + _join(delta["added"], limit))
+    if delta.get("removed"):
+        parts.append("-" + _join(delta["removed"], limit))
+    changed = delta.get("changed") or {}
+    if changed:
+        shown, more = _cap(list(changed.items()), limit)
+        parts.append("~" + ", ".join(f"{name} ({_detail(sub, limit)})" for name, sub in shown)
+                     + more)
+    return "; ".join(parts)
+
+
 def _emit_delta(out: list, depth: int, title: str, delta: dict, limit: int | None) -> None:
-    """A plain added/removed[/changed-pairs] group under one heading."""
+    """A keyed delta under one heading: what came, what went, and a line per changed entry."""
     if not delta:
         return
     out.append((depth, _delta_head(title, delta)))
@@ -572,12 +997,11 @@ def _emit_delta(out: list, depth: int, title: str, delta: dict, limit: int | Non
         out.append((depth + 1, "+ " + _join(delta["added"], limit)))
     if delta.get("removed"):
         out.append((depth + 1, "- " + _join(delta["removed"], limit)))
-    for name, pair in _cap(list((delta.get("changed") or {}).items()), limit)[0]:
-        out.append((depth + 1, f"~ {name}: {pair[0]} -> {pair[1]}"))
-    if delta.get("changed"):
-        _, more = _cap(list(delta["changed"]), limit)
-        if more:
-            out.append((depth + 1, more.strip()))
+    shown, more = _cap(list((delta.get("changed") or {}).items()), limit)
+    for name, detail in shown:
+        out.append((depth + 1, f"~ {name}: {_detail(detail, limit)}"))
+    if more:
+        out.append((depth + 1, more.strip()))
 
 
 def _members_line(entry: dict, limit: int | None) -> str:
@@ -585,6 +1009,7 @@ def _members_line(entry: dict, limit: int | None) -> str:
     for key, label in (
         ("methods", "datadiff.group.methods"),
         ("properties", "datadiff.group.properties"),
+        ("events", "datadiff.group.events"),
         ("members", "datadiff.group.any-members"),
     ):
         delta = entry.get(key)
@@ -596,6 +1021,14 @@ def _members_line(entry: dict, limit: int | None) -> str:
         if delta.get("removed"):
             bits.append("-" + _join(delta["removed"], limit))
         parts.append(i18n.t(label) + " " + "; ".join(bits))
+    moved = entry.get("moved") or {}
+    if moved:
+        shown, more = _cap(list(moved.items()), limit)
+        kinds = [(member, [i18n.t("datadiff.group." + kind) for kind in pair])
+                 for member, pair in shown]
+        parts.append(i18n.t("datadiff.group.moved") + " "
+                     + ", ".join(f"{member} ({was} -> {now})" for member, (was, now) in kinds)
+                     + more)
     return "; ".join(parts)
 
 
@@ -611,15 +1044,6 @@ def _props_line(entry: dict, limit: int | None) -> str:
         rendered = ", ".join(f"{prop} ({', '.join(attrs)})" for prop, attrs in shown)
         parts.append("~" + rendered + more)
     return "; ".join(parts)
-
-
-def _pair_line(pair: list) -> str:
-    def fmt(value):
-        if isinstance(value, list):
-            return "[" + ", ".join(str(v) for v in value) + "]"
-        return str(value)
-
-    return f"{fmt(pair[0])} -> {fmt(pair[1])}"
 
 
 def _emit_named(out: list, depth: int, title: str, entries: dict, line, limit: int | None) -> None:
@@ -658,10 +1082,31 @@ def _emit_pages(out: list, depth: int, body: dict, limit: int | None) -> None:
             out.append((depth + 1, f"~ {old_title} -> {new_title}"))
         if more:
             out.append((depth + 1, more.strip()))
+    changed = pages.get("changed") or []
+    if changed:
+        # The id goes along: titles repeat across the tree, and the id is what opens the page.
+        out.append((depth, f"{i18n.t('datadiff.group.pages-changed')} ~{len(changed)}:"))
+        shown, more = _cap(changed, limit)
+        for pid, page_title, kind in shown:
+            out.append((depth + 1, f"~ {page_title}" + (f"  [{kind}]" if kind else "") + f"  {pid}"))
+        if more:
+            out.append((depth + 1, more.strip()))
 
 
-def _group_title(key: str) -> str:
-    return i18n.t("datadiff.group." + key.replace("_", "-"))
+def _group_title(section: str, key: str) -> str:
+    """The title of a group: the section's own, the shared one, or the key itself.
+
+    A section a newer extractor adds has no title yet - it is shown under its own key rather
+    than hidden for the want of one.
+    """
+    prefixes = (_TITLE_PREFIX.get(section) or f"datadiff.{section.replace('_', '-')}.",
+                "datadiff.group.")
+    for prefix in prefixes:
+        name = prefix + key.replace("_", "-")
+        title = i18n.t(name)
+        if title != name:
+            return title
+    return key
 
 
 def _section_lines(section: str, body: dict, limit: int | None) -> list:
@@ -669,24 +1114,19 @@ def _section_lines(section: str, body: dict, limit: int | None) -> list:
     if section == "docs":
         _emit_pages(out, 0, body, limit)
         return out
-    if section == "terms":
-        for key in _TERM_SECTIONS:
-            if key in body:
-                title = i18n.t("datadiff.term." + key.replace("_", "-"))
-                _emit_delta(out, 0, title, body[key], limit)
-        return out
+    own_shape = section in _OWN_SHAPE_SECTIONS
     for key, payload in body.items():
-        title = _group_title(key)
-        if key in ("members", "facet_members", "manager_members", "generated_members"):
+        title = _group_title(section, key)
+        if own_shape and key in _MEMBER_GROUPS:
             _emit_named(out, 0, title, payload, lambda e: _members_line(e, limit), limit)
-        elif key in ("props", "forms", "enum_values", "object_members"):
+        elif own_shape and key in _NAME_SET_GROUPS:
             _emit_named(out, 0, title, payload, lambda e: _props_line(e, limit), limit)
-        elif key == "member_types":
+        elif own_shape and key == "member_types":
             _emit_named(out, 0, title, payload, _pair_line, limit)
-        elif key == "flags":
+        elif own_shape and key == "flags":
             _emit_named(out, 0, title, payload,
                         lambda e: "; ".join(f"{k} {_pair_line(v)}" for k, v in e.items()), limit)
-        else:  # keywords, operators, types, globals, facets, classes, enums, components, vid2class
+        else:  # a keyed delta: names that came and went, a line per changed entry
             _emit_delta(out, 0, title, payload, limit)
     return out
 

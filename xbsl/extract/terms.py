@@ -105,6 +105,16 @@ _DECLARES_MEMBERS_RE = re.compile(rb"CtMeta(Method|Prop)Builder")
 #: A class states TERMS - a type and its members as pairs stored into named static fields
 #: (classcode.declared_terms) - only if it references one of the term factories.
 _DECLARES_TERMS_RE = re.compile(rb"Term|QNames")
+#: A class extends the EMF package only if its pool names that class - the same cheap test,
+#: taken before the class file is read for its base (see _stated_pairs).
+_EMF_PACKAGE_MARK = classcode.EMF_PACKAGE.encode()
+#: The annotations a data class names a property of its JSON by, in English, and admits the
+#: Russian spelling of the same property as an alias (see _aliased_pairs).
+_JSON_PROPERTY = "Lcom/fasterxml/jackson/annotation/JsonProperty;"
+_JSON_ALIAS = "Lcom/fasterxml/jackson/annotation/JsonAlias;"
+_JSON_ALIAS_MARK = _JSON_ALIAS[1:-1].encode()
+#: The name of a Java constant: words in capitals joined by underscores (`FINISH_NAME_RU`).
+_CONSTANT_NAME_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 #: Jars of the platform itself - the only ones that can hold such classes.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
@@ -184,6 +194,88 @@ def _is_type_field(field: str, english: str) -> bool:
 def _is_term_pair(en: str, ru: str) -> bool:
     """Whether a stated term is a spelling pair: an English name against a Russian one."""
     return bool(_EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru))
+
+
+def _annotated_pairs(blob: bytes) -> list[tuple[str, str]]:
+    """[(English, Russian)] of every annotation of an EMF package that states both spellings.
+
+    A generated package describes the yaml model of an element kind, and its annotations name
+    the properties and the standard attributes in both languages under the keys `ru` and `en`
+    (classcode.annotation_details) - the keys, not the order, say which spelling is which.
+    """
+    return [
+        (details["en"], details["ru"])
+        for details in classcode.annotation_details(blob)
+        if "en" in details and "ru" in details and _is_term_pair(details["en"], details["ru"])
+    ]
+
+
+def _aliased_pairs(blob: bytes) -> list[tuple[str, str]]:
+    """[(English, Russian)] of every JSON property a data class names in English and aliases in
+    Russian (classcode.annotation_values); a property named more than once states nothing."""
+    pairs: list[tuple[str, str]] = []
+    for values in classcode.annotation_values(blob):
+        names = values.get(_JSON_PROPERTY) or []
+        if len(names) == 1:
+            pairs.extend((names[0], alias) for alias in values.get(_JSON_ALIAS) or ()
+                         if _is_term_pair(names[0], alias))
+    return pairs
+
+
+def _stated_pairs(blob: bytes) -> list[tuple[str, str]] | None:
+    """The pairs the class states by annotations, or None for a class that states none this way.
+
+    An EMF package states them in the details of its annotations (_annotated_pairs), a data
+    class in the JSON aliases of its properties (_aliased_pairs). Either writes the Russian
+    spelling first, and that is what the neighbourhood reading cannot survive (see _checked).
+    """
+    if _EMF_PACKAGE_MARK in blob and classcode.super_class(blob) == classcode.EMF_PACKAGE:
+        return _annotated_pairs(blob)
+    if _JSON_ALIAS_MARK in blob:
+        try:
+            return _aliased_pairs(blob) or None
+        except (IndexError, ValueError):  # annotations the reader does not follow: no statement
+            return None
+    return None
+
+
+def _names_its_field(en: str, ru: str) -> bool:
+    """Whether the English side is the name of the static field that holds the Russian one.
+
+    A class keeps the name of a string constant next to the string it holds, and the
+    neighbourhood read `FINISH_NAME_RU` as the English of the Russian word for finish,
+    `SENDER_NAME_RU` as that of the word for sender. The platform writes a constant of its own in
+    capitals in both languages (`NEW_LINE`), so only a capitalized name next to a Russian word
+    that is not capitalized is dropped.
+    """
+    return bool(_CONSTANT_NAME_RE.match(en)) and not ru.isupper()
+
+
+def _checked(stated_pairs: list[tuple[str, str]],
+             pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The neighbourhood reading of a class that states its pairs, checked against the statements.
+
+    An EMF package and a data class write the Russian spelling first, and the pool keeps the
+    strings in that order, so the neighbour of a Russian name is the English name of the
+    PREVIOUS statement: the standard attributes of an exchange plan came out shifted by one -
+    this node read as `ReceivedNumber`, the name as `ThisNode` - and each word got a second
+    spelling that no receiver answers to. The neighbourhood still finds the words of the class;
+    the statement of a word gives its English. A pair the statements confirm stays, one they
+    contradict takes the spelling they state, and a word they do not state - a default value
+    that stands next to a class name - is no pair at all. So is a word stated two ways (two
+    properties of one Russian name) when the neighbour is neither of them.
+    """
+    stated: dict[str, set[str]] = defaultdict(set)
+    for english, russian in stated_pairs:
+        stated[russian].add(english)
+    checked: list[tuple[str, str]] = []
+    for english, russian in pairs:
+        spellings = stated.get(russian, set())
+        if english in spellings:
+            checked.append((english, russian))
+        elif len(spellings) == 1:
+            checked.append((next(iter(spellings)), russian))
+    return checked
 
 
 def _declared_type(
@@ -319,7 +411,11 @@ def _scan_meta_objects(
                 (en, ru) for en, ru in zip(strings, strings[1:])
                 if _EN_NAME_RE.match(en) and en not in _CLASS_FILE_NAMES
                 and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru)
+                and not _names_its_field(en, ru)
             ]
+            stated_pairs = _stated_pairs(data)
+            if stated_pairs is not None:
+                pairs = _checked(stated_pairs, pairs)
             if inner == _QUERY_TERMS_CLASS:
                 # In the query parser's own class a keyword the platform has NO English
                 # spelling for is followed by a transliteration of itself, and adjacency reads

@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from xbsl import cli, freshness, mcpcli, mcpjournal, plugins
+from xbsl import cli, dataset, freshness, mcpcli, mcpjournal, plugins
 
 
 class _Dist:
@@ -97,7 +97,11 @@ def site(tmp_path, monkeypatch):
     _settle(folder)
     _settle(environment)
     plugins.installed()  # the walk that loads the plugins reads their versions
-    return SimpleNamespace(folder=folder, environment=environment, ep=ep, installed=installed)
+    yield SimpleNamespace(folder=folder, environment=environment, ep=ep, installed=installed)
+    # A tool that read the data here (version_info) chose the data root among the stub entry
+    # points, which declare no data, and the dataset keeps that choice: dropped while the stub
+    # still stands, so the tests after this one look for the root among the real ones again.
+    dataset.set_data_root(None)
 
 
 def _upgrade(site, version: str) -> None:

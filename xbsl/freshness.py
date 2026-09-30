@@ -14,7 +14,12 @@ The plugins go stale the same way. Caught on 25.09.2026: after a plugin was upgr
 running server, `lint_paths` named the version it had loaded while the CLI and CI ran the new
 one - two rule sets over one tree, and no word about it in the answer.
 
-Three checks, by cost:
+So does the platform data. Caught on 29.09.2026: a worker of the MCP server started two seconds
+before the data files of a reinstalled plugin were written, read the term pairs while it
+imported and went on answering from them - `translate_status` counted six untranslated tokens
+where the CLI counted none - with every version number the same on both sides.
+
+Four checks, by cost:
 
 - the VERSION: `__version__` in memory against the `__init__.py` on disk. One small file, cheap
   enough for every call of a tool (`version_state`);
@@ -34,10 +39,21 @@ Three checks, by cost:
   every call the MCP server checks the engine's own files (`engine_sources_state`), and that
   check is a stat of the few folders they lie in: the files are walked again only when a
   folder changed or the last walk is a few seconds old (see _Sources). The plugins stay out of
-  it - a plugin changed on disk is no reason to refuse, see below.
+  it - a plugin changed on disk is no reason to refuse, see below;
+- the DATA: the platform data files the process read, with the size and the modification time
+  xbsl/dataset.py noted just before each read, against the disk now (`data_state`). A stat per
+  file, a dozen files: cheap enough for every call. The first reading of a file is the one
+  judged. The dataset drops its caches when a file it read changes, and the tables registered
+  with it follow, but a module that took its constants from the term pairs at import keeps
+  them - and so the process answers from the old file however often the caches were reset. A
+  file the process looked for and did not find counts once it appears, and so does a root that
+  gets its index after the start: what the process built without them stays without them. A
+  file it never read does not count - no answer came from it, and a new process that did read
+  it would answer the same. That includes the documentation database: every call opens it
+  anew, and its index is keyed by the size and the time of the file itself.
 
-The plugins and the sources are judged only in a process that called `remember` at its start:
-the CLI lives for one run and has nothing to compare.
+The plugins, the sources and the data are judged only in a process that called `remember` at
+its start: the CLI lives for one run and has nothing to compare.
 
 Nothing here restarts or stops the process: a client such as Codex does not start a failed
 server again, so the server keeps answering and says what to do - and for a tool the CLI can
@@ -53,10 +69,11 @@ import os
 import re
 import sysconfig
 import time
+from collections import Counter
 from pathlib import Path
 
 import xbsl
-from xbsl import __version__, i18n, plugins
+from xbsl import __version__, dataset, i18n, plugins
 
 MESSAGES = {
     "freshness.version": {
@@ -76,6 +93,33 @@ MESSAGES = {
         "en": "the plugins on disk changed after this process started: {changes}",
     },
     "freshness.plugin-absent": {"ru": "нет", "en": "none"},
+    "freshness.data": {
+        "ru": "данные платформы на диске изменились после запуска этого процесса: {changes}",
+        "en": "the platform data on disk changed after this process started: {changes}",
+    },
+    "freshness.data-in": {"ru": "{files} в {root}", "en": "{files} in {root}"},
+    "freshness.data-added": {"ru": "{file} (появился)", "en": "{file} (appeared)"},
+    "freshness.data-removed": {"ru": "{file} (удален)", "en": "{file} (removed)"},
+    "freshness.data-refusal": {
+        "ru": "{state}. То, что сервер уже прочитал из прежних файлов данных, не сойдется с "
+              "новыми, поэтому инструменты не выполняются. Перезапустите сервер MCP xbsl; сам "
+              "сервер не перезапускается и не завершается",
+        "en": "{state}. What the server has already read from the old data files does not match "
+              "the new ones, so the tools do not run. Restart the xbsl MCP server; the server "
+              "neither restarts nor exits on its own",
+    },
+    "freshness.data-failure": {
+        "ru": "{state}: инструмент упал ({error}), скорее всего, на смеси прежних и новых "
+              "данных. Перезапустите сервер MCP xbsl",
+        "en": "{state}: the tool failed ({error}), most likely on a mix of the old and the new "
+              "data. Restart the xbsl MCP server",
+    },
+    "freshness.data-crash": {
+        "ru": "{state}: правило, скорее всего, упало на смеси прежних и новых данных. "
+              "Перезапустите процесс – сервер MCP или LSP-сервер редактора",
+        "en": "{state}: the rule most likely crashed on a mix of the old and the new data. "
+              "Restart the process - the MCP server or the editor's LSP server",
+    },
     "freshness.refusal": {
         "ru": "{state}. Модули, которые сервер подгрузит дальше, будут из нового кода и не "
               "сойдутся с уже загруженными, поэтому инструменты не выполняются. Перезапустите "
@@ -103,11 +147,11 @@ MESSAGES = {
               "Restart the process - the MCP server or the editor's LSP server",
     },
     "freshness.editor": {
-        "ru": "xbsl-lsp: {state}. Проверки идут на коде, загруженном при старте, и могут "
+        "ru": "xbsl-lsp: {state}. Проверки идут на том, что сервер загрузил при старте, и могут "
               "разойтись с CLI и CI. Перезапустите сервер языка: в VS Code – команда \"XBSL: "
               "Перезапустить линтер\" или перезагрузка окна",
-        "en": "xbsl-lsp: {state}. The checks run on the code loaded at start and may differ "
-              "from the CLI and CI. Restart the language server: in VS Code, the \"XBSL: "
+        "en": "xbsl-lsp: {state}. The checks run on what the server loaded at start and may "
+              "differ from the CLI and CI. Restart the language server: in VS Code, the \"XBSL: "
               "Restart the linter\" command or a reload of the window",
     },
 }
@@ -148,6 +192,8 @@ _plugins_found: dict | None = None
 _SETTLE_NS = 2_000_000_000
 #: Whether the last walk saw a folder that was still changing (see _SETTLE_NS).
 _unsettled = False
+#: Whether this process judges the data it read (see `data_state`): set by `remember`.
+_data_watched = False
 
 
 def disk_version(package: Path | None = None) -> str:
@@ -176,16 +222,18 @@ def _version_state(on_disk: str) -> dict | None:
 
 
 def call_state() -> dict | None:
-    """The check before a call of a tool: the version on disk, then the engine's code files.
+    """The check before a call of a tool: the version on disk, the engine's code files, then
+    the data files the process read.
 
-    Either one refuses the call (xbsl/mcp_server.py): the modules the process loads from now on
-    would come from the new code. An `__init__.py` that cannot be read is no verdict on either
-    (see disk_version). The plugins have a check of their own and are not judged here.
+    Any one refuses the call (xbsl/mcp_server.py): the modules the process loads from now on
+    would come from the new code, and what it read of the data would not match the files a new
+    read meets. An `__init__.py` that cannot be read is no verdict on any of them (see
+    disk_version). The plugins have a check of their own and are not judged here.
     """
     on_disk = disk_version()
     if not on_disk:
         return None
-    return _version_state(on_disk) or engine_sources_state()
+    return _version_state(on_disk) or engine_sources_state() or data_state()
 
 
 def _code_roots() -> list[Path]:
@@ -251,7 +299,7 @@ def fingerprint(package: Path | None = None) -> str:
     return _digest(rows)
 
 
-def _digest(rows: list[tuple[str, int, int]]) -> str:
+def _digest(rows: list[tuple]) -> str:
     return hashlib.sha256(repr(sorted(rows)).encode("utf-8")).hexdigest()
 
 
@@ -333,14 +381,17 @@ def remember() -> None:
     """Take the code and the plugins as this process loaded them; a server calls it at start.
 
     The plugins are not walked here: at start the disk holds what was just loaded, so the
-    modification times of the watched folders are enough to tell a later change by.
+    modification times of the watched folders are enough to tell a later change by. Nor is the
+    data: the dataset notes every file as it is read, the ones read while the modules were
+    imported included, and from now on those readings are judged.
     """
-    global _started, _checked, _engine, _marks, _plugins_found, _unsettled
+    global _started, _checked, _engine, _marks, _plugins_found, _unsettled, _data_watched
     _started, _checked = fingerprint(), None
     _engine = _Sources(PACKAGE)
     if not _engine.start:
         _engine = None  # nothing to compare with: no verdict before a call
     _marks, _plugins_found, _unsettled = _folder_marks(_watched()), None, False
+    _data_watched = True
 
 
 def _listed(versions: dict[str, str]) -> str:
@@ -419,11 +470,53 @@ def engine_sources_state() -> dict | None:
     return _sources_found(digest)
 
 
+def data_state() -> dict | None:
+    """{"reason": "data", "loaded", "on_disk", "root", "changed", "fingerprint"} when a data
+    file this process read, or looked for and did not find, is not on disk as it was then.
+
+    `changed` holds {file, change} per such file: its path under `root`, and whether it was
+    "modified", "added" (not there when the process looked) or "removed"; a file under another
+    root names that `root` of its own. `root` is the root with the most changes, `loaded` the
+    data versions the process read under it, `on_disk` the version a process started now would
+    read there ("" for none). `fingerprint`, a digest of the changed files as they are now,
+    tells one change from the next. None in a process that did not call `remember`. A check
+    is a stat per file read and reads nothing.
+    """
+    if not _data_watched:
+        return None
+    reads = dataset.data_reads()
+    moved = []
+    for key, was in reads.items():
+        now = dataset.file_mark(dataset.data_path(*key))
+        if now != was:
+            moved.append((key, was, now))
+    if not moved:
+        return None
+    counts = Counter(key[0] for key, _was, _now in moved)
+    root = min(counts, key=lambda where: (-counts[where], where))
+    changed = []
+    for (where, version, name), was, now in moved:
+        entry = {"file": f"{version}/{name}" if version else name,
+                 "change": "added" if was is None else "removed" if now is None else "modified"}
+        if where != root:
+            entry["root"] = where
+        changed.append(entry)
+    changed.sort(key=lambda entry: ("root" in entry, entry.get("root", ""), entry["file"]))
+    loaded = sorted({version for (where, version, _name), mark in reads.items()
+                     if where == root and version and mark is not None})
+    digest = _digest([(*key, *(now or ())) for key, _was, now in moved])
+    return {"reason": "data", "loaded": ", ".join(loaded), "on_disk": dataset.version_on_disk(root),
+            "root": root, "changed": changed, "fingerprint": digest[:_SHORT_DIGEST]}
+
+
 def state(*, sources: bool = False) -> dict | None:
-    """The version state; then the plugins; with `sources`, the sources when both still hold."""
+    """The version state; then the plugins; then the data; with `sources`, the sources when all
+    of them still hold."""
     found = version_state()
     if found is None:
         found = plugins_state()
+    if found is None:
+        found = data_state()
     if found is None and sources:
         found = sources_state()
     return found
@@ -437,15 +530,44 @@ def plugin_changes(changed: list[dict]) -> str:
     )
 
 
+def data_changes(found: dict) -> str:
+    """The changed data files of a data state in words, by root: "1.0/terms.json, index.json
+    (appeared) in ROOT"; the roots apart are joined by a semicolon."""
+    groups: dict[str, list[str]] = {}
+    for row in found.get("changed") or ():
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("file") or "?")
+        if row.get("change") in ("added", "removed"):
+            label = i18n.t(f"freshness.data-{row['change']}", file=label)
+        groups.setdefault(str(row.get("root") or found.get("root") or "?"), []).append(label)
+    return "; ".join(i18n.t("freshness.data-in", files=", ".join(files), root=root)
+                     for root, files in groups.items())
+
+
 def describe(found: dict) -> str:
     """The state in words: what changed on disk against what this process runs."""
     if found["reason"] == "plugins":
         return i18n.t("freshness.plugins", changes=plugin_changes(found.get("changed", [])))
+    if found["reason"] == "data":
+        return i18n.t("freshness.data", changes=data_changes(found))
     return i18n.t(f"freshness.{found['reason']}", loaded=found["loaded"], on_disk=found["on_disk"])
 
 
+def refusal(found: dict) -> str:
+    """Why a tool does not run over this state, in words: the change, the reason, the cure."""
+    key = "freshness.data-refusal" if found["reason"] == "data" else "freshness.refusal"
+    return i18n.t(key, state=describe(found))
+
+
+def failure(found: dict, error: str) -> str:
+    """A tool that failed while the disk held another state than the loaded one, in words."""
+    key = "freshness.data-failure" if found["reason"] == "data" else "freshness.failure"
+    return i18n.t(key, state=describe(found), error=error)
+
+
 def crash_note() -> str:
-    """The cause a crashed rule names; "" while the code on disk is the loaded one.
+    """The cause a crashed rule names; "" while the disk holds what the process loaded.
 
     The state found is kept for `take_noted`: the MCP server writes it into its journal.
     """
@@ -454,7 +576,8 @@ def crash_note() -> str:
     if found is None:
         return ""
     _noted = found
-    return i18n.t("freshness.crash", state=describe(found))
+    key = "freshness.data-crash" if found["reason"] == "data" else "freshness.crash"
+    return i18n.t(key, state=describe(found))
 
 
 def take_noted() -> dict | None:

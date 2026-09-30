@@ -155,5 +155,6 @@ distribution and run the extractors. They detect the version themselves:
 python tools/extract.py --dist "<path to the distribution>"   # the whole dataset
 ```
 
-Files from the distribution itself are not committed; they are cached under `.refs/`. Only the
-derived JSON goes into the repository.
+The extractors read the distribution where it lies and copy none of its files into the clone.
+What they write is the derived data, and it stays out of the repository too: `xbsl/data/element/`
+is ignored by git.

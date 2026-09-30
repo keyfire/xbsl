@@ -84,11 +84,18 @@ regenerated: otherwise it keeps the data of the previous run.
 
 `xbsl data-diff [old] [new]` shows what changed in the platform between two data versions. With
 no arguments it compares the default version against the closest older one. The report covers
-stdlib types and members, metamodel properties, components and their properties, terms and
-documentation pages. `--format md` writes a full Markdown report and `--format json` a machine
-view; the text form caps every list at `--limit`. Type members are compared with the inheritance
-expanded, and a change is lifted to the hierarchy root, so an addition to a base type is not
-repeated for every descendant.
+every file of the version: the stdlib catalog (types and members, and the rest of it too – module
+handlers, signatures, availability, constructors, type parameters, deprecations, retired
+components), metamodel properties, components and their properties, the term pairs, the interface
+spellings (`uiterms.json`), the compiler dictionary (`terms_full.json`) and the documentation
+pages that came, went, got another title or another content, compared by a hash of the page. A
+section without a comparison of its own is compared entry by entry, so a section a newer
+extractor adds is not passed over. `--format md` writes a full Markdown report and
+`--format json` a machine view; the text form shows the count and the first entries of every
+list, at most `--limit` of them, and `--limit 0` prints them all. Type members are compared with
+the inheritance expanded, and a change is lifted to the hierarchy root, so an addition to a base
+type is not repeated for every descendant. Signatures, bases and the other sections kept per type
+are compared the same way.
 
 The data root itself is resolved in this order: the `--data-dir` flag, the `XBSL_DATA_DIR`
 environment variable, a root supplied by an installed `xbsl.data` entry point, then

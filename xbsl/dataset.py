@@ -10,6 +10,11 @@ extracted from their own distribution and supplied by a separate package (see xb
 
 The version is chosen by: an explicit argument/set_version > env XBSL_ELEMENT_VERSION >
 the index default.
+
+Every data file the process reads, or looks for and does not find, is noted with the size and
+the modification time the disk held just before (data_reads): a long-lived server compares the
+record with the disk to tell that it answers from data a new process would not read
+(xbsl/freshness.py).
 """
 
 from __future__ import annotations
@@ -165,6 +170,53 @@ def _stamp(path: Path) -> int | None:
         return None
 
 
+#: What this process read of the data: {(root, version, name): (size, modification time)} for
+#: every data file it read, None for one it looked for and did not find; the index goes under
+#: an empty version. The probe that picks a plugin's root counts as a look at that root's
+#: index, so a root that gets its data after the start answers here too. A reading is noted
+#: just BEFORE the file is read - a change made while it is read then shows up later, never
+#: the other way round - and the first reading of a file stays for the life of the process.
+#: The stamps above go with the caches and are taken anew, which keeps the registered tables
+#: current; a module that took its constants from a file at import (the pairs of terms.json
+#: feed a few) still holds what the file said then, and so does the process.
+_READS: dict[tuple[str, str, str], tuple[int, int] | None] = {}
+
+
+def data_path(root: str, version: str, name: str) -> str:
+    """The file of a reading: `<root>/<version>/<name>`, or `<root>/<name>` for the index.
+
+    A string rather than a Path: the freshness check builds one per file read before every
+    call of a tool, and a Path costs several times the join.
+    """
+    return os.path.join(root, version, name) if version else os.path.join(root, name)
+
+
+def file_mark(path: str | os.PathLike[str]) -> tuple[int, int] | None:
+    """(size, modification time) of a file as the disk holds it now; None when it is not there."""
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_size, stat.st_mtime_ns
+
+
+def _look(root: str, version: str, name: str) -> tuple[int, int] | None:
+    """The mark of a data file now, noted as read unless an earlier reading of it was noted."""
+    mark = file_mark(data_path(root, version, name))
+    _READS.setdefault((root, version, name), mark)
+    return mark
+
+
+def data_reads() -> dict[tuple[str, str, str], tuple[int, int] | None]:
+    """What this process read of the data and what the disk held then (see _READS)."""
+    return dict(_READS)
+
+
+def forget_reads() -> None:
+    """Forget every reading: for a test that stands for a new process."""
+    _READS.clear()
+
+
 def _drop_if_stale(root: str) -> None:
     """Clear every cache when any file read for this root changed on disk since."""
     for (r, version, name), stamp in list(_FILE_STAMPS.items()):
@@ -219,7 +271,9 @@ def data_root() -> Path:
 @lru_cache(maxsize=None)
 def _discovered_root() -> Path:
     for root in plugins.data_roots():
-        if (root / "index.json").exists():
+        # A look at the index, noted: a root with no data yet - its plugin still being
+        # installed - that gets it later is a change the process has to hear of.
+        if _look(str(root), "", "index.json") is not None:
             return root
     return BUNDLED_DATA_ROOT
 
@@ -248,9 +302,10 @@ def _read_index() -> dict:
 @lru_cache(maxsize=None)
 def _index_cached(root: str) -> dict:
     idx = Path(root) / "index.json"
-    if not idx.exists():
+    mark = _look(root, "", "index.json")
+    if mark is None:
         raise DatasetError(i18n.t("dataset.no-index", idx=idx, env=_ENV_DATA_DIR))
-    _FILE_STAMPS[(root, "", "index.json")] = _stamp(idx)
+    _FILE_STAMPS[(root, "", "index.json")] = mark[1]
     return read_json(idx)
 
 
@@ -283,6 +338,23 @@ def resolve_version(override: str | None = None) -> str:
             i18n.t("dataset.version-unavailable", version=version, available=", ".join(avail) or "–")
         )
     return version
+
+
+def version_on_disk(root: str) -> str:
+    """The data version a process started now would read under `root`; "" when there is none.
+
+    The pinned version or the default of the index as the disk holds it now. Read past every
+    cache, with nothing noted or dropped: the freshness check names with it where a change of
+    the data leads, and a check must leave the process as it found it.
+    """
+    try:
+        index = read_json(Path(root) / "index.json")
+    except (OSError, DatasetError):
+        return ""
+    if not isinstance(index, dict):
+        return ""
+    version = _selected or _env(_ENV_VERSION, _ENV_VERSION_LEGACY) or index.get("default") or ""
+    return str(version) if version in (index.get("available") or ()) else ""
 
 
 # The root is part of the cache key: otherwise switching roots would return data read from the old one.
@@ -443,10 +515,11 @@ def _stdlib_common_pairs(root: str, version: str) -> dict:
 @lru_cache(maxsize=None)
 def _load_cached(root: str, version: str, name: str) -> dict:
     path = Path(root) / version / name
-    if not path.exists():
+    mark = _look(root, version, name)
+    if mark is None:
         raise DatasetError(i18n.t("dataset.no-file", name=name, version=version, path=path))
     data = read_json(path)
-    _FILE_STAMPS[(root, version, name)] = _stamp(path)
+    _FILE_STAMPS[(root, version, name)] = mark[1]
     if name == "stdlib.json":
         # English keys first (so the English types then inherit like the Russian ones),
         # then the inheritance expansion.

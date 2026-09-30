@@ -438,8 +438,10 @@ _CORE_MESSAGES = {
         "en": "show the engine location, interpreter and Element data (path, source, versions) and exit",
     },
     "cli.help.element-version": {
-        "ru": "версия данных Элемента (по умолчанию – последняя из бандла)",
-        "en": "Element data version (default: the latest in the bundle)",
+        "ru": "версия данных Элемента (по умолчанию – env XBSL_ELEMENT_VERSION, а без него – "
+              "default в index.json корня данных)",
+        "en": "Element data version (default: env XBSL_ELEMENT_VERSION, otherwise the default "
+              "in index.json of the data root)",
     },
     "cli.help.data-dir": {
         "ru": "корень данных Элемента (каталог с index.json); также env XBSL_DATA_DIR",
@@ -723,6 +725,12 @@ _CORE_MESSAGES = {
         "en": "the plugins on disk changed after the server started: {changes} (call {tool}); "
               "the tools answer with a warning until a restart",
     },
+    "mcplog.stale.data": {
+        "ru": "данные платформы на диске изменились после запуска сервера: {changes} (вызов "
+              "{tool}); инструменты отвечают отказом до перезапуска",
+        "en": "the platform data on disk changed after the server started: {changes} (call "
+              "{tool}); the tools refuse until a restart",
+    },
     "mcplog.stale.error": {"ru": "ошибка: {error}", "en": "error: {error}"},
     # Written by the supervisor (xbsl/mcp_supervisor.py) when it retires a worker.
     "mcplog.restart": {
@@ -740,6 +748,10 @@ _CORE_MESSAGES = {
     "mcplog.restart.plugins": {
         "ru": "надстройки на диске сменились",
         "en": "the plugins on disk changed",
+    },
+    "mcplog.restart.data": {
+        "ru": "данные платформы на диске изменились",
+        "en": "the platform data on disk changed",
     },
     "mcplog.restart.exited": {
         "ru": "процесс завершился с кодом {code}",
@@ -1519,7 +1531,7 @@ _CORE_MESSAGES = {
     "cli.help.scaf.add-dependency": {
         "ru": "подключить библиотеку к проекту (секция Библиотеки Проект.yaml); см. также "
               "project-info – какие библиотеки уже подключены",
-        "en": "attach a library to the project (the Библиотеки section of Project.yaml); see also "
+        "en": "attach a library to the project (the Libraries section of Project.yaml); see also "
               "project-info for the libraries already attached",
     },
     "cli.help.scaf.add-dependency-vendor": {
@@ -1651,7 +1663,7 @@ _CORE_MESSAGES = {
     "cli.help.scaf.set-access": {
         "ru": "задать КонтрольДоступа.Разрешения объекта; см. также object-info – текущие права и "
               "их набор у этого вида",
-        "en": "set the object's AccessControl.Разрешения; see also object-info for the current "
+        "en": "set the object's AccessControl.Permissions; see also object-info for the current "
               "rights and the set this kind has",
     },
     "cli.help.scaf.set-access-default": {

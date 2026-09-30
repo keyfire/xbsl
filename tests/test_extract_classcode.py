@@ -310,3 +310,238 @@ def test_the_class_names_itself_and_the_classes_it_refers_to():
     assert classcode.own_class(blob) == "demo/acme/AcmeRightG5Type"
     assert "demo/acme/AcmeRightG5Enum" in classcode.referenced_classes(blob)
     assert classcode.own_class(b"\xca\xfe") is None
+
+
+# --- the annotations of a generated EMF package ---------------------------------------------
+
+
+EMF_OWNER = "demo/model/impl/DemoPackageImpl"
+_ANNOTATE = "(Lorg/eclipse/emf/ecore/ENamedElement;Ljava/lang/String;[Ljava/lang/String;)V"
+_URI = "demo/emf/URI"
+
+
+class _InternedPool(_Pool):
+    """The pool a compiler writes: one entry per distinct string, in the order of first use."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.interned: dict[str, int] = {}
+
+    def string(self, value: str) -> int:
+        if value not in self.interned:
+            self.interned[value] = super().string(value)
+        return self.interned[value]
+
+
+def _index(position: int) -> bytes:
+    """The instruction that pushes an array index: `iconst_<n>` up to five, `bipush` beyond."""
+    return bytes([0x03 + position]) if position <= 5 else bytes([0x10, position])
+
+
+def _package_of(annotations: list[list], base: str = classcode.EMF_PACKAGE,
+                source: str = "", references: bool = False) -> bytes:
+    """A package class whose single method adds each annotation, the way EMF generates it.
+
+    An annotation is the list of its details, keys and values in turn; an item is a string the
+    code pushes by `ldc`, None for `aconst_null`, or ("static", name) for a value read from a
+    static field. `source`, when given, is pushed before the first array, as the first
+    annotation of a source pushes it. `references` adds an array of another type after each
+    details array, the way an annotation with references is built. The pool is interned: every
+    string stands once, where the code first mentions it - the layout that misleads the
+    neighbourhood reading.
+    """
+    pool = _InternedPool()
+    code_name = pool.text("Code")
+    string_class = pool.klass("java/lang/String")
+    uri_class = pool.klass(_URI)
+    annotate = pool.method(EMF_OWNER, classcode.ANNOTATION_CALL, _ANNOTATE)
+    create_uri = pool.method(_URI, "createURI", "(Ljava/lang/String;)L" + _URI + ";")
+    body = bytearray()
+    for number, details in enumerate(annotations):
+        body += bytes([0x2A, 0x01])                                   # aload_0, aconst_null
+        if source and not number:
+            body += bytes([0x13]) + struct.pack(">H", pool.string(source))
+        body += _index(len(details))
+        body += bytes([0xBD]) + struct.pack(">H", string_class)        # anewarray String
+        for position, item in enumerate(details):
+            body += bytes([0x59]) + _index(position)                  # dup, the index
+            if item is None:
+                body += bytes([0x01])                                 # aconst_null
+            elif isinstance(item, tuple):
+                body += bytes([0xB2]) + struct.pack(">H", _field(pool, EMF_OWNER, item[1]))
+            else:
+                body += bytes([0x13]) + struct.pack(">H", pool.string(item))
+            body += bytes([0x53])                                     # aastore
+        if references:
+            body += _index(1) + bytes([0xBD]) + struct.pack(">H", uri_class)
+            body += bytes([0x59]) + _index(0)
+            body += bytes([0x13]) + struct.pack(">H", pool.string("demo://model"))
+            body += bytes([0xB8]) + struct.pack(">H", create_uri)     # invokestatic
+            body += bytes([0x53])
+        body += bytes([0xB6]) + struct.pack(">H", annotate)           # invokevirtual
+    body += bytes([0xB1])  # return
+    code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
+    this_class = pool.klass(EMF_OWNER)
+    super_class = pool.klass(base)
+    method = struct.pack(">HHHH", 0, pool.text("createAnnotations"), pool.text("()V"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0)
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+#: The standard attributes of an exchange plan node as its package annotates them - the Russian
+#: spelling first, as most annotations of the distribution are written.
+NODE_ANNOTATIONS = [
+    ["ru", "НомерОтправленного", "en", "SentNumber"],
+    ["ru", "НомерПринятого", "en", "ReceivedNumber"],
+    ["ru", "ЭтотУзел", "en", "ThisNode"],
+]
+
+
+def test_the_details_of_an_annotation_are_read_by_their_keys():
+    blob = _package_of(NODE_ANNOTATIONS + [["en", "Attribute", "ru", "Реквизит"]],
+                       source="demo://presentation")
+
+    assert classcode.annotation_details(blob) == [
+        {"ru": "НомерОтправленного", "en": "SentNumber"},
+        {"ru": "НомерПринятого", "en": "ReceivedNumber"},
+        {"ru": "ЭтотУзел", "en": "ThisNode"},
+        {"en": "Attribute", "ru": "Реквизит"},
+    ]
+
+
+def test_a_value_the_code_does_not_push_as_a_constant_drops_its_key_alone():
+    """A null value, or one read from a field, has no constant to read: the key goes with it,
+    and the keys after it keep their values."""
+    blob = _package_of([
+        ["ru", "Файлы", "en", None, "from", "8.0"],
+        ["ru", ("static", "NAME_RU"), "en", "Files"],
+    ])
+
+    assert classcode.annotation_details(blob) == [
+        {"ru": "Файлы", "from": "8.0"},
+        {"en": "Files"},
+    ]
+
+
+def test_an_array_of_references_is_not_the_details():
+    blob = _package_of([["ru", "Код", "en", "Code"]], references=True)
+
+    assert classcode.annotation_details(blob) == [{"ru": "Код", "en": "Code"}]
+
+
+def test_the_package_names_the_class_it_extends():
+    assert classcode.super_class(_package_of(NODE_ANNOTATIONS)) == classcode.EMF_PACKAGE
+    assert classcode.super_class(_class_of([])) == "java/lang/Object"
+    assert classcode.super_class(b"\xca\xfe") is None
+
+
+# --- the string values of annotations --------------------------------------------------------
+
+
+JSON_ALIAS = "Lcom/fasterxml/jackson/annotation/JsonAlias;"
+JSON_PROPERTY = "Lcom/fasterxml/jackson/annotation/JsonProperty;"
+
+
+def _element(pool: _Pool, value) -> bytes:
+    """One element value: a string, a list of strings (an array), an int, or ("@", type) - a
+    nested annotation without elements."""
+    if isinstance(value, str):
+        return b"s" + struct.pack(">H", pool.string_utf8(value))
+    if isinstance(value, list):
+        return b"[" + struct.pack(">H", len(value)) + b"".join(_element(pool, v) for v in value)
+    if isinstance(value, tuple):
+        return b"@" + struct.pack(">HH", pool.string_utf8(value[1]), 0)
+    return b"I" + struct.pack(">H", 1)
+
+
+def _annotation(pool: _Pool, kind: str, elements: dict) -> bytes:
+    out = struct.pack(">HH", pool.string_utf8(kind), len(elements))
+    for name, value in elements.items():
+        out += struct.pack(">H", pool.string_utf8(name)) + _element(pool, value)
+    return out
+
+
+class _DataPool(_InternedPool):
+    """An interned pool whose element values point at utf8 entries, as annotations do."""
+
+    def string_utf8(self, value: str) -> int:
+        key = "utf8:" + value
+        if key not in self.interned:
+            self.interned[key] = self.text(value)
+        return self.interned[key]
+
+
+def _data_class_of(parameters: list[list[tuple[str, dict]]], this: str = "demo/dto/DemoDto",
+                   field_annotations: list[tuple[str, dict]] = ()) -> bytes:
+    """A class whose constructor annotates each parameter, the way a JSON data class does.
+
+    A parameter is a list of (annotation type, {element: value}); `field_annotations`, when
+    given, annotate a single field. The pool is interned in the order the annotations mention
+    the strings - the layout the neighbourhood reads.
+    """
+    pool = _DataPool()
+    body = bytearray([len(parameters)])
+    for annotations in parameters:
+        body += struct.pack(">H", len(annotations))
+        for kind, elements in annotations:
+            body += _annotation(pool, kind, elements)
+    attribute = struct.pack(">HI", pool.string_utf8("RuntimeVisibleParameterAnnotations"),
+                            len(body)) + bytes(body)
+    fields = b""
+    if field_annotations:
+        field_body = struct.pack(">H", len(field_annotations)) + b"".join(
+            _annotation(pool, kind, elements) for kind, elements in field_annotations)
+        fields = struct.pack(">HHHH", 0, pool.string_utf8("value"), pool.string_utf8("I"), 1)
+        fields += struct.pack(">HI", pool.string_utf8("RuntimeVisibleAnnotations"),
+                              len(field_body)) + field_body
+    method = struct.pack(">HHHH", 0, pool.string_utf8("<init>"), pool.string_utf8("()V"), 1)
+    method += attribute
+    this_class = pool.klass(this)
+    super_class = pool.klass("java/lang/Object")
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 1 if field_annotations else 0) + fields
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+#: The properties of a data class of the platform: named in English, aliased in Russian.
+DTO_PARAMETERS = [
+    [(JSON_ALIAS, {"value": ["Имя"]}), (JSON_PROPERTY, {"value": "Name"})],
+    [(JSON_ALIAS, {"value": ["Разработчик"]}), (JSON_PROPERTY, {"value": "Developer"})],
+    [(JSON_ALIAS, {"value": ["Поставщик"]}), (JSON_PROPERTY, {"value": "Vendor"})],
+]
+
+
+def test_the_annotations_of_each_parameter_give_their_string_values():
+    blob = _data_class_of(DTO_PARAMETERS)
+
+    assert classcode.annotation_values(blob) == [
+        {JSON_ALIAS: ["Имя"], JSON_PROPERTY: ["Name"]},
+        {JSON_ALIAS: ["Разработчик"], JSON_PROPERTY: ["Developer"]},
+        {JSON_ALIAS: ["Поставщик"], JSON_PROPERTY: ["Vendor"]},
+    ]
+
+
+def test_values_of_other_kinds_and_other_elements_are_stepped_over():
+    """A number, a nested annotation and an element other than `value` do not stop the reading,
+    and an annotated field is read like a parameter."""
+    blob = _data_class_of(
+        [[("Ldemo/Mark;", {"order": 3, "inner": ("@", "Ldemo/Inner;"), "value": "Name"})]],
+        field_annotations=[(JSON_PROPERTY, {"value": "Version"})],
+    )
+
+    assert classcode.annotation_values(blob) == [
+        {JSON_PROPERTY: ["Version"]},
+        {"Ldemo/Mark;": ["Name"]},
+    ]
