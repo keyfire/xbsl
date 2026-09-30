@@ -219,7 +219,7 @@ placed outside the linted subset would look dead.
 <a id="a-yaml-duplicate-subtree"></a>**`yaml/duplicate-subtree`.** Names, ids and texts are left
 out of the shape of a subtree. The 40-node threshold is measured: below it the rule catches
 layout, not copies. A repeat inside one file, the data source of a list and a localized-strings
-dictionary are never judged, and only maximal groups are named. Off by default: how much sameness
+dictionary with its translations are never judged, and only maximal groups are named. Off by default: how much sameness
 is too much is a decision of the project.
 
 <a id="a-yaml-unknown-component-property"></a>**`yaml/unknown-component-property`.** An example:

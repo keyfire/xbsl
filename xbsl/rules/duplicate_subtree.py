@@ -17,7 +17,10 @@ Three decisions, each measured rather than guessed (four corpora, the threshold 
   kind coincide by construction; without the exclusion half of the findings were those. A
   dictionary of localized strings is skipped whole for the same reason: its per-language twin
   repeats its shape by definition, and a project with two languages would answer with nothing
-  else.
+  else. So is every translation of it (`Localization/<language>/<Name>.yaml`): two
+  translations of one dictionary repeat each other key for key, and a project with a third
+  language answered with every such pair - there is nothing to pull out, the platform
+  wants one file per language.
 
 Only MAXIMAL groups are reported: a duplicated subtree duplicates its every branch too, and
 naming them all says the same thing a dozen times.
@@ -35,6 +38,7 @@ from functools import lru_cache
 from xbsl import dataset, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule, rule_param
+from xbsl.layout import translation_language
 from xbsl.rules.yaml_schema import _composed, _parsed, object_kind
 
 try:
@@ -139,6 +143,8 @@ def _walk(node, path: str, out: list) -> None:
 def _duplicate_subtree_mapper(source: SourceFile) -> dict | None:
     if not _HAVE_YAML or source.kind != "yaml":
         return None
+    if translation_language(source.path) is not None:
+        return None  # a translation repeats its dictionary key for key (see the docstring)
     data, err = _parsed(source)
     if err is None and object_kind(data) == _SKIPPED_KIND:
         return None
