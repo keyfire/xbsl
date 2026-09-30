@@ -254,6 +254,20 @@ def _names_its_field(en: str, ru: str) -> bool:
     return bool(_CONSTANT_NAME_RE.match(en)) and not ru.isupper()
 
 
+def _contradicts_language(en: str, ru: str, languages: dict[str, str]) -> bool:
+    """Whether the pair names a language other than the language table of the platform does.
+
+    The names of the languages stand next to each other in more than one class, and not as
+    pairs: an enumeration of the languages presents each one in its own language, so English
+    comes right before the Russian name of Russian, and a reader of the project descriptor lists
+    the Russian and the English names in turn. Read by adjacency, the Russian name of one
+    language got the English name of another, and the word lost its common spelling. The table
+    is the platform's own (language_rows).
+    """
+    known = languages.get(ru)
+    return known is not None and known != en
+
+
 def _checked(stated_pairs: list[tuple[str, str]],
              pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """The neighbourhood reading of a class that states its pairs, checked against the statements.
@@ -375,13 +389,16 @@ def _note_manager_evidence(managers: ManagerEvidence, class_name: str, data: byt
 
 def _scan_meta_objects(
     car: zipfile.ZipFile, managers: ManagerEvidence | None = None,
+    languages: dict[str, str] | None = None,
 ) -> tuple[dict[str, dict[str, str]], dict[str, str], dict[str, str]]:
     """({owner type: {ru: en}}, {ru: en}, {ru type: en type}) from the compiled classes.
 
     The third table is the types the classes DECLARE as terms (see _declared_type) - the
     pairs of the types the reference pages never describe. The flat table is the
     neighbourhood's, and the terms the classes state answer where it settled nothing.
-    `managers`, when given, collects on the same walk what manager_owners needs.
+    `managers`, when given, collects on the same walk what manager_owners needs;
+    `languages` ({Russian name: English}) is the language table every pair of a language name
+    is checked against (see _contradicts_language).
 
     A class without a single Cyrillic byte cannot hold a pair and is skipped before parsing -
     that check alone drops the overwhelming majority of the classes. The classes that construct
@@ -419,6 +436,10 @@ def _scan_meta_objects(
             stated_pairs = _stated_pairs(data)
             if stated_pairs is not None:
                 pairs = _checked(stated_pairs, pairs)
+            # Checked last: a package that writes its annotations Russian first has its shifted
+            # neighbours spelled by the annotations above, the names of languages among them.
+            if languages:
+                pairs = [(en, ru) for en, ru in pairs if not _contradicts_language(en, ru, languages)]
             if inner == _QUERY_TERMS_CLASS:
                 # In the query parser's own class a keyword the platform has NO English
                 # spelling for is followed by a transliteration of itself, and adjacency reads
@@ -1031,7 +1052,9 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
 
     with zipfile.ZipFile(car) as z:
         managers = ManagerEvidence()
-        members, common, declared_types = _scan_meta_objects(z, managers)
+        languages = scan_language_table(z)
+        language_names = {row["ru"]: row["en"] for row in (languages[1] if languages else ())}
+        members, common, declared_types = _scan_meta_objects(z, managers, language_names)
         query = _scan_query_terms(z)
         try:
             syntax_page = stdlib._page(z, _QUERY_SYNTAX_PAGE)
@@ -1039,7 +1062,6 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
             syntax_page = ""
         reserved, english_only = query_reserved_words(syntax_page)
         kind_table = scan_kind_table(z)
-        languages = scan_language_table(z)
         compiled = metamodel.compiled_enumerations(z)
         manager_table = manager_owners(z, members, managers)
 

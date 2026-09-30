@@ -219,7 +219,7 @@ def test_the_common_table_comes_back_sorted_by_the_russian_key():
 # --- a generated EMF package states its pairs in annotations --------------------------------
 
 
-def _scan_classes(classes: dict[str, bytes]):
+def _scan_classes(classes: dict[str, bytes], languages: dict[str, str] | None = None):
     """_scan_meta_objects over one platform jar holding the given classes."""
     import io
     import zipfile
@@ -233,7 +233,7 @@ def _scan_classes(classes: dict[str, bytes]):
     car = io.BytesIO()
     with zipfile.ZipFile(car, "w") as z:
         z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
-    return _scan_meta_objects(zipfile.ZipFile(car))
+    return _scan_meta_objects(zipfile.ZipFile(car), languages=languages)
 
 
 def test_the_pairs_of_an_emf_package_are_spelled_as_its_annotations_state_them():
@@ -324,6 +324,31 @@ def test_the_name_of_a_constant_is_not_the_english_of_its_value():
     assert _names_its_field("SENDER_NAME_RU", "Отправитель")
     assert not _names_its_field("NEW_LINE", "НОВАЯ_СТРОКА")
     assert not _names_its_field("Recipient", "Получатель")
+
+
+def test_a_language_name_is_paired_only_as_the_language_table_says():
+    """An enumeration presents each language in its own language, so the pool holds English
+    right before the Russian name of Russian; a reader of the descriptor lists the Russian
+    and the English names in turn. Checked against the table of the languages, neither
+    neighbourhood is a pair, and the Russian name keeps its common spelling."""
+    from test_extract_classcode import _class_of
+
+    presented = _class_of([], extra_strings=["EN", "English", "Русский"])
+    listed = _class_of([], extra_strings=["Russian", "Английский", "English"])
+    stated = _class_of([], extra_strings=["Russian", "Русский"])
+    classes = {"demo/lang/Presented.class": presented, "demo/lang/Listed.class": listed,
+               "demo/lang/Stated.class": stated}
+    table = {"Русский": "Russian", "Английский": "English"}
+
+    members, common, _types = _scan_classes(classes, languages=table)
+    unchecked, unsettled, _types = _scan_classes(classes)
+
+    assert "Presented" not in members and "Listed" not in members
+    assert members["Stated"] == {"Русский": "Russian"}
+    assert common["Русский"] == "Russian"
+    assert unchecked["Presented"] == {"Русский": "English"}
+    assert unchecked["Listed"] == {"Английский": "Russian"}
+    assert "Русский" not in unsettled
 
 
 # --- the kind table: the fullest copy of the serializer enum, not the first ---------------
