@@ -213,6 +213,28 @@ def enum_values(name: str) -> tuple[str, ...]:
     return tuple((data.get("enums") or {}).get(name, ())) if data else ()
 
 
+def _value_record(name: str, value: str) -> dict:
+    """The record of one enumeration value (`enum_items` of the data), {} when there is none.
+
+    Data extracted before the section existed has no records at all: every reader then answers
+    as if the value had no English spelling.
+    """
+    data = _data()
+    records = (data.get("enum_items") or {}).get(name) if data else None
+    record = records.get(value) if isinstance(records, dict) else None
+    return record if isinstance(record, dict) else {}
+
+
+def enum_value_english(name: str, value: str) -> str | None:
+    """The English spelling of a value the way ITS enumeration spells it, or None.
+
+    Per enumeration on purpose: the same Russian word is `Normal` for the importance of a
+    command and `Usual` for the importance of a favorite, and a flat table cannot hold it.
+    """
+    english = _value_record(name, value).get("en")
+    return english if isinstance(english, str) and english else None
+
+
 @dataclass(frozen=True)
 class Language:
     """A language a project may be localized into, as the platform declares it.

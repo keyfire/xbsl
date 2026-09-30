@@ -374,3 +374,91 @@ def test_a_yaml_value_read_with_data_that_has_no_pictures_is_read_as_before(tmp_
         assert report.resource_tokens == {"Команда"}
     finally:
         platform_map.dataset.set_data_root(None)
+
+
+# --- the values of a metamodel enumeration -----------------------------------------------------
+
+
+def _enumeration_root(tmp_path, name: str, *, records: bool = True):
+    """A data root whose model types three properties of a kind by enumerations. Two of them
+    share a Russian value and spell it apart; the third shares a value with a table of the
+    interface that spells it otherwise. With `records` the model spells every value itself,
+    the way the extractor writes metamodel.json; without them it is data extracted before."""
+    import json
+
+    root = tmp_path / name
+    version = root / "1.0.0"
+    version.mkdir(parents=True)
+    enums = {"TaskImportance": ["Низкая", "Обычная"], "FavoriteImportance": ["Обычная", "Высокая"],
+             "ConditionKind": ["Равно", "НеРавно"]}
+    model = {
+        "classes": {"DemoCommandDescriptor": {"props": {
+            "Важность": {"kind": "enum", "enum": "TaskImportance", "type": "TaskImportance",
+                         "en": "Importance"},
+            "ВажностьИзбранного": {"kind": "enum", "enum": "FavoriteImportance",
+                                   "type": "FavoriteImportance", "en": "FavoriteImportance"},
+            "Условие": {"kind": "enum", "enum": "ConditionKind", "type": "ConditionKind",
+                        "en": "Condition"},
+        }, "ext": []}},
+        "vid2class": {"КомандаДемо": "DemoCommandDescriptor"}, "common": [], "enums": enums,
+    }
+    if records:
+        model["enum_items"] = {
+            "TaskImportance": {"Низкая": {"en": "Low"}, "Обычная": {"en": "Normal"}},
+            "FavoriteImportance": {"Обычная": {"en": "Usual"}, "Высокая": {"en": "High"}},
+            "ConditionKind": {"Равно": {"en": "Equals"}, "НеРавно": {"en": "NotEquals"}},
+        }
+    files = {
+        "metamodel.json": model,
+        "terms.json": {"enums": {"Низкая": "Low", "Высокая": "High", "НеРавно": "NotEquals"}},
+        "uiterms.json": {"enum_values": {"ВидСравненияДемо": {"Равно": "Equal"}}},
+    }
+    for file, content in files.items():
+        (version / file).write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    (root / "index.json").write_text(
+        json.dumps({"available": ["1.0.0"], "default": "1.0.0"}), encoding="utf-8")
+    return root
+
+
+_COMMAND = ("ВидЭлемента: КомандаДемо\n"
+            "Важность: Обычная\n"
+            "ВажностьИзбранного: Обычная\n"
+            "Условие: Равно\n")
+
+
+def _translated(text: str) -> tuple[str, FileReport]:
+    from xbsl import engine
+
+    report = FileReport(path="Команда.yaml")
+    out = yamlfile.translate_yaml(engine.load_text("Команда.yaml", text), Resolver(_dictionary()),
+                                  report)
+    return out, report
+
+
+def test_a_value_of_the_model_is_spelled_by_its_own_enumeration(tmp_path):
+    """The model spells each value by the enumeration it belongs to: the same Russian word is
+    Normal in one and Usual in the other, and a table of the interface that happens to hold
+    the value of the third spells it by its own rules, not by the model's."""
+    platform_map.dataset.set_data_root(_enumeration_root(tmp_path, "data"))
+    try:
+        out, _report = _translated(_COMMAND)
+        assert "Importance: Normal\n" in out
+        assert "FavoriteImportance: Usual\n" in out
+        assert "Condition: Equals\n" in out
+        assert platform_map.enum_value_of("ConditionKind", "Равно") == "Equals"
+        assert platform_map.enum_value_of("ConditionKind", "Больше") is None
+    finally:
+        platform_map.dataset.set_data_root(None)
+
+
+def test_data_without_the_records_of_the_model_answers_from_the_flat_tables(tmp_path):
+    """Data extracted before the model spelled its values: a word the flat table drops stays
+    Russian and is reported, and a word every table of the interface agrees on is taken."""
+    platform_map.dataset.set_data_root(_enumeration_root(tmp_path, "data", records=False))
+    try:
+        out, report = _translated(_COMMAND)
+        assert "Importance: Обычная\n" in out
+        assert "Condition: Equal\n" in out
+        assert "Обычная" in report.missing_platform
+    finally:
+        platform_map.dataset.set_data_root(None)

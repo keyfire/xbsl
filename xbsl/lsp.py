@@ -223,10 +223,11 @@ def _project_language(root: Optional[str]) -> str:
 def enum_values_in(name: str, lang: str) -> list[str]:
     """The values of a metamodel enumeration, spelled in the project's language.
 
-    An English project spells a value the way ITS enumeration does, as the translator writes
-    it: the same Russian word is `Normal` for the importance of a command and `Usual` for the
-    importance of a favorite, and the flat table of enumeration values holds no such word at
-    all - read through it, the panel of an English project would offer the word in Russian.
+    An English project spells a value the way ITS enumeration does in metamodel.json, as the
+    translator writes it: the same Russian word is `Normal` for the importance of a command and
+    `Usual` for the importance of a favorite, and the flat table of enumeration values holds no
+    such word at all - read through it, the panel of an English project would offer the word in
+    Russian.
     """
     values = metamodel.enum_values(name)
     if lang != "en":

@@ -21,7 +21,7 @@ from xbsl.restext import RESOURCE_DIRS
 
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
-                   ident_english, member_english, _metamodel_enum_value, _ui_enum_tables,
+                   ident_english, member_english, _ui_enum_tables,
                    _unanimous_enum_value, _member_names, reference_only_members,
                    _platform_facets, _facet_owners, _facet_keys, _library_pictures):
         cached.cache_clear()
@@ -598,27 +598,24 @@ def enum_value_of(enum: str, value: str) -> str | None:
     """
     if not enum or not value:
         return None
+    if metamodel.enum_values(enum):
+        return metamodel.enum_value_english(enum, value)
     per_enum = uischema.enum_value_aliases(enum)
-    if per_enum:
-        return per_enum.get(value)
-    return _metamodel_enum_value(enum, value)
+    return per_enum.get(value) if per_enum else None
 
 
 def enum_value_english(enum: str, value: str) -> str | None:
     """The English spelling of one enumeration's value, or None.
 
     Per enumeration on purpose - globally the same Russian word answers to several English
-    ones (`Обычная` is Common, Normal and Usual). The interface enumerations come from
-    uiterms; a metamodel enumeration is matched by its VALUE SET (its class name is English
-    and the uiterms table is keyed by the Russian names), and the flat unambiguous section
-    is the last resort.
+    ones (Common, Normal and Usual). An enumeration of the metamodel, named by its class,
+    spells its values in metamodel.json itself; the interface enumerations come from
+    uiterms, keyed by their Russian names. The flat unambiguous section is the last resort -
+    and all there is for data extracted before the metamodel spelled its values.
     """
     if enum:
-        per_enum = uischema.enum_value_aliases(enum)
-        english = per_enum.get(value)
-        if english:
-            return english
-        english = _metamodel_enum_value(enum, value)
+        english = (metamodel.enum_value_english(enum, value)
+                   or uischema.enum_value_aliases(enum).get(value))
         if english:
             return english
     return terms.english(value, "enums") or _unanimous_enum_value(value)
@@ -637,26 +634,6 @@ def _unanimous_enum_value(value: str) -> str | None:
         for pairs in _ui_enum_tables().values()
         if value in pairs
     }
-    return spellings.pop() if len(spellings) == 1 else None
-
-
-@lru_cache(maxsize=None)
-def _metamodel_enum_value(enum_class: str, value: str) -> str | None:
-    """A metamodel enumeration's value, matched into uiterms by the value set.
-
-    The metamodel names its enumerations in English (`EventImportance`) while uiterms is
-    keyed by the Russian names, so the bridge is the values themselves: every uiterms
-    enumeration whose Russian values all belong to the metamodel one is a candidate, and
-    the spelling is taken only when every candidate agrees on it.
-    """
-    values = set(metamodel.enum_values(enum_class))
-    if not values:
-        return None
-    spellings: set[str] = set()
-    for pairs in _ui_enum_tables().values():
-        if value not in pairs or not set(pairs).issubset(values):
-            continue
-        spellings.add(pairs[value])
     return spellings.pop() if len(spellings) == 1 else None
 
 
