@@ -20,6 +20,12 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Changed
+
+- **`translate` keeps the prefix of a deprecated name.** An entry that does not start with
+  `Deprecated` gets it in front, so `naming/presentation` knows the element in the English tree
+  and asks for `(not used)` there. A word that only begins like the prefix no longer counts.
+
 ### Fixed
 
 - **`from xbsl import scaffold` works as the first import of a process.** It used to fail on a

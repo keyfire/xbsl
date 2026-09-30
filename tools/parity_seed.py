@@ -2602,6 +2602,18 @@ _CHECK_RU = (
 )
 _CHECK_TOKENS = {"УстарелоСверка": "DeprecatedReconciliation"}
 
+# A deprecated element whose dictionary entry renders the prefix its own way or leaves it out:
+# nothing in a file of the English tree says where the name came from, so the translator keeps
+# the prefix in the English name, and the rule knows the element there (naming/presentation).
+_OBSOLETE_RATES_TOKENS = {"Курсы": "Rates", "УстарелоКурсы": "ObsoleteRates"}
+_PREFIXLESS_CHECK_TOKENS = {"УстарелоСверка": "Reconciliation"}
+# A name that merely starts with the letters of the prefix is not deprecated in either tree.
+_OBSOLESCENCE_RU = (
+    "ВидЭлемента: Отчет\nИд: 1d1f5c60-0000-4000-8000-000000000fb5\nИмя: УстарелостьОборудования\n"
+    "Представление: Устарелость оборудования\n"
+)
+_OBSOLESCENCE_TOKENS = {"УстарелостьОборудования": "EquipmentObsolescence"}
+
 
 #: A form whose module reads a module constant from a method compiled for the server
 #: (code/constant-unavailable): a component module lives in the client environment, and so
@@ -7199,6 +7211,44 @@ SEEDS: list[Seed] = [
              "and the mark at its head moves to '(not used)'",
         files={"УстарелоСверка.yaml": _CHECK_RU.format(presentation="(не используется) Сверка")},
         tokens=_CHECK_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a deprecated register whose entry renders the prefix its own way ('ObsoleteRates'): "
+             "the translator keeps the prefix in the English name, and the record caption left "
+             "without the mark is reported in both trees",
+        files={"УстарелоКурсы.yaml": _RATES_RU.format(name="УстарелоКурсы")
+               + _RATES_CAPTIONS_RU.format(list="(не используется) Курсы валют",
+                                           record="Курс валюты")},
+        tokens=_OBSOLETE_RATES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same register with both captions marked: the prefixed English name is a "
+             "deprecated element whose captions carry '(not used)'",
+        files={"УстарелоКурсы.yaml": _RATES_RU.format(name="УстарелоКурсы")
+               + _RATES_CAPTIONS_RU.format(list="(не используется) Курсы валют",
+                                           record="(не используется) Курс валюты")},
+        tokens=_OBSOLETE_RATES_TOKENS,
+        literals=_DEPRECATED_RATES_LITERALS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a deprecated report whose entry leaves the prefix out ('Reconciliation'): the "
+             "English name gets the prefix in front, and the unmarked presentation is reported",
+        files={"УстарелоСверка.yaml": _CHECK_RU.format(presentation="Сверка")},
+        tokens=_PREFIXLESS_CHECK_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="a name that merely starts with the letters of the prefix is not deprecated: the "
+             "presentation owes no mark, and the translator leaves the English name as it is",
+        files={"УстарелостьОборудования.yaml": _OBSOLESCENCE_RU},
+        tokens=_OBSOLESCENCE_TOKENS,
     ),
     Seed(
         rule="yaml/id-required",

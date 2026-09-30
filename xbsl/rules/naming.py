@@ -265,14 +265,6 @@ MESSAGES = {
 i18n.register(MESSAGES)
 
 
-@lru_cache(maxsize=1)
-def _deprecated_prefixes() -> tuple[str, ...]:
-    """Both spellings of the deprecation prefix a field name may carry."""
-    return tuple(terms.key_forms("Устарело"))
-
-
-dataset.register_reset(_deprecated_prefixes.cache_clear)
-
 # --- description parsing ---------------------------------------------------------------
 
 # Lines with the Имя key are parsed by the shared regex yaml_schema._NAME_LINE_RE (it strips
@@ -1048,7 +1040,7 @@ def _deprecation_fields(source: SourceFile, ref: NameRef) -> dict:
     """What a message about a missing deprecation mark names: the prefix the name carries, the
     mark the project owes and the language of the project."""
     language = _project_language(source)
-    prefix = next(p for p in _deprecated_prefixes() if ref.name.startswith(p))
+    prefix = terms.deprecation_prefix(ref.name)
     return {"name": ref.name, "prefix": prefix, "mark": DEPRECATED_MARKS[language],
             "language": i18n.t(f"naming/presentation.language-{language}")}
 
@@ -1104,7 +1096,7 @@ def _interface_findings(source: SourceFile, ref: NameRef | None, vid: str, data,
         # A set of captions the table does not know gets a finding per caption left empty.
         for message_key in ([key] if key else [_MISSING_CAPTION[path] for path in missing]):
             yield _presentation_diag(source, ref, vid, message_key, tail=tail, **names)
-    if ref is None or not ref.name.startswith(_deprecated_prefixes()):
+    if ref is None or terms.deprecation_prefix(ref.name) is None:
         return
     fields = _deprecation_fields(source, ref)
     for path in _interface_captions(vid):
@@ -1159,7 +1151,14 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
     Russian, and a project written in English - a translated tree among them - marks the same
     places with "(not used)". The mark of the other language does not count: an English caption
     of a Russian project owes the Russian mark, and a Russian caption left in an English project
-    owes the English one (_unmarked)."""
+    owes the English one (_unmarked).
+
+    An element is deprecated when its name starts with the deprecation prefix, in either
+    spelling and in front of the next word of the name (terms.deprecation_prefix). A file of a
+    translated tree keeps nothing else of the Russian name, so the translator keeps the prefix
+    in the English name whatever the dictionary entry says (Dictionary.written): an entry
+    that renders the prefix its own way (`ObsoleteRates`) is written `DeprecatedObsoleteRates`,
+    and the rule asks the English tree for the mark wherever the Russian one owes it."""
     got = _vid(source)
     if got is None:
         return
@@ -1178,7 +1177,7 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
         return
     if (
         ref is not None
-        and ref.name.startswith(_deprecated_prefixes())
+        and terms.deprecation_prefix(ref.name) is not None
         and prop.get("type") != "AttributeName"
     ):
         fields = _deprecation_fields(source, ref)

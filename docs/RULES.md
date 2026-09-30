@@ -1266,7 +1266,9 @@ constants set names a constant in its top-level `Presentation` and is captioned 
 by the list as well when it is periodic. A deprecated element starts its presentation and every
 caption with the mark of its project's language: the Russian mark of the standard where the keys
 are Russian, `(not used)` where they are English, as in a translated tree. The mark of the other
-language does not count.
+language does not count. An element is deprecated when its name starts with the prefix of the
+standard in either spelling (`Deprecated` in English) in front of the next word of the name, and a
+translated tree keeps that prefix in the English name whatever the dictionary entry says.
 
 ### Code style conventions (the `style/` rules)
 

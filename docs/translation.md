@@ -128,6 +128,14 @@ changes only its mark and stays a gap. A report's presentation, which the transl
 data, changes its mark the same way. An entry that starts with a bracket of its own is written as
 it is, and the rule points at it in the English tree.
 
+The prefix of a deprecated name is the engine's as well. The standard starts such a name with
+`Устарело`, and a file of the English tree keeps nothing else of the Russian name: the rule knows
+a deprecated element there by the prefix `Deprecated` alone. So the translator keeps the prefix
+whatever the entry says. An entry that starts with `Deprecated` is written as it is, and any other
+one gets the prefix in front: `УстарелоКурсы: Rates` and `УстарелоКурсы: ObsoleteRates` give
+`DeprecatedRates` and `DeprecatedObsoleteRates`. The file of the element and every use of the name
+follow. A name that only begins with the same letters, the head of a longer word, keeps its entry.
+
 A text meant to read the same in both languages - a product name, a code, a word English borrowed
 whole - is named by an entry whose value repeats its key:
 
