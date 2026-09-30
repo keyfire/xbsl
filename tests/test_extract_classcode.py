@@ -641,3 +641,102 @@ def test_an_object_stored_into_a_field_of_another_type_is_no_constant():
     blob = _enumeration(DEMO_LANGUAGES[:1], stray=True)
 
     assert [constant.field for constant in classcode.declared_constants(blob)] == ["EN"]
+
+
+# --- an enumeration of values: the name of each constant, then the value in both spellings ---
+
+
+PRIORITIES = "demo/acme/TaskPriorityG5Enum"
+_INFO = "demo/acme/yaml/ItemInfo"
+_INFO_BUILDER = _INFO + "$Builder"
+
+
+def _value_enumeration(owner: str, constants: list[tuple[str, ...]], builder: bool = False,
+                       named: bool = True) -> bytes:
+    """An enumeration whose static initializer builds each constant from its values.
+
+    A constant is (field, string, string, ...): the object of the class itself is reserved, the
+    constant name and its ordinal are pushed, then the strings. By default they go to the
+    constructor as they are, an identifier made from the last one on the way - the shape of
+    `LOW("LOW", 0, "Low", <Russian>, UUID.fromString(<id>))`. With `builder` they go to a
+    builder of the item first, and the builder to the constructor - the shape of
+    `TOP("TOP", 0, info().named("Top", <Russian>))`; a mode field after the strings is read by
+    the builder too. The object is stored into the field of the class's own type. Without
+    `named` the constant name is not pushed - a class that builds its instances the way an
+    enumeration does, but is none.
+    """
+    pool = _Pool()
+    code_name = pool.text("Code")
+    own_type = f"L{owner};"
+    if builder:
+        init = pool.method(owner, "<init>", f"(Ljava/lang/String;IL{_INFO_BUILDER};)V")
+        info = pool.method(_INFO, "info", f"()L{_INFO_BUILDER};")
+        named = pool.method(_INFO_BUILDER, "named",
+                            f"(Ljava/lang/String;Ljava/lang/String;)L{_INFO_BUILDER};")
+        added = pool.method(_INFO_BUILDER, "added", f"(Ldemo/utils/Mode;)L{_INFO_BUILDER};")
+    else:
+        init = pool.method(owner, "<init>",
+                           "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/util/UUID;)V")
+        uuid = pool.method("java/util/UUID", "fromString", "(Ljava/lang/String;)Ljava/util/UUID;")
+    body = bytearray()
+    for ordinal, (field, *strings) in enumerate(constants):
+        mode = strings.pop() if builder and strings and strings[-1].startswith("CMODE_") else None
+        body += bytes([0xBB]) + struct.pack(">H", pool.klass(owner))       # new
+        body += bytes([0x59])                                                 # dup
+        if named:
+            body += bytes([0x13]) + struct.pack(">H", pool.string(field))   # the constant name
+        body += bytes([0x03 + ordinal])                                       # iconst_<ordinal>
+        if builder:
+            body += bytes([0xB8]) + struct.pack(">H", info)                  # invokestatic
+        for value in strings:
+            body += bytes([0x13]) + struct.pack(">H", pool.string(value))   # ldc_w
+        if builder:
+            body += bytes([0xB6]) + struct.pack(">H", named)                 # invokevirtual
+            if mode:
+                body += bytes([0xB2]) + struct.pack(">H", _typed_field(      # getstatic
+                    pool, "demo/utils/Mode", mode, "Ldemo/utils/Mode;"))
+                body += bytes([0xB6]) + struct.pack(">H", added)
+        else:
+            body += bytes([0xB8]) + struct.pack(">H", uuid)                  # invokestatic
+        body += bytes([0xB7]) + struct.pack(">H", init)                      # invokespecial
+        body += bytes([0xB3]) + struct.pack(">H", _typed_field(               # putstatic
+            pool, owner, field, own_type))
+    body += bytes([0xB1])  # return
+    code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
+    this_class = pool.klass(owner)
+    super_class = pool.klass("java/lang/Enum")
+    method = struct.pack(">HHHH", 0, pool.text("<clinit>"), pool.text("()V"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0)
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+#: The priority of a task in the demo project, as a compiled enumeration would declare it.
+DEMO_PRIORITIES = [
+    ("LOW", "Low", "Низкая", "7420e42d-0000-4000-8000-000000000001"),
+    ("HIGH", "High", "Высокая", "7420e42d-0000-4000-8000-000000000002"),
+]
+
+
+def test_each_value_of_an_enumeration_is_built_with_its_name_first():
+    """The reading does not care how the strings reach the constructor: pushed as they are,
+    or through a builder of the item, they belong to the constant they are pushed for."""
+    plain = classcode.declared_constants(_value_enumeration(PRIORITIES, DEMO_PRIORITIES))
+    built = classcode.declared_constants(_value_enumeration(
+        "demo/acme/StepState", [("DONE", "Done", "Готово"), ("SKIPPED", "Skipped", "Пропущен",
+                                                               "CMODE_9_1")], builder=True))
+
+    assert [constant.strings for constant in plain] == [
+        ("LOW", "Low", "Низкая", "7420e42d-0000-4000-8000-000000000001"),
+        ("HIGH", "High", "Высокая", "7420e42d-0000-4000-8000-000000000002"),
+    ]
+    assert [(constant.field, constant.strings, constant.modes) for constant in built] == [
+        ("DONE", ("DONE", "Done", "Готово"), ()),
+        ("SKIPPED", ("SKIPPED", "Skipped", "Пропущен"), ("9.1",)),
+    ]

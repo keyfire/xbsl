@@ -47,7 +47,7 @@ import zipfile
 from pathlib import Path
 
 from xbsl.extract import _distro
-from xbsl.extract.terms import scan_kind_table, scan_language_table
+from xbsl.extract.terms import scan_enumeration_classes, scan_kind_table, scan_language_table
 
 # jar plugins that carry .xcore
 _JAR_RE = re.compile(r"designtime|\.model|mdd|dmf|metamodel", re.I)
@@ -56,6 +56,11 @@ _HEADER_RE = re.compile(
 )
 _ENUM_RE = re.compile(r"\benum\s+(\w+)\s*\{([^}]*)\}")
 _ENUM_ITEM_RE = re.compile(r"(\w+)\s*(?:=\s*\d+\s*)?as\s+\"([^\"]+)\"")
+#: A data type of the model over a Java class: `type Importance wraps ImportanceG5Enum`. The
+#: class is named as the file imports it, fully qualified, or from the package of the file.
+_WRAPS_RE = re.compile(r"\btype\s+(\w+)\s+wraps\s+([\w.$]+)")
+_PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
+_IMPORT_RE = re.compile(r"^\s*import\s+([\w.$]+)\s*$", re.M)
 _ANNOT_NAME_RE = re.compile(r"@(\w+)")
 _MODIFIERS = ("unsettable", "contains", "refers", "unique", "transient", "derived", "readonly")
 _DECL_RE = re.compile(
@@ -391,14 +396,27 @@ def _leading_annotations(text: str, start: int) -> dict[str, str]:
     return out
 
 
-def _parse_xcore(text: str, classes: dict, enums: dict, wrappers: set[str]) -> None:
-    """Collect classes, enumerations and @TypedWrapper markers of one .xcore file."""
+def _parse_xcore(text: str, classes: dict, enums: dict, wrappers: set[str],
+                 wraps: dict[str, str] | None = None) -> None:
+    """Collect classes, enumerations and @TypedWrapper markers of one .xcore file.
+
+    `wraps`, when given, collects the data types the file declares over a Java class: {the
+    type's name in the model: the class file of the class (`pkg/Name.class`)}.
+    """
     text = _strip_comments(text)
     n = len(text)
     for name, body in _ENUM_RE.findall(text):
         values = [ru for _, ru in _ENUM_ITEM_RE.findall(body)]
         if values:
             enums.setdefault(name, values)
+    if wraps is not None:
+        package = _PACKAGE_RE.search(text)
+        imported = {path.rsplit(".", 1)[-1]: path for path in _IMPORT_RE.findall(text)}
+        for name, wrapped in _WRAPS_RE.findall(text):
+            if "." not in wrapped:
+                wrapped = imported.get(wrapped) or (
+                    f"{package.group(1)}.{wrapped}" if package else wrapped)
+            wraps.setdefault(name, wrapped.replace(".", "/") + ".class")
     for m in re.finditer(r"@TypedWrapper\s*(?:\([^)]*\))?\s*(?:@\w+(?:\([^)]*\))?\s*)*"
                          r"(?:abstract\s+)?(?:class|interface)\s+(\w+)", text):
         wrappers.add(m.group(1))
@@ -454,8 +472,73 @@ def _fill_members(classes: dict, enums: dict, wrappers: set[str]) -> None:
                         node["inline"].append(d.group("type"))
 
 
-def extract(dist: Path) -> tuple[dict, dict, dict, list[dict[str, str]]]:
-    """The classes, the enumerations, the kind table and the languages of the main .car.
+def _read_model(car: zipfile.ZipFile) -> tuple[dict, dict, set[str], dict[str, str]]:
+    """(classes, enumerations, @TypedWrapper classes, wrapped Java classes) of every .xcore.
+
+    The classes still carry their raw bodies (`_body`): the members are typed later, once
+    every enumeration is known (see _fill_members).
+    """
+    classes: dict = {}
+    enums: dict = {}
+    wrappers: set[str] = set()
+    wraps: dict[str, str] = {}
+    for n in car.namelist():
+        if not n.endswith(".jar") or not _JAR_RE.search(Path(n).name):
+            continue
+        try:
+            jz = zipfile.ZipFile(io.BytesIO(car.read(n)))
+        except zipfile.BadZipFile:
+            continue
+        for m in jz.namelist():
+            if m.endswith(".xcore"):
+                _parse_xcore(jz.read(m).decode("utf-8", "replace"), classes, enums, wrappers, wraps)
+    return classes, enums, wrappers, wraps
+
+
+def _property_types(classes: dict) -> set[str]:
+    """The declared types of every property of the raw class bodies - the item type of a list
+    included, since a list is declared by the type of its items."""
+    found: set[str] = set()
+    for node in classes.values():
+        for body in node["_body"]:
+            for annots, decl in _members(body):
+                if not any(key in annots for key in ("PropertyInfo", "PropertyInfo2", "PropertyInfo3")):
+                    continue
+                m = _DECL_RE.match(decl)
+                if m:
+                    found.add(m.group("type"))
+    return found
+
+
+def _compiled_enumerations(car: zipfile.ZipFile, classes: dict, enums: dict, wrappers: set[str],
+                           wraps: dict[str, str]) -> dict[str, list[tuple[str, str]]]:
+    """{a data type a property is typed by: the values of the compiled enumeration it wraps}.
+
+    The model types the importance of a command, the days of a weekly schedule, the periodicity
+    of a set of constants and more by data types over Java enumerations; the values are in the
+    compiled class alone (extract.terms.enumeration_values). A type that is an enumeration or a
+    class of the model itself, or a wrapper written as a scalar, is not looked for; a wrapped
+    class that is no enumeration of values gives nothing. The values are (English, Russian).
+    """
+    used = _property_types(classes)
+    wanted = {
+        name: path for name, path in wraps.items()
+        if name in used and name not in enums and name not in classes and name not in wrappers
+    }
+    values = scan_enumeration_classes(car, set(wanted.values()))
+    return {name: values[path] for name, path in sorted(wanted.items()) if path in values}
+
+
+def compiled_enumerations(car: zipfile.ZipFile) -> dict[str, list[tuple[str, str]]]:
+    """The compiled enumerations the properties of the model are typed by (see
+    _compiled_enumerations) - for the terms step, which spells their values."""
+    classes, enums, wrappers, wraps = _read_model(car)
+    return _compiled_enumerations(car, classes, enums, wrappers, wraps)
+
+
+def extract(dist: Path) -> tuple[dict, dict, dict, list[dict[str, str]], list[str]]:
+    """The classes, the enumerations, the kind table, the languages of the main .car and the
+    compiled enumerations among the enumerations.
 
     The kind table (Russian kind -> its English spelling) is read from the serializer's own
     enum by the term extractor; it is taken here rather than from terms.json because this
@@ -466,31 +549,25 @@ def extract(dist: Path) -> tuple[dict, dict, dict, list[dict[str, str]]]:
     and its default language by. It is a compiled class, not an .xcore enumeration, so the
     walk above never met it: the default language came out a `block` and the list of
     languages a list of an unknown class. It joins the enumerations BEFORE the members are
-    typed, and the default language becomes an enumeration like any other.
+    typed, and the default language becomes an enumeration like any other. So do the other
+    compiled enumerations the model wraps for its properties (_compiled_enumerations): before
+    them the importance of a command, the strategy of a scheduled job and a dozen more
+    properties were typed `block`, with no list of the values they allow.
     """
     car = _distro.find_car(dist)
-    classes: dict = {}
-    enums: dict = {}
-    wrappers: set[str] = set()
     with zipfile.ZipFile(car) as z:
-        for n in z.namelist():
-            if not n.endswith(".jar") or not _JAR_RE.search(Path(n).name):
-                continue
-            try:
-                jz = zipfile.ZipFile(io.BytesIO(z.read(n)))
-            except zipfile.BadZipFile:
-                continue
-            for m in jz.namelist():
-                if m.endswith(".xcore"):
-                    _parse_xcore(jz.read(m).decode("utf-8", "replace"), classes, enums, wrappers)
+        classes, enums, wrappers, wraps = _read_model(z)
         kinds = scan_kind_table(z)
         languages = scan_language_table(z)
-    rows: list[dict[str, str]] = []
-    if languages is not None:
-        language_class, rows = languages
-        enums.setdefault(language_class, [row["ru"] for row in rows])
+        rows: list[dict[str, str]] = []
+        if languages is not None:
+            language_class, rows = languages
+            enums.setdefault(language_class, [row["ru"] for row in rows])
+        compiled = _compiled_enumerations(z, classes, enums, wrappers, wraps)
+    for name, values in compiled.items():
+        enums.setdefault(name, [russian for _english, russian in values])
     _fill_members(classes, enums, wrappers)
-    return classes, enums, kinds, rows
+    return classes, enums, kinds, rows, sorted(compiled)
 
 
 def main(argv=None) -> int:
@@ -511,7 +588,7 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    classes, enums, kinds, languages = extract(dist)
+    classes, enums, kinds, languages, compiled = extract(dist)
     vid2class, unresolved = build_vid2class(classes, kinds)
     if not languages:
         print("ПРЕДУПРЕЖДЕНИЕ: в дистрибутиве не найдено перечисление языков локализации – "
@@ -565,6 +642,8 @@ def main(argv=None) -> int:
     print(f"  классов: {len(classes)}; перечислений: {len(enums)}; видов в vid2class: {len(vid2class)}")
     listed = ", ".join(f"{row['ru']} ({row['code']}, с {row['since']})" for row in languages)
     print(f"  языков локализации: {len(languages)}" + (f" – {listed}" if listed else ""))
+    print(f"  скомпилированных перечислений у свойств: {len(compiled)}"
+          + (f" – {', '.join(compiled)}" if compiled else ""))
     return 0
 
 

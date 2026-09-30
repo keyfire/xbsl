@@ -15,7 +15,8 @@ Every pair here comes from the distribution, never from a translation:
 - yaml properties - the EMF metamodel annotates them `@PropertyInfo(ru="Имя", en="Name")`;
 - enumeration values - the metamodel declares them `InProject as "ВПроекте"`; the languages a
   project may be localized into are a compiled enumeration instead, read from its class
-  (language_rows);
+  (language_rows), and so are the other enumerations the model only wraps for its properties
+  (enumeration_values);
 - members of every stdlib type - the distribution states them itself. The two
   documentation-and-xcore sources above are thin: a great many names carry no `en` in the
   metamodel at all (`@PropertyInfo(ru="Реквизиты")`), which used to read as "the platform has
@@ -732,6 +733,76 @@ def scan_language_table(car: zipfile.ZipFile) -> tuple[str, list[dict[str, str]]
     return best
 
 
+def _is_value_pair(english: str, russian: str) -> bool:
+    """An English name against its Russian twin - or against itself, for a value the platform
+    spells alike in both languages (`PlainText`)."""
+    return _is_term_pair(english, russian) or (russian == english and bool(_EN_NAME_RE.match(english)))
+
+
+def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
+    """[(English, Russian)] of every value a compiled enumeration declares, or None for another class.
+
+    Some enumerations a property of the model is typed by are compiled classes the model only
+    wraps (`type Importance wraps ImportanceG5Enum`): no `.xcore` lists their values, so the
+    property had no list of allowed values and its values no English spelling. A Java
+    enumeration passes the name of each constant to its base first, and after it the value's two
+    spellings, English first - as plain arguments (`LOW("LOW", 0, "Low", <Russian>, <id>)`),
+    through a builder (`TOP("TOP", 0, info().named("Top", <Russian>))`) or as a term, which then
+    is the pair. Without a term the pair is the first two strings after the name that read as an
+    English name and its Russian twin; a value spelled alike in both languages counts too.
+
+    A class counts only when EVERY constant it builds has that shape: its first string is its
+    own name, and one pair follows. The values come in the order the class declares them.
+    """
+    try:
+        constants = classcode.declared_constants(blob)
+    except (IndexError, ValueError):  # a class the reader does not follow says nothing
+        return None
+    if not constants:
+        return None
+    values: list[tuple[str, str]] = []
+    for constant in constants:
+        strings = constant.strings
+        if not strings or strings[0] != constant.field or len(constant.terms) > 1:
+            return None
+        if constant.terms:
+            pair: tuple[str, str] | None = constant.terms[0]
+        else:
+            pair = next(((english, russian) for english, russian in zip(strings[1:], strings[2:])
+                         if _is_value_pair(english, russian)), None)
+        if pair is None or not _is_value_pair(*pair):
+            return None
+        values.append(pair)
+    return values
+
+
+def scan_enumeration_classes(
+    car: zipfile.ZipFile, paths: set[str],
+) -> dict[str, list[tuple[str, str]]]:
+    """{class file path: its values (see enumeration_values)} for the compiled enumerations named.
+
+    `paths` are the class files the caller wants (`pkg/Name.class`); one that is not an
+    enumeration of values, or is nowhere in the platform jars, is left out. The server, the
+    designer and the language server each ship a copy of such a class, and should they ever
+    differ, the fullest list stands - the way the kind table is read.
+    """
+    found: dict[str, list[tuple[str, str]]] = {}
+    if not paths:
+        return found
+    for entry in car.namelist():
+        if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in paths.intersection(jar.namelist()):
+            values = enumeration_values(jar.read(inner))
+            if values and len(values) > len(found.get(inner, ())):
+                found[inner] = values
+    return found
+
+
 #: The query language is a separate grammar (TreeSQL); its keyword pairs live in one class.
 _QUERY_TERMS_CLASS = "com/e1c/g5/treesql/domain/QueryTerms.class"
 _QUERY_JAR_RE = re.compile(r"treesql\.model")
@@ -910,6 +981,7 @@ def query_reserved_types(page: str, types: dict[str, str]) -> dict[str, str]:
 
 def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
     from xbsl.extract import stdlib  # the page reader: stdlib imports this module in turn
+    from xbsl.extract import metamodel  # the model's enumerations: it imports this module too
 
     car = _distro.find_car(dist)
     types: dict[str, str] = {}
@@ -968,6 +1040,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
         reserved, english_only = query_reserved_words(syntax_page)
         kind_table = scan_kind_table(z)
         languages = scan_language_table(z)
+        compiled = metamodel.compiled_enumerations(z)
         manager_table = manager_owners(z, members, managers)
 
     # A type the reference pages never describe is still paired by its own classes: the
@@ -986,6 +1059,12 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     # could not be translated.
     for row in (languages[1] if languages else ()):
         _add(enums, row["ru"], row["en"], conflicts["enums"])
+    # So are the values of the other compiled enumerations the properties of the model are
+    # typed by: the importance of a command, the days of a weekly schedule, the periodicity of
+    # a set of constants. A value two of them spell apart is a conflict like any other.
+    for values in compiled.values():
+        for english, russian in values:
+            _add(enums, russian, english, conflicts["enums"])
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]

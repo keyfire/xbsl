@@ -930,3 +930,99 @@ def test_the_step_gives_every_language_its_english_spelling(tmp_path):
 
     assert written["enums"]["Вьетнамский"] == "Vietnamese"
     assert written["enums"]["Английский"] == "English"
+
+
+# --- the compiled enumerations the properties of the model are typed by ---------------------
+
+
+def test_the_values_of_a_compiled_enumeration_come_in_both_spellings():
+    from test_extract_classcode import DEMO_PRIORITIES, PRIORITIES, _value_enumeration
+
+    from xbsl.extract.terms import enumeration_values
+
+    built = _value_enumeration("demo/acme/StepState", [
+        ("DONE", "Done", "Готово"), ("PLAIN_TEXT", "PlainText", "PlainText", "CMODE_9_1"),
+    ], builder=True)
+
+    assert enumeration_values(_value_enumeration(PRIORITIES, DEMO_PRIORITIES)) == [
+        ("Low", "Низкая"), ("High", "Высокая"),
+    ]
+    # A value spelled alike in both languages is still a value.
+    assert enumeration_values(built) == [("Done", "Готово"), ("PlainText", "PlainText")]
+
+
+def test_an_enumeration_of_another_shape_gives_no_values():
+    """Every constant must be built from its own name and one pair: a constant that pushes
+    anything else first, or no pair at all, makes the class some other enumeration."""
+    from test_extract_classcode import (
+        DEMO_LANGUAGES, DEMO_PRIORITIES, PRIORITIES, _enumeration, _value_enumeration,
+    )
+
+    from xbsl.extract.terms import enumeration_values
+
+    presented = [("EN", "English"), ("RU", "Русский")]
+    named_apart = DEMO_PRIORITIES + [("MEDIUM", "Normal", "Обычная", "7420e42d")]
+
+    assert enumeration_values(_value_enumeration(PRIORITIES, presented)) is None
+    assert enumeration_values(_value_enumeration(PRIORITIES, DEMO_PRIORITIES, named=False)) is None
+    # A constant named apart from its value (MEDIUM for Normal) still gives the value.
+    assert enumeration_values(_value_enumeration(PRIORITIES, named_apart)) == [
+        ("Low", "Низкая"), ("High", "Высокая"), ("Normal", "Обычная"),
+    ]
+    # The term the language enumeration builds is its pair.
+    assert enumeration_values(_enumeration(DEMO_LANGUAGES)) == [
+        ("English", "Английский"), ("Vietnamese", "Вьетнамский"),
+    ]
+
+
+def test_the_scan_reads_the_classes_asked_for_and_keeps_the_fullest_copy(tmp_path):
+    import io
+    import zipfile
+
+    from test_extract_classcode import DEMO_PRIORITIES, PRIORITIES, _value_enumeration
+
+    from xbsl.extract.terms import scan_enumeration_classes
+
+    path = PRIORITIES + ".class"
+
+    def jar(blob: bytes) -> bytes:
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as z:
+            z.writestr(path, blob)
+            z.writestr("demo/acme/Other.class", blob)
+        return out.getvalue()
+
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/com.e1c.g5rt.short-1.0.jar",
+                   jar(_value_enumeration(PRIORITIES, DEMO_PRIORITIES[:1])))
+        z.writestr("data/lib/com.e1c.g5rt.full-1.0.jar",
+                   jar(_value_enumeration(PRIORITIES, DEMO_PRIORITIES)))
+        z.writestr("data/lib/vendor-lib-1.0.jar", jar(b"not a class"))
+
+    found = scan_enumeration_classes(zipfile.ZipFile(car), {path, "demo/acme/Missing.class"})
+
+    assert found == {path: [("Low", "Низкая"), ("High", "Высокая")]}
+
+
+def test_the_step_spells_the_values_of_the_wrapped_enumerations(tmp_path):
+    """End to end: the values of an enumeration the model only wraps join the enumeration
+    values of the term dictionary, the way the languages do."""
+    import json
+
+    from test_extract_metamodel import _wrapping_distribution
+
+    from xbsl.extract import _distro, terms
+
+    dist = _wrapping_distribution(tmp_path)
+    root = tmp_path / "data"
+    try:
+        terms.main(["--dist", str(dist), "--element-version", "9.9.9+1", "--data-dir", str(root)])
+    finally:
+        _distro.set_data_root(None)
+    written = json.loads((root / "9.9.9+1" / "terms.json").read_text(encoding="utf-8"))
+
+    assert written["enums"]["Низкая"] == "Low"
+    assert written["enums"]["Высокая"] == "High"
+    assert written["enums"]["Готово"] == "Done"
+    assert "Любой" not in written["enums"]
