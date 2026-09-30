@@ -545,3 +545,99 @@ def test_values_of_other_kinds_and_other_elements_are_stepped_over():
         {JSON_PROPERTY: ["Version"]},
         {"Ldemo/Mark;": ["Name"]},
     ]
+
+
+# --- the constants an enumeration builds -----------------------------------------------------
+
+
+LANGUAGES = "demo/lang/DemoLanguages"
+_TERM_OF = "(Ljava/lang/String;Ljava/lang/String;)Ldemo/utils/Term;"
+_LANGUAGE_INIT = ("(Ljava/lang/String;ILjava/lang/String;Ldemo/utils/Term;Ljava/lang/String;"
+                  "Ldemo/utils/Mode;)V")
+
+
+def _typed_field(pool: _Pool, owner: str, name: str, descriptor: str) -> int:
+    owner_index = pool.klass(owner)
+    nat = pool._add(bytes([12]) + struct.pack(">HH", pool.text(name), pool.text(descriptor)))
+    return pool._add(bytes([9]) + struct.pack(">HH", owner_index, nat))
+
+
+def _enumeration(constants: list[tuple[str, str, str, str, str | None]],
+                 stray: bool = False) -> bytes:
+    """An enumeration whose static initializer builds each constant the way the platform does.
+
+    A constant is (field, code, English, Russian, mode field or None): the object of the class
+    itself is reserved, the constant name, its ordinal, the code and the two names are pushed,
+    the term is built, an identifier is pushed and the mode read, the constructor is called and
+    the object stored into the field of the class's own type. `stray` puts first an object of
+    the class that is built and then stored into a field of ANOTHER type - no constant at all.
+    """
+    pool = _Pool()
+    code_name = pool.text("Code")
+    own_type = f"L{LANGUAGES};"
+    init = pool.method(LANGUAGES, "<init>", _LANGUAGE_INIT)
+    term = pool.method("demo/utils/Term", "term", _TERM_OF)
+    body = bytearray()
+    if stray:
+        body += bytes([0xBB]) + struct.pack(">H", pool.klass(LANGUAGES)) + bytes([0x59])
+        body += bytes([0xB7]) + struct.pack(">H", init)
+        body += bytes([0xB3]) + struct.pack(">H", _typed_field(
+            pool, LANGUAGES, "FALLBACK", "Ljava/lang/Object;"))
+    for ordinal, (field, code, english, russian, mode) in enumerate(constants):
+        body += bytes([0xBB]) + struct.pack(">H", pool.klass(LANGUAGES))    # new
+        body += bytes([0x59])                                                  # dup
+        body += bytes([0x13]) + struct.pack(">H", pool.string(field))        # the constant name
+        body += bytes([0x03 + ordinal])                                        # iconst_<ordinal>
+        for value in (code, english, russian):
+            body += bytes([0x13]) + struct.pack(">H", pool.string(value))    # ldc_w
+        body += bytes([0xB8]) + struct.pack(">H", term)                       # invokestatic
+        body += bytes([0x13]) + struct.pack(">H", pool.string("0f0e-" + code))  # an identifier
+        if mode:
+            body += bytes([0xB2]) + struct.pack(">H", _typed_field(           # getstatic
+                pool, "demo/utils/Mode", mode, "Ldemo/utils/Mode;"))
+        body += bytes([0xB7]) + struct.pack(">H", init)                       # invokespecial
+        body += bytes([0xB3]) + struct.pack(">H", _typed_field(                # putstatic
+            pool, LANGUAGES, field, own_type))
+    body += bytes([0xB1])  # return
+    code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
+    this_class = pool.klass(LANGUAGES)
+    super_class = pool.klass("java/lang/Enum")
+    method = struct.pack(">HHHH", 0, pool.text("<clinit>"), pool.text("()V"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0)
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+#: Two languages of the enumeration a project is localized by. The modes are the test's own:
+#: what is read is the field a constant names, not the platform's numbers.
+DEMO_LANGUAGES = [
+    ("EN", "en", "English", "Английский", "CMODE_1_0"),
+    ("VIETNAMESE", "vi", "Vietnamese", "Вьетнамский", "CMODE_9_1"),
+]
+
+
+def test_each_constant_comes_with_what_built_it():
+    blob = _enumeration(DEMO_LANGUAGES)
+
+    assert classcode.declared_constants(blob) == [
+        classcode.DeclaredConstant(
+            "EN", ("EN", "en", "English", "Английский", "0f0e-en"),
+            (("English", "Английский"),), ("1.0",)),
+        classcode.DeclaredConstant(
+            "VIETNAMESE", ("VIETNAMESE", "vi", "Vietnamese", "Вьетнамский", "0f0e-vi"),
+            (("Vietnamese", "Вьетнамский"),), ("9.1",)),
+    ]
+
+
+def test_an_object_stored_into_a_field_of_another_type_is_no_constant():
+    """The class builds an object of itself and keeps it under a field of another type: that
+    is not how a constant is declared, and the reading must not start one there."""
+    blob = _enumeration(DEMO_LANGUAGES[:1], stray=True)
+
+    assert [constant.field for constant in classcode.declared_constants(blob)] == ["EN"]

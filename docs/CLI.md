@@ -580,7 +580,7 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 | Option | Description |
 |---|---|
 | `yaml_path` | the yaml of the LocalizedStrings element |
-| `language` | the translation language: Russian/English or the Ru/En code |
+| `language` | the translation language: its name in either project language (Vietnamese) or the folder code (Vi); the languages and the compatibility mode each one needs come from the platform data |
 
 **Options**
 

@@ -78,3 +78,52 @@ def test_kinds_added_by_the_serializer_table_have_properties():
         if kind not in set(metamodel.kinds()):
             continue  # the kind is newer than this data; an older set legitimately has none
         assert metamodel.properties(kind), f"вид {kind} без свойств"
+
+
+# --- the languages: a compiled enumeration the descriptor is typed by ------------------------
+
+
+_DESCRIPTOR_XCORE = """
+class ProjectDescriptor {
+    @PropertyInfo(ru="ЯзыкПоУмолчанию", en="DefaultLanguage")
+    DemoLanguages defaultLanguage
+    @PropertyInfo(ru="ЯзыкиЛокализации", en="LocalizationLanguages")
+    DemoLanguages[] localizationLanguages
+}
+"""
+
+
+def test_the_languages_type_the_descriptor_and_are_written_out(tmp_path):
+    """No .xcore declares the enumeration of the languages, so the default language used to
+    come out a `block` and the list of languages a list of an unknown class. Read from its
+    class, the enumeration types the default language, and the table keeps what the
+    scaffolding needs of each language: the code of its folder and the mode it needs."""
+    import json
+
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration
+    from test_extract_terms import _car_with_classes
+
+    from xbsl.extract import _distro
+    from xbsl.extract import metamodel as extract_metamodel
+
+    dist = _car_with_classes(
+        tmp_path / "dist", {"demo/lang/DemoLanguages.class": _enumeration(DEMO_LANGUAGES)},
+        jar_name="com.e1c.g5rt.demo.mdd-1.0.jar", extra={"model/demo.xcore": _DESCRIPTOR_XCORE},
+    )
+    root = tmp_path / "data"
+    try:
+        extract_metamodel.main(["--dist", str(dist), "--element-version", "9.9.9+1",
+                                "--data-dir", str(root)])
+    finally:
+        _distro.set_data_root(None)
+    written = json.loads((root / "9.9.9+1" / "metamodel.json").read_text(encoding="utf-8"))
+
+    props = written["classes"]["ProjectDescriptor"]["props"]
+    assert props["ЯзыкПоУмолчанию"]["kind"] == "enum"
+    assert props["ЯзыкПоУмолчанию"]["enum"] == "DemoLanguages"
+    assert props["ЯзыкиЛокализации"]["item"] == "DemoLanguages"
+    assert written["enums"]["DemoLanguages"] == ["Английский", "Вьетнамский"]
+    assert written["languages"] == [
+        {"ru": "Английский", "en": "English", "code": "en", "since": "1.0"},
+        {"ru": "Вьетнамский", "en": "Vietnamese", "code": "vi", "since": "9.1"},
+    ]

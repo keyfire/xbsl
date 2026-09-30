@@ -86,3 +86,20 @@ def test_a_localized_strings_dictionary_is_out_of_scope():
         + "".join("    Ключ" + str(i) + ": Значение" + str(i) + "\n" for i in range(60))
     )
     assert _lint({"Словарь.yaml": body, "СловарьEn.yaml": body.replace("Словарь", "СловарьEn")}) == []
+
+
+def test_translations_of_one_dictionary_are_out_of_scope():
+    """Two translations of one dictionary repeat each other key for key - only the language of
+    the values differs, and the platform wants one file per language. A project with a third
+    language answered with every such pair; either spelling of the section is one section."""
+    body = "Строки:\n" + "".join(
+        "    Ключ" + str(i) + ": Значение" + str(i) + "\n" for i in range(60))
+    translations = {
+        "Основное/Локализация/En/Словарь.yaml": body,
+        "Основное/Локализация/Vi/Словарь.yaml": body.replace("Значение", "Giá trị "),
+        "Отчеты/Localization/Zh/Словарь.yaml": body,
+    }
+
+    assert _lint(translations) == []
+    # The same two bodies anywhere else are a copy: the shape alone would be reported.
+    assert _lint({"Основное/Словарь.yaml": body, "Отчеты/Словарь.yaml": body})

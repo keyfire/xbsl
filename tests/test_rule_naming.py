@@ -770,18 +770,88 @@ def test_presentation_deprecated_caption_without_the_mark():
 
 
 @pytest.mark.needs_data
-@pytest.mark.parametrize("caption", ["(не используется) Партия", "$Словарь.Партия", "Batch"])
-def test_presentation_deprecated_caption_judged_on_a_russian_text(caption):
-    # A marked caption passes; a localized-string reference and an English caption carry no
-    # text the Russian mark could head.
+@pytest.mark.parametrize("caption", ["(не используется) Партия", "$Словарь.Партия"])
+def test_presentation_deprecated_caption_judged_on_a_text(caption):
+    # A marked caption passes; a localized-string reference carries no text a mark could head.
     tail = _DEPRECATED_CAPTIONS.format(object=caption)
     assert _lint(_PRESENTATION, "Справочник", "УстарелоПартии", tail) == []
 
 
 @pytest.mark.needs_data
-@pytest.mark.parametrize("value", ["$Отчеты.Сверка", "Reconciliation"])
-def test_presentation_deprecated_text_judged_on_a_russian_text(value):
-    assert _lint(_PRESENTATION, "Отчет", "УстарелоСверка", f"Представление: {value}\n") == []
+@pytest.mark.parametrize("caption", ["(not used) Партия", "(not used) Batch", "Batch"])
+def test_presentation_russian_project_owes_the_russian_mark(caption):
+    """The mark follows the keys of the description, not the script of the caption: a
+    project written in Russian does not count the English mark, and an English caption in it
+    owes the Russian one all the same."""
+    d = _lint(_PRESENTATION, "Справочник", "УстарелоПартии", _DEPRECATED_CAPTIONS.format(object=caption))
+    assert len(d) == 1
+    assert "не начинается с '(не используется)' – в русском проекте" in d[0].message
+    assert (d[0].line, d[0].col) == (8, 24)
+
+
+@pytest.mark.needs_data
+def test_presentation_deprecated_text_judged_on_a_text():
+    assert _lint(_PRESENTATION, "Отчет", "УстарелоСверка", "Представление: $Отчеты.Сверка\n") == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("value", ["Reconciliation", "(not used) Сверка"])
+def test_presentation_deprecated_text_of_a_russian_project_owes_the_russian_mark(value):
+    d = _lint(_PRESENTATION, "Отчет", "УстарелоСверка", f"Представление: {value}\n")
+    assert len(d) == 1
+    assert "не начинается с '(не используется)'" in d[0].message
+
+
+def _english(kind: str, name: str, tail: str = "") -> list:
+    """naming/presentation over a description written with English keys."""
+    text = f"ElementKind: {kind}\nId: {_ID}\nName: {name}\n{tail}"
+    return engine.run_sources([engine.load_text(f"{name}.yaml", text)], select={_PRESENTATION})
+
+
+_ENGLISH_DEPRECATED_CAPTIONS = (
+    "Presentation: Name\n"
+    "Interface:\n"
+    "    List:\n        Presentation: (not used) Batches\n"
+    "    Object:\n        Presentation: {object}\n"
+)
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("caption", ["(not used) Batch", "$Batches.Batch"])
+def test_presentation_english_project_marks_its_captions_with_not_used(caption):
+    tail = _ENGLISH_DEPRECATED_CAPTIONS.format(object=caption)
+    assert _english("Catalog", "DeprecatedBatches", tail) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("name, caption", [
+    ("DeprecatedBatches", "Batch"),
+    ("DeprecatedBatches", "(не используется) Batch"),
+    ("DeprecatedBatches", "(не используется) Партия"),
+    # The deprecation prefix is read in both spellings in either project.
+    ("УстарелоПартии", "(не используется) Партия"),
+])
+def test_presentation_english_project_owes_the_english_mark(name, caption):
+    """A project written in English - a translated tree among them - marks a deprecated
+    element with "(not used)", and the Russian mark does not stand in for it."""
+    d = _english("Catalog", name, _ENGLISH_DEPRECATED_CAPTIONS.format(object=caption))
+    assert len(d) == 1
+    assert "не начинается с '(not used)' – в английском проекте" in d[0].message
+    assert (d[0].line, d[0].col) == (9, 23)
+
+
+@pytest.mark.needs_data
+def test_presentation_english_message_names_the_mark_of_the_project():
+    i18n.set_lang("en")
+    d = _english("Report", "DeprecatedReconciliation", "Presentation: Reconciliation\n")
+    assert len(d) == 1
+    assert d[0].message == (
+        "The name 'DeprecatedReconciliation' starts with 'Deprecated', but the presentation "
+        "does not start with '(not used)' – that is how an English project marks the "
+        "presentation of a deprecated element."
+    )
+    marked = "Presentation: (not used) Reconciliation\n"
+    assert _english("Report", "DeprecatedReconciliation", marked) == []
 
 
 # --- mandatory prefixes and postfixes by kind -----------------------------------------

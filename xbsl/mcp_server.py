@@ -1388,9 +1388,11 @@ def meta_add_localization(yaml_path: str, language: str, root: str | None = None
     Strings/Templates sections with the default-language values for the translator to
     replace in place.
 
-    language - Russian/English (either project spelling) or the folder code Ru/En. The
-    language must be declared in LocalizationLanguages of the project descriptor and must
-    differ from DefaultLanguage. Candidates come from meta_localization_info.
+    language - the name of the language in either project spelling (Vietnamese) or its
+    folder code (Vi). The languages, and the compatibility mode each one needs, come from the
+    platform data. The language must be declared in LocalizationLanguages of the project
+    descriptor, must differ from DefaultLanguage, and must be allowed by the project's
+    CompatibilityMode. Candidates come from meta_localization_info.
 
     See also: meta_set_localization writes the TEXT of one string into every language at
     once - this tool only adds the language and echoes the keys into it.
@@ -1419,8 +1421,8 @@ def meta_set_localization(
 
     yaml_path - the LocalizedStrings element (the translations sit under Localization/<Code>);
     name, values - ONE key: the key (one word) and {language: text}. A language is named any
-                way it reasonably holds it - Russian/English in either project spelling, or
-                the folder code Ru/En.
+                way it reasonably holds it - its name in either project spelling, or the
+                folder code (Ru, En, Vi).
     entries   - MANY keys in one call instead: {key: values}, values shaped like the ones
                 above. Composes with name/values (one extra key on top of the batch); a key
                 named by both is refused rather than letting one silently win. Every file
@@ -1487,8 +1489,12 @@ def meta_set_localization(
 def meta_localization_info(yaml_path: str, root: str | None = None) -> dict:
     """The localization picture of a LocalizedStrings element: the declared languages, the
     default one, the translations already present and the candidate languages a translation
-    can be added for (folder codes Ru/En with their display names). `file` names the
+    can be added for (folder codes - Ru, En, Vi - with their display names). `file` names the
     absolute path read.
+
+    The languages come from the platform data, each with the compatibility mode it needs: a
+    language a newer mode added is no candidate for a project of an older one, and `notes`
+    say why, as they name a listed value the data knows no language by.
 
     See also: meta_add_localization adds one of the candidate languages,
     meta_set_localization writes the text of a string into every language at once.

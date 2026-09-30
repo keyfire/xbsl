@@ -13,7 +13,8 @@ values, and the value's type decides what happens to it:
 - `kind: enum` / an enum class - an enumeration value, translated within its enumeration;
 - `kind: boolean`            - "Истина" -> `True`;
 - `Localizable` / `String`   - DATA: left as written (a `$Словарь.Ключ` reference is the
-  exception - both of its parts are names and follow their renames);
+  exception - both of its parts are names and follow their renames - and so is the
+  deprecation mark at the head of a text, which the engine translates itself);
 - `= expression`             - code: re-tokenized and translated like a module body;
 - `kind: list` / `block`     - the walk descends with the item's class.
 
@@ -38,6 +39,7 @@ from functools import lru_cache
 from xbsl import dataset, engine, lexer, metamodel, terms, uischema
 from xbsl.engine import SourceFile
 from xbsl.rules.enum_defaults import bare_type_name
+from xbsl.rules.naming import DEPRECATED_MARKS
 from xbsl.rules.yaml_schema import _composed, _parsed, object_kind
 from xbsl.translation import code as code_module
 from xbsl.translation import platform_map
@@ -384,6 +386,35 @@ def _set_body(node, body: str, edits: list[Edit]) -> None:
     edits.append((node.start_mark.index, node.end_mark.index, text))
 
 
+def _deprecation_marked(source: str, text: str, language: str) -> str:
+    """`text`, what the translated tree writes for `source`, headed by the deprecation mark
+    of the target language.
+
+    The naming standard marks a deprecated element by a fixed head of its presentation and of
+    its captions, and naming/presentation asks a project for the mark of its own language
+    (DEPRECATED_MARKS) - an English project, a translated tree among them, for "(not used)".
+    The head is told from the text by the very test the rule applies, so the mark is the
+    engine's to translate and only the text after it is the project's:
+
+    - a text that does not start with the Russian mark, and one that already starts with the
+      mark of the target language, is written as it is;
+    - the Russian mark still at the head - a text no entry names, a text kept as data, an entry
+      that copied the head - gives way to the mark of the target language;
+    - an entry that opens with a bracket of its own renders the mark its own way, and a guess
+      at where that rendering ends could cut the text: it is written as the entry says, and
+      naming/presentation reports it on the translated tree;
+    - any other entry left the mark out, and the mark is put in front of it.
+    """
+    russian, target = DEPRECATED_MARKS["ru"], DEPRECATED_MARKS.get(language)
+    if target is None or not source.startswith(russian) or text.startswith(target):
+        return text
+    if text.startswith(russian):
+        return target + text[len(russian):]
+    if text.startswith("("):
+        return text
+    return f"{target} {text}"
+
+
 def _template_scalar(node, resolver, report, edits, *, visible: bool = False) -> None:
     """A text with expressions inside it: the presentation template of an event kind.
 
@@ -400,6 +431,7 @@ def _template_scalar(node, resolver, report, edits, *, visible: bool = False) ->
     """
     value = node.value
     body = _scalar_body(node)
+    language = resolver.dictionary.language
     named = resolver.dictionary.literal(body) if body is not None else None
     if named is not None:
         report.note_literal_named(body)
@@ -407,12 +439,15 @@ def _template_scalar(node, resolver, report, edits, *, visible: bool = False) ->
         # The names inside the expressions are the event's own fields: a translation naming
         # other ones presents a field the event does not have.
         check_placeholders(body, replacement, resolver, report, _at(node))
-        _set_body(node, replacement, edits)
+        _set_body(node, _deprecation_marked(body, replacement, language), edits)
         return
-    _set_scalar(node, translate_interpolations(value, resolver, report, at=_at(node)), edits)
+    kept = _deprecation_marked(value, translate_interpolations(value, resolver, report,
+                                                               at=_at(node)), language)
+    _set_scalar(node, kept, edits)
     # Only the prose counts: a template whose Cyrillic sits inside the expressions alone has
-    # already been translated whole, and there is nothing in it left for a person to name.
-    if body is not None and has_cyrillic(prose_of(value)):
+    # already been translated whole, and there is nothing in it left for a person to name -
+    # nor is there in a text that was the deprecation mark alone.
+    if body is not None and has_cyrillic(prose_of(kept)):
         line, col = _at(node)
         report.note_literal(body, line, col, visible=visible)
 
@@ -459,8 +494,13 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False,
         _template_scalar(node, resolver, report, edits, visible=True)
         return
     if has_cyrillic(value):
-        line, col = _at(node)
-        report.note_text_kept(value, line, col)
+        # Data stays as written, all but the deprecation mark at its head: the presentation
+        # of a report is typed a plain string, and naming/presentation judges it all the same.
+        kept = _deprecation_marked(value, value, resolver.dictionary.language)
+        _set_scalar(node, kept, edits)
+        if has_cyrillic(kept):
+            line, col = _at(node)
+            report.note_text_kept(value, line, col)
 
 
 def _is_enum_class(declared: str) -> bool:

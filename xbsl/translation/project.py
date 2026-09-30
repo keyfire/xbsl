@@ -499,7 +499,7 @@ def translate_project(
         if modulehandlers.available() else {}
     )
     report = ProjectReport(root=root)
-    swaps = _localization_map(root, files) if swap_localization else {}
+    swaps = _localization_map(root, files, dictionary.language) if swap_localization else {}
     outputs: dict[Path, tuple[str, bytes | str, engine.SourceFile | None]] = {}
     targets: dict[str, str] = {}
 
@@ -567,8 +567,8 @@ def translate_project(
 
 @dataclass
 class _Swap:
-    role: str  # 'base' | 'section'
-    partner: Path | None  # the other file of the pair, when it exists
+    role: str  # 'base' | 'section' | 'kept' (a translation into a third language)
+    partner: Path | None  # the other file of the pair (the base, for a kept one), when it exists
 
 
 def _collect_data_values(files: list[Path]) -> frozenset[str]:
@@ -638,8 +638,22 @@ def _translate_resource_bytes(
     return (b"\xef\xbb\xbf" if bom else b"") + translated.encode("utf-8")
 
 
-def _localization_map(root: Path, files: list[Path]) -> dict[Path, _Swap]:
-    """{file: its role in the localization swap} for every localized-strings element."""
+def _localization_map(root: Path, files: list[Path], language: str = "en") -> dict[Path, _Swap]:
+    """{file: its role in the localization swap} for every localized-strings element.
+
+    The pair that swaps places is the element itself (the base: the default language of the
+    source) and its translation into the TARGET language of the dictionary - `Localization/En`
+    for an English tree. The platform finds the language of a translation by the name of its
+    folder, compared with the language code regardless of case, and so does this: `En` and
+    `en` are one partner.
+
+    A translation into any OTHER language (`Localization/Vi`) is no part of the swap, and it
+    is marked `kept` so that this is a decision rather than the accident of a search for one
+    code: the file keeps its place, its keys follow the base keys through the same dictionary,
+    and its values stay in the language they are written in - which is exactly what the
+    translated tree needs, since that language is still one of the project's.
+    """
+    target = language.casefold()
     out: dict[Path, _Swap] = {}
     for path in files:
         if path.suffix != ".yaml":
@@ -654,17 +668,24 @@ def _localization_map(root: Path, files: list[Path]) -> dict[Path, _Swap]:
         if err is not None or object_kind(data) != "ЛокализованныеСтроки":
             continue
         partner = None
+        kept: list[Path] = []
         for dir_name in (_LOCALIZATION_DIR_RU, _LOCALIZATION_DIR_EN):
-            for code in ("En", "en"):
-                candidate = path.parent / dir_name / code / path.name
-                if candidate.is_file():
+            section = path.parent / dir_name
+            if not section.is_dir():
+                continue
+            for language_dir in sorted(section.iterdir()):
+                candidate = language_dir / path.name
+                if not candidate.is_file():
+                    continue
+                if partner is None and language_dir.name.casefold() == target:
                     partner = candidate
-                    break
-            if partner:
-                break
+                else:
+                    kept.append(candidate)
         out[path] = _Swap("base", partner)
         if partner:
             out[partner] = _Swap("section", path)
+        for candidate in kept:
+            out[candidate] = _Swap("kept", path)
     return out
 
 
@@ -679,6 +700,8 @@ def _apply_language_flip(root, outputs, swaps, dictionary, report) -> None:
         if source is None or source.path not in swaps:
             continue
         swap = swaps[source.path]
+        if swap.role == "kept":
+            continue  # a translation into a third language keeps its place (_localization_map)
         entry = by_base.setdefault(str(swap.partner if swap.role == "section" else source.path), {})
         entry[swap.role] = (new_rel, rel_str, translated, source)
     for pair in by_base.values():

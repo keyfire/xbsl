@@ -292,7 +292,7 @@ _QUOTED_IN_ENGLISH = frozenset({
     "ДанныеСтрокиСписка", "Заменить",
     # the naming standard quotes its own prefixes and examples
     "Вид", "Исключение", "Это", "Есть", "Содержит", "Успешно", "НетОшибок", "Устарело",
-    "используется", "ФизическоеЛицо", "ФизическиеЛица",
+    "ФизическоеЛицо", "ФизическиеЛица",
     "КабинетСотрудника", "НовыеЭлементарныеТехнологии",
     # the word a "ё" replacement would turn the label into - the point of typography/yo-in-text
     "все",

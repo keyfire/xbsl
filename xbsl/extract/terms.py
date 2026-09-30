@@ -13,7 +13,9 @@ Every pair here comes from the distribution, never from a translation:
   English one in its path segment (`.../Query_ru/index.html`), the same pairing extract_stdlib
   relies on;
 - yaml properties - the EMF metamodel annotates them `@PropertyInfo(ru="Имя", en="Name")`;
-- enumeration values - the metamodel declares them `InProject as "ВПроекте"`;
+- enumeration values - the metamodel declares them `InProject as "ВПроекте"`; the languages a
+  project may be localized into are a compiled enumeration instead, read from its class
+  (language_rows);
 - members of every stdlib type - the distribution states them itself. The two
   documentation-and-xcore sources above are thin: a great many names carry no `en` in the
   metamodel at all (`@PropertyInfo(ru="Реквизиты")`), which used to read as "the platform has
@@ -657,6 +659,79 @@ def scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
     return best
 
 
+#: A language code the way ISO 639 writes it: two letters (`vi`), three for a language that
+#: has no two-letter code.
+_LANGUAGE_CODE_RE = re.compile(r"^[a-z]{2,3}$")
+#: The name a compatibility mode is read by starts so (`CMODE_9_0`) - a class that never
+#: names one cannot declare the mode of a language, and is not even parsed.
+_MODE_MARK = b"CMODE_"
+
+
+def language_rows(blob: bytes) -> list[dict[str, str]] | None:
+    """The languages a compiled enumeration of languages declares, or None for another class.
+
+    The languages a project may be localized into are an enumeration of the platform, and a
+    COMPILED one: no `.xcore` declares it, so neither the enumeration values of this step nor
+    the enumerations of the metamodel step ever held it. Each constant is built from the ISO
+    639 code of the language, the term of its two names, an identifier and the compatibility
+    mode the language appeared in - `VIETNAMESE("vi", term("Vietnamese", "Вьетнамский"), <id>,
+    <mode>)`. The term gives the pair, the string pushed right before it the code, the mode the
+    version of the platform a project needs for that language.
+
+    A class counts only when EVERY constant it builds has that shape; one constant of another
+    shape makes it some other enumeration. A row: {"ru", "en", "code", "since"}, in the order
+    the class declares the languages.
+    """
+    constants = classcode.declared_constants(blob)
+    if not constants:
+        return None
+    rows: list[dict[str, str]] = []
+    for constant in constants:
+        if len(constant.terms) != 1 or len(constant.modes) != 1:
+            return None
+        english, russian = constant.terms[0]
+        strings = constant.strings
+        at = next((i for i in range(1, len(strings) - 1)
+                   if strings[i] == english and strings[i + 1] == russian), None)
+        if (at is None or not _LANGUAGE_CODE_RE.match(strings[at - 1])
+                or not _EN_NAME_RE.match(english) or not _CYRILLIC_RE.search(russian)):
+            return None
+        rows.append({"ru": russian, "en": english, "code": strings[at - 1],
+                     "since": constant.modes[0]})
+    return rows
+
+
+def scan_language_table(car: zipfile.ZipFile) -> tuple[str, list[dict[str, str]]] | None:
+    """(the class of the languages, its rows - see language_rows) or None when there is none.
+
+    Found by its shape rather than by its name: over the whole distribution exactly one class
+    builds every constant from a language code, a term and a compatibility mode. The server,
+    the designer and the language server each ship a copy of it; the copies are one class,
+    and should they ever differ, the fullest table stands - the way the kind table is read.
+    """
+    best: tuple[str, list[dict[str, str]]] | None = None
+    for entry in car.namelist():
+        if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            if not inner.endswith(".class"):
+                continue
+            data = jar.read(inner)
+            if _MODE_MARK not in data:
+                continue
+            try:
+                rows = language_rows(data)
+            except (IndexError, ValueError):  # a class the reader does not follow says nothing
+                continue
+            if rows and (best is None or len(rows) > len(best[1])):
+                best = (inner.rsplit("/", 1)[-1][:-len(".class")], rows)
+    return best
+
+
 #: The query language is a separate grammar (TreeSQL); its keyword pairs live in one class.
 _QUERY_TERMS_CLASS = "com/e1c/g5/treesql/domain/QueryTerms.class"
 _QUERY_JAR_RE = re.compile(r"treesql\.model")
@@ -892,6 +967,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
             syntax_page = ""
         reserved, english_only = query_reserved_words(syntax_page)
         kind_table = scan_kind_table(z)
+        languages = scan_language_table(z)
         manager_table = manager_owners(z, members, managers)
 
     # A type the reference pages never describe is still paired by its own classes: the
@@ -902,6 +978,14 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
         if russian not in types and _NAME_RE.match(russian)
     }
     types.update(class_types)
+
+    # The languages of a project are enumeration values like the ones above, but of a compiled
+    # enumeration no .xcore declares. Only Russian and English were here, and only because an
+    # unrelated enumeration (the development language) shares those two values; the languages
+    # a later compatibility mode added had no English spelling, and a project that listed one
+    # could not be translated.
+    for row in (languages[1] if languages else ()):
+        _add(enums, row["ru"], row["en"], conflicts["enums"])
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]

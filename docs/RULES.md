@@ -219,7 +219,7 @@ placed outside the linted subset would look dead.
 <a id="a-yaml-duplicate-subtree"></a>**`yaml/duplicate-subtree`.** Names, ids and texts are left
 out of the shape of a subtree. The 40-node threshold is measured: below it the rule catches
 layout, not copies. A repeat inside one file, the data source of a list and a localized-strings
-dictionary are never judged, and only maximal groups are named. Off by default: how much sameness
+dictionary with its translations are never judged, and only maximal groups are named. Off by default: how much sameness
 is too much is a decision of the project.
 
 <a id="a-yaml-unknown-component-property"></a>**`yaml/unknown-component-property`.** An example:
@@ -1263,8 +1263,10 @@ attribute are captioned in the interface section instead, and both captions are 
 An information register has no top-level `Presentation` and captions the list and the record
 (`Interface.Record.Presentation`), an accumulation register and a data journal the list alone. A
 constants set names a constant in its top-level `Presentation` and is captioned by the record, and
-by the list as well when it is periodic. A deprecated element marks every caption with the same
-prefix as its presentation.
+by the list as well when it is periodic. A deprecated element starts its presentation and every
+caption with the mark of its project's language: the Russian mark of the standard where the keys
+are Russian, `(not used)` where they are English, as in a translated tree. The mark of the other
+language does not count.
 
 ### Code style conventions (the `style/` rules)
 

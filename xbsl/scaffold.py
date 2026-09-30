@@ -4899,27 +4899,48 @@ def _block_at(text: str, offset: int | None) -> str:
 
 
 # The localization section of a project: <where the element lies>/Localization/<Code>/<Name>.yaml,
-# one file per language of LocalizationLanguages (the "Локализация" documentation). The platform
-# supports exactly two languages; a language folder is named by the capitalized language code
-# (Localization/En). A caller may name the language any way it reasonably holds it - the
-# descriptor value in either project language or the folder code itself.
+# one file per language of LocalizationLanguages (the "Локализация" documentation). The
+# languages are the platform's own enumeration, and they come from the data
+# (metamodel.languages), together with the compatibility mode each one needs. The platform
+# finds the language of a folder by its code, regardless of case; the folders this module
+# creates carry the code with a capital, the way the projects already write them
+# (Localization/En, Localization/Vi). A caller may name the language any way it reasonably
+# holds it - the descriptor value in either project language or the folder code itself.
 _LOCALIZATION_DIR_RU = "Локализация"
 _LOCALIZATION_DIR_EN = "Localization"
-_LANGUAGE_FOLDERS = {
-    "русский": "Ru", "russian": "Ru", "ru": "Ru",
-    "английский": "En", "english": "En", "en": "En",
-}
-#: The language name (as a Russian descriptor spells it) by its folder code.
-_LANGUAGE_BY_FOLDER = {"Ru": "Русский", "En": "Английский"}
 _LOCALIZED_STRINGS_KIND = "ЛокализованныеСтроки"
 
 
+def _folder_code(language: metamodel.Language) -> str:
+    """The folder a translation into the language lies in: its code with a capital (`Vi`)."""
+    return language.code[:1].upper() + language.code[1:]
+
+
+def _known_languages() -> str:
+    """The languages the data knows, for a message: `Русский (Ru), Английский (En), ...`."""
+    return ", ".join(f"{language.russian} ({_folder_code(language)})"
+                     for language in metamodel.languages())
+
+
 def _language_folder(language: str) -> str:
-    folder = _LANGUAGE_FOLDERS.get(language.strip().casefold())
-    if folder is None:
-        known = ", ".join(f"{name} ({code})" for code, name in _LANGUAGE_BY_FOLDER.items())
-        raise ScaffoldError(f"Неизвестный язык '{language}'; поддерживаются: {known}")
-    return folder
+    found = metamodel.language_named(language)
+    if found is None:
+        raise ScaffoldError(
+            f"Неизвестный язык '{language}'; поддерживаются: {_known_languages()}"
+        )
+    return _folder_code(found)
+
+
+def _canonical_folder(folder: str) -> str:
+    """The folder code of the language a folder names (`vi` -> `Vi`), or the name as it is."""
+    found = metamodel.language_named(folder)
+    return _folder_code(found) if found is not None else folder
+
+
+def _language_name(folder: str) -> str:
+    """The name of the language a folder code stands for, as a Russian descriptor spells it."""
+    found = metamodel.language_named(folder)
+    return found.russian if found is not None else folder
 
 
 def _localized_strings_source(yaml_path: Path, reader=None) -> tuple[str, str]:
@@ -4934,11 +4955,26 @@ def _localized_strings_source(yaml_path: Path, reader=None) -> tuple[str, str]:
     return text, nl
 
 
-def _descriptor_languages(yaml_path: Path) -> tuple[list[str], str | None]:
-    """(localization languages, default language) of the project around the element.
+@dataclass(frozen=True)
+class _ProjectLanguages:
+    """What the project descriptor says about languages.
 
-    Folder codes (Ru/En) on both sides. An absent descriptor, or one without languages,
-    yields an empty list - such a project does not localize at all.
+    `languages` and `default` are folder codes (Ru, En, Vi); `mode` is the compatibility mode
+    as written, None when the descriptor names none; `unknown` - the listed values no language
+    of the data answers to, kept to be reported rather than dropped without a word.
+    """
+
+    languages: list[str] = field(default_factory=list)
+    default: str | None = None
+    mode: str | None = None
+    unknown: list[str] = field(default_factory=list)
+
+
+def _project_languages(yaml_path: Path) -> _ProjectLanguages:
+    """The languages of the project around the element (see _ProjectLanguages).
+
+    An absent descriptor, or one without languages, yields an empty list - such a project does
+    not localize at all.
     """
     project = None
     for candidate in (yaml_path.parent, *yaml_path.parent.parents):
@@ -4946,7 +4982,7 @@ def _descriptor_languages(yaml_path: Path) -> tuple[list[str], str | None]:
         if project is not None:
             break
     if project is None:
-        return [], None
+        return _ProjectLanguages()
     text = _read(project)
     # The list comes in either yaml form: inline `[Русский, Английский]` (a real project
     # writes it so) or a block of `- Русский` lines.
@@ -4962,18 +4998,37 @@ def _descriptor_languages(yaml_path: Path) -> tuple[list[str], str | None]:
         bounds = _section_bounds(text, "ЯзыкиЛокализации", top_level=True)
         if bounds is not None:
             _, body_start, body_end = bounds
+            # A language name holds no `#`, so whatever follows one is a comment.
             values = [
-                line.strip().lstrip("-").strip()
+                line.split("#", 1)[0].strip().lstrip("-").strip().strip("'\"")
                 for line in text[body_start:body_end].splitlines()
             ]
     languages: list[str] = []
+    unknown: list[str] = []
     for value in values:
-        folder = _LANGUAGE_FOLDERS.get(value.casefold()) if value else None
-        if folder and folder not in languages:
+        if not value:
+            continue
+        language = metamodel.language_named(value)
+        if language is None:
+            if value not in unknown:
+                unknown.append(value)
+        elif (folder := _folder_code(language)) not in languages:
             languages.append(folder)
     m = _key_re("ЯзыкПоУмолчанию").search(text)
-    default = _LANGUAGE_FOLDERS.get(m.group(1).casefold()) if m else None
-    return languages, default
+    default = metamodel.language_named(m.group(1)) if m else None
+    mode = _key_re("РежимСовместимости").search(text)
+    return _ProjectLanguages(
+        languages=languages,
+        default=_folder_code(default) if default is not None else None,
+        mode=mode.group(1).strip("'\"") if mode else None,
+        unknown=unknown,
+    )
+
+
+def _descriptor_languages(yaml_path: Path) -> tuple[list[str], str | None]:
+    """(localization languages, default language) of the project, as folder codes."""
+    found = _project_languages(yaml_path)
+    return found.languages, found.default
 
 
 def _localization_dirs(element_dir: Path) -> list[Path]:
@@ -4983,40 +5038,84 @@ def _localization_dirs(element_dir: Path) -> list[Path]:
     ]
 
 
+def _language_dir(base: Path, folder: str) -> Path | None:
+    """The folder of a language in a localization section, whatever the case of its name.
+
+    The platform compares the name with the code of the language regardless of case, so `vi`
+    holds the same translation `Vi` would; a file system that tells the two apart must not
+    make the tool miss it.
+    """
+    exact = base / folder
+    if exact.is_dir():
+        return exact
+    try:
+        children = sorted(base.iterdir())
+    except OSError:
+        return None
+    return next((child for child in children
+                 if child.is_dir() and _canonical_folder(child.name) == folder), None)
+
+
+def _unavailable(folder: str, mode: str | None) -> str | None:
+    """Why a project of this mode cannot list the language, or None when it can."""
+    language = metamodel.language_named(folder)
+    if language is None or metamodel.language_available(language, mode):
+        return None
+    return (f"{language.russian} появился в режиме совместимости {language.since}, а проект "
+            f"в режиме {mode}")
+
+
 def localization_info(yaml_path: Path, *, reader=None) -> dict:
     """The translations a LocalizedStrings element has and the languages it may get.
 
     candidates - folder codes a translation can be added for: the declared localization
     languages minus the default one (its values live in the element itself) minus the
-    translations already present; with no languages declared - every supported language,
-    with a note that the descriptor must declare them for localization to work.
+    translations already present; with no languages declared - every language the data
+    knows, with a note that the descriptor must declare them for localization to work.
+
+    The languages and the compatibility mode each one needs come from the data: a language a
+    newer mode added is not a candidate for a project of an older one, and a listed value the
+    data knows no language by is named in the notes instead of vanishing from the answer.
     """
     yaml_path = Path(yaml_path)
     text, _nl = _localized_strings_source(yaml_path, reader)
     name = element_name(text, yaml_path.stem)
     existing = sorted({
-        lang_dir.name
+        _canonical_folder(lang_dir.name)
         for base in _localization_dirs(yaml_path.parent)
         for lang_dir in base.iterdir()
         if lang_dir.is_dir() and (lang_dir / f"{name}.yaml").is_file()
     })
-    languages, default = _descriptor_languages(yaml_path)
-    candidates = [
-        code for code in (languages or list(_LANGUAGE_BY_FOLDER))
-        if code != default and code not in existing
-    ]
+    project = _project_languages(yaml_path)
+    languages, default = project.languages, project.default
+    offered = languages or [_folder_code(language) for language in metamodel.languages()]
     notes = []
+    candidates = []
+    for code in offered:
+        if code == default or code in existing:
+            continue
+        why = _unavailable(code, project.mode)
+        if why is None:
+            candidates.append(code)
+        elif languages:
+            notes.append(f"{why} – поднимите РежимСовместимости или уберите язык из "
+                         "ЯзыкиЛокализации")
     if not languages:
         notes.append(
             "В описании проекта не заданы ЯзыкиЛокализации – задайте их (включая язык "
             "по умолчанию), иначе локализация не работает"
+        )
+    for value in project.unknown:
+        notes.append(
+            f"ЯзыкиЛокализации: '{value}' не называет ни один язык из данных инструмента "
+            f"(известны: {_known_languages()}) – проверьте написание или обновите данные"
         )
     return {
         "languages": languages,
         "default": default,
         "existing": existing,
         "candidates": candidates,
-        "names": {code: _LANGUAGE_BY_FOLDER[code] for code in candidates},
+        "names": {code: _language_name(code) for code in candidates},
         "notes": notes,
     }
 
@@ -5029,9 +5128,9 @@ def localization_strings(root: Path, language: str | None = None) -> dict:
     preview reads as a row of identifiers rather than as the page. This collects the texts, and
     the editor shows what the user will see.
 
-    `language` is a folder code (Ru/En). The default language is served by the element itself;
-    another one is layered on top from `Локализация/<Code>/<Name>.yaml`, and a key with no
-    translation keeps its default text - exactly what the platform falls back to.
+    `language` is a folder code (Ru, En, Vi). The default language is served by the element
+    itself; another one is layered on top from `Локализация/<Code>/<Name>.yaml`, and a key with
+    no translation keeps its default text - exactly what the platform falls back to.
 
     Returns {"strings": {...}, "language": <code or None>, "default": <code or None>}; a project
     that localizes nothing answers with an empty mapping rather than an error.
@@ -5039,6 +5138,7 @@ def localization_strings(root: Path, language: str | None = None) -> dict:
     root = Path(root)
     out: dict[str, str] = {}
     default = None
+    wanted = _canonical_folder(language) if language else None
     for yaml_path in sorted(root.rglob("*.yaml")):
         try:
             text = _read(yaml_path)
@@ -5051,10 +5151,11 @@ def localization_strings(root: Path, language: str | None = None) -> dict:
             _langs, default = _descriptor_languages(yaml_path)
         for key, value in _section_entries(text).items():
             out[f"{name}.{key}"] = value
-        if language and language != default:
+        if wanted and wanted != default:
             for base in _localization_dirs(yaml_path.parent):
-                translated = base / language / f"{name}.yaml"
-                if not translated.is_file():
+                folder = _language_dir(base, wanted)
+                translated = folder / f"{name}.yaml" if folder is not None else None
+                if translated is None or not translated.is_file():
                     continue
                 try:
                     for key, value in _section_entries(_read(translated)).items():
@@ -5120,19 +5221,28 @@ def op_add_localization(yaml_path: Path, language: str, *, reader=None) -> Scaff
     The file repeats the Rows/Templates sections of the element as they are - the keys with
     their default-language values, for the translator to replace in place (the documentation
     allows only these sections in a translation, and its name must match the element).
+
+    The language is one the data knows (metamodel.languages), and one the compatibility mode
+    of the project allows: a language a newer mode added is refused for a project of an older
+    one. A folder of the language that is already there is reused whatever the case of its
+    name; a new one is named by the code with a capital (`Vi`).
     """
     yaml_path = Path(yaml_path)
     text, nl = _localized_strings_source(yaml_path, reader)
     folder = _language_folder(language)
-    languages, default = _descriptor_languages(yaml_path)
+    project = _project_languages(yaml_path)
+    languages, default = project.languages, project.default
     if folder == default:
         raise ScaffoldError(
-            f"{_LANGUAGE_BY_FOLDER[folder]} – язык по умолчанию: его значения лежат в самом "
+            f"{_language_name(folder)} – язык по умолчанию: его значения лежат в самом "
             "элементе, отдельный файл перевода для него не нужен"
         )
+    why = _unavailable(folder, project.mode)
+    if why is not None:
+        raise ScaffoldError(f"{why} – сначала поднимите РежимСовместимости описания проекта")
     if languages and folder not in languages:
         raise ScaffoldError(
-            f"Язык {_LANGUAGE_BY_FOLDER[folder]} не указан в ЯзыкиЛокализации описания "
+            f"Язык {_language_name(folder)} не указан в ЯзыкиЛокализации описания "
             "проекта – сначала добавьте его туда"
         )
     name = element_name(text, yaml_path.stem)
@@ -5141,7 +5251,8 @@ def op_add_localization(yaml_path: Path, language: str, *, reader=None) -> Scaff
     section_dir = dirs[0] if dirs else yaml_path.parent / (
         _LOCALIZATION_DIR_EN if lang == "en" else _LOCALIZATION_DIR_RU
     )
-    target = section_dir / folder / f"{name}.yaml"
+    language_dir = _language_dir(section_dir, folder) if section_dir.is_dir() else None
+    target = (language_dir or section_dir / folder) / f"{name}.yaml"
     if target.exists():
         raise ScaffoldError(f"Файл уже существует: {target}")
 
@@ -5157,7 +5268,7 @@ def op_add_localization(yaml_path: Path, language: str, *, reader=None) -> Scaff
     if pieces:
         result.notes.append(
             "Значения скопированы на языке по умолчанию – переведите их "
-            f"({_LANGUAGE_BY_FOLDER[folder]})"
+            f"({_language_name(folder)})"
         )
     if not languages:
         result.notes.append(
@@ -5178,8 +5289,8 @@ _LOCALIZATION_SECTIONS = ("Строки", "Шаблоны")
 class LocalizationChange:
     """One row set-localization writes: a key's text in ONE file, before and after.
 
-    `language` is the Russian name of the language (the spelling _LANGUAGE_BY_FOLDER and
-    every message here already use), not the folder code - a summary reads next to those
+    `language` is the Russian name of the language (the spelling _language_name gives and
+    every message here already uses), not the folder code - a summary reads next to those
     messages. `old` is "" when the key had no row in this file yet.
     """
 
@@ -5299,14 +5410,14 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
         if unknown:
             raise ScaffoldError(
                 f"Ключ {clean_name}: нет файла перевода для языка "
-                + ", ".join(_LANGUAGE_BY_FOLDER.get(code, code) for code in unknown)
+                + ", ".join(_language_name(code) for code in unknown)
                 + " – сначала добавьте язык (add-localization / meta_add_localization)"
             )
         base = texts.get(default, _section_entries(main_text).get(clean_name, ""))
         if not base:
             raise ScaffoldError(
                 f"Ключ {clean_name}: нет значения на языке по умолчанию "
-                f"({_LANGUAGE_BY_FOLDER.get(default, default)}) – элемент несёт сам текст, "
+                f"({_language_name(default)}) – элемент несёт сам текст, "
                 "переводы – только замену"
             )
 
@@ -5315,7 +5426,7 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
             main_text, key_section, clean_name, base, nl, lang,
         )
         entry_changes.append(LocalizationChange(
-            key=clean_name, language=_LANGUAGE_BY_FOLDER.get(default, default),
+            key=clean_name, language=_language_name(default),
             file=yaml_path, old=old_main, new=base,
         ))
 
@@ -5348,7 +5459,7 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
                 current, key_section, clean_name, written, other_nls[code], lang,
             )
             entry_changes.append(LocalizationChange(
-                key=clean_name, language=_LANGUAGE_BY_FOLDER.get(code, code),
+                key=clean_name, language=_language_name(code),
                 file=target, old=old_other, new=written,
             ))
 
@@ -5390,9 +5501,13 @@ def _section_of_key(text: str, name: str) -> str:
 
 
 def _translation_files(yaml_path: Path, name: str) -> dict[str, Path]:
-    """{folder code: the translation file} the element already has."""
+    """{folder code: the translation file} the element already has.
+
+    Keyed by the folder code of the language (`Vi`) whatever the case the folder is written
+    in - the key a caller's language name resolves to (see _language_dir).
+    """
     return {
-        lang_dir.name: lang_dir / f"{name}.yaml"
+        _canonical_folder(lang_dir.name): lang_dir / f"{name}.yaml"
         for base in _localization_dirs(yaml_path.parent)
         for lang_dir in sorted(base.iterdir())
         if lang_dir.is_dir() and (lang_dir / f"{name}.yaml").is_file()

@@ -18,6 +18,7 @@ string attribute gets МаксимальнаяДлина). Both are followed on 
 The result is xbsl/data/element/<version>/metamodel.json:
     { "classes": { "<Class>": {"props": {"<ru name>": {kind, ...}}, "ext": [...], "inline": [...]} },
       "enums": { "<EnumClass>": ["<Russian value>", ...] },
+      "languages": [ {"ru": "<name>", "en": "<name>", "code": "<ISO 639>", "since": "<mode>"} ],
       "vid2class": { "<ВидЭлемента>": "<root class>" },
       "vetted": [ kinds the unknown-property rule may judge ],
       "common": [universal keys of the project element envelope] }
@@ -46,7 +47,7 @@ import zipfile
 from pathlib import Path
 
 from xbsl.extract import _distro
-from xbsl.extract.terms import scan_kind_table
+from xbsl.extract.terms import scan_kind_table, scan_language_table
 
 # jar plugins that carry .xcore
 _JAR_RE = re.compile(r"designtime|\.model|mdd|dmf|metamodel", re.I)
@@ -453,13 +454,19 @@ def _fill_members(classes: dict, enums: dict, wrappers: set[str]) -> None:
                         node["inline"].append(d.group("type"))
 
 
-def extract(dist: Path) -> tuple[dict, dict, dict]:
-    """The classes, the enumerations and the kind table of the main .car.
+def extract(dist: Path) -> tuple[dict, dict, dict, list[dict[str, str]]]:
+    """The classes, the enumerations, the kind table and the languages of the main .car.
 
     The kind table (Russian kind -> its English spelling) is read from the serializer's own
     enum by the term extractor; it is taken here rather than from terms.json because this
     step runs BEFORE the terms one, and a mapping built from a stale dictionary would quietly
     lose the kinds a new build brings.
+
+    The languages are the enumeration the project descriptor types its localization languages
+    and its default language by. It is a compiled class, not an .xcore enumeration, so the
+    walk above never met it: the default language came out a `block` and the list of
+    languages a list of an unknown class. It joins the enumerations BEFORE the members are
+    typed, and the default language becomes an enumeration like any other.
     """
     car = _distro.find_car(dist)
     classes: dict = {}
@@ -477,8 +484,13 @@ def extract(dist: Path) -> tuple[dict, dict, dict]:
                 if m.endswith(".xcore"):
                     _parse_xcore(jz.read(m).decode("utf-8", "replace"), classes, enums, wrappers)
         kinds = scan_kind_table(z)
+        languages = scan_language_table(z)
+    rows: list[dict[str, str]] = []
+    if languages is not None:
+        language_class, rows = languages
+        enums.setdefault(language_class, [row["ru"] for row in rows])
     _fill_members(classes, enums, wrappers)
-    return classes, enums, kinds
+    return classes, enums, kinds, rows
 
 
 def main(argv=None) -> int:
@@ -499,8 +511,11 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    classes, enums, kinds = extract(dist)
+    classes, enums, kinds, languages = extract(dist)
     vid2class, unresolved = build_vid2class(classes, kinds)
+    if not languages:
+        print("ПРЕДУПРЕЖДЕНИЕ: в дистрибутиве не найдено перечисление языков локализации – "
+              "раздел languages остался пустым", file=sys.stderr)
     if not kinds:
         print("ПРЕДУПРЕЖДЕНИЕ: в дистрибутиве не найдено перечисление видов элементов – "
               "vid2class остался пустым", file=sys.stderr)
@@ -531,6 +546,9 @@ def main(argv=None) -> int:
             for k, v in sorted(classes.items())
         },
         "enums": dict(sorted(enums.items())),
+        # The languages in the order the platform declares them, each with its code (the
+        # folder of its translations is named by it) and the compatibility mode it needs.
+        "languages": languages,
         "vid2class": vid2class,
         "vetted": sorted(VETTED),
         "common": COMMON,
@@ -545,6 +563,8 @@ def main(argv=None) -> int:
         _distro.update_index(version, make_default=not args.no_default)
     print(f"Записано: {out} (версия {version})")
     print(f"  классов: {len(classes)}; перечислений: {len(enums)}; видов в vid2class: {len(vid2class)}")
+    listed = ", ".join(f"{row['ru']} ({row['code']}, с {row['since']})" for row in languages)
+    print(f"  языков локализации: {len(languages)}" + (f" – {listed}" if listed else ""))
     return 0
 
 

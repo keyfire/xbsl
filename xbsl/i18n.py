@@ -1412,8 +1412,11 @@ _CORE_MESSAGES = {
         "en": "the yaml of the LocalizedStrings element",
     },
     "cli.help.scaf.al-language": {
-        "ru": "язык перевода: Русский/Английский или код Ru/En",
-        "en": "the translation language: Russian/English or the Ru/En code",
+        "ru": "язык перевода: название на любом языке проекта (Вьетнамский, Vietnamese) или код "
+              "папки (Vi); языки и нужный им режим совместимости берутся из данных платформы",
+        "en": "the translation language: its name in either project language (Vietnamese) or "
+              "the folder code (Vi); the languages and the compatibility mode each one needs "
+              "come from the platform data",
     },
     "cli.help.scaf.set-localization": {
         "ru": "записать строку локализации во все языки сразу: в элемент и в его переводы; см. "

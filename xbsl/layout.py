@@ -43,6 +43,24 @@ SUBSYSTEM_FILES = ("Подсистема.yaml", "Subsystem.yaml")
 #: The Russian names of the service folders that are not packages.
 _SERVICE_DIRS_RU = ("Ресурсы", "Локализация")
 
+#: The localization section of a subsystem or a package, in both spellings. The platform
+#: declares the pair itself (a term of the reader of project sources), so it stands without
+#: the data as well.
+LOCALIZATION_DIRS = ("Локализация", "Localization")
+
+
+def translation_language(path: Path | str) -> str | None:
+    """The language folder of a translation file, or None when the path is not one.
+
+    A translation of a localized-strings element lies at `<section>/<language>/<Name>.yaml`,
+    the section being the localization folder of a subsystem or a package. The folder is
+    returned as written - the platform reads the language code out of it regardless of case.
+    """
+    parents = Path(path).parents
+    if len(parents) < 2 or parents[1].name not in LOCALIZATION_DIRS:
+        return None
+    return parents[0].name
+
 
 @lru_cache(maxsize=1)
 def service_dirs() -> frozenset[str]:

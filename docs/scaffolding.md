@@ -183,6 +183,16 @@ refused, because that file carries neither a kind nor the sections of an element
 names the element the file belongs to and the same `set-localization`. It used to read "the
 kind ? has no section for it".
 
+`add-localization <strings>.yaml <language>` adds a translation, and `localization-info` lists
+the languages one can be added for. The languages are the platform's own enumeration, read
+from the data together with the compatibility mode each one needs, so Chinese, Vietnamese and
+Tajik stand next to Russian and English once the data carries them. A language a newer mode
+added is offered and added only for a project of that mode, and a value of
+`LocalizationLanguages` the data knows no language by is named in the notes instead of
+vanishing from the answer. A new translation goes to the folder of the language code with a
+capital (`Localization/Vi`); a folder already written in another case (`vi`) is found as it
+is, since the platform reads the code regardless of case.
+
 `add-dependency` attaches a library: it writes the `Libraries` section of the project descriptor
 with `Name`, `Vendor` and `Version`. The version here is the library's **release** version. A
 release is issued in the control panel, and a build version with a suffix such as `1.0-42` is

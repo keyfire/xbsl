@@ -448,6 +448,101 @@ def test_translate_project_renames_swaps_and_flips(tmp_path: Path):
     assert "Id: ffeacdec-02d6-4f08-bcfa-be89e9a1861a" in project_yaml
 
 
+def _three_language_project(root: Path, english_folder: str = "En") -> None:
+    """A dictionary with a translation into the target language and one into a third language."""
+    _write(root / "Проект.yaml", (
+        "Ид: ffeacdec-02d6-4f08-bcfa-be89e9a1861a\n"
+        "Поставщик: Acme\n"
+        "Имя: Задачник\n"
+        "Версия: 1.0.0\n"
+        "ЯзыкиЛокализации: [Русский, Английский]\n"
+        "ЯзыкПоУмолчанию: Русский\n"
+        "ЯзыкРазработки: Русский\n"
+    ))
+    _write(root / "Основное" / "Подсистема.yaml", "Интерфейс: ВключатьВАвтоИнтерфейс\n")
+    _write(root / "Основное" / "СловарьСтрок.yaml", (
+        "ВидЭлемента: ЛокализованныеСтроки\n"
+        "Ид: 11ac08d0-a2ef-4011-bdbc-0b7a1358e4e7\n"
+        "Имя: СловарьСтрок\n"
+        "ОбластьВидимости: ВПроекте\n"
+        "Строки:\n"
+        "    Записать: Записать\n"
+    ))
+    _write(root / "Основное" / "Локализация" / english_folder / "СловарьСтрок.yaml",
+           "Строки:\n    Записать: Save\n")
+    _write(root / "Основное" / "Локализация" / "Vi" / "СловарьСтрок.yaml",
+           "Строки:\n    Записать: Lưu\n")
+
+
+_THREE_LANGUAGE_TOKENS = {"Задачник": "TaskBook", "Основное": "Main",
+                          "СловарьСтрок": "StringsDictionary", "Записать": "Save"}
+
+
+def test_a_translation_into_a_third_language_keeps_its_place(tmp_path: Path):
+    """Only the target language swaps places with the base; a translation into any other one
+    is marked as kept rather than skipped by the accident of a search for `En` alone. Its keys
+    follow the base keys, its values stay in its own language, and its folder keeps its code."""
+    from xbsl.translation.project import _iter_files, _localization_map
+
+    root = tmp_path / "Acme" / "Задачник"
+    _three_language_project(root)
+    dictionary = _dictionary(tokens=_THREE_LANGUAGE_TOKENS)
+
+    roles = {path.relative_to(root).as_posix(): swap.role
+             for path, swap in _localization_map(root, _iter_files(root, dictionary)).items()}
+    assert roles == {
+        "Основное/СловарьСтрок.yaml": "base",
+        "Основное/Локализация/En/СловарьСтрок.yaml": "section",
+        "Основное/Локализация/Vi/СловарьСтрок.yaml": "kept",
+    }
+
+    out = tmp_path / "out"
+    report = translate_project(root, dictionary, out)
+
+    base = (out / "Main" / "StringsDictionary.yaml").read_text(encoding="utf-8")
+    assert "    Save: Save" in base
+    russian = (out / "Main" / "Localization" / "Ru" / "StringsDictionary.yaml").read_text(
+        encoding="utf-8")
+    assert "    Save: Записать" in russian
+    vietnamese = (out / "Main" / "Localization" / "Vi" / "StringsDictionary.yaml").read_text(
+        encoding="utf-8")
+    assert vietnamese == "Strings:\n    Save: Lưu\n"
+    assert not (out / "Main" / "Localization" / "En").exists()
+    assert not report.problems, report.problems
+
+
+def test_the_partner_folder_is_found_whatever_the_case_of_its_name(tmp_path: Path):
+    """The platform reads the language of a translation folder regardless of case, so `en` is
+    the partner of the swap as much as `En` is."""
+    root = tmp_path / "Acme" / "Задачник"
+    _three_language_project(root, english_folder="en")
+    out = tmp_path / "out"
+
+    report = translate_project(root, _dictionary(tokens=_THREE_LANGUAGE_TOKENS), out)
+
+    assert "    Save: Save" in (out / "Main" / "StringsDictionary.yaml").read_text(encoding="utf-8")
+    assert (out / "Main" / "Localization" / "Vi" / "StringsDictionary.yaml").is_file()
+    assert not report.problems, report.problems
+
+
+def test_a_language_of_a_newer_mode_is_spelled_by_the_platform_data():
+    """The languages a newer compatibility mode added have their English names in the data,
+    the way Russian and English always had: no dictionary of a project has to spell them."""
+    from xbsl import metamodel
+
+    if "vi" not in {language.code for language in metamodel.languages()}:
+        pytest.skip("данные собраны экстрактором без таблицы языков")
+    text = (
+        "Ид: ffeacdec-02d6-4f08-bcfa-be89e9a1861a\nИмя: Задачник\nПоставщик: Acme\n"
+        "ЯзыкиЛокализации: [Русский, Английский, Вьетнамский]\nЯзыкПоУмолчанию: Русский\n"
+    )
+
+    out, report = _yaml(text, tokens={"Задачник": "TaskBook"}, name="Проект.yaml")
+
+    assert "LocalizationLanguages: [Russian, English, Vietnamese]" in out
+    assert report.platform_missing == 0 and report.user_missing == 0
+
+
 def _mini_project(root: Path) -> None:
     """The smallest tree that has a descriptor: the two names the layout is built from."""
     _write(root / "Проект.yaml", (
