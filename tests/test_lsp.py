@@ -828,3 +828,37 @@ def test_the_panel_spells_a_value_the_way_its_enumeration_does(tmp_path):
         assert lsp.enum_values_in("FavoriteImportance", "en") == ["Обычная", "High"]
     finally:
         dataset.set_data_root(None)
+
+
+def test_the_panel_offers_only_the_values_of_the_project_mode(tmp_path):
+    """A value added in a newer mode, or taken off after an older one, is not one the project
+    may write, and the panel does not offer it; a project whose mode is not known is offered
+    everything. The mode is read from the description of the project under the root, the
+    way the build reads it."""
+    from xbsl import dataset
+
+    _enumeration_data(tmp_path / "data")
+    project = tmp_path / "project"
+    (project / "Основное").mkdir(parents=True)
+    descriptor = project / "Проект.yaml"
+    descriptor.write_text("ВидПроекта: Приложение\nИмя: Проба\nРежимСовместимости: 9.0\n",
+                          encoding="utf-8")
+    dataset.set_data_root(tmp_path / "data")
+    lsp._project_descriptor.cache_clear()
+    try:
+        mode = lsp._project_mode(str(project))
+        assert mode == (9, 0)
+        assert lsp.enum_values_in("TaskImportance", "ru", mode) == ["Низкая", "Обычная"]
+        assert lsp.enum_values_in("FavoriteImportance", "en", mode) == ["Usual", "High"]
+        assert lsp.enum_values_in("FavoriteImportance", "en", (9, 1)) == ["High"]
+        assert lsp.enum_values_in("TaskImportance", "ru", (9, 1)) == ["Низкая", "Обычная", "Срочная"]
+        assert lsp.enum_values_in("TaskImportance", "ru") == ["Низкая", "Обычная", "Срочная"]
+        # The mode follows an edit of the description; no project, no mode.
+        descriptor.write_text("ВидПроекта: Приложение\nИмя: Проба\nРежимСовместимости: 9.1\n",
+                              encoding="utf-8")
+        assert lsp._project_mode(str(project)) == (9, 1)
+        assert lsp._project_mode(str(tmp_path / "data")) is None
+        assert lsp._project_mode(None) is None
+    finally:
+        dataset.set_data_root(None)
+        lsp._project_descriptor.cache_clear()

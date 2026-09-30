@@ -406,6 +406,57 @@ def test_mcp_metadata_schema(mcp_module, mm_root):
     assert one["enums"]["VisibilityScopeEnum"] == ["ВПодсистеме", "ВПроекте", "Глобально"]
 
 
+def test_a_value_is_available_between_the_modes_its_record_names(tmp_path):
+    """The mode a value appeared in and the last mode that has it both count; a value without
+    a record, a mode the data cannot read and an unknown project mode limit nothing."""
+    dated = {**_MM, "enum_items": {"VisibilityScopeEnum": {
+        "ВПодсистеме": {"en": "InSubsystem", "since": "9.1"},
+        "Глобально": {"en": "Global", "since": "8.2", "until": "9.0"},
+        "ВПроекте": {"en": "InProject", "until": "later"},
+    }}}
+    _root(tmp_path, dated)
+    try:
+        available = [(value, mode) for value in metamodel.enum_values("VisibilityScopeEnum")
+                     for mode in ((8, 0), (8, 2), (9, 0), (9, 1))
+                     if metamodel.enum_value_available("VisibilityScopeEnum", value, mode)]
+        assert available == [
+            ("ВПодсистеме", (9, 1)),
+            ("ВПроекте", (8, 0)), ("ВПроекте", (8, 2)), ("ВПроекте", (9, 0)), ("ВПроекте", (9, 1)),
+            ("Глобально", (8, 2)), ("Глобально", (9, 0)),
+        ]
+        assert metamodel.enum_value_modes("VisibilityScopeEnum", "Глобально") == ("8.2", "9.0")
+        assert metamodel.enum_value_available("VisibilityScopeEnum", "ВПодсистеме", None)
+        assert metamodel.enum_value_english("VisibilityScopeEnum", "Глобально") == "Global"
+        assert metamodel.enum_value_english("VisibilityScopeEnum", "Нигде") is None
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_legacy_data_limits_no_value_and_spells_none(legacy_root):
+    assert metamodel.enum_value_modes("VisibilityScopeEnum", "Глобально") == (None, None)
+    assert metamodel.enum_value_available("VisibilityScopeEnum", "Глобально", (9, 0))
+    assert metamodel.enum_value_english("VisibilityScopeEnum", "Глобально") is None
+
+
+def test_mcp_metadata_schema_names_the_modes_a_value_is_limited_to(mcp_module, tmp_path):
+    """The values keep their list; the ones a compatibility mode limits come with the limits,
+    and an answer with nothing limited has no such section at all."""
+    dated = {**_MM, "enum_items": {"VisibilityScopeEnum": {
+        "ВПодсистеме": {"en": "InSubsystem", "since": "9.1"},
+        "ВПроекте": {"en": "InProject"},
+        "Глобально": {"en": "Global", "until": "9.0"},
+    }}}
+    _root(tmp_path, dated)
+    try:
+        one = mcp_module.metadata_schema("Справочник")
+        assert one["enums"]["VisibilityScopeEnum"] == ["ВПодсистеме", "ВПроекте", "Глобально"]
+        assert one["enum_modes"] == {"VisibilityScopeEnum": {
+            "ВПодсистеме": {"since": "9.1"}, "Глобально": {"until": "9.0"}}}
+        assert "enum_modes" not in mcp_module.metadata_schema("Документ")
+    finally:
+        dataset.set_data_root(None)
+
+
 def test_mcp_metadata_schema_of_a_collection_item(mcp_module, mm_root):
     item = mcp_module.metadata_schema("Справочник", ["Реквизиты"], ["Срок"])
     assert item["class"] == "AcmeRegularAttributeDescriptor"

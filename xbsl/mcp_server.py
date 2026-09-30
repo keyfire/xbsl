@@ -928,6 +928,19 @@ def ui_schema(component: str | None = None, brief: bool = False, property: str |
     return uischema.catalog()
 
 
+def _enum_modes(enums: dict[str, list[str]]) -> dict[str, dict[str, dict[str, str]]]:
+    """{enumeration: {value: {"since", "until"}}} of the values the platform limits to some
+    compatibility modes - the others are in every mode and are not repeated here."""
+    out: dict[str, dict[str, dict[str, str]]] = {}
+    for name, values in enums.items():
+        for value in values:
+            since, until = metamodel.enum_value_modes(name, value)
+            limits = {**({"since": since} if since else {}), **({"until": until} if until else {})}
+            if limits:
+                out.setdefault(name, {})[value] = limits
+    return out
+
+
 @mcp.tool()
 def metadata_schema(
     kind: str | None = None,
@@ -939,7 +952,10 @@ def metadata_schema(
     Without arguments - the kinds the metamodel covers. With `kind` - its properties, each
     with a value kind (boolean | number | string | enum | type | block | list), the declared
     type, the platform default, the version it appeared in and the alternate spellings the
-    compiler still accepts, plus "enums" - the values of the enumerations they reference.
+    compiler still accepts, plus "enums" - the values of the enumerations they reference - and
+    "enum_modes" - the values a compatibility mode limits: `since` is the mode a value
+    appeared in, `until` the last mode that has it. Hold them against the compatibility mode
+    of the project: a value outside its modes is not one to write.
     `block` and `list` are the nested structures (КонтрольДоступа, Реквизиты), written as
     yaml blocks rather than a scalar. Use it before writing an element yaml by hand:
     it answers "what else may a Справочник declare" without guessing.
@@ -983,6 +999,9 @@ def metadata_schema(
         "props": props,
         "enums": enums,
     }
+    dated = _enum_modes(enums)
+    if dated:
+        answer["enum_modes"] = dated
     if not props:
         # An empty answer has two very different causes - the platform has no such kind, or
         # THESE data files do not know it yet (a server started before the data was
