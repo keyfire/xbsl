@@ -428,6 +428,13 @@ as its base, with the keys translated. The original values move under `Localizat
 the project descriptor's default and development languages follow. A key with no value in the
 target language keeps the original one and is reported.
 
+Only the translation into the target language swaps places with the base. Its folder is found
+by the language code whatever the case of the name, the way the platform finds it. A
+translation into any other language (`Localization/Vi` next to `Localization/En`) keeps its
+place: its keys follow the base keys through the same dictionary, and its values stay in its
+own language. The English names of the languages come from the platform data, so a descriptor
+that lists Vietnamese needs no dictionary entry for it.
+
 ## Coverage and the gaps
 
 `--coverage` prints the dictionary's share for every metadata object, meaning the yaml and xbsl
