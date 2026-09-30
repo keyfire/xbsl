@@ -18,6 +18,14 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **`from xbsl import scaffold` works as the first import of a process.** It used to fail on a
+  circular import: loading the engine loads the rules, and a rule takes a name from the
+  scaffolding module. `import xbsl.resource_usage` failed the same way.
+
 ## 2026-09-30 – 0.125.0, 0.126.0
 
 ### Added

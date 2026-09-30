@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine, fixer, metamodel, resources as resource_model, restext, terms, uischema
+from xbsl import dataset, metamodel, resources as resource_model, restext, terms, uischema
 from xbsl.layout import Layout, Place, service_dirs
 from xbsl.lexer import _skip_interpolation
 
@@ -9505,3 +9505,11 @@ def resource_references(root: Path, resource_path: Path, *, reader=None,
         "references": shown,
         "hasMore": len(shown) < len(places),
     }
+
+
+# The engine is imported last, once every name of this module exists. Importing it loads the
+# rule package, and rules take names from here at their own import - `latin_url_path`, and
+# `ScaffoldError` through the form model. Imported at the top, the engine ran before any of
+# those names were defined, and `from xbsl import scaffold` failed as the first import of a
+# process. The functions above read the engine and the fixer at call time only.
+from xbsl import engine, fixer  # noqa: E402
