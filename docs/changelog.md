@@ -44,8 +44,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`from xbsl import scaffold` works as the first import of a process.** It used to fail on a
   circular import: loading the engine loads the rules, and a rule takes a name from the
   scaffolding module. `import xbsl.resource_usage` failed the same way.
-### Fixed
-
 - **`xbsl extract` lists the values of properties typed by compiled enumerations.** `Importance`
   of a command, `WeekDays` and `Months` of a schedule, `Periodicity` of a constants set and ten more
   properties were typed as blocks with no values, and the values had no English spelling. The
