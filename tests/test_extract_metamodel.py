@@ -196,3 +196,84 @@ def test_a_property_typed_by_a_wrapped_enumeration_gets_its_values(tmp_path):
     assert written["enums"]["Priority"] == ["Низкая", "Высокая"]
     assert written["enums"]["StepState"] == ["Готово"]
     assert "Unused" not in written["enums"] and "Missing" not in written["enums"]
+
+
+# --- every value with its English spelling and the modes that have it ------------------------
+
+
+_IMPORTANCE_XCORE = """
+package demo.acme.model
+
+import demo.acme.types.Placement
+
+type LegendPlacement wraps Placement
+
+enum TaskImportance {
+    Low as "Низкая",
+    Normal as "Обычная"
+}
+
+enum FavoriteImportance {
+    Usual as "Обычная" = 1,
+    High as "Высокая" = 2
+}
+
+class TaskCommandDescriptor {
+    @PropertyInfo(ru="Важность", en="Importance")
+    unsettable TaskImportance importance = "Normal"
+    @PropertyInfo(ru="ВажностьИзбранного", en="FavoriteImportance")
+    unsettable FavoriteImportance favoriteImportance
+    @PropertyInfo(ru="РасположениеЛегенды", en="LegendPlacement")
+    unsettable LegendPlacement legendPlacement
+    @PropertyInfo(ru="ЯзыкПоУмолчанию", en="DefaultLanguage")
+    DemoLanguages defaultLanguage
+}
+"""
+
+
+def test_every_value_is_written_with_the_english_of_its_own_enumeration(tmp_path):
+    """Two enumerations spell one Russian value apart, and the flat table of the term pairs
+    drops such a word; the records keep it per enumeration, as each one declares it - the
+    literal of the model, the pair a compiled value is built from, the term of a language.
+    The modes come with the values the platform dates: the builder of a compiled item and the
+    table of the languages. The records follow the order of the values."""
+    import json
+
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration, _value_enumeration
+    from test_extract_terms import _car_with_classes
+
+    from xbsl.extract import _distro
+    from xbsl.extract import metamodel as extract_metamodel
+
+    dist = _car_with_classes(tmp_path / "dist", {
+        "demo/lang/DemoLanguages.class": _enumeration(DEMO_LANGUAGES),
+        "demo/acme/types/Placement.class": _value_enumeration("demo/acme/types/Placement", [
+            ("TOP", "Top", "Сверху"),
+            ("OVER", "Over", "Поверх", ("removedAfter", "CMODE_8_2")),
+            ("SIDE", ("added", "CMODE_9_1"), "Side", "Сбоку"),
+        ], builder=True),
+    }, jar_name="com.e1c.g5rt.demo.designtime-1.0.jar",
+        extra={"model/demo.xcore": _IMPORTANCE_XCORE})
+    root = tmp_path / "data"
+    try:
+        extract_metamodel.main(["--dist", str(dist), "--element-version", "9.9.9+1",
+                                "--data-dir", str(root)])
+    finally:
+        _distro.set_data_root(None)
+    written = json.loads((root / "9.9.9+1" / "metamodel.json").read_text(encoding="utf-8"))
+
+    assert written["enum_items"] == {
+        "DemoLanguages": {
+            "Английский": {"en": "English", "since": "1.0"},
+            "Вьетнамский": {"en": "Vietnamese", "since": "9.1"},
+        },
+        "FavoriteImportance": {"Обычная": {"en": "Usual"}, "Высокая": {"en": "High"}},
+        "LegendPlacement": {
+            "Сверху": {"en": "Top"},
+            "Поверх": {"en": "Over", "until": "8.2"},
+            "Сбоку": {"en": "Side", "since": "9.1"},
+        },
+        "TaskImportance": {"Низкая": {"en": "Low"}, "Обычная": {"en": "Normal"}},
+    }
+    assert written["enums"]["LegendPlacement"] == ["Сверху", "Поверх", "Сбоку"]
+    assert list(written["enum_items"]["LegendPlacement"]) == written["enums"]["LegendPlacement"]

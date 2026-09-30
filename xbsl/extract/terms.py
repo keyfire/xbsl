@@ -828,8 +828,42 @@ def _is_value_pair(english: str, russian: str) -> bool:
     return _is_term_pair(english, russian) or (russian == english and bool(_EN_NAME_RE.match(english)))
 
 
-def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
-    """[(English, Russian)] of every value a compiled enumeration declares, or None for another class.
+@dataclass(frozen=True)
+class EnumerationValue:
+    """One value of a compiled enumeration: its two spellings and the modes that have it.
+
+    `since` - the compatibility mode the value is added in; `until` - the last mode that still
+    has it. Either is None where the class states no such limit.
+    """
+
+    english: str
+    russian: str
+    since: str | None = None
+    until: str | None = None
+
+
+#: The calls an item of a compiled enumeration is dated by: the builder of the item takes the
+#: mode a value is added in (`added`), and the last mode it is kept in (`removedAfter` - the
+#: platform takes the value off in the modes after it).
+_VALUE_ADDED = "ItemInfo$Builder.added"
+_VALUE_REMOVED_AFTER = "ItemInfo$Builder.removedAfter"
+
+
+def _value_modes(constant: classcode.DeclaredConstant) -> tuple[str | None, str | None]:
+    """(since, until) of one value, as the calls that take a mode for it state them.
+
+    A mode taken by a call of another kind - a constructor, a spelling kept up to a mode -
+    says nothing about when the value is available, and is not read as such.
+    """
+    since = next((mode for called, mode in constant.mode_calls
+                  if called.endswith(_VALUE_ADDED)), None)
+    until = next((mode for called, mode in constant.mode_calls
+                  if called.endswith(_VALUE_REMOVED_AFTER)), None)
+    return since, until
+
+
+def enumeration_values(blob: bytes) -> list[EnumerationValue] | None:
+    """Every value a compiled enumeration declares, or None for another class.
 
     Some enumerations a property of the model is typed by are compiled classes the model only
     wraps (`type Importance wraps ImportanceG5Enum`): no `.xcore` lists their values, so the
@@ -840,6 +874,9 @@ def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
     is the pair. Without a term the pair is the first two strings after the name that read as an
     English name and its Russian twin; a value spelled alike in both languages counts too.
 
+    The builder also dates an item: `added(<mode>)` names the mode the value appeared in,
+    `removedAfter(<mode>)` the last mode that has it (see _value_modes).
+
     A class counts only when EVERY constant it builds has that shape: its first string is its
     own name, and one pair follows. The values come in the order the class declares them.
     """
@@ -849,7 +886,7 @@ def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
         return None
     if not constants:
         return None
-    values: list[tuple[str, str]] = []
+    values: list[EnumerationValue] = []
     for constant in constants:
         strings = constant.strings
         if not strings or strings[0] != constant.field or len(constant.terms) > 1:
@@ -861,13 +898,13 @@ def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
                          if _is_value_pair(english, russian)), None)
         if pair is None or not _is_value_pair(*pair):
             return None
-        values.append(pair)
+        values.append(EnumerationValue(*pair, *_value_modes(constant)))
     return values
 
 
 def scan_enumeration_classes(
     car: zipfile.ZipFile, paths: set[str],
-) -> dict[str, list[tuple[str, str]]]:
+) -> dict[str, list[EnumerationValue]]:
     """{class file path: its values (see enumeration_values)} for the compiled enumerations named.
 
     `paths` are the class files the caller wants (`pkg/Name.class`); one that is not an
@@ -875,7 +912,7 @@ def scan_enumeration_classes(
     designer and the language server each ship a copy of such a class, and should they ever
     differ, the fullest list stands - the way the kind table is read.
     """
-    found: dict[str, list[tuple[str, str]]] = {}
+    found: dict[str, list[EnumerationValue]] = {}
     if not paths:
         return found
     for entry in car.namelist():
@@ -1153,8 +1190,8 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     # typed by: the importance of a command, the days of a weekly schedule, the periodicity of
     # a set of constants. A value two of them spell apart is a conflict like any other.
     for values in compiled.values():
-        for english, russian in values:
-            _add(enums, russian, english, conflicts["enums"])
+        for value in values:
+            _add(enums, value.russian, value.english, conflicts["enums"])
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]

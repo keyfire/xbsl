@@ -424,13 +424,16 @@ class DeclaredConstant:
     `field` - the static field the constant is stored into (its name); `strings` - every
     string constant pushed for it, in order; `terms` - the terms built from two of them,
     (English, Russian) as TERM_FACTORIES take them; `modes` - the compatibility modes the code
-    reads for it (`CMODE_9_0` -> `9.0`).
+    reads for it (`CMODE_9_0` -> `9.0`); `mode_calls` - the same modes with the call that takes
+    each of them, (the called method, the mode): the mode alone does not say what it means, the
+    call does - a value added in the mode, or one the platform keeps up to it.
     """
 
     field: str
     strings: tuple[str, ...]
     terms: tuple[tuple[str, str], ...]
     modes: tuple[str, ...]
+    mode_calls: tuple[tuple[str, str], ...] = ()
 
 
 def declared_constants(blob: bytes) -> list[DeclaredConstant]:
@@ -445,7 +448,8 @@ def declared_constants(blob: bytes) -> list[DeclaredConstant]:
     is not a constant either.
 
     Nothing here knows what the arguments mean: the caller reads its own shape out of the
-    strings, the terms and the modes (see extract.terms.language_rows).
+    strings, the terms and the modes (see extract.terms.language_rows). A mode goes to the
+    first call made after it is read - the call that takes it as an argument.
     """
     pool, position = constant_pool(blob)
     own = text(pool, int.from_bytes(blob[position + 2:position + 4], "big"))
@@ -454,7 +458,8 @@ def declared_constants(blob: bytes) -> list[DeclaredConstant]:
         building: dict | None = None
         for opcode, operand in _walk(code):
             if opcode == _NEW and text(pool, operand) == own:
-                building = {"strings": [], "terms": [], "modes": [], "pushed": [], "built": False}
+                building = {"strings": [], "terms": [], "modes": [], "pushed": [], "built": False,
+                            "pending": [], "mode_calls": []}
             elif building is None:
                 continue
             elif opcode in (_LDC, _LDC_W):
@@ -466,6 +471,7 @@ def declared_constants(blob: bytes) -> list[DeclaredConstant]:
                 mode = _mode(field_name(pool, operand))
                 if mode is not None:
                     building["modes"].append(mode)
+                    building["pending"].append(mode)
             elif opcode in _INVOKE:
                 name = called_method(pool, operand) or ""
                 pushed = building["pushed"]
@@ -475,14 +481,15 @@ def declared_constants(blob: bytes) -> list[DeclaredConstant]:
                         building["terms"].append((english, russian))
                 if name == f"{own}.<init>":
                     building["built"] = True
-                building["pushed"] = []
+                building["mode_calls"].extend((name, mode) for mode in building["pending"])
+                building["pushed"], building["pending"] = [], []
             elif opcode == _PUTSTATIC:
                 field = field_name(pool, operand)
                 own_typed = field_descriptor(pool, operand) == f"L{own};"
                 if building["built"] and field and own_typed:
                     found.append(DeclaredConstant(
                         field, tuple(building["strings"]), tuple(building["terms"]),
-                        tuple(building["modes"]),
+                        tuple(building["modes"]), tuple(building["mode_calls"]),
                     ))
                 building = None
     return found

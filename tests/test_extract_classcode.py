@@ -627,15 +627,17 @@ DEMO_LANGUAGES = [
 
 
 def test_each_constant_comes_with_what_built_it():
+    """The mode of a language is an argument of the constructor itself, and the reading says
+    which call took it."""
     blob = _enumeration(DEMO_LANGUAGES)
 
     assert classcode.declared_constants(blob) == [
         classcode.DeclaredConstant(
             "EN", ("EN", "en", "English", "Английский", "0f0e-en"),
-            (("English", "Английский"),), ("1.0",)),
+            (("English", "Английский"),), ("1.0",), ((LANGUAGES + ".<init>", "1.0"),)),
         classcode.DeclaredConstant(
             "VIETNAMESE", ("VIETNAMESE", "vi", "Vietnamese", "Вьетнамский", "0f0e-vi"),
-            (("Vietnamese", "Вьетнамский"),), ("9.1",)),
+            (("Vietnamese", "Вьетнамский"),), ("9.1",), ((LANGUAGES + ".<init>", "9.1"),)),
     ]
 
 
@@ -665,9 +667,11 @@ def _value_enumeration(owner: str, constants: list[tuple[str, ...]], builder: bo
     `LOW("LOW", 0, "Low", <Russian>, UUID.fromString(<id>))`. With `builder` they go to a
     builder of the item first, and the builder to the constructor - the shape of
     `TOP("TOP", 0, info().named("Top", <Russian>))`; a mode field after the strings is read by
-    the builder too. The object is stored into the field of the class's own type. Without
-    `named` the constant name is not pushed - a class that builds its instances the way an
-    enumeration does, but is none.
+    the builder too, as the mode the value is added in. A (call, mode field) item dates the value
+    by that call of the builder (`added`, `removedAfter`) - before the strings when it stands
+    before them, the shape of `info().added(<mode>).named(...)`, after them otherwise. The object
+    is stored into the field of the class's own type. Without `named` the constant name is not
+    pushed - a class that builds its instances the way an enumeration does, but is none.
     """
     pool = _Pool()
     code_name = pool.text("Code")
@@ -677,14 +681,26 @@ def _value_enumeration(owner: str, constants: list[tuple[str, ...]], builder: bo
         info = pool.method(_INFO, "info", f"()L{_INFO_BUILDER};")
         named = pool.method(_INFO_BUILDER, "named",
                             f"(Ljava/lang/String;Ljava/lang/String;)L{_INFO_BUILDER};")
-        added = pool.method(_INFO_BUILDER, "added", f"(Ldemo/utils/Mode;)L{_INFO_BUILDER};")
+        dating = {call: pool.method(_INFO_BUILDER, call, f"(Ldemo/utils/Mode;)L{_INFO_BUILDER};")
+                  for call in ("added", "removedAfter")}
     else:
         init = pool.method(owner, "<init>",
                            "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;Ljava/util/UUID;)V")
         uuid = pool.method("java/util/UUID", "fromString", "(Ljava/lang/String;)Ljava/util/UUID;")
+
+    def dated(call: str, mode: str) -> bytes:
+        return (bytes([0xB2]) + struct.pack(">H", _typed_field(               # getstatic
+                    pool, "demo/utils/Mode", mode, "Ldemo/utils/Mode;"))
+                + bytes([0xB6]) + struct.pack(">H", dating[call]))           # invokevirtual
+
     body = bytearray()
-    for ordinal, (field, *strings) in enumerate(constants):
-        mode = strings.pop() if builder and strings and strings[-1].startswith("CMODE_") else None
+    for ordinal, (field, *items) in enumerate(constants):
+        if builder and items and isinstance(items[-1], str) and items[-1].startswith("CMODE_"):
+            items[-1] = ("added", items[-1])
+        first = next((at for at, item in enumerate(items) if isinstance(item, str)), len(items))
+        before = [item for item in items[:first] if not isinstance(item, str)]
+        after = [item for item in items[first:] if not isinstance(item, str)]
+        strings = [item for item in items if isinstance(item, str)]
         body += bytes([0xBB]) + struct.pack(">H", pool.klass(owner))       # new
         body += bytes([0x59])                                                 # dup
         if named:
@@ -692,14 +708,14 @@ def _value_enumeration(owner: str, constants: list[tuple[str, ...]], builder: bo
         body += bytes([0x03 + ordinal])                                       # iconst_<ordinal>
         if builder:
             body += bytes([0xB8]) + struct.pack(">H", info)                  # invokestatic
+            for call, mode in before:
+                body += dated(call, mode)
         for value in strings:
             body += bytes([0x13]) + struct.pack(">H", pool.string(value))   # ldc_w
         if builder:
             body += bytes([0xB6]) + struct.pack(">H", named)                 # invokevirtual
-            if mode:
-                body += bytes([0xB2]) + struct.pack(">H", _typed_field(      # getstatic
-                    pool, "demo/utils/Mode", mode, "Ldemo/utils/Mode;"))
-                body += bytes([0xB6]) + struct.pack(">H", added)
+            for call, mode in after:
+                body += dated(call, mode)
         else:
             body += bytes([0xB8]) + struct.pack(">H", uuid)                  # invokestatic
         body += bytes([0xB7]) + struct.pack(">H", init)                      # invokespecial
@@ -743,6 +759,25 @@ def test_each_value_of_an_enumeration_is_built_with_its_name_first():
     assert [(constant.field, constant.strings, constant.modes) for constant in built] == [
         ("DONE", ("DONE", "Done", "Готово"), ()),
         ("SKIPPED", ("SKIPPED", "Skipped", "Пропущен"), ("9.1",)),
+    ]
+
+
+def test_a_mode_goes_to_the_call_that_takes_it():
+    """A builder dates an item before its spellings or after them, and by two calls of opposite
+    meaning; the mode alone would not tell `added` from `removedAfter`, the call does."""
+    built = classcode.declared_constants(_value_enumeration("demo/acme/StepState", [
+        ("DONE", ("added", "CMODE_9_1"), "Done", "Готово"),
+        ("SKIPPED", "Skipped", "Пропущен", ("removedAfter", "CMODE_9_0")),
+        ("OPEN", "Open", "Открыт"),
+    ], builder=True))
+
+    assert [(constant.field, constant.mode_calls) for constant in built] == [
+        ("DONE", ((_INFO_BUILDER + ".added", "9.1"),)),
+        ("SKIPPED", ((_INFO_BUILDER + ".removedAfter", "9.0"),)),
+        ("OPEN", ()),
+    ]
+    assert [constant.strings for constant in built] == [
+        ("DONE", "Done", "Готово"), ("SKIPPED", "Skipped", "Пропущен"), ("OPEN", "Open", "Открыт"),
     ]
 
 

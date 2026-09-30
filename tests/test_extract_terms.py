@@ -1045,17 +1045,44 @@ def test_the_step_gives_every_language_its_english_spelling(tmp_path):
 def test_the_values_of_a_compiled_enumeration_come_in_both_spellings():
     from test_extract_classcode import DEMO_PRIORITIES, PRIORITIES, _value_enumeration
 
-    from xbsl.extract.terms import enumeration_values
+    from xbsl.extract.terms import EnumerationValue, enumeration_values
 
     built = _value_enumeration("demo/acme/StepState", [
         ("DONE", "Done", "Готово"), ("PLAIN_TEXT", "PlainText", "PlainText", "CMODE_9_1"),
     ], builder=True)
 
     assert enumeration_values(_value_enumeration(PRIORITIES, DEMO_PRIORITIES)) == [
-        ("Low", "Низкая"), ("High", "Высокая"),
+        EnumerationValue("Low", "Низкая"), EnumerationValue("High", "Высокая"),
     ]
     # A value spelled alike in both languages is still a value.
-    assert enumeration_values(built) == [("Done", "Готово"), ("PlainText", "PlainText")]
+    assert enumeration_values(built) == [
+        EnumerationValue("Done", "Готово"), EnumerationValue("PlainText", "PlainText", since="9.1"),
+    ]
+
+
+def test_a_value_is_dated_by_the_calls_of_the_builder_of_its_item():
+    """The builder of an item names the mode a value is added in and the last mode that keeps
+    it, before the spellings or after them. A mode the constructor itself takes - the shape of
+    the language table - dates no value this way: the call does not say what the mode means."""
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration, _value_enumeration
+
+    from xbsl.extract.terms import EnumerationValue, enumeration_values
+
+    built = _value_enumeration("demo/acme/Placement", [
+        ("TOP", "Top", "Сверху"),
+        ("OVER", "Over", "Поверх", ("removedAfter", "CMODE_8_2")),
+        ("SIDE", ("added", "CMODE_9_1"), "Side", "Сбоку"),
+        ("NEAR", ("added", "CMODE_8_2"), "Near", "Рядом", ("removedAfter", "CMODE_9_1")),
+    ], builder=True)
+
+    assert enumeration_values(built) == [
+        EnumerationValue("Top", "Сверху"),
+        EnumerationValue("Over", "Поверх", until="8.2"),
+        EnumerationValue("Side", "Сбоку", since="9.1"),
+        EnumerationValue("Near", "Рядом", since="8.2", until="9.1"),
+    ]
+    assert [(value.since, value.until) for value in enumeration_values(
+        _enumeration(DEMO_LANGUAGES))] == [(None, None), (None, None)]
 
 
 def test_an_enumeration_of_another_shape_gives_no_values():
@@ -1070,14 +1097,18 @@ def test_an_enumeration_of_another_shape_gives_no_values():
     presented = [("EN", "English"), ("RU", "Русский")]
     named_apart = DEMO_PRIORITIES + [("MEDIUM", "Normal", "Обычная", "7420e42d")]
 
-    assert enumeration_values(_value_enumeration(PRIORITIES, presented)) is None
-    assert enumeration_values(_value_enumeration(PRIORITIES, DEMO_PRIORITIES, named=False)) is None
+    def pairs(blob: bytes) -> list[tuple[str, str]] | None:
+        values = enumeration_values(blob)
+        return None if values is None else [(value.english, value.russian) for value in values]
+
+    assert pairs(_value_enumeration(PRIORITIES, presented)) is None
+    assert pairs(_value_enumeration(PRIORITIES, DEMO_PRIORITIES, named=False)) is None
     # A constant named apart from its value (MEDIUM for Normal) still gives the value.
-    assert enumeration_values(_value_enumeration(PRIORITIES, named_apart)) == [
+    assert pairs(_value_enumeration(PRIORITIES, named_apart)) == [
         ("Low", "Низкая"), ("High", "Высокая"), ("Normal", "Обычная"),
     ]
     # The term the language enumeration builds is its pair.
-    assert enumeration_values(_enumeration(DEMO_LANGUAGES)) == [
+    assert pairs(_enumeration(DEMO_LANGUAGES)) == [
         ("English", "Английский"), ("Vietnamese", "Вьетнамский"),
     ]
 
@@ -1088,7 +1119,7 @@ def test_the_scan_reads_the_classes_asked_for_and_keeps_the_fullest_copy(tmp_pat
 
     from test_extract_classcode import DEMO_PRIORITIES, PRIORITIES, _value_enumeration
 
-    from xbsl.extract.terms import scan_enumeration_classes
+    from xbsl.extract.terms import EnumerationValue, scan_enumeration_classes
 
     path = PRIORITIES + ".class"
 
@@ -1109,7 +1140,7 @@ def test_the_scan_reads_the_classes_asked_for_and_keeps_the_fullest_copy(tmp_pat
 
     found = scan_enumeration_classes(zipfile.ZipFile(car), {path, "demo/acme/Missing.class"})
 
-    assert found == {path: [("Low", "Низкая"), ("High", "Высокая")]}
+    assert found == {path: [EnumerationValue("Low", "Низкая"), EnumerationValue("High", "Высокая")]}
 
 
 def test_the_step_spells_the_values_of_the_wrapped_enumerations(tmp_path):
