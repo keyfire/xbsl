@@ -778,3 +778,34 @@ def test_the_editor_hands_over_the_dictionary_by_the_names_the_engine_discovers(
 
     assert f'"**/{dictionary.DICTIONARY_DIR}/**/*.yaml"' in text
     assert f'"**/{dictionary.DICTIONARY_FILE}"' in text
+
+
+def test_the_panel_spells_a_value_the_way_its_enumeration_does(tmp_path):
+    """Two enumerations share a Russian value and spell it apart, so the flat table of the
+    term pairs holds no English for it. The panel of an English project asks the enumeration
+    itself, the way the translator does; a Russian project gets the values as they are."""
+    import json
+
+    from xbsl import dataset
+
+    version = tmp_path / "9.9.9"
+    version.mkdir()
+    (version / "metamodel.json").write_text(json.dumps({
+        "classes": {}, "vid2class": {}, "common": [],
+        "enums": {"TaskImportance": ["Низкая", "Обычная"], "FavoriteImportance": ["Обычная", "Высокая"]},
+    }, ensure_ascii=False), encoding="utf-8")
+    (version / "terms.json").write_text(json.dumps(
+        {"enums": {"Низкая": "Low", "Высокая": "High"}}, ensure_ascii=False), encoding="utf-8")
+    (version / "uiterms.json").write_text(json.dumps({"enum_values": {
+        "ВажностьЗадачи": {"Низкая": "Low", "Обычная": "Normal"},
+        "ВажностьИзбранного": {"Обычная": "Usual", "Высокая": "High"},
+    }}, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "index.json").write_text(
+        json.dumps({"available": ["9.9.9"], "default": "9.9.9"}), encoding="utf-8")
+    dataset.set_data_root(tmp_path)
+    try:
+        assert lsp.enum_values_in("TaskImportance", "en") == ["Low", "Normal"]
+        assert lsp.enum_values_in("FavoriteImportance", "en") == ["Usual", "High"]
+        assert lsp.enum_values_in("FavoriteImportance", "ru") == ["Обычная", "Высокая"]
+    finally:
+        dataset.set_data_root(None)
