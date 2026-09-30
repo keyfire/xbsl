@@ -120,6 +120,14 @@ of an `=` expression, a text with a `%{...}` inside a component tree, a descript
 project can tell its data from its messages there. An `=` value is code, so its string is keyed
 between its own quotes, as in a module.
 
+The engine translates the deprecation mark itself. The naming standard starts the caption of a
+deprecated element with `(не используется)`, and `naming/presentation` asks an English project
+for `(not used)`, so the English tree carries that mark in its place. When a dictionary entry
+leaves the mark out, the translator puts it in front of the entry's text. A text without an entry
+changes only its mark and stays a gap. A report's presentation, which the translator keeps as
+data, changes its mark the same way. An entry that starts with a bracket of its own is written as
+it is, and the rule points at it in the English tree.
+
 A text meant to read the same in both languages - a product name, a code, a word English borrowed
 whole - is named by an entry whose value repeats its key:
 

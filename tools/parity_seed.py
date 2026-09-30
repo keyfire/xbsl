@@ -96,6 +96,10 @@ class Seed:
     #: The project names the translator needs. Platform names come from the shipped
     #: dictionaries; only the names this seed invents belong here.
     tokens: dict[str, str] = field(default_factory=dict)
+    #: The texts the translator takes from the literals plane - for a seed whose verdict turns
+    #: on what the translated tree writes in place of a text (the deprecation mark). A text
+    #: without an entry is a gap and stays as written, the way it always did.
+    literals: dict[str, str] = field(default_factory=dict)
     #: The English twin written by hand, one file per Russian file, under the names the
     #: translator would give them - spelled from the platform's own dictionaries, never
     #: guessed. Empty: the translated tree is the English twin, as before.
@@ -2576,6 +2580,27 @@ _SETTINGS_TOKENS = {"Настройки": "Settings"}
 _IMPORT_RU = "ВидЭлемента: Обработка\nИд: 1d1f5c60-0000-4000-8000-000000000fb3\nИмя: {name}\n"
 _IMPORT_CAPTION_RU = "Интерфейс:\n    Представление: {caption}\n"
 _IMPORT_TOKENS = {"ЗагрузкаЦен": "PriceImport", "УстарелоЗагрузкаЦен": "DeprecatedPriceImport"}
+
+# The deprecated register written in English: a project with English keys heads its captions
+# with "(not used)", and the translator puts that mark in front of an entry that left it out
+# (naming/presentation).
+_RATES_EN = "ElementKind: InformationRegister\nId: 1d1f5c60-0000-4000-8000-000000000fb1\nName: {name}\n"
+_RATES_CAPTIONS_EN = (
+    "Interface:\n    List:\n        Presentation: {list}\n"
+    "    Record:\n        Presentation: {record}\n"
+)
+_DEPRECATED_RATES_LITERALS = {
+    "(не используется) Курсы валют": "Exchange rates",
+    "(не используется) Курс валюты": "(not used) Exchange rate",
+}
+
+# A deprecated report keeps its presentation in a top-level text the translator leaves as
+# data - all but the deprecation mark at its head (naming/presentation).
+_CHECK_RU = (
+    "ВидЭлемента: Отчет\nИд: 1d1f5c60-0000-4000-8000-000000000fb4\nИмя: УстарелоСверка\n"
+    "Представление: {presentation}\n"
+)
+_CHECK_TOKENS = {"УстарелоСверка": "DeprecatedReconciliation"}
 
 
 #: A form whose module reads a module constant from a method compiled for the server
@@ -7147,6 +7172,35 @@ SEEDS: list[Seed] = [
         tokens=_IMPORT_TOKENS,
     ),
     Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="a deprecated register marked in both captions: the English project heads them "
+             "with '(not used)', and the translator writes the mark the entry left out",
+        files={"УстарелоКурсы.yaml": _RATES_RU.format(name="УстарелоКурсы")
+               + _RATES_CAPTIONS_RU.format(list="(не используется) Курсы валют",
+                                           record="(не используется) Курс валюты")},
+        english={"DeprecatedRates.yaml": _RATES_EN.format(name="DeprecatedRates")
+                 + _RATES_CAPTIONS_EN.format(list="(not used) Exchange rates",
+                                             record="(not used) Exchange rate")},
+        tokens=_RATES_TOKENS,
+        literals=_DEPRECATED_RATES_LITERALS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a deprecated report whose top-level presentation lacks the mark",
+        files={"УстарелоСверка.yaml": _CHECK_RU.format(presentation="Сверка")},
+        tokens=_CHECK_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same report marked: its presentation stays data in the translated tree, "
+             "and the mark at its head moves to '(not used)'",
+        files={"УстарелоСверка.yaml": _CHECK_RU.format(presentation="(не используется) Сверка")},
+        tokens=_CHECK_TOKENS,
+    ),
+    Seed(
         rule="yaml/id-required",
         expect=FINDING,
         note="an element declared without its identifier",
@@ -8961,7 +9015,8 @@ def run_seed(seed: Seed) -> dict:
         russian = _plant(base / "ru", seed.files)
 
         translated = base / "translated"
-        report = translate_project(russian, Dictionary(tokens=dict(seed.tokens)), out=translated)
+        dictionary = Dictionary(tokens=dict(seed.tokens), literals=dict(seed.literals))
+        report = translate_project(russian, dictionary, out=translated)
         # The hand-written twin, when the seed carries one, is the English tree the rule is
         # judged on; the translator's output is then a third tree of its own.
         english = _plant(base / "en", seed.english) if seed.english else translated

@@ -18,8 +18,9 @@ What is checked (clauses of the standard):
   needs the captions the section carries: a catalog, a document and their kin the list and
   the object, an information register the list and the record (2.3), a constants set the
   record, an accumulation register the list, a processing the section itself - and for a
-  deprecated one the presentation and every caption start with "(не используется)"
-  (naming/presentation);
+  deprecated one the presentation and every caption start with the mark of the project's
+  language: "(не используется)" where the keys are Russian, "(not used)" where they are
+  English (naming/presentation);
 - section 3: the grammatical number of the name by element kind (naming/number) and the
   mandatory prefixes of certain kinds (naming/prefix-by-kind).
 
@@ -36,7 +37,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 
-from xbsl import dataset, i18n, metamodel, terms
+from xbsl import dataset, i18n, metamodel, scaffold, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
@@ -231,19 +232,21 @@ MESSAGES = {
               "constant whose value presents the record.",
     },
     "naming/presentation.deprecated": {
-        "ru": "Имя '{name}' начинается с '{n[Устарело]}', а представление не начинается с "
-              "'(не используется)' – у устаревших элементов представление помечают именно так.",
-        "en": "The name '{name}' starts with '{n[Устарело]}', but the presentation does not start with "
-              "'(не используется)' – that is how deprecated elements are marked.",
+        "ru": "Имя '{name}' начинается с '{prefix}', а представление не начинается с '{mark}' – "
+              "в {language} проекте так помечают представление устаревшего элемента.",
+        "en": "The name '{name}' starts with '{prefix}', but the presentation does not start with "
+              "'{mark}' – that is how {language} project marks the presentation of a deprecated "
+              "element.",
     },
     "naming/presentation.deprecated-caption": {
-        "ru": "Имя '{name}' начинается с '{n[Устарело]}', а заголовок {path} не начинается с "
-              "'(не используется)' – у устаревших элементов так помечают и заголовки в "
-              "интерфейсе.",
-        "en": "The name '{name}' starts with '{n[Устарело]}', but the caption {path} does not "
-              "start with '(не используется)' – deprecated elements mark their interface "
-              "captions the same way.",
+        "ru": "Имя '{name}' начинается с '{prefix}', а заголовок {path} не начинается с '{mark}' "
+              "– в {language} проекте так помечают и заголовки устаревшего элемента в интерфейсе.",
+        "en": "The name '{name}' starts with '{prefix}', but the caption {path} does not start "
+              "with '{mark}' – {language} project marks the interface captions of a deprecated "
+              "element the same way.",
     },
+    "naming/presentation.language-ru": {"ru": "русском", "en": "a Russian"},
+    "naming/presentation.language-en": {"ru": "английском", "en": "an English"},
     "naming/prefix-by-kind.title": {
         "ru": "Имя вида без обязательного префикса",
         "en": "Kind-specific name without its prefix",
@@ -965,8 +968,11 @@ _MISSING_CAPTION = {
 #: a list caption is asked of a periodic set only.
 _LIST_WHEN_PERIODIC = frozenset({"НаборКонстант"})
 
-#: The mark the standard puts at the head of a deprecated element's presentation.
-_DEPRECATED_MARK = "(не используется)"
+#: The mark at the head of a deprecated element's presentation, by the language of the project.
+#: The standard names the Russian one; a project written in English carries the same words in
+#: English. The translator writes the English mark into a translated tree
+#: (xbsl/translation/yamlfile.py), so the two stay in step.
+DEPRECATED_MARKS = {"ru": "(не используется)", "en": "(not used)"}
 
 
 @lru_cache(maxsize=None)
@@ -1018,16 +1024,33 @@ def _filled(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _unmarked(value) -> bool:
-    """Whether the presentation of a deprecated element lacks the mark of the standard.
+def _project_language(source: SourceFile) -> str:
+    """"en" for a description whose keys are English, "ru" otherwise.
 
-    Only a Russian text is judged: a `$` reference to a localized string and an `=` binding
-    are no text to read a mark in, and a caption without a Cyrillic letter is English - the
-    standard names the mark for a project written in Russian, and an English caption cannot
-    carry it.
+    The language a yaml file spells its keys in, read the way the scaffolding reads it
+    (scaffold.yaml_language): the element declares its kind under the Russian key or the
+    English one, and a tree written by `xbsl translate` spells every key in English.
     """
-    return (isinstance(value, str) and not value.startswith(("$", "="))
-            and bool(_CYRILLIC_LETTER_RE.search(value)) and not value.startswith(_DEPRECATED_MARK))
+    return scaffold.yaml_language(source.text)
+
+
+def _unmarked(value, mark: str) -> bool:
+    """Whether a presentation of a deprecated element lacks the mark of its project.
+
+    Only a text is judged: a `$` reference to a localized string and an `=` binding are no
+    text to read a mark in. The mark follows the language of the project rather than of the
+    caption, so the mark of the other language does not count.
+    """
+    return isinstance(value, str) and not value.startswith(("$", "=")) and not value.startswith(mark)
+
+
+def _deprecation_fields(source: SourceFile, ref: NameRef) -> dict:
+    """What a message about a missing deprecation mark names: the prefix the name carries, the
+    mark the project owes and the language of the project."""
+    language = _project_language(source)
+    prefix = next(p for p in _deprecated_prefixes() if ref.name.startswith(p))
+    return {"name": ref.name, "prefix": prefix, "mark": DEPRECATED_MARKS[language],
+            "language": i18n.t(f"naming/presentation.language-{language}")}
 
 
 def _caption_position(source: SourceFile, vid: str, path: str) -> tuple[int, int] | None:
@@ -1083,21 +1106,21 @@ def _interface_findings(source: SourceFile, ref: NameRef | None, vid: str, data,
             yield _presentation_diag(source, ref, vid, message_key, tail=tail, **names)
     if ref is None or not ref.name.startswith(_deprecated_prefixes()):
         return
+    fields = _deprecation_fields(source, ref)
     for path in _interface_captions(vid):
         value = _caption_value(data, vid, path)
-        if not _filled(value) or not _unmarked(value):
+        if not _filled(value) or not _unmarked(value, fields["mark"]):
             continue
         line, col = _caption_position(source, vid, path) or (ref.line, ref.col)
-        message = i18n.t("naming/presentation.deprecated-caption", name=ref.name,
-                         path=i18n.name(path))
+        message = i18n.t("naming/presentation.deprecated-caption", path=i18n.name(path), **fields)
         yield Diagnostic(source.rel, line, col, "naming/presentation", Severity.WARNING, message)
 
 
 @rule("naming/presentation", "naming/presentation.title", "D", severity=Severity.WARNING)
 def presentation(source: SourceFile) -> Iterable[Diagnostic]:
     """2.1: a top-level element has its presentation filled in; for a deprecated one it starts
-    with "(не используется)" (1.6). Kinds that have neither a `Presentation` property nor
-    captions in an interface section are skipped.
+    with the deprecation mark of its project (1.6). Kinds that have neither a `Presentation`
+    property nor captions in an interface section are skipped.
 
     Where the top-level property is a field NAME (metamodel type AttributeName) it is no
     caption, and filling it in satisfies nothing: such an element is captioned in its
@@ -1129,8 +1152,14 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
     The deprecation mark applies where the value is a text: to the top-level text of a
     report, a command or an enumeration, and to every interface caption that is filled in. No
     prefix can be written into a field name, and the validity of the name itself is
-    yaml/presentation-field's business. The mark is judged on a Russian text alone
-    (_unmarked)."""
+    yaml/presentation-field's business.
+
+    The mark follows the language of the project, read off the keys of the description
+    (_project_language): the standard names "(не используется)" for a project written in
+    Russian, and a project written in English - a translated tree among them - marks the same
+    places with "(not used)". The mark of the other language does not count: an English caption
+    of a Russian project owes the Russian mark, and a Russian caption left in an English project
+    owes the English one (_unmarked)."""
     got = _vid(source)
     if got is None:
         return
@@ -1150,10 +1179,11 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
     if (
         ref is not None
         and ref.name.startswith(_deprecated_prefixes())
-        and _unmarked(value)
         and prop.get("type") != "AttributeName"
     ):
-        yield _diag(source, ref, "naming/presentation", "naming/presentation.deprecated", name=ref.name)
+        fields = _deprecation_fields(source, ref)
+        if _unmarked(value, fields["mark"]):
+            yield _diag(source, ref, "naming/presentation", "naming/presentation.deprecated", **fields)
 
 
 @rule("naming/prefix-by-kind", "naming/prefix-by-kind.title", "D", severity=Severity.WARNING)

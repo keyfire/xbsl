@@ -5,7 +5,13 @@ through the literals plane like a presentation template: named whole or reported
 The documentation properties (`Description`) stay data. And a code literal spelled exactly
 like a VALUE of a json resource is usually compared against that data - moving it by a
 dictionary entry draws a warning, because the data side never moves.
+
+The deprecation mark at the head of a text is the engine's own to translate: an English
+project marks a deprecated element with "(not used)" (naming/presentation), so the translated
+tree carries that mark whether the entry of the text wrote it, left it out or is missing.
 """
+
+import pytest
 
 from xbsl import engine
 from xbsl.translation import dictionary as dict_module
@@ -78,6 +84,78 @@ def test_an_event_description_is_documentation_and_stays_data():
     _out, report = _yaml(_EVENT, "ЗапускЗадачи.yaml", tokens={"ЗапускЗадачи": "TaskStart"})
     assert report.missing_literals == {}
     assert any("Событие регистрируется" in text for text, _line, _col in report.texts_kept)
+
+
+_DEPRECATED_REGISTER = '''ВидЭлемента: РегистрСведений
+Имя: УстарелоКурсы
+Интерфейс:
+    Список:
+        Представление: {caption}
+'''
+
+_DEPRECATED_TOKENS = {"УстарелоКурсы": "DeprecatedRates"}
+
+
+def _deprecated_caption(caption: str, literals=None):
+    """The translated list caption of a deprecated register, and the report."""
+    out, report = _yaml(_DEPRECATED_REGISTER.format(caption=caption), "УстарелоКурсы.yaml",
+                        tokens=_DEPRECATED_TOKENS, literals=literals)
+    line = next(line for line in out.splitlines() if line.strip().startswith("Presentation:"))
+    return line.split(":", 1)[1].strip(), report
+
+
+def test_an_entry_that_left_the_deprecation_mark_out_gets_it_in_front():
+    caption, report = _deprecated_caption(
+        "(не используется) Курсы валют",
+        literals={"(не используется) Курсы валют": "Exchange rates"},
+    )
+    assert caption == "(not used) Exchange rates"
+    assert report.missing_literals == {}
+
+
+@pytest.mark.parametrize("entry, expected", [
+    ("(not used) Exchange rates", "(not used) Exchange rates"),
+    # The Russian head copied into the entry gives way to the English one.
+    ("(не используется) Exchange rates", "(not used) Exchange rates"),
+    # A bracket of its own is the entry's rendering of the mark: written as the entry says,
+    # and naming/presentation reports it on the translated tree.
+    ("(deprecated) Exchange rates", "(deprecated) Exchange rates"),
+])
+def test_an_entry_that_heads_its_text_itself_keeps_it(entry, expected):
+    caption, _report = _deprecated_caption(
+        "(не используется) Курсы валют", literals={"(не используется) Курсы валют": entry},
+    )
+    assert caption == expected
+
+
+def test_a_marked_text_without_an_entry_is_still_a_gap_under_the_english_mark():
+    caption, report = _deprecated_caption("(не используется) Курсы валют")
+    assert caption == "(not used) Курсы валют"
+    # The gap is the whole text, as the dictionary keys it.
+    assert list(report.missing_visible_literals) == ["(не используется) Курсы валют"]
+
+
+def test_a_text_that_is_the_mark_alone_needs_no_entry():
+    caption, report = _deprecated_caption("(не используется)")
+    assert caption == "(not used)"
+    assert report.missing_literals == {}
+
+
+def test_a_mark_that_does_not_head_the_text_is_not_the_deprecation_mark():
+    caption, _report = _deprecated_caption(
+        "Курсы валют (не используется)",
+        literals={"Курсы валют (не используется)": "Exchange rates"},
+    )
+    assert caption == "Exchange rates"
+
+
+def test_the_mark_of_a_presentation_kept_as_data_is_translated_too():
+    # The presentation of a report is typed a plain string, so it stays data - all but the
+    # mark at its head, which naming/presentation reads there as well.
+    text = "ВидЭлемента: Отчет\nИмя: УстарелоСверка\nПредставление: (не используется) Сверка\n"
+    out, report = _yaml(text, "УстарелоСверка.yaml", tokens={"УстарелоСверка": "DeprecatedCheck"})
+    assert "Presentation: (not used) Сверка" in out
+    assert [kept for kept, _line, _col in report.texts_kept] == ["(не используется) Сверка"]
 
 
 _PARSE = '''метод ИзСтроки(Код: Строка): Число

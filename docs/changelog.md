@@ -25,6 +25,14 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Changed
+
+- **`naming/presentation` expects `(not used)` from an English project.** A deprecated element
+  starts its presentation and captions with that mark, and the rule does not count the mark of
+  the other language. `translate` adds `(not used)` itself when a dictionary entry leaves it out.
+
 ## 2026-09-30 – 0.125.0
 
 ### Added

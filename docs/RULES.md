@@ -1263,8 +1263,10 @@ attribute are captioned in the interface section instead, and both captions are 
 An information register has no top-level `Presentation` and captions the list and the record
 (`Interface.Record.Presentation`), an accumulation register and a data journal the list alone. A
 constants set names a constant in its top-level `Presentation` and is captioned by the record, and
-by the list as well when it is periodic. A deprecated element marks every caption with the same
-prefix as its presentation.
+by the list as well when it is periodic. A deprecated element starts its presentation and every
+caption with the mark of its project's language: the Russian mark of the standard where the keys
+are Russian, `(not used)` where they are English, as in a translated tree. The mark of the other
+language does not count.
 
 ### Code style conventions (the `style/` rules)
 
