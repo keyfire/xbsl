@@ -234,7 +234,8 @@ def _reset() -> None:
     platform name would pass over a project written in English (dataset.register_recheck).
     """
     global _cache, _reverse, _common, _common_reverse, _kinds, _facets, _owners, _bases
-    global _manager_owners
+    global _manager_owners, _deprecation
+    _deprecation = None
     _manager_owners = None
     _facets = None
     _cache = None
@@ -321,3 +322,34 @@ def key_forms(*names: str, extra: tuple[str, ...] = ()) -> tuple[str, ...]:
             if form not in out:
                 out.append(form)
     return tuple(out)
+
+
+#: The word the naming standard puts in front of the name of a deprecated element. The platform
+#: pairs it with an English spelling - the annotation of a deprecated declaration - and a
+#: project written in English starts such a name with that spelling.
+DEPRECATION_PREFIX = "Устарело"
+
+_deprecation: tuple[str, ...] | None = None
+
+
+def deprecation_prefixes() -> tuple[str, ...]:
+    """Both spellings of the deprecation prefix of a name, the Russian one first."""
+    global _deprecation
+    if _deprecation is None:
+        _deprecation = key_forms(DEPRECATION_PREFIX)
+    return _deprecation
+
+
+def deprecation_prefix(name: str) -> str | None:
+    """The deprecation prefix `name` starts with, in either spelling, or None.
+
+    The prefix counts only in front of the next word of the name, a capital letter: the bare
+    word is no prefix, and neither is the head of a longer word (`УстарелостьДанных`).
+    naming/presentation knows a deprecated element by this answer, and the translator decides
+    by it which names keep the prefix in English (translation/dictionary.py), so the two
+    cannot disagree about an element.
+    """
+    for prefix in deprecation_prefixes():
+        if name.startswith(prefix) and name[len(prefix):len(prefix) + 1].isupper():
+            return prefix
+    return None

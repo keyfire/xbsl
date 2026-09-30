@@ -86,12 +86,14 @@ def test_an_entry_that_repeats_the_platform_is_named(tmp_path: Path):
 
 
 def test_an_entry_needed_in_one_place_is_not_named(tmp_path: Path):
-    """The same word standing where no platform table reaches: the entry carries that place,
-    so it is not redundant anywhere - the direction of the error that matters."""
+    """The same word standing where no platform table reaches - the name of a method the
+    project declares: the entry carries that place, so it is not redundant anywhere - the
+    direction of the error that matters. A reference in code is no such place: the compiler
+    dictionary spells the Russian name of Russian as well, and answers it there."""
     root, dictionary = _project(
         tmp_path,
-        "    Русский: Russian\n    Строка: String\n    Пуск: Start\n    Метка: Mark\n",
-        module="метод Пуск()\n    пер Метка = Русский\n;\n",
+        "    Русский: Russian\n    Строка: String\n    Метка: Mark\n",
+        module="метод Русский()\n    пер Метка = 1\n;\n",
     )
 
     assert _echoed(root, dictionary) == {"Строка": "String"}

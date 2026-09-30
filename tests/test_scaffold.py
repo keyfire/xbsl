@@ -2877,6 +2877,7 @@ def test_localization_info_candidates(tmp_path):
     assert info["existing"] == []
     assert info["candidates"] == ["En"]
     assert info["names"] == {"En": "Английский"}
+    assert info["names_en"] == {"En": "English"}
     apply_result(scaffold.op_add_localization(path, "Английский"))
     info = scaffold.localization_info(path)
     assert info["existing"] == ["En"]
@@ -2917,7 +2918,9 @@ def test_a_language_of_the_data_is_offered_and_added_under_its_code(tmp_path, pi
     info = scaffold.localization_info(path)
     assert info["languages"] == ["Ru", "En", "Vi"]
     assert info["candidates"] == ["En", "Vi"]
+    # Both names of every candidate: a client shows the one of its own interface language.
     assert info["names"] == {"En": "Английский", "Vi": "Вьетнамский"}
+    assert info["names_en"] == {"En": "English", "Vi": "Vietnamese"}
     assert info["notes"] == []
 
     written = apply_result(scaffold.op_add_localization(path, "Vietnamese"))

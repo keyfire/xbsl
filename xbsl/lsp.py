@@ -45,7 +45,7 @@ except ImportError:  # pragma: no cover - the extra is not installed
 from xbsl import (
     __version__, baseline, bindingcomplete, cijob, dataset, doccomments, docs, engine, environment,
     formedits, formhandlers, formmodel, formsearch, freshness, i18n, indexer, lsp_doc, metamodel,
-    scaffold, templates, terms, uischema,
+    scaffold, templates, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -218,6 +218,22 @@ def _project_language(root: Optional[str]) -> str:
         if match:
             return "ru" if _CYRILLIC.search(match.group(1)) else "en"
     return "ru"
+
+
+def enum_values_in(name: str, lang: str) -> list[str]:
+    """The values of a metamodel enumeration, spelled in the project's language.
+
+    An English project spells a value the way ITS enumeration does, as the translator writes
+    it: the same Russian word is `Normal` for the importance of a command and `Usual` for the
+    importance of a favorite, and the flat table of enumeration values holds no such word at
+    all - read through it, the panel of an English project would offer the word in Russian.
+    """
+    values = metamodel.enum_values(name)
+    if lang != "en":
+        return list(values)
+    from xbsl.translation import platform_map  # the translator's per-enumeration spellings
+
+    return [platform_map.enum_value_english(name, value) or value for value in values]
 
 
 def _label_language(label: str) -> str:
@@ -1632,10 +1648,7 @@ def _make_server() -> "LanguageServer":
         for record in props.values():
             name = record.get("enum")
             if name and name not in enums:
-                values = metamodel.enum_values(name)
-                enums[name] = [
-                    (terms.english(v, "enums") or v) if lang == "en" else v for v in values
-                ]
+                enums[name] = enum_values_in(name, lang)
         return {
             "available": True,
             "kind": kind,

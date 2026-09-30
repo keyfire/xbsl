@@ -317,6 +317,50 @@ def builder_calls(blob: bytes) -> list[tuple[str, list[str]]]:
     ]
 
 
+_STRING_PARAMETER = "Ljava/lang/String;"
+
+
+def _string_parameters(descriptor: str) -> int:
+    """How many parameters of a method descriptor are strings - an array of them is not one."""
+    count, at, end = 0, 1, descriptor.find(")")
+    while 0 < at < end:
+        start = at
+        while descriptor[at] == "[":
+            at += 1
+        if descriptor[at] == "L":
+            at = descriptor.index(";", at)
+        if descriptor[start:at + 1] == _STRING_PARAMETER:
+            count += 1
+        at += 1
+    return count
+
+
+def string_arguments(blob: bytes) -> list[tuple[str, tuple[str, ...]]]:
+    """[(the called method, the string constants it takes for its string parameters)].
+
+    A call takes the strings pushed last before it - as many as its descriptor has string
+    parameters. A constant pushed earlier belongs to an outer call: the key of a map is pushed
+    before the value built for it, and the call that builds the value does not take the key.
+    A string argument the code computes is no constant, and the call then takes fewer of them.
+    """
+    pool, position = constant_pool(blob)
+    found: list[tuple[str, tuple[str, ...]]] = []
+    for code in _method_code(blob, pool, position):
+        pushed: list[str] = []
+        for opcode, operand in _walk(code):
+            if opcode in (_LDC, _LDC_W):
+                value = text(pool, operand)
+                if value is not None:
+                    pushed.append(value)
+            elif opcode in _INVOKE:
+                name = called_method(pool, operand)
+                count = _string_parameters(method_descriptor(pool, operand) or "")
+                if name:
+                    found.append((name, tuple(pushed[-count:]) if count else ()))
+                pushed = []
+    return found
+
+
 def constructions(blob: bytes) -> list[tuple[str, str]]:
     """[(the class the code constructs, the descriptor of the constructor it calls)].
 

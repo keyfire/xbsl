@@ -171,8 +171,6 @@
   "One or several - the engine writes a handler stub for each": "Один или несколько – на каждый движок добавит заготовку обработчика",
   "Kind of the new object": "Вид нового объекта",
   "Language of the translation": "Язык перевода",
-  "Russian": "Русский",
-  "English": "Английский",
   "Every declared localization language already has its translation.": "Все заявленные языки локализации уже переведены.",
   "A component type and optional key=value predicates": "Тип компонента и необязательные условия ключ=значение",
   "A newer extension is published: {0} (installed {1}). It is installed from a vsix, so the editor does not update it by itself.": "Опубликована новая версия расширения: {0} (установлена {1}). Расширение установлено из vsix, поэтому редактор сам его не обновит.",

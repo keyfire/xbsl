@@ -854,6 +854,23 @@ def test_presentation_english_message_names_the_mark_of_the_project():
     assert _english("Report", "DeprecatedReconciliation", marked) == []
 
 
+@pytest.mark.needs_data
+@pytest.mark.parametrize("name", ["УстарелостьОборудования", "Устарело"])
+def test_presentation_a_name_that_only_starts_like_the_prefix_is_not_deprecated(name):
+    """The prefix counts in front of the next word of the name: the head of a longer word and
+    the bare word carry none, and the presentation owes no mark. The translator reads the
+    prefix the same way, so the English tree agrees."""
+    assert _lint(_PRESENTATION, "Отчет", name, "Представление: Устарелость оборудования\n") == []
+    assert _english("Report", "Deprecatedness", "Presentation: Obsolescence\n") == []
+
+
+@pytest.mark.needs_data
+def test_presentation_the_prefix_in_front_of_a_latin_word_counts():
+    d = _lint(_PRESENTATION, "Отчет", "УстарелоXmlОбмен", "Представление: Обмен Xml\n")
+    assert len(d) == 1
+    assert "начинается с 'Устарело'" in d[0].message
+
+
 # --- mandatory prefixes and postfixes by kind -----------------------------------------
 
 @pytest.mark.parametrize("name", ["ApiСайта", "WebСайт"])

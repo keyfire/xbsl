@@ -83,18 +83,24 @@ dataset.register_reset(_platform_spellings.cache_clear)
 
 
 def _scoped(dictionary) -> dict[str, list[str]]:
-    """{name: [the values of its scoped entries `<Owner>.<Name>`]} of the tokens section."""
+    """{name: [the spellings of its scoped entries `<Owner>.<Name>`]} of the tokens section."""
     out: dict[str, list[str]] = {}
     for key, value in dictionary.tokens.items():
         if "." in key:
-            out.setdefault(key.rsplit(".", 1)[1], []).append(value)
+            name = key.rsplit(".", 1)[1]
+            out.setdefault(name, []).append(dictionary.written(name, value))
     return out
 
 
 def _spellings(dictionary, name: str, scoped: dict[str, list[str]]) -> tuple[str, ...]:
-    """The token pair of the name (the plain entry, then the scoped ones), then the platform's."""
+    """The token pair of the name (the plain entry, then the scoped ones), then the platform's.
+
+    A pair is taken the way the translated tree spells it (Dictionary.written): the name of a
+    deprecated element keeps its prefix there, and a comment that names it after the bare
+    entry names something the tree does not have.
+    """
     out: list[str] = []
-    plain = dictionary.tokens.get(name)
+    plain = dictionary.token(name)
     for spelling in (plain, *scoped.get(name, ()), *_platform_spellings(name)):
         if spelling and spelling not in out:
             out.append(spelling)
@@ -128,7 +134,8 @@ def _tag_drift(dictionary, key: str, value: str,
 
 def phrase_drift(dictionary) -> list[NameDrift]:
     """Every name of every phrase whose translation spells it otherwise (see the module note)."""
-    token_values = set(dictionary.tokens.values())
+    token_values = {dictionary.written(key.rsplit(".", 1)[-1], value)
+                    for key, value in dictionary.tokens.items()}
     scoped = _scoped(dictionary)
     platform = comment_names._platform_names()
     out: list[NameDrift] = []

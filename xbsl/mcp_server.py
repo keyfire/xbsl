@@ -1489,8 +1489,8 @@ def meta_set_localization(
 def meta_localization_info(yaml_path: str, root: str | None = None) -> dict:
     """The localization picture of a LocalizedStrings element: the declared languages, the
     default one, the translations already present and the candidate languages a translation
-    can be added for (folder codes - Ru, En, Vi - with their display names). `file` names the
-    absolute path read.
+    can be added for (folder codes - Ru, En, Vi - with their Russian names in `names` and their
+    English ones in `names_en`). `file` names the absolute path read.
 
     The languages come from the platform data, each with the compatibility mode it needs: a
     language a newer mode added is no candidate for a project of an older one, and `notes`

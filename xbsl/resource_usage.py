@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine
+from xbsl import dataset
 from xbsl import parser as P
 from xbsl import resources as resource_model
 from xbsl import terms, typeinfer
@@ -628,3 +628,9 @@ def compact(answer: dict, *, include_protected: bool = False, limit: int = 100) 
     for section in sections:
         out[section] = list(answer.get(section, ()))[:limit]
     return out
+
+
+# The engine is imported last, once `_Analyzer` exists: importing it loads the rule package,
+# and a rule subclasses the analyzer at its own import (rules/resource_labels.py). The code
+# above reads the engine at call time only.
+from xbsl import engine  # noqa: E402

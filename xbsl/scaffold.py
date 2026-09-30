@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine, fixer, metamodel, resources as resource_model, restext, terms, uischema
+from xbsl import dataset, metamodel, resources as resource_model, restext, terms, uischema
 from xbsl.layout import Layout, Place, service_dirs
 from xbsl.lexer import _skip_interpolation
 
@@ -4937,10 +4937,13 @@ def _canonical_folder(folder: str) -> str:
     return _folder_code(found) if found is not None else folder
 
 
-def _language_name(folder: str) -> str:
-    """The name of the language a folder code stands for, as a Russian descriptor spells it."""
+def _language_name(folder: str, *, english: bool = False) -> str:
+    """The name of the language a folder code stands for, as a Russian descriptor spells it -
+    or as an English one does, with `english`."""
     found = metamodel.language_named(folder)
-    return found.russian if found is not None else folder
+    if found is None:
+        return folder
+    return found.english if english else found.russian
 
 
 def _localized_strings_source(yaml_path: Path, reader=None) -> tuple[str, str]:
@@ -5076,6 +5079,9 @@ def localization_info(yaml_path: Path, *, reader=None) -> dict:
     The languages and the compatibility mode each one needs come from the data: a language a
     newer mode added is not a candidate for a project of an older one, and a listed value the
     data knows no language by is named in the notes instead of vanishing from the answer.
+
+    names and names_en - the Russian and the English name of every candidate, by its code: a
+    client shows the language in the language of its own interface, and the data has both.
     """
     yaml_path = Path(yaml_path)
     text, _nl = _localized_strings_source(yaml_path, reader)
@@ -5116,6 +5122,7 @@ def localization_info(yaml_path: Path, *, reader=None) -> dict:
         "existing": existing,
         "candidates": candidates,
         "names": {code: _language_name(code) for code in candidates},
+        "names_en": {code: _language_name(code, english=True) for code in candidates},
         "notes": notes,
     }
 
@@ -9505,3 +9512,11 @@ def resource_references(root: Path, resource_path: Path, *, reader=None,
         "references": shown,
         "hasMore": len(shown) < len(places),
     }
+
+
+# The engine is imported last, once every name of this module exists. Importing it loads the
+# rule package, and rules take names from here at their own import - `latin_url_path`, and
+# `ScaffoldError` through the form model. Imported at the top, the engine ran before any of
+# those names were defined, and `from xbsl import scaffold` failed as the first import of a
+# process. The functions above read the engine and the fixer at call time only.
+from xbsl import engine, fixer  # noqa: E402

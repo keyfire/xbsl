@@ -18,6 +18,39 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **`localization-info` gives the English name of each candidate language too.** The `names_en`
+  field stands next to `names` in the command, in MCP `meta_localization_info` and in the language
+  server, so a client can name a language in the language of its own interface.
+
+### Changed
+
+- **`translate` keeps the prefix of a deprecated name.** An entry that does not start with
+  `Deprecated` gets it in front, so `naming/presentation` knows the element in the English tree
+  and asks for `(not used)` there. A word that only begins like the prefix no longer counts.
+
+### Fixed
+
+- **`from xbsl import scaffold` works as the first import of a process.** It used to fail on a
+  circular import: loading the engine loads the rules, and a rule takes a name from the
+  scaffolding module. `import xbsl.resource_usage` failed the same way.
+- **`xbsl extract` lists the values of properties typed by compiled enumerations.** `Importance`
+  of a command, `WeekDays` and `Months` of a schedule, `Periodicity` of a constants set and ten more
+  properties were typed as blocks with no values, and the values had no English spelling. The
+  metadata schema and the properties panel now offer them, an English project gets each value the
+  way its own enumeration spells it, and `translate` spells them too.
+- **`xbsl extract` checks the names of languages against the language table.** Enumerations of
+  the languages and a reader of the project descriptor put the name of one language next to the
+  name of another, and the compiler dictionary paired them that way, so the Russian name of Russian
+  lost its common spelling. A pair the table contradicts is dropped now.
+- **`xbsl extract` no longer takes the word before a Russian name for its English.** A class that
+  localizes a word Russian first, English right after it, left on the left of the word the name
+  of an enumeration constant or the English of the previous parameter. The check reads the calls
+  of the class, not the shape of the word, so abbreviations the platform declares stay.
+
 ## 2026-09-30 – 0.125.0, 0.126.0
 
 ### Added

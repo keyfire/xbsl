@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from xbsl import dataset, i18n
+from xbsl import terms as platform_terms
 from xbsl.translation import platform_map
 
 try:
@@ -313,7 +314,7 @@ class Dictionary:
         scoped = self.scoped_token(name, *scopes)
         if scoped is not None:
             return scoped
-        return self.tokens.get(name)
+        return self.written(name, self.tokens.get(name))
 
     def scoped_token(self, name: str, *scopes: str) -> str | None:
         """The translation of a name from a QUALIFIED entry alone, the scopes tried in order.
@@ -326,8 +327,36 @@ class Dictionary:
             if scope:
                 scoped = self.tokens.get(f"{scope}.{name}")
                 if scoped is not None:
-                    return scoped
+                    return self.written(name, scoped)
         return None
+
+    def written(self, name: str, value: str | None) -> str | None:
+        """The spelling the translated tree gives `name` when its entry says `value`.
+
+        The entry itself, but for the prefix of a deprecated name. The naming standard starts
+        the name of a deprecated element with a fixed word, and in a file of the English tree
+        that prefix is all that says the element is deprecated: naming/presentation asks for
+        the mark "(not used)" by it, and the file carries no trace of the entry it came from.
+        So the prefix is the engine's to translate, the way the mark in front of a presentation
+        is: an entry that starts with the English prefix is written as it is, and any other one
+        gets it in front - `Rates` and `ObsoleteRates` become `DeprecatedRates` and
+        `DeprecatedObsoleteRates`. Every place of the tree spells a name through `token`, so a
+        declaration, its uses and the name of its file move together.
+
+        Only a translation into English is prefixed, and only when the data pairs the prefix
+        with an English spelling (platform_terms.deprecation_prefixes).
+        """
+        # The cheap test first: it runs for every name the pass translates.
+        if value is None or not name.startswith(platform_terms.DEPRECATION_PREFIX):
+            return value
+        forms = platform_terms.deprecation_prefixes()
+        if self.language != "en" or len(forms) < 2:
+            return value
+        if platform_terms.deprecation_prefix(name) != forms[0]:
+            return value
+        if platform_terms.deprecation_prefix(value) == forms[1]:
+            return value
+        return forms[1] + value[:1].upper() + value[1:]
 
     def phrase(self, text: str) -> str | None:
         return self.phrases.get(text)
