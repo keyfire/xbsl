@@ -839,3 +839,94 @@ def test_the_step_writes_the_types_of_the_literals_it_can_pair(tmp_path):
     }
     assert "query_reserved_types" not in written["plain"]
     assert written["plain"]["query_reserved"] == _RESERVED
+
+
+# --- the languages of a project: a compiled enumeration ---------------------------------------
+
+
+def _car_with_classes(path, classes: dict[str, bytes], jar_name: str = "com.e1c.g5rt.demo-1.0.jar",
+                      extra: dict[str, str] | None = None):
+    """A distribution whose one platform jar holds the given classes (and extra text members)."""
+    import io
+    import zipfile
+
+    path.mkdir()
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as z:
+        for member, blob in classes.items():
+            z.writestr(member, blob)
+        for member, text in (extra or {}).items():
+            z.writestr(member, text)
+    car = path / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/chassis/modules/" + jar_name, jar.getvalue())
+    return path
+
+
+def test_a_language_is_read_from_its_code_its_term_and_its_mode():
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration
+
+    from xbsl.extract.terms import language_rows
+
+    assert language_rows(_enumeration(DEMO_LANGUAGES)) == [
+        {"ru": "Английский", "en": "English", "code": "en", "since": "1.0"},
+        {"ru": "Вьетнамский", "en": "Vietnamese", "code": "vi", "since": "9.1"},
+    ]
+
+
+def test_an_enumeration_of_another_shape_is_no_language_table():
+    """One constant without a mode - or with something other than a language code before its
+    term - makes the class some other enumeration, whatever the rest of it looks like."""
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration
+
+    from xbsl.extract.terms import language_rows
+
+    no_mode = DEMO_LANGUAGES + [("RU", "ru", "Russian", "Русский", None)]
+    no_code = DEMO_LANGUAGES + [("RU", "Default", "Russian", "Русский", "CMODE_1_0")]
+
+    assert language_rows(_enumeration(no_mode)) is None
+    assert language_rows(_enumeration(no_code)) is None
+
+
+def test_the_scan_finds_the_languages_by_their_shape_and_names_the_class(tmp_path):
+    import zipfile
+
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration
+
+    from xbsl.extract import _distro
+    from xbsl.extract.terms import scan_language_table
+
+    dist = _car_with_classes(tmp_path / "dist", {
+        "demo/lang/DemoLanguages.class": _enumeration(DEMO_LANGUAGES),
+        "demo/lang/Other.class": b"\xca\xfe\xba\xbe not a class the reader follows CMODE_",
+    })
+
+    with zipfile.ZipFile(_distro.find_car(dist)) as car:
+        found = scan_language_table(car)
+
+    assert found is not None
+    assert found[0] == "DemoLanguages"
+    assert [row["code"] for row in found[1]] == ["en", "vi"]
+
+
+def test_the_step_gives_every_language_its_english_spelling(tmp_path):
+    """End to end: the values of the language enumeration join the enumeration values of the
+    term dictionary, which a translation of a project descriptor reads them by."""
+    import json
+
+    from test_extract_classcode import DEMO_LANGUAGES, _enumeration
+
+    from xbsl.extract import _distro, terms
+
+    dist = _car_with_classes(tmp_path / "dist", {
+        "demo/lang/DemoLanguages.class": _enumeration(DEMO_LANGUAGES),
+    })
+    root = tmp_path / "data"
+    try:
+        terms.main(["--dist", str(dist), "--element-version", "9.9.9+1", "--data-dir", str(root)])
+    finally:
+        _distro.set_data_root(None)
+    written = json.loads((root / "9.9.9+1" / "terms.json").read_text(encoding="utf-8"))
+
+    assert written["enums"]["Вьетнамский"] == "Vietnamese"
+    assert written["enums"]["Английский"] == "English"

@@ -22,6 +22,7 @@ pool, the code of every method, and the calls that code makes with string argume
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 # How many bytes of operand each instruction carries. Only the three opcodes this module reads
 # matter by name, but every length has to be right: a walker that mistakes an operand byte for
@@ -198,6 +199,17 @@ def field_name(pool: dict[int, tuple[int, object]], index: int) -> str | None:
     return text(pool, described[1][0])  # type: ignore[index]
 
 
+def field_descriptor(pool: dict[int, tuple[int, object]], index: int) -> str | None:
+    """The type descriptor of a field reference (`Lpkg/Type;`), or None when the entry is not one."""
+    entry = pool.get(index)
+    if not entry or entry[0] != 9:  # fieldref
+        return None
+    described = pool.get(entry[1][1])  # type: ignore[index]
+    if not described or described[0] != 12:
+        return None
+    return text(pool, described[1][1])  # type: ignore[index]
+
+
 def _method_code(blob: bytes, pool: dict[int, tuple[int, object]], position: int) -> list[bytes]:
     """The bytecode of every method of the class, in declaration order."""
 
@@ -358,6 +370,77 @@ def declared_terms(blob: bytes) -> list[tuple[str, str, str]]:
             elif built is not None:
                 found.append((name, *built))
                 built = None
+    return found
+
+
+@dataclass(frozen=True)
+class DeclaredConstant:
+    """One constant an enumeration class builds, with what went into building it.
+
+    `field` - the static field the constant is stored into (its name); `strings` - every
+    string constant pushed for it, in order; `terms` - the terms built from two of them,
+    (English, Russian) as TERM_FACTORIES take them; `modes` - the compatibility modes the code
+    reads for it (`CMODE_9_0` -> `9.0`).
+    """
+
+    field: str
+    strings: tuple[str, ...]
+    terms: tuple[tuple[str, str], ...]
+    modes: tuple[str, ...]
+
+
+def declared_constants(blob: bytes) -> list[DeclaredConstant]:
+    """[the constants an enumeration class builds, in the order it builds them].
+
+    A Java enumeration builds each of its constants in the static initializer: an object of
+    the class ITSELF is reserved (`new`), the arguments are pushed, the class's own
+    constructor is called, and the object is stored into the static field named after the
+    constant - a field of the class's own type. Whatever the code pushes and builds in between
+    belongs to that constant - an object of another class made on the way included, since it
+    is an argument and not a constant. A construction that is never stored into such a field
+    is not a constant either.
+
+    Nothing here knows what the arguments mean: the caller reads its own shape out of the
+    strings, the terms and the modes (see extract.terms.language_rows).
+    """
+    pool, position = constant_pool(blob)
+    own = text(pool, int.from_bytes(blob[position + 2:position + 4], "big"))
+    found: list[DeclaredConstant] = []
+    for code in _method_code(blob, pool, position):
+        building: dict | None = None
+        for opcode, operand in _walk(code):
+            if opcode == _NEW and text(pool, operand) == own:
+                building = {"strings": [], "terms": [], "modes": [], "pushed": [], "built": False}
+            elif building is None:
+                continue
+            elif opcode in (_LDC, _LDC_W):
+                value = text(pool, operand)
+                if value is not None:
+                    building["strings"].append(value)
+                    building["pushed"].append(value)
+            elif opcode == _GETSTATIC:
+                mode = _mode(field_name(pool, operand))
+                if mode is not None:
+                    building["modes"].append(mode)
+            elif opcode in _INVOKE:
+                name = called_method(pool, operand) or ""
+                pushed = building["pushed"]
+                if any(name.endswith(factory) for factory in TERM_FACTORIES) and len(pushed) >= 2:
+                    english, russian = pushed[-2], pushed[-1]
+                    if english.isascii():
+                        building["terms"].append((english, russian))
+                if name == f"{own}.<init>":
+                    building["built"] = True
+                building["pushed"] = []
+            elif opcode == _PUTSTATIC:
+                field = field_name(pool, operand)
+                own_typed = field_descriptor(pool, operand) == f"L{own};"
+                if building["built"] and field and own_typed:
+                    found.append(DeclaredConstant(
+                        field, tuple(building["strings"]), tuple(building["terms"]),
+                        tuple(building["modes"]),
+                    ))
+                building = None
     return found
 
 
