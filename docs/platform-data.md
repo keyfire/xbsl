@@ -63,6 +63,34 @@ Component and property queries retain these definitions for existing compatibili
 Catalog entries preserve `retired` and `until`. The insertion palette excludes retired
 components and containers; it does not assume that the active project's mode permits them.
 
+## Enumeration values of the metamodel
+
+`metamodel.json` lists the values of every enumeration its properties are typed by: `enums` keeps
+the Russian values in the order the platform declares them, and `enum_items` keeps a record of
+each value - an item of the enumeration, as the platform calls it.
+
+```json
+"enum_items": {
+  "<enumeration>": {
+    "<Russian value>": {"en": "<English value>", "since": "<mode>", "until": "<mode>"}
+  }
+}
+```
+
+`en` is the English spelling the way this very enumeration writes it. A flat table of pairs cannot
+hold every word: one Russian value is `Normal` for the importance of a command and `Usual` for the
+importance of a favorite. `translate` and the properties panel of an English project spell a value
+by the record of its own enumeration.
+
+`since` is the compatibility mode the value appeared in, `until` the last mode that still has it;
+a value with neither is there in every mode. The modes come from the compiled classes of the
+platform and from its table of languages, since the model files date no value. The properties
+panel offers only the values the mode of the project allows, and a value the file already holds
+stays shown whatever its mode. MCP `metadata_schema` returns the limits in `enum_modes`.
+
+Data extracted before the section appeared keeps working: a value is then spelled from the flat
+table of pairs, and no value is limited by a mode. Re-extract the metamodel to get the records.
+
 ## Element versions
 
 The data is versioned by platform version:
