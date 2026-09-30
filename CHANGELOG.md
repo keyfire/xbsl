@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-30 – 0.125.0
 
 ### Added
 
@@ -26,18 +26,18 @@ entry either - say what the behaviour was, not which class name was compared.
   `Quarter` or `Year`, in either language. Such a set has a list beside its record, so
   `--presentation` writes the list caption and `--record-presentation` the record one, and the
   new set passes `naming/presentation`. MCP `meta_new_object` and the language server call it
-  `periodicity`.
+  `periodicity`. ([#166](https://github.com/keyfire/xbsl/pull/166))
 
 ### Changed
 
 - **`naming/presentation` now asks a processing for its caption.** A processing keeps it in
   `Interface.Presentation`: the form and the command that opens it are named by it, and without it
   both carry the element name. The standard lists processings among the elements whose
-  presentation is mandatory, and `new-object --presentation` writes the caption right there.
+  presentation is mandatory, and `new-object --presentation` writes the caption right there. ([#167](https://github.com/keyfire/xbsl/pull/167))
 - **`data-diff` no longer says "no changes" where the data changed.** It now compares the whole
   stdlib catalog, module handlers and signatures included, as well as `uiterms.json`,
   `terms_full.json` and the text of the help pages. The text report keeps to a count and the first
-  names; `--limit 0` lists them all.
+  names; `--limit 0` lists them all. ([#168](https://github.com/keyfire/xbsl/pull/168))
 
 ### Fixed
 
@@ -46,26 +46,26 @@ entry either - say what the behaviour was, not which class name was compared.
   cards, labels right and wrong examples, and keeps the code fragment of a card as code. ([#165](https://github.com/keyfire/xbsl/pull/165))
 - **Servers no longer answer from data replaced under them.** An MCP worker that read the term pairs
   just before a reinstall rewrote them kept answering from the old ones. Now it refuses with reason
-  `data` and a new worker answers the call; the language server asks for a restart.
+  `data` and a new worker answers the call; the language server asks for a restart. ([#168](https://github.com/keyfire/xbsl/pull/168))
 - **`xbsl extract` no longer writes into the package.** The grammar step used to cache the grammar
   files next to the package code whatever `--data-dir` said; now it reads them from the
-  distribution in memory, and an installed package stays as it was.
+  distribution in memory, and an installed package stays as it was. ([#168](https://github.com/keyfire/xbsl/pull/168))
 - **The help of `--element-version` names the real default.** It said "the latest in the
   bundle", while the version comes from `XBSL_ELEMENT_VERSION` or, without it, from the `default`
-  of `index.json` in the data root.
+  of `index.json` in the data root. ([#168](https://github.com/keyfire/xbsl/pull/168))
 - **The translator spells the standard attributes of an exchange plan in `ComputePermissionsBy`.**
   The number of the sent message and this node stayed Russian in the list, so the English exchange
-  plan named fields its object does not have. Now the kind spells them: `SentNumber`, `ThisNode`.
+  plan named fields its object does not have. Now the kind spells them: `SentNumber`, `ThisNode`. ([#168](https://github.com/keyfire/xbsl/pull/168))
 - **`xbsl extract` no longer pairs a name of an element model with its neighbour.** Such a class
   writes the Russian name first, and this node of an exchange plan read as `ReceivedNumber`; a dozen
   words of the compiler dictionary were wrong as well, and the name of a Java constant passed for
-  the English of the word it holds. Run `xbsl extract --dist ... --only terms`.
+  the English of the word it holds. Run `xbsl extract --dist ... --only terms`. ([#168](https://github.com/keyfire/xbsl/pull/168))
 - **A second translation of the same file no longer leaves the schedule kind Russian.** The
   translator wrote the English kind back into the parsed file kept with the source, so the next
-  pass in the same process found nothing to change. It now leaves the parsed file as it was.
+  pass in the same process found nothing to change. It now leaves the parsed file as it was. ([#168](https://github.com/keyfire/xbsl/pull/168))
 - **The translator names a declared standard attribute the way its kind does.** An exchange
   plan that declared the number of the sent message kept it Russian and asked the project for
-  an entry, while its own list already said `SentNumber`. An entry of the project still wins.
+  an entry, while its own list already said `SentNumber`. An entry of the project still wins. ([#168](https://github.com/keyfire/xbsl/pull/168))
 
 ## 2026-09-29 – 0.121.0, 0.122.0, 0.122.1, 0.123.0, 0.124.0
 
