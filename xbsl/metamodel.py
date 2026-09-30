@@ -213,6 +213,13 @@ def enum_values(name: str) -> tuple[str, ...]:
     return tuple((data.get("enums") or {}).get(name, ())) if data else ()
 
 
+def has_value_records() -> bool:
+    """True when the data records the values of its enumerations (`enum_items`); data extracted
+    before the section existed records none of them."""
+    data = _data()
+    return bool(data and data.get("enum_items"))
+
+
 def _value_record(name: str, value: str) -> dict:
     """The record of one enumeration value (`enum_items` of the data), {} when there is none.
 

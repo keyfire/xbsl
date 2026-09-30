@@ -21,7 +21,7 @@ from xbsl.restext import RESOURCE_DIRS
 
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
-                   ident_english, member_english, _ui_enum_tables,
+                   ident_english, member_english, _unrecorded_enum_value, _ui_enum_tables,
                    _unanimous_enum_value, _member_names, reference_only_members,
                    _platform_facets, _facet_owners, _facet_keys, _library_pictures):
         cached.cache_clear()
@@ -599,7 +599,7 @@ def enum_value_of(enum: str, value: str) -> str | None:
     if not enum or not value:
         return None
     if metamodel.enum_values(enum):
-        return metamodel.enum_value_english(enum, value)
+        return metamodel.enum_value_english(enum, value) or _unrecorded_enum_value(enum, value)
     per_enum = uischema.enum_value_aliases(enum)
     return per_enum.get(value) if per_enum else None
 
@@ -610,12 +610,14 @@ def enum_value_english(enum: str, value: str) -> str | None:
     Per enumeration on purpose - globally the same Russian word answers to several English
     ones (Common, Normal and Usual). An enumeration of the metamodel, named by its class,
     spells its values in metamodel.json itself; the interface enumerations come from
-    uiterms, keyed by their Russian names. The flat unambiguous section is the last resort -
-    and all there is for data extracted before the metamodel spelled its values.
+    uiterms, keyed by their Russian names. Data extracted before the metamodel spelled its
+    values is read the way it was (see _unrecorded_enum_value), and the flat unambiguous
+    section is the last resort.
     """
     if enum:
         english = (metamodel.enum_value_english(enum, value)
-                   or uischema.enum_value_aliases(enum).get(value))
+                   or uischema.enum_value_aliases(enum).get(value)
+                   or _unrecorded_enum_value(enum, value))
         if english:
             return english
     return terms.english(value, "enums") or _unanimous_enum_value(value)
@@ -634,6 +636,29 @@ def _unanimous_enum_value(value: str) -> str | None:
         for pairs in _ui_enum_tables().values()
         if value in pairs
     }
+    return spellings.pop() if len(spellings) == 1 else None
+
+
+@lru_cache(maxsize=None)
+def _unrecorded_enum_value(enum_class: str, value: str) -> str | None:
+    """A value of the model spelled by the tables of the interface, for data WITHOUT records.
+
+    Data extracted before the metamodel recorded its values (`enum_items`) holds no other
+    spelling per enumeration: the enumeration is matched into the tables of the interface by
+    its values, and a spelling is taken only when every table that fits agrees. It is a guess -
+    the comparison of an integration process came out `Equal` where the model says `Equals` -
+    and data that carries the records never asks it. Without it such data would answer nothing
+    for a word two enumerations spell apart, and a pair of the project dictionary took the
+    platform's place: an event of a real project came out `Importance: Regular`, a value the
+    platform does not have.
+    """
+    if metamodel.has_value_records():
+        return None
+    values = set(metamodel.enum_values(enum_class))
+    if not values:
+        return None
+    spellings = {pairs[value] for pairs in _ui_enum_tables().values()
+                 if value in pairs and set(pairs).issubset(values)}
     return spellings.pop() if len(spellings) == 1 else None
 
 

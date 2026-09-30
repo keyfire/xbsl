@@ -382,15 +382,16 @@ def test_a_yaml_value_read_with_data_that_has_no_pictures_is_read_as_before(tmp_
 def _enumeration_root(tmp_path, name: str, *, records: bool = True):
     """A data root whose model types three properties of a kind by enumerations. Two of them
     share a Russian value and spell it apart; the third shares a value with a table of the
-    interface that spells it otherwise. With `records` the model spells every value itself,
-    the way the extractor writes metamodel.json; without them it is data extracted before."""
+    interface that spells it otherwise. With `records` the model spells its values itself, the
+    way the extractor writes metamodel.json (one value is left without a record); without them
+    it is data extracted before."""
     import json
 
     root = tmp_path / name
     version = root / "1.0.0"
     version.mkdir(parents=True)
     enums = {"TaskImportance": ["Низкая", "Обычная"], "FavoriteImportance": ["Обычная", "Высокая"],
-             "ConditionKind": ["Равно", "НеРавно"]}
+             "ConditionKind": ["Равно", "НеРавно", "Больше"]}
     model = {
         "classes": {"DemoCommandDescriptor": {"props": {
             "Важность": {"kind": "enum", "enum": "TaskImportance", "type": "TaskImportance",
@@ -411,7 +412,11 @@ def _enumeration_root(tmp_path, name: str, *, records: bool = True):
     files = {
         "metamodel.json": model,
         "terms.json": {"enums": {"Низкая": "Low", "Высокая": "High", "НеРавно": "NotEquals"}},
-        "uiterms.json": {"enum_values": {"ВидСравненияДемо": {"Равно": "Equal"}}},
+        "uiterms.json": {"enum_values": {
+            "ВидСравненияДемо": {"Равно": "Equal", "Больше": "Greater"},
+            "ВажностьЗадачиДемо": {"Низкая": "Low", "Обычная": "Normal"},
+            "ВажностьИзбранногоДемо": {"Обычная": "Usual", "Высокая": "High"},
+        }},
     }
     for file, content in files.items():
         (version / file).write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
@@ -446,19 +451,24 @@ def test_a_value_of_the_model_is_spelled_by_its_own_enumeration(tmp_path):
         assert "FavoriteImportance: Usual\n" in out
         assert "Condition: Equals\n" in out
         assert platform_map.enum_value_of("ConditionKind", "Равно") == "Equals"
+        # Data that records its values never guesses, not even for a value its records lack.
         assert platform_map.enum_value_of("ConditionKind", "Больше") is None
+        assert platform_map.enum_value_of("ConditionKind", "Меньше") is None
     finally:
         platform_map.dataset.set_data_root(None)
 
 
-def test_data_without_the_records_of_the_model_answers_from_the_flat_tables(tmp_path):
-    """Data extracted before the model spelled its values: a word the flat table drops stays
-    Russian and is reported, and a word every table of the interface agrees on is taken."""
+def test_data_without_the_records_of_the_model_is_read_as_before(tmp_path):
+    """Data extracted before the model recorded its values: an enumeration of the model is
+    matched into the tables of the interface by its values, as the engine did before, so a
+    word the flat table drops keeps its spelling and no pair of a project takes its place."""
     platform_map.dataset.set_data_root(_enumeration_root(tmp_path, "data", records=False))
     try:
         out, report = _translated(_COMMAND)
-        assert "Importance: Обычная\n" in out
+        assert "Importance: Normal\n" in out
+        assert "FavoriteImportance: Usual\n" in out
         assert "Condition: Equal\n" in out
-        assert "Обычная" in report.missing_platform
+        assert platform_map.enum_value_of("ConditionKind", "Больше") == "Greater"
+        assert "Обычная" not in report.missing_platform
     finally:
         platform_map.dataset.set_data_root(None)

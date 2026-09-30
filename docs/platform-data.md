@@ -88,8 +88,10 @@ platform and from its table of languages, since the model files date no value. T
 panel offers only the values the mode of the project allows, and a value the file already holds
 stays shown whatever its mode. MCP `metadata_schema` returns the limits in `enum_modes`.
 
-Data extracted before the section appeared keeps working: a value is then spelled from the flat
-table of pairs, and no value is limited by a mode. Re-extract the metamodel to get the records.
+Data extracted before the section appeared is read as it was: an enumeration of the model is
+matched into the tables of the interface by its values, the flat table of pairs answers after
+them, and no value is limited by a mode. That match is a guess, and data with the records never
+makes it. Re-extract the metamodel to get the records.
 
 ## Element versions
 
