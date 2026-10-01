@@ -25,15 +25,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
-
-### Fixed
-
-- **`xbsl extract` reads event handler names correctly.** It used to pair most of them with
-  neighbouring words from the same class, so the compiler dictionary offered the wrong English
-  names. The extractor now uses the name pairs declared by the platform. ([#172](https://github.com/keyfire/xbsl/pull/172))
-
-## 2026-10-01 – 0.127.0, 0.128.0
+## 2026-10-01 – 0.127.0, 0.128.0, 0.128.1
 
 ### Added
 
@@ -56,6 +48,9 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`xbsl extract` reads event handler names correctly.** It used to pair most of them with
+  neighbouring words from the same class, so the compiler dictionary offered the wrong English
+  names. The extractor now uses the name pairs declared by the platform. ([#172](https://github.com/keyfire/xbsl/pull/172))
 - **`xbsl extract` puts the pairs a class writes Russian first into the compiler dictionary.**
   Such a pair only checked the neighbour on its left, and now it is a source too, screened like
   the others: the code `SN` of a number spellout parameter gets its pair. A caption such as
