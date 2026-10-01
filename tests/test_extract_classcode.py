@@ -798,3 +798,17 @@ def test_a_call_takes_as_many_strings_as_it_has_string_parameters():
         ("demo/acme/Log.format", ("Step",)),
         ("demo/acme/Types.typeVariable", ("Item", "Элемент", "ItemType")),
     ]
+
+
+def test_object_pair_constructor_reads_its_two_string_constants():
+    pair = "com/e1c/g5rt/utils/common/collections/Pair.<init>"
+    blob = _class_of([
+        (pair, ["Картинка", "Picture"], "(Ljava/lang/Object;Ljava/lang/Object;)V"),
+        ("demo/acme/Map.put", ["KEY"],
+         "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"),
+    ])
+
+    assert classcode.string_arguments(blob) == [
+        (pair, ("Картинка", "Picture")),
+        ("demo/acme/Map.put", ()),
+    ]
