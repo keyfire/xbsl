@@ -1195,3 +1195,23 @@ def test_the_step_spells_the_values_of_the_wrapped_enumerations(tmp_path):
     assert written["enums"]["Высокая"] == "High"
     assert written["enums"]["Готово"] == "Done"
     assert "Любой" not in written["enums"]
+
+
+def test_object_pair_constructor_removes_shifted_neighbours_and_supplies_its_pairs():
+    from test_extract_classcode import _class_of
+
+    pair = "com/e1c/g5rt/utils/common/collections/Pair.<init>"
+    descriptor = "(Ljava/lang/Object;Ljava/lang/Object;)V"
+    blob = _class_of([
+        (pair, ["Кнопка", "Button"], descriptor),
+        (pair, ["Картинка", "Picture"], descriptor),
+        (pair, ["Поле", "Field"], descriptor),
+    ], extra_strings=["Кнопка", "Button", "Картинка", "Picture", "Поле", "Field"])
+
+    members, common, _types = _scan_classes({"demo/acme/EventHandlerRule.class": blob})
+
+    assert members["EventHandlerRule"] == {
+        "Кнопка": "Button", "Картинка": "Picture", "Поле": "Field",
+    }
+    assert common["Картинка"] == "Picture"
+    assert common["Поле"] == "Field"

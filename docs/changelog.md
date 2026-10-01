@@ -25,6 +25,14 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **`xbsl extract` reads event handler names correctly.** It used to pair most of them with
+  neighbouring words from the same class, so the compiler dictionary offered the wrong English
+  names. The extractor now uses the name pairs declared by the platform.
+
 ## 2026-10-01 – 0.127.0, 0.128.0
 
 ### Added

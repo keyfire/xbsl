@@ -318,6 +318,8 @@ def builder_calls(blob: bytes) -> list[tuple[str, list[str]]]:
 
 
 _STRING_PARAMETER = "Ljava/lang/String;"
+_OBJECT_PAIR_INIT = "com/e1c/g5rt/utils/common/collections/Pair.<init>"
+_OBJECT_PAIR_DESCRIPTOR = "(Ljava/lang/Object;Ljava/lang/Object;)V"
 
 
 def _string_parameters(descriptor: str) -> int:
@@ -342,6 +344,8 @@ def string_arguments(blob: bytes) -> list[tuple[str, tuple[str, ...]]]:
     parameters. A constant pushed earlier belongs to an outer call: the key of a map is pushed
     before the value built for it, and the call that builds the value does not take the key.
     A string argument the code computes is no constant, and the call then takes fewer of them.
+    The platform Pair constructor declares both name spellings as Object parameters, so its
+    two directly pushed string constants count too. Other Object calls do not.
     """
     pool, position = constant_pool(blob)
     found: list[tuple[str, tuple[str, ...]]] = []
@@ -354,7 +358,10 @@ def string_arguments(blob: bytes) -> list[tuple[str, tuple[str, ...]]]:
                     pushed.append(value)
             elif opcode in _INVOKE:
                 name = called_method(pool, operand)
-                count = _string_parameters(method_descriptor(pool, operand) or "")
+                descriptor = method_descriptor(pool, operand) or ""
+                count = _string_parameters(descriptor)
+                if name == _OBJECT_PAIR_INIT and descriptor == _OBJECT_PAIR_DESCRIPTOR:
+                    count = 2
                 if name:
                     found.append((name, tuple(pushed[-count:]) if count else ()))
                 pushed = []
