@@ -9,13 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.80.0
 
 ### Fixed
 
-- **Add localization names each language in the language of the editor.** The list and the names
-  come from the engine, with the command line standing in for the language server; with no engine
-  the command says so rather than offering a fixed Russian and English pair.
+- **"Add localization" shows every language name in the editor's language.** The engine
+  supplies the languages available to the project through the language server or CLI.
+  If the engine is unavailable, the command shows an installation prompt. ([change](https://github.com/keyfire/xbsl/commit/f951c039c60fea42caaf1c0bb6e1e6949c674e56))
 
 ## 0.79.0
 
