@@ -18,13 +18,16 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-10-01 – 0.127.0, 0.128.0
 
 ### Added
 
 - **The properties panel offers only the values the compatibility mode of the project allows.**
   `xbsl extract` dates the enumeration values the platform limits to some modes, the panel reads
   the mode the way the build does, and MCP `metadata_schema` returns the limits in `enum_modes`. ([#171](https://github.com/keyfire/xbsl/pull/171))
+- **`localization-info` gives the English name of each candidate language too.** The `names_en`
+  field stands next to `names` in the command, in MCP `meta_localization_info` and in the language
+  server, so a client can name a language in the language of its own interface. ([#170](https://github.com/keyfire/xbsl/pull/170))
 
 ### Changed
 
@@ -32,6 +35,9 @@ entry either - say what the behaviour was, not which class name was compared.
   writes the English spelling of every value into `metamodel.json`, and both read it there
   instead of guessing it by the tables of the interface. So `ComparisonKind` of an integration
   process predicate is `Equals` now, and a value the flat table had no English for gets one. ([#171](https://github.com/keyfire/xbsl/pull/171))
+- **`translate` keeps the prefix of a deprecated name.** An entry that does not start with
+  `Deprecated` gets it in front, so `naming/presentation` knows the element in the English tree
+  and asks for `(not used)` there. A word that only begins like the prefix no longer counts. ([#170](https://github.com/keyfire/xbsl/pull/170))
 
 ### Fixed
 
@@ -42,23 +48,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **Two worktrees of one project in one run are no longer merged into one project.** Shared names
   gave a finding each, and one tree's baseline judged the other. Each root now gets its own check
   and record in `summary.projects`, and `lint_paths` with `compact` keeps within 12,000 characters. ([#171](https://github.com/keyfire/xbsl/pull/171))
-
-## 2026-10-01 – 0.127.0
-
-### Added
-
-- **`localization-info` gives the English name of each candidate language too.** The `names_en`
-  field stands next to `names` in the command, in MCP `meta_localization_info` and in the language
-  server, so a client can name a language in the language of its own interface. ([#170](https://github.com/keyfire/xbsl/pull/170))
-
-### Changed
-
-- **`translate` keeps the prefix of a deprecated name.** An entry that does not start with
-  `Deprecated` gets it in front, so `naming/presentation` knows the element in the English tree
-  and asks for `(not used)` there. A word that only begins like the prefix no longer counts. ([#170](https://github.com/keyfire/xbsl/pull/170))
-
-### Fixed
-
 - **`from xbsl import scaffold` works as the first import of a process.** It used to fail on a
   circular import: loading the engine loads the rules, and a rule takes a name from the
   scaffolding module. `import xbsl.resource_usage` failed the same way. ([#170](https://github.com/keyfire/xbsl/pull/170))
