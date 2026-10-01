@@ -24,7 +24,7 @@ entry either - say what the behaviour was, not which class name was compared.
 
 - **`xbsl extract` reads event handler names correctly.** It used to pair most of them with
   neighbouring words from the same class, so the compiler dictionary offered the wrong English
-  names. The extractor now uses the name pairs declared by the platform.
+  names. The extractor now uses the name pairs declared by the platform. ([#172](https://github.com/keyfire/xbsl/pull/172))
 
 ## 2026-10-01 – 0.127.0, 0.128.0
 
