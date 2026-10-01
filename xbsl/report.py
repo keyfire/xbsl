@@ -6,7 +6,9 @@ carries the counts by rule, by file and by severity (breakdown()); rule_table() 
 rows of the text `--summary` (rundiff.py). compact() omits the per-file map
 and keeps the error-level findings whole; up to COMPACT_FINDINGS_LIMIT it also lists the findings
 themselves, one line each, and past that limit only says how many there are - what a reader wants
-when the list is too long to carry.
+when the list is too long to carry. fit() holds a compact answer to COMPACT_ANSWER_LIMIT
+characters whatever the run found, and names what it cut. A run over several project roots adds
+project_record() of each root to its summary, under `projects`.
 
 CI integration lives here too: codeclimate() renders the diagnostics as a GitLab Code Quality
 report (a subset of the Code Climate issue format), which GitLab shows as a widget on merge
@@ -16,6 +18,7 @@ requests (https://docs.gitlab.com/ee/ci/testing/code_quality.html).
 from __future__ import annotations
 
 import hashlib
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -100,6 +103,20 @@ def report(diags: list[Diagnostic], n_files: int) -> dict:
     }
 
 
+def project_record(root: Path | None, diags: list[Diagnostic], n_files: int) -> dict:
+    """One project root of a run over several, for `summary.projects`: its own counts.
+
+    A run over several project roots checks each of them on its own; the summary of the run
+    counts them all, and this record counts one of them - the files, the findings by rule and
+    by severity. The per-file map stays in the summary of the run, whose paths already name
+    the root they lie under. `project` is the root folder, None for the sources that lie in
+    no project.
+    """
+    counts = summary(sorted(diags, key=lambda x: x.sort_key()), n_files)
+    del counts["by_file"]
+    return {"project": str(root) if root is not None else None, **counts}
+
+
 #: compact() lists findings one line each up to this many; more, and only the count remains.
 #: Ten is a screenful either way - fewer and a reader still has to ask again to see anything,
 #: more and the "compact" answer is not compact any more. A named constant instead of a bare
@@ -151,12 +168,113 @@ def compact_summary(summary: dict, *, as_ci_full: bool = False) -> dict:
     """The summary of a compact answer: without the per-file map, `as_ci` as one line.
 
     compact() builds its summary here, and so does the comparison answer of `lint_paths`,
-    which carries the changes in place of the findings.
+    which carries the changes in place of the findings. The record of each project root
+    (`projects`, a run over several of them) keeps its CI job as one line too.
     """
     out = {key: value for key, value in summary.items() if key != "by_file"}
     as_ci = out.get("as_ci")
     if as_ci is not None and not as_ci_full:
         out["as_ci"] = compact_as_ci(as_ci)
+    projects = out.get("projects")
+    if projects and not as_ci_full:
+        out["projects"] = [
+            {**entry, "as_ci": compact_as_ci(entry["as_ci"])}
+            if entry.get("as_ci") is not None else entry
+            for entry in projects
+        ]
+    return out
+
+
+#: The most characters a compact answer takes, counted as its JSON text. The lists of a
+#: compact answer are held short by count (COMPACT_FINDINGS_LIMIT), but a few of them grow with
+#: the run: the full records of the errors, the stale entries of a baseline, the records of the
+#: project roots. Two worktrees of one project checked as one project once answered with 467
+#: thousand characters under `compact` - hundreds of errors in full, when the question was
+#: whether the trees were clean. Twelve thousand characters hold the counts of any run and a
+#: screenful of records, and stay well inside what a client takes from one tool call.
+COMPACT_ANSWER_LIMIT = 12_000
+
+
+def _json_size(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False))
+
+
+def _cut_places(answer: dict) -> list[tuple[str, dict, str]]:
+    """The lists fit() may cut, in the order it cuts them: (name, container, key).
+
+    What the reader can do without goes first: the stale and the reworded entries of a
+    baseline (their counts stay), then the findings one line each, the error records, the
+    counts by rule of each project root, the project roots themselves and the counts by rule
+    of the run. The counts of the summary are never cut - they are what the answer is for.
+    """
+    summary = answer["summary"]
+    projects = summary.get("projects") or []
+    entries = ("baseline_stale_entries", "baseline_reworded_entries")
+    places = [(f"summary.{key}", summary, key) for key in entries]
+    places += [(f"summary.projects[{index}].{key}", entry, key)
+               for index, entry in enumerate(projects) for key in entries]
+    places += [("findings", answer, "findings"), ("errors", answer, "errors")]
+    places += [(f"summary.projects[{index}].by_rule", entry, "by_rule")
+               for index, entry in enumerate(projects)]
+    places += [("summary.projects", summary, "projects"), ("summary.by_rule", summary, "by_rule")]
+    return [(name, container, key) for name, container, key in places
+            if isinstance(container.get(key), (list, dict)) and container[key]]
+
+
+class _Cut:
+    """One list of an answer being cut: keeps its first items and says how many."""
+
+    def __init__(self, answer: dict, cuts: dict, limit: int, name: str, container: dict,
+                 key: str) -> None:
+        self.answer, self.cuts, self.limit = answer, cuts, limit
+        self.name, self.container, self.key = name, container, key
+        whole = container[key]
+        self.as_dict = isinstance(whole, dict)
+        self.items = list(whole.items()) if self.as_dict else list(whole)
+
+    def keep(self, count: int) -> int:
+        """Keep the first `count` items, name the cut, and measure the answer that makes."""
+        kept = self.items[:count]
+        self.container[self.key] = dict(kept) if self.as_dict else kept
+        self.cuts[self.name] = {"shown": count, "total": len(self.items)}
+        self.answer["truncated"] = dict(self.cuts)
+        self.answer["truncated_hint"] = i18n.t("report.truncated", limit=self.limit)
+        return _json_size(self.answer)
+
+
+def fit(answer: dict, limit: int = COMPACT_ANSWER_LIMIT) -> dict:
+    """A compact answer held to `limit` characters of JSON, every cut said out loud.
+
+    An answer that fits comes back as it is. Otherwise the lists that grow with the run are
+    cut from their end, one after another in the order of _cut_places, each to as many items
+    as still fit, until the answer does: `truncated` names every list cut with {shown,
+    total}, and `truncated_hint` says how to read the whole answer - a call without
+    `compact`, narrower paths or rules, or the CLI writing the json report to a file. The
+    parts that do not grow with the findings - the counts, the CI record, the hints - stay
+    whole. The answer given is not changed: the containers on the way to a cut are copies.
+    """
+    if _json_size(answer) <= limit:
+        return answer
+    out = dict(answer)
+    out["summary"] = dict(answer["summary"])
+    if out["summary"].get("projects"):
+        out["summary"]["projects"] = [dict(entry) for entry in out["summary"]["projects"]]
+    cuts: dict[str, dict[str, int]] = {}
+    for name, container, key in _cut_places(out):
+        cut = _Cut(out, cuts, limit, name, container, key)
+        if cut.keep(0) > limit:
+            continue  # even without this list the answer is over: the next one goes too
+        # With the whole list the answer is over the limit, so the count that fits is below
+        # its length: the largest such count, by halving.
+        low, high = 0, len(cut.items) - 1
+        while low < high:
+            middle = (low + high + 1) // 2
+            if cut.keep(middle) <= limit:
+                low = middle
+            else:
+                high = middle - 1
+        cut.keep(low)
+        break
     return out
 
 

@@ -98,6 +98,38 @@ _CORE_MESSAGES = {
         "ru": "ещё правил: {count}",
         "en": "{count} more rules",
     },
+    "report.truncated": {
+        "ru": "ответ урезан до {limit} знаков: списки, показанные не целиком, названы в "
+              "truncated. Полный ответ даст вызов без compact либо более узкие paths/select; "
+              "в файл его пишет xbsl <пути> --format json --out ФАЙЛ",
+        "en": "the answer is cut to {limit} characters: the lists shown in part are named in "
+              "truncated. The whole answer is a call without compact or narrower "
+              "paths/select; xbsl <paths> --format json --out FILE writes it to a file",
+    },
+    "cli.projects": {
+        "ru": "Проектов: {count}, каждый проверен отдельно:",
+        "en": "Projects: {count}, each checked on its own:",
+    },
+    "cli.project-line": {
+        "ru": "  {root}: файлов: {files}, замечаний: {diags} (ошибок: {errors})",
+        "en": "  {root}: files: {files}, diagnostics: {diags} (errors: {errors})",
+    },
+    "cli.project-baselined": {
+        "ru": "; погашено списком принятых {path}: {count}",
+        "en": "; suppressed by the baseline {path}: {count}",
+    },
+    "cli.project-outside": {
+        "ru": "вне проектов",
+        "en": "outside any project",
+    },
+    "cli.baseline-several": {
+        "ru": "Пути относятся к проектам с разными списками принятых замечаний: {paths}. Список "
+              "меняется по одному файлу – запустите команду для каждого проекта отдельно либо "
+              "назовите файл явно",
+        "en": "The paths belong to projects with different baselines: {paths}. A baseline is "
+              "changed one file at a time - run the command for each project separately, or "
+              "name the file",
+    },
     "code/unused-method.off": {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",

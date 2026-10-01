@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from xbsl import __version__, dataset, i18n
-from xbsl.cli import discover
+from xbsl.cli import _context_of, _filter_requested, split_by_project
 from xbsl.diagnostics import Diagnostic
 from xbsl.engine import RULES, run
 
@@ -81,16 +81,22 @@ def _lint(body: dict) -> dict:
 
     select = body.get("select")
     ignore = body.get("ignore")
-    files = discover(raw_paths)
+    # Each project root on its own, with its project around a file asked alone - the rule of
+    # the CLI and the MCP server.
+    parts = split_by_project(raw_paths)
     sel = set(select) if select is not None else None
-    if sel is not None and not sel:
-        diags: list[Diagnostic] = []  # no rules selected
-    else:
-        diags = run(files, select=sel, ignore=set(ignore) if ignore else None)
+    diags: list[Diagnostic] = []
+    if sel is None or sel:  # an empty selection selects no rules
+        for part in parts:
+            diags += _filter_requested(
+                run(part.files, select=sel, ignore=set(ignore) if ignore else None,
+                    context=_context_of(part.files, part.requested)),
+                part.requested,
+            )
     diags = sorted(diags, key=lambda x: x.sort_key())
     return {
         "diagnostics": [_diag_dict(d) for d in diags],
-        "summary": _summary(diags, len(files)),
+        "summary": _summary(diags, sum(len(part.counted) for part in parts)),
     }
 
 

@@ -57,7 +57,21 @@ The summary of that payload counts the findings by rule, by file and by severity
 without reading its list: which rules fire, in which files, and whether an error is among them. The
 MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary, the
 error-level findings whole and - while there are no more than ten findings in all - the list itself,
-one line each. Past that the list gives way to the count and a word on how to read the rest.
+one line each. Past that the list gives way to the count and a word on how to read the rest. Whatever
+the run found, a compact answer stays within 12,000 characters: past that it cuts the lists that
+grow with the run from their end, the error records among them, keeps every count and names each
+cut in `truncated`.
+
+Paths of several project roots are never checked as one project. A root is the folder holding the
+project descriptor, so two worktrees of one project given in one run are two roots, and so are the
+projects under a folder given as a whole. Loaded as one project, the two worktrees gave a finding for
+every name they share, and the baseline of the first one judged the files of the second. Now each
+root is checked on its own, with its own project around a file asked for alone, the baseline found
+above its files and, with `--as-ci`, the job of its own checkout. The findings of all the roots come
+in one list. The text report adds a line per root under the totals, and the json payload a record
+per root in `summary.projects`: its counts, its baseline and its CI job, which then leave the top of
+the summary. `xbsl baseline add` and the MCP `baseline_prune` change one file, so they refuse paths
+whose roots keep baselines of their own and name the files.
 
 `--summary` prints the counts instead of the findings: a row per rule with the files it reached
 and its findings, and a line of totals below. `--compare FILE` prints the same on its first run

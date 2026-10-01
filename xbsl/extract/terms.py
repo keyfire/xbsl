@@ -317,6 +317,35 @@ def _origin_contradicts(en: str, ru: str, russian_first: dict[str, set[str]],
     return en not in spellings and en not in {_identifier_of(phrase) for phrase in spellings}
 
 
+def _russian_first_pairs(russian_first: dict[str, set[str]],
+                         english_first: set[tuple[str, str]],
+                         kept: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """[(English, Russian)] the class states Russian first: a source of pairs, not only a check.
+
+    A word the class writes Russian first with one English NAME right after it is paired the
+    way the class states it: the code of a parameter of a format string is `SN`, while the
+    neighbour on its left was the English of the previous parameter. The screening is the one
+    every pair of the scan passes: both sides are names (see _names_its_field too), and a word
+    the class writes this way with two spellings is no pair - neither is guessed. A word the
+    class also states English first keeps that statement, and a word a kept neighbour already
+    pairs - with the stated spelling, or with the name a stated phrase makes - is not paired
+    twice. A phrase (`Half year`) is a caption the class localizes, no name: it still tells
+    which neighbour is not a spelling (_origin_contradicts), but in a dictionary of names it
+    would stand as a platform spelling of the word that no identifier can take.
+    """
+    paired = {ru for _en, ru in kept} | {ru for _en, ru in english_first}
+    out: list[tuple[str, str]] = []
+    for russian, spellings in russian_first.items():
+        if russian in paired or len(spellings) != 1:
+            continue
+        english = next(iter(spellings))
+        if (_EN_NAME_RE.match(english) and english not in _CLASS_FILE_NAMES
+                and _RU_NAME_RE.match(russian) and _CYRILLIC_RE.search(russian)
+                and not _names_its_field(english, russian)):
+            out.append((english, russian))
+    return out
+
+
 def _contradicts_language(en: str, ru: str, languages: dict[str, str]) -> bool:
     """Whether the pair names a language other than the language table of the platform does.
 
@@ -502,10 +531,14 @@ def _scan_meta_objects(
             if stated_pairs is not None:
                 pairs = _checked(stated_pairs, pairs)
             elif pairs and (russian_first := _russian_first(data)):
+                # Read where the neighbourhood found a pair: a word written Russian first leaves
+                # one on its left, and over the distribution no class states such a pair
+                # without it - reading every class with a Cyrillic string would cost a minute.
                 english_first = {(en, ru) for _field, en, ru in found}
                 english_first.update((en, ru) for ru, en in declared.items())
                 pairs = [(en, ru) for en, ru in pairs
                          if not _origin_contradicts(en, ru, russian_first, english_first)]
+                pairs += _russian_first_pairs(russian_first, english_first, pairs)
             # Checked last: a package that writes its annotations Russian first has its shifted
             # neighbours spelled by the annotations above, the names of languages among them.
             if languages:
@@ -828,8 +861,42 @@ def _is_value_pair(english: str, russian: str) -> bool:
     return _is_term_pair(english, russian) or (russian == english and bool(_EN_NAME_RE.match(english)))
 
 
-def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
-    """[(English, Russian)] of every value a compiled enumeration declares, or None for another class.
+@dataclass(frozen=True)
+class EnumerationValue:
+    """One value of a compiled enumeration: its two spellings and the modes that have it.
+
+    `since` - the compatibility mode the value is added in; `until` - the last mode that still
+    has it. Either is None where the class states no such limit.
+    """
+
+    english: str
+    russian: str
+    since: str | None = None
+    until: str | None = None
+
+
+#: The calls an item of a compiled enumeration is dated by: the builder of the item takes the
+#: mode a value is added in (`added`), and the last mode it is kept in (`removedAfter` - the
+#: platform takes the value off in the modes after it).
+_VALUE_ADDED = "ItemInfo$Builder.added"
+_VALUE_REMOVED_AFTER = "ItemInfo$Builder.removedAfter"
+
+
+def _value_modes(constant: classcode.DeclaredConstant) -> tuple[str | None, str | None]:
+    """(since, until) of one value, as the calls that take a mode for it state them.
+
+    A mode taken by a call of another kind - a constructor, a spelling kept up to a mode -
+    says nothing about when the value is available, and is not read as such.
+    """
+    since = next((mode for called, mode in constant.mode_calls
+                  if called.endswith(_VALUE_ADDED)), None)
+    until = next((mode for called, mode in constant.mode_calls
+                  if called.endswith(_VALUE_REMOVED_AFTER)), None)
+    return since, until
+
+
+def enumeration_values(blob: bytes) -> list[EnumerationValue] | None:
+    """Every value a compiled enumeration declares, or None for another class.
 
     Some enumerations a property of the model is typed by are compiled classes the model only
     wraps (`type Importance wraps ImportanceG5Enum`): no `.xcore` lists their values, so the
@@ -840,6 +907,9 @@ def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
     is the pair. Without a term the pair is the first two strings after the name that read as an
     English name and its Russian twin; a value spelled alike in both languages counts too.
 
+    The builder also dates an item: `added(<mode>)` names the mode the value appeared in,
+    `removedAfter(<mode>)` the last mode that has it (see _value_modes).
+
     A class counts only when EVERY constant it builds has that shape: its first string is its
     own name, and one pair follows. The values come in the order the class declares them.
     """
@@ -849,7 +919,7 @@ def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
         return None
     if not constants:
         return None
-    values: list[tuple[str, str]] = []
+    values: list[EnumerationValue] = []
     for constant in constants:
         strings = constant.strings
         if not strings or strings[0] != constant.field or len(constant.terms) > 1:
@@ -861,13 +931,13 @@ def enumeration_values(blob: bytes) -> list[tuple[str, str]] | None:
                          if _is_value_pair(english, russian)), None)
         if pair is None or not _is_value_pair(*pair):
             return None
-        values.append(pair)
+        values.append(EnumerationValue(*pair, *_value_modes(constant)))
     return values
 
 
 def scan_enumeration_classes(
     car: zipfile.ZipFile, paths: set[str],
-) -> dict[str, list[tuple[str, str]]]:
+) -> dict[str, list[EnumerationValue]]:
     """{class file path: its values (see enumeration_values)} for the compiled enumerations named.
 
     `paths` are the class files the caller wants (`pkg/Name.class`); one that is not an
@@ -875,7 +945,7 @@ def scan_enumeration_classes(
     designer and the language server each ship a copy of such a class, and should they ever
     differ, the fullest list stands - the way the kind table is read.
     """
-    found: dict[str, list[tuple[str, str]]] = {}
+    found: dict[str, list[EnumerationValue]] = {}
     if not paths:
         return found
     for entry in car.namelist():
@@ -1153,8 +1223,8 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     # typed by: the importance of a command, the days of a weekly schedule, the periodicity of
     # a set of constants. A value two of them spell apart is a conflict like any other.
     for values in compiled.values():
-        for english, russian in values:
-            _add(enums, russian, english, conflicts["enums"])
+        for value in values:
+            _add(enums, value.russian, value.english, conflicts["enums"])
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]

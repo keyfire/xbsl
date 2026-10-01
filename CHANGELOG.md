@@ -18,6 +18,31 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **The properties panel offers only the values the compatibility mode of the project allows.**
+  `xbsl extract` dates the enumeration values the platform limits to some modes, the panel reads
+  the mode the way the build does, and MCP `metadata_schema` returns the limits in `enum_modes`. ([#171](https://github.com/keyfire/xbsl/pull/171))
+
+### Changed
+
+- **`translate` and the properties panel spell a value by its own enumeration.** `xbsl extract`
+  writes the English spelling of every value into `metamodel.json`, and both read it there
+  instead of guessing it by the tables of the interface. So `ComparisonKind` of an integration
+  process predicate is `Equals` now, and a value the flat table had no English for gets one. ([#171](https://github.com/keyfire/xbsl/pull/171))
+
+### Fixed
+
+- **`xbsl extract` puts the pairs a class writes Russian first into the compiler dictionary.**
+  Such a pair only checked the neighbour on its left, and now it is a source too, screened like
+  the others: the code `SN` of a number spellout parameter gets its pair. A caption such as
+  `Half year` is no name and stays out. ([#171](https://github.com/keyfire/xbsl/pull/171))
+- **Two worktrees of one project in one run are no longer merged into one project.** Shared names
+  gave a finding each, and one tree's baseline judged the other. Each root now gets its own check
+  and record in `summary.projects`, and `lint_paths` with `compact` keeps within 12,000 characters. ([#171](https://github.com/keyfire/xbsl/pull/171))
+
 ## 2026-10-01 – 0.127.0
 
 ### Added

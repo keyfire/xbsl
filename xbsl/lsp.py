@@ -45,7 +45,7 @@ except ImportError:  # pragma: no cover - the extra is not installed
 from xbsl import (
     __version__, baseline, bindingcomplete, cijob, dataset, doccomments, docs, engine, environment,
     formedits, formhandlers, formmodel, formsearch, freshness, i18n, indexer, lsp_doc, metamodel,
-    scaffold, templates, uischema,
+    resources, scaffold, templates, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -220,17 +220,41 @@ def _project_language(root: Optional[str]) -> str:
     return "ru"
 
 
-def enum_values_in(name: str, lang: str) -> list[str]:
-    """The values of a metamodel enumeration, spelled in the project's language.
+@lru_cache(maxsize=8)
+def _project_descriptor(root: str) -> Optional[Path]:
+    """The nearest Проект.yaml under the workspace root - the project whose language the
+    completion speaks (see _project_language) - or None outside a project."""
+    descriptors = [p for name in ("Проект.yaml", "Project.yaml")
+                   for p in Path(root).rglob(name)]
+    return min(descriptors) if descriptors else None
 
-    An English project spells a value the way ITS enumeration does, as the translator writes
-    it: the same Russian word is `Normal` for the importance of a command and `Usual` for the
-    importance of a favorite, and the flat table of enumeration values holds no such word at
-    all - read through it, the panel of an English project would offer the word in Russian.
+
+def _project_mode(root: Optional[str]) -> Optional[tuple[int, ...]]:
+    """The compatibility mode the project under the workspace root is read in, None when unknown.
+
+    Read the way the build reads it (resources.project_compatibility): a description without a
+    mode, or with one the platform does not support, is read in the newest mode. Read on every
+    call - only the place of the description is remembered - so an edit of the mode shows at
+    the next request.
     """
-    values = metamodel.enum_values(name)
+    descriptor = _project_descriptor(root) if root else None
+    return resources.project_compatibility(descriptor.parent) if descriptor else None
+
+
+def enum_values_in(name: str, lang: str, mode: Optional[tuple[int, ...]] = None) -> list[str]:
+    """The values of a metamodel enumeration a project may write, spelled in its language.
+
+    An English project spells a value the way ITS enumeration does in metamodel.json, as the
+    translator writes it: the same Russian word is `Normal` for the importance of a command and
+    `Usual` for the importance of a favorite, and the flat table of enumeration values holds no
+    such word at all - read through it, the panel of an English project would offer the word in
+    Russian. A value the compatibility mode of the project does not have - added in a newer
+    mode, or taken off after an older one - is not offered; an unknown mode limits nothing.
+    """
+    values = [value for value in metamodel.enum_values(name)
+              if metamodel.enum_value_available(name, value, mode)]
     if lang != "en":
-        return list(values)
+        return values
     from xbsl.translation import platform_map  # the translator's per-enumeration spellings
 
     return [platform_map.enum_value_english(name, value) or value for value in values]
@@ -1644,11 +1668,14 @@ def _make_server() -> "LanguageServer":
             props = metamodel.localized(metamodel.properties(kind), lang)
         if not props:
             return {"available": True, "kind": kind, "class": cls, "props": {}}
+        # The values a project of its compatibility mode may write: the panel offers only them,
+        # while a value the file already holds stays shown whatever its mode.
+        mode = _project_mode(str(STATE.root) if STATE.root else None)
         enums = {}
         for record in props.values():
             name = record.get("enum")
             if name and name not in enums:
-                enums[name] = enum_values_in(name, lang)
+                enums[name] = enum_values_in(name, lang, mode)
         return {
             "available": True,
             "kind": kind,

@@ -38,7 +38,10 @@ from xbsl import (
     cijob, formmodel, freshness, i18n, mcpcli, mcpjournal, metamodel, plugins, report,
     resource_usage, rundiff, scaffold, uischema,
 )
-from xbsl.cli import _context_of, _filter_requested, discover, discover_with_context
+from xbsl.cli import (
+    CheckSettings, ProjectPart, _context_of, _filter_requested, baselines_of, discover,
+    nested_roots, shared_reach, split_by_project, without_nested,
+)
 from xbsl.engine import (
     RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
     run, run_sources,
@@ -346,9 +349,18 @@ def version_info() -> dict:
     return info
 
 
+def _baseline_of(settings: CheckSettings, files: list[Path]) -> Path | None:
+    """The baseline one project root is judged by: the one named (by the caller or its CI
+    job), else the project's own above its files; None when the baseline is turned off."""
+    if settings.no_baseline:
+        return None
+    return Path(settings.baseline) if settings.baseline else baseline_data.discover(files)
+
+
 def _through_baseline(
-    diags: list, files: list[Path], path: str | None, disabled: bool, rules: set[str],
-    asked: list[Path], accepted: list | None = None,
+    diags: list, found: Path | None, rules: set[str], asked: list[Path],
+    accepted: list | None = None, reach: list[Path] | None = None,
+    nested: list[Path] | None = None,
 ) -> tuple[list, dict]:
     """The findings the baseline leaves, plus the summary keys describing what it took.
 
@@ -359,11 +371,11 @@ def _through_baseline(
     fewer rules, and without the set their entries were reported as stale - the two answered
     differently about one baseline. `asked` is what the caller named: the entries of other
     files are out of this run's reach, and a request for two files used to be answered with
-    the whole baseline called stale.
+    the whole baseline called stale. `reach` is what the call named for every project root
+    this baseline judges (cli.shared_reach): an entry another root of the call checked is not
+    "not checked". `nested` are the roots of the call inside this one (cli.nested_roots): the
+    entries of their files are theirs, never stale here.
     """
-    if disabled:
-        return diags, {}
-    found = Path(path) if path else baseline_data.discover(files)
     if found is None:
         return diags, {}
     data = baseline_data.load(found)
@@ -372,6 +384,8 @@ def _through_baseline(
     kept, suppressed, unused, stale = baseline_data.apply(
         diags, data, found.parent, rules, roots, accepted=accepted, reworded=reworded,
     )
+    stale, allowed = without_nested(stale, found.parent, nested or [])
+    unused -= allowed
     summary = {
         "baseline": str(found),
         "baselined": suppressed,
@@ -382,7 +396,8 @@ def _through_baseline(
         # a script of their own, sorting the entries by the prose of their `reason`.
         "baseline_stale_entries": stale,
     }
-    not_checked = baseline_data.not_checked_entries(data, rules, roots)
+    joint = roots if reach is None else baseline_data.roots_of(reach, found.parent)
+    not_checked = baseline_data.not_checked_entries(data, rules, joint)
     if not_checked:
         split = baseline_data.not_checked_split(not_checked)
         summary["baseline_not_checked"] = len(not_checked)
@@ -500,7 +515,15 @@ def lint_paths(
                   to two kilobytes over an answer of two findings. The info-level findings
                   are counted, not listed: `info_hint` gives their number and rules, and they
                   do not count towards the limit - a project keeps a few of them on purpose,
-                  and every answer of a session repeated them;
+                  and every answer of a session repeated them. The whole answer is held to
+                  report.COMPACT_ANSWER_LIMIT (12000) characters of JSON, whatever the run
+                  found: past it the lists that grow with the run are cut from their end -
+                  the stale and reworded baseline entries first, then `findings`, the
+                  `errors` records, the records of the project roots and `by_rule` - and
+                  `truncated` names every list cut, {shown, total}, while `truncated_hint`
+                  says how to read the whole answer (without `compact`, with narrower
+                  `paths`/`select`, or the CLI `--format json --out FILE`). The counts are
+                  never cut;
     as_ci_full  - with `compact` or `select`, keep the whole `as_ci` record instead of the line;
     list_info   - with `compact`, list the info-level findings with the rest;
     compare     - a file that keeps the run for the next call; the CLI `--compare` reads and
@@ -521,6 +544,14 @@ def lint_paths(
                   run, or a run saved in another language, is refused before the check;
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
+    Paths of several project roots - folders holding a project descriptor; two worktrees of
+    one project are two roots - are never checked as one project: each root is checked the
+    way a call of its own would check it, with its own project context, its own baseline and,
+    with `as_ci`, the CI job of its own checkout. The answer keeps its shape and counts the
+    findings of all the roots, and `summary.projects` holds a record per root: `project`
+    (the root folder, null for the sources outside every project), its own `files`,
+    `diagnostics`, `errors`, `warnings`, `by_rule` and `by_severity`, and its baseline, CI-job
+    and fix keys, which then leave the top of the summary.
     Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors, findings}
     or {summary, errors, findings_hint} past the limit, and `info_hint` when info findings
     were left out; with `compare`: {summary, compare},
@@ -543,19 +574,24 @@ def lint_paths(
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
     narrow = bool(select)  # the caller's own selection, before the job adds its set
-    job = None
-    if as_ci or as_ci_job:
-        try:
-            job = cijob.find(asked, job=as_ci_job)
-        except cijob.CiLintError as exc:
-            return {"error": str(exc)}
-        select = list(select or []) + list(job.select)
-        ignore = list(ignore or []) + list(job.ignore)
-        enable = list(enable or []) + list(job.enable)
-        if named is None and not no_baseline:
-            adopted = job.baseline_file()
-            named = Path(adopted) if adopted else None
-            no_baseline = job.no_baseline
+    own = CheckSettings(select, ignore, enable, None, str(named) if named else None, no_baseline)
+    parts = split_by_project(asked)
+    checks: list[_RootCheck] = []
+    for part in parts:
+        job = None
+        settings = own
+        if as_ci or as_ci_job:
+            # The job of the root's own checkout: two worktrees keep two pipeline files, and
+            # the baseline the first one names would judge the files of the second.
+            try:
+                job = cijob.find(part.asked, job=as_ci_job)
+            except cijob.CiLintError as exc:
+                refusal = {"error": str(exc)}
+                if len(parts) > 1:
+                    refusal["project"] = str(part.root) if part.root is not None else None
+                return refusal
+            settings = own.with_job(job)
+        checks.append(_RootCheck(part, job, settings))
     state = _under(base, compare)
     saved = None
     if state is not None:
@@ -565,58 +601,111 @@ def lint_paths(
             saved = rundiff.load(state, i18n.current_lang())
         except rundiff.RunStateError as exc:
             return {"error": str(exc)}
-    files, requested = discover_with_context(asked)
-    chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
-    fix_summary = {}
-    fix_accepted = None
-    from xbsl.rules import comment_names
-
-    # The systems the job declares hold for this call only: the server answers for many
-    # projects in one process.
-    with comment_names.other_systems(job.other_systems if job is not None else ()):
+    for check in checks:
+        check.run(fix)
+    reach = shared_reach([(check.part, check.baseline) for check in checks])
+    for check in checks:
+        check.diags, check.extra = _through_baseline(
+            check.diags, check.baseline, {r.id for r in check.active},
+            [Path(p) for p in check.part.asked], accepted=check.accepted,
+            reach=reach.get(check.baseline.resolve()) if check.baseline is not None else None,
+            nested=nested_roots(check.part, parts),
+        )
+    if len(checks) == 1:
+        (check,) = checks
+        diags, active, chosen = check.diags, check.active, check.chosen
+        payload = report.report(diags, len(check.part.counted))
+        payload["summary"].update(environment.provenance(active))
+        payload["summary"].update(check.extra)
+        payload["summary"].update(check.fix)
+        payload["summary"]["root"] = str(base)
+        if check.job is not None:
+            payload["summary"]["as_ci"] = _as_ci_record(check.job, as_ci_job, narrow, as_ci_full)
+    else:
+        # Every root checked on its own, the answer counting them all: the records that
+        # belong to one root - its baseline, its job, its fixes - stand in its own entry.
+        diags = [d for check in checks for d in check.diags]
+        carried = {rule.id for check in checks for rule in check.active}
+        active = [rule for rule in RULES if rule.id in carried]
+        chosen = checks[0].chosen
+        payload = report.report(diags, sum(len(check.part.counted) for check in checks))
+        payload["summary"].update(environment.provenance(active))
         if fix:
-            from xbsl import fixer
-
-            target = named
-            if target is None and not no_baseline:
-                target = baseline_data.discover(
-                    requested if requested is not None else files
-                )
-            diags, fix_summary, fix_accepted = fixer.fix_paths(
-                files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
-                requested=requested, baseline_path=None if no_baseline else target,
-            )
-        else:
-            diags = _filter_requested(
-                run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
-                    context=_context_of(files, requested)),
-                requested,
-            )
-    counted = requested if requested is not None else files
-    active = active_rules(*chosen)
-    diags, extra = _through_baseline(
-        diags, counted, str(named) if named else None, no_baseline, {r.id for r in active},
-        [Path(p) for p in asked], accepted=fix_accepted,
-    )
-    payload = report.report(diags, len(counted))
-    payload["summary"].update(environment.provenance(active))
-    payload["summary"].update(extra)
-    payload["summary"].update(fix_summary)
-    payload["summary"]["root"] = str(base)
-    if job is not None:
-        # The shared record: the file and the job, the rule set as data and as the sentence a
-        # terminal prints, the jobs NOT taken (an agent comparing its verdict with a red
-        # pipeline has to know which of them it reproduced), where the command actually
-        # stands when an `include:` brought it, and the includes nobody fetched.
-        payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
-        if narrow and not as_ci_full:
-            payload["summary"]["as_ci"] = report.compact_as_ci(payload["summary"]["as_ci"])
+            payload["summary"].update({
+                key: sum(check.fix.get(key, 0) for check in checks)
+                for key in ("fixed", "files_changed")
+            })
+        payload["summary"]["root"] = str(base)
+        payload["summary"]["projects"] = [
+            check.record(as_ci_job, narrow, as_ci_full) for check in checks
+        ]
     if state is not None:
         return _compared(payload, diags, paths, base, state, saved, active, chosen,
                          compact=compact, as_ci_full=as_ci_full)
     if compact:
-        return report.compact(payload, as_ci_full=as_ci_full, list_info=list_info)
+        return report.fit(report.compact(payload, as_ci_full=as_ci_full, list_info=list_info))
     return payload
+
+
+def _as_ci_record(job: cijob.CiLint, as_ci_job: str | None, narrow: bool,
+                  as_ci_full: bool) -> dict:
+    """The CI job a check adopted, as the summary names it.
+
+    The shared record: the file and the job, the rule set as data and as the sentence a
+    terminal prints, the jobs NOT taken (an agent comparing its verdict with a red pipeline has
+    to know which of them it reproduced), where the command actually stands when an `include:`
+    brought it, and the includes nobody fetched. A call with its own `select` gets it as one
+    line (report.compact_as_ci) unless `as_ci_full` asks for the record.
+    """
+    record = job.as_dict(hint=not as_ci_job)
+    return report.compact_as_ci(record) if narrow and not as_ci_full else record
+
+
+class _RootCheck:
+    """One project root of a `lint_paths` call: what it is checked by and what it found."""
+
+    def __init__(self, part: ProjectPart, job: cijob.CiLint | None,
+                 settings: CheckSettings) -> None:
+        self.part, self.job, self.settings = part, job, settings
+        self.chosen = (_as_set(settings.select), _as_set(settings.ignore),
+                       _as_set(settings.enable))
+        self.active = active_rules(*self.chosen)
+        self.baseline = _baseline_of(settings, part.counted)
+        self.diags: list = []
+        self.fix: dict = {}
+        self.accepted: list | None = None
+        self.extra: dict = {}
+
+    def run(self, fix: bool) -> None:
+        """Check the root, or fix it: the findings before its baseline."""
+        from xbsl.rules import comment_names
+
+        part, (select, ignore, enable) = self.part, self.chosen
+        # The systems the job declares hold for this root only: the server answers for many
+        # projects in one process.
+        with comment_names.other_systems(self.settings.systems or ()):
+            if fix:
+                from xbsl import fixer
+
+                self.diags, self.fix, self.accepted = fixer.fix_paths(
+                    part.files, select=select, ignore=ignore, enable=enable,
+                    requested=part.requested, baseline_path=self.baseline,
+                )
+            else:
+                self.diags = _filter_requested(
+                    run(part.files, select=select, ignore=ignore, enable=enable,
+                        context=_context_of(part.files, part.requested)),
+                    part.requested,
+                )
+
+    def record(self, as_ci_job: str | None, narrow: bool, as_ci_full: bool) -> dict:
+        """The entry of the root in `summary.projects`."""
+        entry = report.project_record(self.part.root, self.diags, len(self.part.counted))
+        entry.update(self.extra)
+        entry.update(self.fix)
+        if self.job is not None:
+            entry["as_ci"] = _as_ci_record(self.job, as_ci_job, narrow, as_ci_full)
+        return entry
 
 
 def _compared(
@@ -645,10 +734,11 @@ def _compared(
     except OSError as exc:
         return {"error": i18n.t("rundiff.save-failed", path=state, error=exc)}
     summary = payload["summary"]
-    return {
+    answer = {
         "summary": report.compact_summary(summary, as_ci_full=as_ci_full) if compact else summary,
         "compare": rundiff.compare_record(changes, now, diags, path=str(state), compact=compact),
     }
+    return report.fit(answer) if compact else answer
 
 
 @mcp.tool()
@@ -674,6 +764,10 @@ def baseline_prune(
     pruning after a narrow run would drop the record of a debt nobody looked at.
     dry_run - report what would go and leave the file untouched.
 
+    Paths of several project roots are checked each on its own, as `lint_paths` checks them,
+    and the file they are pruned from is one: roots that keep baselines of their own - two
+    worktrees - are pruned one call each, and a call over them is refused with the files named.
+
     Returns {baseline, stale, removed: [{path, rule, message, count, reason}], written,
     not_checked}. `reason` is the sentence a human wrote about the exclusion - it is
     reported back before it disappears; the file's own order and format survive the rewrite
@@ -682,17 +776,27 @@ def baseline_prune(
     base = _base(root)
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
-    files, requested = discover_with_context(asked)
-    chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
-    diags = _filter_requested(
-        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
-            context=_context_of(files, requested)),
-        requested,
-    )
-    counted = requested if requested is not None else files
-    found = Path(named) if named else baseline_data.discover(counted)
+    parts = split_by_project(asked)
+    if named is not None:
+        found = Path(named)
+    else:
+        found_files = baselines_of(parts)
+        if len(found_files) > 1:
+            return {"error": i18n.t("cli.baseline-several",
+                                    paths=", ".join(str(p) for p in found_files)),
+                    "root": str(base)}
+        found = found_files[0] if found_files else None
     if found is None:
         return {"error": i18n.t("cli.baseline-none-to-extend"), "root": str(base)}
+    chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
+    diags = [
+        d for part in parts
+        for d in _filter_requested(
+            run(part.files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+                context=_context_of(part.files, part.requested)),
+            part.requested,
+        )
+    ]
     data = baseline_data.load(found)
     rules = {r.id for r in active_rules(*chosen)}
     roots = baseline_data.roots_of([Path(p) for p in asked], found.parent)
@@ -928,6 +1032,19 @@ def ui_schema(component: str | None = None, brief: bool = False, property: str |
     return uischema.catalog()
 
 
+def _enum_modes(enums: dict[str, list[str]]) -> dict[str, dict[str, dict[str, str]]]:
+    """{enumeration: {value: {"since", "until"}}} of the values the platform limits to some
+    compatibility modes - the others are in every mode and are not repeated here."""
+    out: dict[str, dict[str, dict[str, str]]] = {}
+    for name, values in enums.items():
+        for value in values:
+            since, until = metamodel.enum_value_modes(name, value)
+            limits = {**({"since": since} if since else {}), **({"until": until} if until else {})}
+            if limits:
+                out.setdefault(name, {})[value] = limits
+    return out
+
+
 @mcp.tool()
 def metadata_schema(
     kind: str | None = None,
@@ -939,7 +1056,10 @@ def metadata_schema(
     Without arguments - the kinds the metamodel covers. With `kind` - its properties, each
     with a value kind (boolean | number | string | enum | type | block | list), the declared
     type, the platform default, the version it appeared in and the alternate spellings the
-    compiler still accepts, plus "enums" - the values of the enumerations they reference.
+    compiler still accepts, plus "enums" - the values of the enumerations they reference - and
+    "enum_modes" - the values a compatibility mode limits: `since` is the mode a value
+    appeared in, `until` the last mode that has it. Hold them against the compatibility mode
+    of the project: a value outside its modes is not one to write.
     `block` and `list` are the nested structures (КонтрольДоступа, Реквизиты), written as
     yaml blocks rather than a scalar. Use it before writing an element yaml by hand:
     it answers "what else may a Справочник declare" without guessing.
@@ -983,6 +1103,9 @@ def metadata_schema(
         "props": props,
         "enums": enums,
     }
+    dated = _enum_modes(enums)
+    if dated:
+        answer["enum_modes"] = dated
     if not props:
         # An empty answer has two very different causes - the platform has no such kind, or
         # THESE data files do not know it yet (a server started before the data was

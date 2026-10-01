@@ -780,32 +780,85 @@ def test_the_editor_hands_over_the_dictionary_by_the_names_the_engine_discovers(
     assert f'"**/{dictionary.DICTIONARY_FILE}"' in text
 
 
-def test_the_panel_spells_a_value_the_way_its_enumeration_does(tmp_path):
-    """Two enumerations share a Russian value and spell it apart, so the flat table of the
-    term pairs holds no English for it. The panel of an English project asks the enumeration
-    itself, the way the translator does; a Russian project gets the values as they are."""
+def _enumeration_data(root, records: bool = True):
+    """A data root with two enumerations that share a Russian value and spell it apart, so
+    the flat table of the term pairs holds no English for it. With `records` the metamodel
+    spells every value by its own enumeration and dates one of them, the way the extractor
+    writes metamodel.json; without them it is data extracted before it did."""
     import json
 
+    version = root / "9.9.9"
+    version.mkdir(parents=True)
+    metamodel_data = {
+        "classes": {}, "vid2class": {}, "common": [],
+        "enums": {"TaskImportance": ["Низкая", "Обычная", "Срочная"],
+                  "FavoriteImportance": ["Обычная", "Высокая"]},
+    }
+    if records:
+        metamodel_data["enum_items"] = {
+            "TaskImportance": {"Низкая": {"en": "Low"}, "Обычная": {"en": "Normal"},
+                               "Срочная": {"en": "Urgent", "since": "9.1"}},
+            "FavoriteImportance": {"Обычная": {"en": "Usual", "until": "9.0"},
+                                   "Высокая": {"en": "High"}},
+        }
+    (version / "metamodel.json").write_text(json.dumps(metamodel_data, ensure_ascii=False),
+                                            encoding="utf-8")
+    (version / "terms.json").write_text(json.dumps(
+        {"enums": {"Низкая": "Low", "Высокая": "High", "Срочная": "Urgent"}},
+        ensure_ascii=False), encoding="utf-8")
+    (root / "index.json").write_text(
+        json.dumps({"available": ["9.9.9"], "default": "9.9.9"}), encoding="utf-8")
+
+
+def test_the_panel_spells_a_value_the_way_its_enumeration_does(tmp_path):
+    """The panel of an English project asks the enumeration itself, the way the translator
+    does - its spellings are in metamodel.json; a Russian project gets the values as they
+    are. Data extracted before the metamodel spelled its values answers from the flat table,
+    and a word that table does not hold stays Russian."""
     from xbsl import dataset
 
-    version = tmp_path / "9.9.9"
-    version.mkdir()
-    (version / "metamodel.json").write_text(json.dumps({
-        "classes": {}, "vid2class": {}, "common": [],
-        "enums": {"TaskImportance": ["Низкая", "Обычная"], "FavoriteImportance": ["Обычная", "Высокая"]},
-    }, ensure_ascii=False), encoding="utf-8")
-    (version / "terms.json").write_text(json.dumps(
-        {"enums": {"Низкая": "Low", "Высокая": "High"}}, ensure_ascii=False), encoding="utf-8")
-    (version / "uiterms.json").write_text(json.dumps({"enum_values": {
-        "ВажностьЗадачи": {"Низкая": "Low", "Обычная": "Normal"},
-        "ВажностьИзбранного": {"Обычная": "Usual", "Высокая": "High"},
-    }}, ensure_ascii=False), encoding="utf-8")
-    (tmp_path / "index.json").write_text(
-        json.dumps({"available": ["9.9.9"], "default": "9.9.9"}), encoding="utf-8")
-    dataset.set_data_root(tmp_path)
+    _enumeration_data(tmp_path / "records")
+    _enumeration_data(tmp_path / "older", records=False)
+    dataset.set_data_root(tmp_path / "records")
     try:
-        assert lsp.enum_values_in("TaskImportance", "en") == ["Low", "Normal"]
+        assert lsp.enum_values_in("TaskImportance", "en") == ["Low", "Normal", "Urgent"]
         assert lsp.enum_values_in("FavoriteImportance", "en") == ["Usual", "High"]
         assert lsp.enum_values_in("FavoriteImportance", "ru") == ["Обычная", "Высокая"]
+        dataset.set_data_root(tmp_path / "older")
+        assert lsp.enum_values_in("FavoriteImportance", "en") == ["Обычная", "High"]
     finally:
         dataset.set_data_root(None)
+
+
+def test_the_panel_offers_only_the_values_of_the_project_mode(tmp_path):
+    """A value added in a newer mode, or taken off after an older one, is not one the project
+    may write, and the panel does not offer it; a project whose mode is not known is offered
+    everything. The mode is read from the description of the project under the root, the
+    way the build reads it."""
+    from xbsl import dataset
+
+    _enumeration_data(tmp_path / "data")
+    project = tmp_path / "project"
+    (project / "Основное").mkdir(parents=True)
+    descriptor = project / "Проект.yaml"
+    descriptor.write_text("ВидПроекта: Приложение\nИмя: Проба\nРежимСовместимости: 9.0\n",
+                          encoding="utf-8")
+    dataset.set_data_root(tmp_path / "data")
+    lsp._project_descriptor.cache_clear()
+    try:
+        mode = lsp._project_mode(str(project))
+        assert mode == (9, 0)
+        assert lsp.enum_values_in("TaskImportance", "ru", mode) == ["Низкая", "Обычная"]
+        assert lsp.enum_values_in("FavoriteImportance", "en", mode) == ["Usual", "High"]
+        assert lsp.enum_values_in("FavoriteImportance", "en", (9, 1)) == ["High"]
+        assert lsp.enum_values_in("TaskImportance", "ru", (9, 1)) == ["Низкая", "Обычная", "Срочная"]
+        assert lsp.enum_values_in("TaskImportance", "ru") == ["Низкая", "Обычная", "Срочная"]
+        # The mode follows an edit of the description; no project, no mode.
+        descriptor.write_text("ВидПроекта: Приложение\nИмя: Проба\nРежимСовместимости: 9.1\n",
+                              encoding="utf-8")
+        assert lsp._project_mode(str(project)) == (9, 1)
+        assert lsp._project_mode(str(tmp_path / "data")) is None
+        assert lsp._project_mode(None) is None
+    finally:
+        dataset.set_data_root(None)
+        lsp._project_descriptor.cache_clear()
