@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { singleProjectCheck } from "./projectCheckCore";
-import { ProjectCheckProgress } from "./projectCheckProgressCore";
+import { ProjectCheckProgress, projectCheckSummary } from "./projectCheckProgressCore";
 
 export const REINDEX_PROJECT = "xbsl.reindexProject";
 
@@ -12,45 +12,44 @@ export function registerProjectCheck(context: vscode.ExtensionContext,
   item.accessibilityInformation = { label: "XBSL: " + title, role: "button" };
   let busy = false;
   let current = "";
+  let summary = "";
   const state = (value: boolean): void => {
     busy = value;
-    item.text = busy ? "$(sync~spin)" : "$(refresh)";
-    item.tooltip = busy && current ? title + "\n" + current : title;
+    const text = busy ? "$(sync~spin) " + summary : "$(refresh)";
+    const tooltip = busy && current ? title + "\n" + current : title;
+    if (item.text !== text) { item.text = text; }
+    if (item.tooltip !== tooltip) { item.tooltip = tooltip; }
     item.command = busy ? undefined : REINDEX_PROJECT;
     if (vscode.workspace.workspaceFolders?.length) { item.show(); } else { item.hide(); }
   };
   const run = singleProjectCheck(async () => {
+    const started = Date.now();
+    let message = vscode.l10n.t("Waiting for project progress...");
+    summary = vscode.l10n.t("Waiting for project progress...");
+    const refresh = (event?: ProjectCheckProgress): void => {
+      if (event?.message) {
+        message = event.message;
+        if (event.kind !== "end") {
+          summary = projectCheckSummary(message) || vscode.l10n.t("Checking project...");
+        }
+      }
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+      current = message + " | " + vscode.l10n.t("Elapsed: {0}", time);
+      state(true);
+    };
+    refresh();
+    const clock = setInterval(() => refresh(), 1000);
     try {
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "XBSL", cancellable: false },
-        async (progress) => {
-          const started = Date.now();
-          let message = vscode.l10n.t("Waiting for project progress...");
-          let percentage = 0;
-          const refresh = (event?: ProjectCheckProgress): void => {
-            if (event?.message) { message = event.message; }
-            const seconds = Math.floor((Date.now() - started) / 1000);
-            const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-            current = message + " | " + vscode.l10n.t("Elapsed: {0}", time);
-            let increment = 0;
-            if (event?.percentage !== undefined && Number.isFinite(event.percentage)) {
-              const next = Math.max(percentage, Math.min(100, Math.max(0, event.percentage)));
-              increment = next - percentage;
-              percentage = next;
-            }
-            progress?.report({ message: time + " | " + message, increment });
-            state(true);
-          };
-          refresh();
-          const clock = setInterval(() => refresh(), 1000);
-          try { await check((event) => refresh(event)); }
-          finally { clearInterval(clock); }
-        },
-      );
+      await check((event) => refresh(event));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       void vscode.window.showErrorMessage(vscode.l10n.t("XBSL: project check failed: {0}", message));
-    } finally { current = ""; }
+    } finally {
+      clearInterval(clock);
+      current = "";
+      summary = "";
+    }
   }, state);
   context.subscriptions.push(item, vscode.commands.registerCommand(REINDEX_PROJECT, run),
     vscode.workspace.onDidChangeWorkspaceFolders(() => state(busy)));

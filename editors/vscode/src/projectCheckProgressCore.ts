@@ -18,3 +18,11 @@ export async function requestProjectCheck(connection: ProjectCheckConnection, to
     listener.dispose();
   }
 }
+
+// Extract the phase prefix of our RU/EN server messages; keep counts and rule titles in the tooltip.
+export function projectCheckSummary(message: string): string | undefined {
+  const match = /^(?:Stage|Этап) (\d+\/\d+): (.*?)(?: (\d{1,3})%| – \d+\/\d+;|$)/.exec(message);
+  if (!match) { return undefined; }
+  const percentage = match[3] === undefined ? "" : ` · ${Math.min(100, Number(match[3]))}%`;
+  return `${match[1]} ${match[2]}${percentage}`;
+}

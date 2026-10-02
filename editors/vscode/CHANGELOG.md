@@ -15,10 +15,10 @@ Not released yet.
 
 ### Added
 
-- **A status-bar refresh icon reindexes and checks the project.** A progress notification and
-  its tooltip show the stage, completed and remaining file or rule counts, the active project
-  rule, the stage percentage and elapsed time. The icon spins until diagnostics are published;
-  repeated clicks share the same run. ([#173](https://github.com/keyfire/xbsl/pull/173))
+- **A status-bar refresh icon reindexes and checks the project.** While it spins, the stage
+  and its percentage appear beside it. The tooltip shows completed and remaining file or rule
+  counts, the active project rule and elapsed time. After diagnostics are published and the
+  check finishes, the text disappears; repeated clicks share the same run. ([#173](https://github.com/keyfire/xbsl/pull/173))
 - **Standard method suggestions show signatures, a short description and parameters.**
   Documentation loads when the item is selected. ([#173](https://github.com/keyfire/xbsl/pull/173))
 

@@ -20,6 +20,7 @@ function harness() {
   const events: Record<string, Function> = {}, commands: Record<string, Function> = {};
   const documents: any[] = [], buffers: any[] = [], projects: any[] = [], actions: any[] = [];
   const statusItems: any[] = [], errors: string[] = [];
+  const manualChecks: any[] = [];
   const progressMessages: string[] = [], intervals = new Map<number, Function>();
   const findings = new Map<string, any[]>(), timers = new Map<number, { fn: Function; delay: number }>();
   let timer = 0, lsp = false;
@@ -58,7 +59,7 @@ function harness() {
     "./report": { ciSettings: () => ({}) },
     "./excludeAction": { baselineForLint: () => undefined, registerExcludeAction() {} },
     "./ruleConfig": { engineRuleArgs: () => ({}), ruleOverride: () => undefined, primeRuleCatalogue() {}, registerRuleConfig() {} },
-    "./lspClient": { lspActive: () => lsp, activateLsp: async () => lsp, setAfterServerStart() {} },
+    "./lspClient": { reindexProject: (report: Function) => { const request = pending(); manualChecks.push({ report, ...request }); return request.promise; }, lspActive: () => lsp, activateLsp: async () => lsp, setAfterServerStart() {} },
     "./uiSchemaClient": { metaKeyAliases: async () => ({}) },
     "./statusBar": { registerStatusBar: () => ({ setLspMode() {} }) },
     "./codeActions": { PROVIDED_KINDS: [], XbslCodeActionProvider: class { constructor(public lookup: Function) {} } },
@@ -77,7 +78,7 @@ function harness() {
     const module = { exports: {} };
     const code = transformSync(fs.readFileSync(path.resolve("src", filename), "utf8"), { loader: "ts", format: "cjs" }).code;
     vm.runInNewContext(code, { module, exports: module.exports, console,
-      require: (name: string) => ["./workspaceCore", "./projectCheck", "./projectCheckCore"].includes(name)
+      require: (name: string) => ["./workspaceCore", "./projectCheck", "./projectCheckCore", "./projectCheckProgressCore"].includes(name)
         ? load(name.slice(2) + ".ts") : dependencies[name] ?? noops,
       setTimeout: (fn: Function, delay: number) => { timers.set(++timer, { fn, delay }); return timer; }, clearTimeout: (id: number) => timers.delete(id),
       setInterval: (fn: Function) => { intervals.set(++timer, fn); return timer; }, clearInterval: (id: number) => intervals.delete(id),
@@ -91,7 +92,7 @@ function harness() {
   };
   const tick = async (delay: number) => { for (const [id, value] of [...timers]) if (value.delay === delay) { timers.delete(id); value.fn(); } await flush(); };
   const finishProject = async (diags: any[]) => { projects[0].resolve({ report: { diagnostics: diags } }); projects[1]?.resolve({ report: { diagnostics: [] } }); await flush(); };
-  return { root, uri, folders, doc, settings, events, commands, findings, buffers, projects, actions, statusItems, errors, progressMessages, intervals, tick, finishProject,
+  return { root, uri, folders, doc, settings, events, commands, findings, buffers, projects, actions, statusItems, errors, manualChecks, progressMessages, intervals, tick, finishProject,
     setLsp: (value: boolean) => { lsp = value; }, start: () => extension.activate({ subscriptions: [], globalState: {} }) };
 }
 let failures = 0;
@@ -100,6 +101,23 @@ async function test(name: string, run: () => Promise<void>) {
 }
 const raw = (file: string, rule: string): RawDiag => ({ path: file, rule, message: rule, severity: "warning", line: 1, col: 1, fix: { start: 0, end: 1, newText: "x" } });
 async function main() {
+  await test("manual LSP checking shows phase percentage beside the spinner without a popup", async () => {
+    const h = harness(); h.setLsp(true); await h.start();
+    const manual = h.commands["xbsl.reindexProject"](); await flush();
+    assert.strictEqual(h.manualChecks.length, 1);
+    const active = h.manualChecks[0];
+    active.report({ kind: "report", message: "Stage 2/8: Index 80% – 8/10; 2 remaining" });
+    assert.strictEqual(h.statusItems[0].text, "$(sync~spin) 2/8 Index · 80%");
+    active.report({ kind: "report", message: "Stage 4/8: File rules 0% – 0/10; 10 remaining" });
+    assert.strictEqual(h.statusItems[0].text, "$(sync~spin) 4/8 File rules · 0%", "a new phase starts its own percentage");
+    assert.ok(h.statusItems[0].tooltip.includes("10 remaining"));
+    assert.ok(h.statusItems[0].tooltip.includes("Elapsed:"));
+    assert.strictEqual(h.progressMessages.length, 0);
+    active.resolve({ ok: true, files: 10, diagnostics: 0 }); await manual;
+    assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0);
+    assert.deepStrictEqual(h.errors, []);
+  });
   await test("project YAML uses unsaved text, a relative filename and registered quick fixes", async () => {
     const h = harness(); await h.start(); const doc = h.doc("src/Item.yaml"); h.events.Change({ document: doc, contentChanges: [{ text: "edit" }] }); await h.tick(300);
     assert.strictEqual(h.buffers.length, 1);
@@ -186,8 +204,8 @@ async function main() {
     const manual = h.commands["xbsl.reindexProject"]();
     assert.strictEqual(h.commands["xbsl.reindexProject"](), manual, "duplicate clicks share the manual operation");
     await flush(); assert.strictEqual(h.projects.length, 2);
-    assert.strictEqual(h.statusItems[0].text, "$(sync~spin)");
-    assert.ok(h.progressMessages.some((value) => /^0:00 \| /.test(value)));
+    assert.ok(h.statusItems[0].text.startsWith("$(sync~spin) "));
+    assert.strictEqual(h.progressMessages.length, 0, "manual checking must not open a progress popup");
     assert.ok(h.statusItems[0].tooltip.includes("Elapsed:"));
     assert.strictEqual(h.intervals.size, 1);
     const doc = h.doc("src/Item.xbsl", "xbsl"); doc.isDirty = false;
@@ -195,7 +213,7 @@ async function main() {
     assert.strictEqual(h.projects.length, 4);
     let finished = false; void manual.then(() => { finished = true; }); await flush();
     assert.strictEqual(finished, false, "canceling the first run must not complete the manual operation");
-    assert.strictEqual(h.statusItems[0].text, "$(sync~spin)");
+    assert.ok(h.statusItems[0].text.startsWith("$(sync~spin) "));
     assert.strictEqual(h.projects[2].canceled, 0, "following a replacement must not cancel it");
     assert.strictEqual(h.projects[2].args[1], h.root, "replacement keeps the workspace cwd");
     h.projects[2].resolve({ report: { diagnostics: [] } }); h.projects[3].resolve({ report: { diagnostics: [] } });
@@ -210,7 +228,7 @@ async function main() {
     h.events.Save(doc); await h.tick(500);
     h.events.Save(doc); await h.tick(500);
     assert.strictEqual(h.projects.length, 6);
-    assert.strictEqual(h.statusItems[0].text, "$(sync~spin)");
+    assert.ok(h.statusItems[0].text.startsWith("$(sync~spin) "));
     assert.strictEqual(h.projects[4].canceled, 0);
     h.projects[4].resolve({ report: { diagnostics: [] } }); h.projects[5].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");
@@ -260,7 +278,7 @@ async function main() {
     assert.strictEqual(h.projects.length, 2);
     h.projects[0].resolve({ error: "synthetic first-folder failure" }); h.projects[1].resolve({ report: { diagnostics: [] } });
     await flush(); await flush(); assert.strictEqual(h.projects.length, 3);
-    assert.strictEqual(h.statusItems[0].text, "$(sync~spin)", "the second folder is still being checked");
+    assert.ok(h.statusItems[0].text.startsWith("$(sync~spin) "), "the second folder is still being checked");
     assert.strictEqual(h.errors.length, 0, "report failure after all folders finish");
     h.projects[2].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");
@@ -276,7 +294,7 @@ async function main() {
     h.projects[1].resolve({ report: { diagnostics: [] } });
     h.events.Save(doc); await h.tick(500); await flush();
     assert.strictEqual(h.projects.length, 4);
-    assert.strictEqual(h.statusItems[0].text, "$(sync~spin)", "a newer run is already pending");
+    assert.ok(h.statusItems[0].text.startsWith("$(sync~spin) "), "a newer run is already pending");
     assert.strictEqual(h.errors.length, 0);
     h.projects[2].resolve({ report: { diagnostics: [] } }); h.projects[3].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");

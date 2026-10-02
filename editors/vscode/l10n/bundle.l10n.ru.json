@@ -663,6 +663,7 @@
   "The project check did not return a report.": "Проверка проекта не вернула отчет.",
   "The project check was canceled before completion.": "Проверка проекта отменена до завершения.",
   "Waiting for project progress...": "Ожидание сведений о проверке проекта...",
+  "Checking project...": "Проверка проекта...",
   "Elapsed: {0}": "Прошло: {0}",
   "Checking project sources through the CLI...": "Проверка исходников проекта через CLI...",
   "The language server is not available.": "Сервер языка недоступен."
