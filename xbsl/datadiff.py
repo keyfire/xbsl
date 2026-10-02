@@ -218,10 +218,8 @@ def previous_version(new: str, available: list[str]) -> str | None:
 
 
 def _load_json(root: Path, version: str, name: str) -> dict | None:
-    path = root / version / name
-    if not path.exists():
-        return None
-    return dataset.read_json(path)
+    from xbsl import data_storage
+    return data_storage.raw_json(root, version, name)
 
 
 def _digest(html: str | None) -> str:
@@ -230,12 +228,10 @@ def _digest(html: str | None) -> str:
 
 def _load_doc_pages(root: Path, version: str) -> dict[str, tuple[str, str, str]] | None:
     """{page id: (title, kind, hash of the HTML)} of the documentation index, or None without one."""
-    path = root / version / "docs.sqlite"
-    if not path.exists():
+    from xbsl import data_storage
+    con = data_storage.open_docs(root, version)
+    if con is None:
         return None
-    # Read-only: the diff must not touch a data root it only reads. A file URI needs an
-    # absolute path, and --data-dir may be a relative one.
-    con = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
         rows = con.execute("SELECT id, title, kind, html FROM pages").fetchall()
     finally:

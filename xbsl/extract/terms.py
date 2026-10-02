@@ -1310,5 +1310,8 @@ def main(argv=None) -> None:
     print(f"  manager_owners: {len(owners)} видов элементов" + (f" ({listed})" if listed else ""))
 
 
+main = _distro.packed_step(main)
+
+
 if __name__ == "__main__":
     main()

@@ -515,11 +515,26 @@ def _stdlib_common_pairs(root: str, version: str) -> dict:
 @lru_cache(maxsize=None)
 def _load_cached(root: str, version: str, name: str) -> dict:
     path = Path(root) / version / name
-    mark = _look(root, version, name)
-    if mark is None:
-        raise DatasetError(i18n.t("dataset.no-file", name=name, version=version, path=path))
-    data = read_json(path)
-    _FILE_STAMPS[(root, version, name)] = mark[1]
+    if _index_cached(root).get("storage") is not None:
+        from xbsl import data_storage
+        try:
+            for dependency in data_storage.dependencies(Path(root), version):
+                relative = dependency.relative_to(Path(root)).as_posix()
+                mark = _look(root, "", relative)
+                if mark is None:
+                    raise data_storage.StorageError(f"Missing shared data dependency: {dependency}")
+                _FILE_STAMPS[(root, "", relative)] = mark[1]
+            data = data_storage.raw_json(Path(root), version, name)
+        except data_storage.StorageError as error:
+            raise DatasetError(str(error)) from error
+        if data is None:
+            raise DatasetError(i18n.t("dataset.no-file", name=name, version=version, path=path))
+    else:
+        mark = _look(root, version, name)
+        if mark is None:
+            raise DatasetError(i18n.t("dataset.no-file", name=name, version=version, path=path))
+        data = read_json(path)
+        _FILE_STAMPS[(root, version, name)] = mark[1]
     if name == "stdlib.json":
         # English keys first (so the English types then inherit like the Russian ones),
         # then the inheritance expansion.
@@ -669,6 +684,22 @@ def data_file(name: str, version: str | None = None) -> Path:
 def has_data_file(name: str, version: str | None = None) -> bool:
     """Whether the data file exists (no exception) - for optional data such as the documentation."""
     try:
+        root = data_root()
+        resolved = resolve_version(version)
+        if _read_index().get("storage") is not None:
+            from xbsl import data_storage
+            description = data_storage.manifest(root, resolved)
+            return name in description.get("files", {}) or (name == "docs.sqlite" and bool(description.get("docs")))
         return data_file(name, version).exists()
     except DatasetError:
         return False
+
+
+def raw_json(name: str, version: str | None = None) -> dict | None:
+    """Read a logical file without stdlib expansion or mutable cache sharing."""
+    from xbsl import data_storage
+    _drop_if_stale(str(data_root()))
+    try:
+        return data_storage.raw_json(data_root(), resolve_version(version), name)
+    except data_storage.StorageError as error:
+        raise DatasetError(str(error)) from error

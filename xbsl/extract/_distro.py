@@ -249,3 +249,47 @@ def keep_previous(version: str, build: str) -> str:
         data["available"].sort()
     _write_index(idx, data)
     return f"прежняя сборка сохранена как {snapshot}"
+
+
+def packed_step(function):
+    """Route every individual extractor through the packed-root publisher."""
+    from functools import wraps
+    @wraps(function)
+    def wrapped(argv=None):
+        import argparse
+        import sys
+        import tempfile
+        from xbsl import data_storage, dataset
+        values = list(sys.argv[1:] if argv is None else argv)
+        if any(arg in ("--help", "-h", "--out") or arg.startswith("--out=") for arg in values):
+            return function(values)
+        probe = argparse.ArgumentParser(add_help=False)
+        probe.add_argument("--data-dir")
+        options, _ = probe.parse_known_args(values)
+        root = Path(options.data_dir) if options.data_dir else data_root()
+        if not (root / "index.json").is_file() or not data_storage.index(root).get("storage"):
+            return function(values)
+        saved_root, saved_dataset, saved_version = _root_override, dataset.pinned_root(), dataset._selected
+        try:
+            with tempfile.TemporaryDirectory(prefix="xbsl-step-") as temporary:
+                staged = Path(temporary)
+                data_storage.export(root, staged)
+                arguments = []
+                position = 0
+                while position < len(values):
+                    value = values[position]
+                    if value == "--data-dir":
+                        position += 2
+                        continue
+                    if not value.startswith("--data-dir="):
+                        arguments.append(value)
+                    position += 1
+                result = function([*arguments, "--data-dir", str(staged)])
+                if result in (None, 0):
+                    data_storage.pack(staged, root)
+                return result
+        finally:
+            set_data_root(saved_root)
+            dataset.set_data_root(saved_dataset)
+            dataset.set_version(saved_version)
+    return wrapped

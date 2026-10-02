@@ -16,6 +16,7 @@ from typing import NamedTuple
 from xbsl import (
     __version__, baseline, cijob, dataset, engine, environment, i18n, plugins, report, rundiff,
 )
+from xbsl import storage_cli
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
@@ -2403,6 +2404,10 @@ COMMANDS: tuple[Command, ...] = (
     Command("baseline", "cli.help.commands.baseline", _baseline_main, parser=_baseline_parser),
     Command("extract", "cli.help.commands.extract", _extract_main, reference=False),
     Command("data-diff", "cli.help.commands.data-diff", _datadiff_main, reference=False),
+    Command("data-pack", "storage.pack", partial(storage_cli.main, "data-pack"), reference=False),
+    Command("data-export", "storage.export", partial(storage_cli.main, "data-export"), reference=False),
+    Command("data-verify", "storage.verify", partial(storage_cli.main, "data-verify"), reference=False),
+    Command("data-prune", "storage.prune", partial(storage_cli.main, "data-prune"), reference=False),
     Command("translate", "cli.help.commands.translate", _translate_main, reference=False),
     Command("self-update", "cli.help.commands.self-update", _selfupdate_main,
             parser=_selfupdate_parser),
