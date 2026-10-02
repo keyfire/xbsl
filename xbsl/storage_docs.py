@@ -94,7 +94,7 @@ def open_shared(path, version, description):
     connection.create_function("xbsl_unzip", 1, unpack_text, deterministic=True)
     quoted = "'" + version.replace("'", "''") + "'"
     try:
-        connection.execute(f"CREATE TEMP VIEW pages AS SELECT l.page_rowid AS rowid,c.id,c.kind,c.title,c.qualified,c.availability,c.url,xbsl_unzip(c.html) AS html FROM docs_links l JOIN docs_content c ON c.key=l.content WHERE l.version={quoted} ORDER BY l.page_rowid")
+        connection.execute(f"CREATE TEMP VIEW pages AS SELECT l.page_rowid AS rowid,l.id,c.kind,c.title,c.qualified,c.availability,c.url,xbsl_unzip(c.html) AS html FROM docs_links l JOIN docs_content c ON c.key=l.content WHERE l.version={quoted} ORDER BY l.page_rowid")
         connection.execute(f"CREATE TEMP VIEW tree AS SELECT c.node,c.parent,c.ord,xbsl_unzip(c.label) AS label,c.page,c.anchor,c.kind FROM tree_links l JOIN tree_content c ON c.key=l.content WHERE l.version={quoted} ORDER BY c.node")
     except Exception:
         connection.close()
