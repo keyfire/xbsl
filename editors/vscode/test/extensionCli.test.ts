@@ -187,7 +187,8 @@ async function main() {
     assert.strictEqual(h.commands["xbsl.reindexProject"](), manual, "duplicate clicks share the manual operation");
     await flush(); assert.strictEqual(h.projects.length, 2);
     assert.strictEqual(h.statusItems[0].text, "$(sync~spin)");
-    assert.ok(h.progressMessages.some((value) => value.includes("Elapsed:")));
+    assert.ok(h.progressMessages.some((value) => /^0:00 \| /.test(value)));
+    assert.ok(h.statusItems[0].tooltip.includes("Elapsed:"));
     assert.strictEqual(h.intervals.size, 1);
     const doc = h.doc("src/Item.xbsl", "xbsl"); doc.isDirty = false;
     h.events.Save(doc); await h.tick(500);

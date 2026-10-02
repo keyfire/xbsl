@@ -22,7 +22,7 @@ export function registerProjectCheck(context: vscode.ExtensionContext,
   const run = singleProjectCheck(async () => {
     try {
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "XBSL: " + title, cancellable: false },
+        { location: vscode.ProgressLocation.Notification, title: "XBSL", cancellable: false },
         async (progress) => {
           const started = Date.now();
           let message = vscode.l10n.t("Waiting for project progress...");
@@ -38,7 +38,7 @@ export function registerProjectCheck(context: vscode.ExtensionContext,
               increment = next - percentage;
               percentage = next;
             }
-            progress?.report({ message: current, increment });
+            progress?.report({ message: time + " | " + message, increment });
             state(true);
           };
           refresh();
