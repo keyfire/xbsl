@@ -163,7 +163,7 @@ def _version_key(version: str) -> tuple[int, ...]:
 def _read_index(idx: Path) -> dict:
     # utf-8-sig: индекс, переписанный PowerShell 5.1, несёт BOM; ошибка разбора обязана
     # называть файл - без имени она одинаково валила все шаги, читающие индекс.
-    data = {"available": [], "default": None}
+    data: dict = {"available": [], "default": None}
     if idx.exists():
         try:
             data = json.loads(idx.read_text(encoding="utf-8-sig"))

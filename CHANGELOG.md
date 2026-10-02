@@ -18,6 +18,19 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **Platform data can share identical content across versions.** `data-pack` builds the shared
+  catalog, `data-export` restores the earlier layout, and `data-verify` checks its contents.
+  `data-prune` previews unused files and removes them only with `--apply`. ([#173](https://github.com/keyfire/xbsl/pull/173))
+
+### Changed
+
+- **Data readers and extractors support the shared layout.** JSON views, documentation searches
+  and image paths keep their previous meaning; the earlier layout remains readable. ([#173](https://github.com/keyfire/xbsl/pull/173))
+
 ## 2026-10-01 – 0.127.0, 0.128.0, 0.128.1
 
 ### Added
