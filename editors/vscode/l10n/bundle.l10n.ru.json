@@ -655,5 +655,11 @@
   "The documentation comment could not be saved.": "Не удалось сохранить документирующий комментарий.",
   "The documentation service is unavailable. Try again.": "Сервис документации недоступен. Повторите попытку.",
   "The documentation service returned an unsupported edit.": "Сервис документации вернул неподдерживаемую правку.",
-  "XBSL: the project folder {0} (xbsl.projectRoot) does not exist, so the yaml files of the project are not checked. Point the setting at the project folder.": "XBSL: папки проекта {0} (xbsl.projectRoot) нет, поэтому yaml проекта не проверяются. Укажите в настройке папку проекта."
+  "XBSL: the project folder {0} (xbsl.projectRoot) does not exist, so the yaml files of the project are not checked. Point the setting at the project folder.": "XBSL: папки проекта {0} (xbsl.projectRoot) нет, поэтому yaml проекта не проверяются. Укажите в настройке папку проекта.",
+  "Reindex and check the project": "Переиндексировать и проверить проект",
+  "XBSL: reindexing and checking the project...": "XBSL: переиндексация и проверка проекта...",
+  "XBSL: project check failed: {0}": "XBSL: проверка проекта не выполнена: {0}",
+  "The server did not complete the project check.": "Сервер не завершил проверку проекта.",
+  "The project check did not return a report.": "Проверка проекта не вернула отчет.",
+  "The project check was canceled before completion.": "Проверка проекта отменена до завершения."
 }

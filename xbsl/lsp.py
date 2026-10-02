@@ -610,7 +610,7 @@ def _make_server() -> "LanguageServer":
         STATE.file_timers[uri] = timer
         timer.start()
 
-    def build_project_index() -> None:
+    def build_project_index() -> bool:
         """Rebuild the navigation index of the project (see indexer.build_index).
 
         It is built apart from the project lint and BEFORE it: the lint of a whole project
@@ -620,12 +620,14 @@ def _make_server() -> "LanguageServer":
         """
         root = STATE.root
         if root is None:
-            return
+            return False
         with STATE.index_lock:
             try:
                 STATE.lookup = IndexLookup(indexer.build_index(root))
+                return True
             except Exception as e:  # noqa: BLE001 - the index must not break diagnostics
                 server.show_message_log(f"xbsl-lsp: индекс не построен: {e}")
+                return False
 
     def ensure_lookup() -> Optional[IndexLookup]:
         """The index for a navigation request, built here if the background pass has not
@@ -634,16 +636,17 @@ def _make_server() -> "LanguageServer":
             build_project_index()
         return STATE.lookup
 
-    def project_lint() -> None:
+    def project_lint(wait: bool = False) -> Optional[dict]:
         tell_if_stale()
         root = STATE.root
         if root is None:
-            return
-        if not STATE.project_lock.acquire(blocking=False):
+            return {"ok": False, "files": 0, "diagnostics": 0,
+                    "error": "Project root is not initialized."}
+        if not STATE.project_lock.acquire(blocking=wait):
             schedule_project_lint()  # a run is already in progress - retry afterwards
-            return
-        build_project_index()  # navigation comes alive before the lint of the whole project
+            return None
         try:
+            indexed = build_project_index()  # navigation comes alive before the whole-project lint
             project_paths = project_sources(root)
             sources = [engine.load(p) for p in project_paths]
             diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
@@ -702,6 +705,11 @@ def _make_server() -> "LanguageServer":
                 )
             kept = {k: u for k, u in STATE.published.items() if stands(k)}
             STATE.published = {k: STATE.published.get(k) or uri_of[k] for k in by_key} | kept
+            result = {"ok": indexed, "files": len(project_paths) + len(dictionary_paths),
+                      "diagnostics": len(diags)}
+            if not indexed:
+                result["error"] = "Project index could not be rebuilt."
+            return result
         finally:
             STATE.project_lock.release()
 
@@ -801,6 +809,20 @@ def _make_server() -> "LanguageServer":
             schedule_buffer_lint(str(uri))
         schedule_project_lint()
         return {"ok": True}
+
+    @server.feature("xbsl/reindexProject")
+    @server.thread()
+    def _reindex_project(_params: object = None) -> dict:
+        """Await a fresh index and full project check, after any pass already running."""
+        timer = STATE.project_timer
+        if timer is not None:
+            timer.cancel()
+            STATE.project_timer = None
+        try:
+            return project_lint(wait=True)
+        except Exception as exc:  # noqa: BLE001 - report a failed check to the waiting client
+            server.show_message_log(f"xbsl-lsp: project check failed: {exc}")
+            return {"ok": False, "files": 0, "diagnostics": 0, "error": str(exc)}
 
     # --- navigation --------------------------------------------------------------------
 
@@ -963,7 +985,7 @@ def _make_server() -> "LanguageServer":
 
     @server.feature(
         lsp.TEXT_DOCUMENT_COMPLETION,
-        lsp.CompletionOptions(trigger_characters=[".", ":", "@", "/"]),
+        lsp.CompletionOptions(trigger_characters=[".", ":", "@", "/"], resolve_provider=True),
     )
     def _completion(params: lsp.CompletionParams) -> Optional[lsp.CompletionList]:
         # Everything project-specific - the objects, their fields, the tables of a query -
@@ -1085,6 +1107,7 @@ def _make_server() -> "LanguageServer":
                 kind=lsp.CompletionItemKind(_COMPLETION_KINDS.get(e["kind"], 1)),
                 detail=e.get("detail"),
                 documentation=_doc_markup(e.get("doc")),
+                data=e.get("data"),
                 insert_text=e.get("snippet"),
                 insert_text_format=lsp.InsertTextFormat.Snippet if e.get("snippet") else None,
                 sort_text=_sort_text(e, project_language),
@@ -1092,6 +1115,22 @@ def _make_server() -> "LanguageServer":
             for e in entries or ()
         ]
         return lsp.CompletionList(is_incomplete=False, items=items)
+
+    @server.feature(lsp.COMPLETION_ITEM_RESOLVE)
+    def _completion_resolve(item: lsp.CompletionItem) -> lsp.CompletionItem:
+        """Read documentation only for the completion item the client selects."""
+        if item.documentation is None:
+            try:
+                from xbsl import completion_docs
+
+                text = completion_docs.resolve(item.data)
+                if text:
+                    item.documentation = lsp.MarkupContent(
+                        kind=lsp.MarkupKind.Markdown, value=text,
+                    )
+            except Exception:  # noqa: BLE001 - a missing document must not break completion
+                pass
+        return item
 
     def _variable_type(params: object) -> Optional[tuple[str, str]]:
         """(variable name, inferred type) for a local variable under the cursor, or None."""
@@ -1139,6 +1178,103 @@ def _make_server() -> "LanguageServer":
             return None
         word, var_type = hit
         return f"**{word}: {var_type}**\n\nлокальная переменная"
+
+    def _module_constant(params: object) -> Optional[tuple[str, Optional[str], str]]:
+        """Name, type and documentation of a module constant at the current buffer position."""
+        from xbsl import lexer, parser, typeinfer
+
+        uri = _param(params, "uri") or getattr(getattr(params, "text_document", None), "uri", None)
+        pos = _param(params, "position")
+        if not uri or pos is None:
+            return None
+        path = uri_to_path(uri)
+        if path is None or language_of(path) != "xbsl":
+            return None
+        doc = server.workspace.get_text_document(uri)
+        lines = doc.source.split("\n")
+        line_no = int(_param(pos, "line", 0) or 0)
+        char = int(_param(pos, "character", 0) or 0)
+        if not 0 <= line_no < len(lines):
+            return None
+        line = lines[line_no]
+        match = next(
+            (m for m in re.finditer(r"[\wА-Яа-яЁё]+", line) if m.start() <= char <= m.end()),
+            None,
+        )
+        if match is None or line[:match.start()].rstrip().endswith((".", "::")):
+            return None
+        word = match.group(0)
+        start = sum(len(lines[k]) + 1 for k in range(line_no)) + match.start()
+        try:
+            src = engine.load_text(path.name, doc.source)
+            toks = lexer.tokens(src)
+            if not any(t.kind == "IDENT" and t.start == start and t.value == word for t in toks):
+                return None
+            code_toks = [t for t in toks if t.kind != "COMMENT"]
+            if not any(
+                left.kind == "KEYWORD" and left.canonical == "CONST"
+                and right.kind == "IDENT" and right.value == word
+                for left, right in zip(code_toks, code_toks[1:])
+            ):
+                return None
+            typing = typeinfer.file_typing(src)
+            if typing is None:
+                return None
+            field = next(
+                (m for m in typing.tree.members
+                 if isinstance(m, parser.ObjectField) and m.kind == "CONST" and m.name == word),
+                None,
+            )
+            if field is None:
+                return None
+            # A method-wide declaration must not fall through to a module name when its type
+            # is unknown or its block is not visible at this position.
+            method = next(
+                (n for n in typeinfer.walk_nodes(typing.tree)
+                 if isinstance(n, parser.Method) and n.start <= start < n.end),
+                None,
+            )
+            if method is not None:
+                for node in typeinfer.walk_nodes(method):
+                    if isinstance(node, (parser.Param, parser.VarDecl)) and node.name == word:
+                        return None
+                    if isinstance(node, (parser.ForEach, parser.ForTo)) and node.var == word:
+                        return None
+                    if isinstance(node, parser.Try) and any(
+                        name == word for name, _type, _body in node.catches
+                    ):
+                        return None
+            for member in typing.tree.members:
+                if isinstance(member, parser.Structure) and member.start <= start < member.end:
+                    if any(isinstance(n, parser.ObjectField) and n.name == word
+                           for n in member.members):
+                        return None
+            var_type = field.type.text if field.type is not None else None
+            if var_type is None:
+                typing.typer._prepare(typing.tree)
+                got = typing.typer.outer_name(word, None)
+                var_type = got.text() if isinstance(got, typeinfer.TypeSet) else None
+            index = next(
+                i for i, tok in enumerate(toks)
+                if tok.kind == "KEYWORD" and tok.canonical == "CONST"
+                and field.start <= tok.start < field.end
+            )
+            comment = indexer._doc_above(toks, index, [a.name for a in field.annotations])
+            return word, var_type, comment
+        except Exception:  # noqa: BLE001 - hover must not fail because of parsing
+            return None
+
+    def _module_constant_hover(params: lsp.HoverParams) -> Optional[str]:
+        """The declared or inferred type and documentation of a module constant."""
+        hit = _module_constant(params)
+        if hit is None:
+            return None
+        word, var_type, comment = hit
+        signature = f"{word}: {var_type}" if var_type else word
+        text = f"**{signature}**\n\nконстанта модуля"
+        if comment:
+            text += "\n\n" + lsp_doc.doc_markdown(comment)
+        return text
 
     def _member_hover(params: lsp.HoverParams) -> Optional[str]:
         """Hover over a member of a PLATFORM type - `JsonSerialization.WriteObject`,
@@ -1262,7 +1398,8 @@ def _make_server() -> "LanguageServer":
         if q is None or lookup is None:
             return None
         text = (
-            resolve_hover(lookup, **q)
+            _module_constant_hover(params)
+            or resolve_hover(lookup, **q)
             or _variable_hover(params)
             or _member_hover(params)
             or _global_hover(params)

@@ -565,9 +565,8 @@ spelling first, an external service's guess otherwise - stands grey inside an em
 in on a click or on `Enter`. The table reads `--table`, which yields the entries, the gaps and the
 coverage out of one pass over the project, and it writes through `--set`. A written cell does not
 cost another pass, only a re-read of the dictionary, and the header counters step forward by what
-that edit changed. The "Re-read" button replaces them with freshly counted ones. The panel needs
-**xbsl 0.72.0 or newer**, because `--suggest`, the machine-translation run behind its suggestions
-button, only arrived there. The **"Suggest via translation service"** button in the same panel
+that edit changed. The "Re-read" button replaces them with freshly counted ones.
+The **"Suggest via translation service"** button in the same panel
 fills empty fields with an external service's guesses; details are in
 [Machine translation](#machine-translation) below.
 

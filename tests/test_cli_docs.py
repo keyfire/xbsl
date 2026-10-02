@@ -147,7 +147,7 @@ def test_help_answers_within_timeout(command):
     if dep and importlib.util.find_spec(dep) is None:
         pytest.skip(f"optional dependency {dep} is not installed")
     out = subprocess.run(
-        [sys.executable, "-m", "xbsllint", *command, "--help"],
+        [sys.executable, "-m", "xbsl", *command, "--help"],
         capture_output=True, text=True, encoding="utf-8", timeout=30,
         # PYTHONIOENCODING: the help asked for here is Russian, and a child writing in the
         # console code page would pass this check with replacement characters in its output.

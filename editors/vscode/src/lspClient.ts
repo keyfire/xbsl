@@ -285,13 +285,8 @@ export async function activateLsp(
         void vscode.window.showErrorMessage(vscode.l10n.t("XBSL LSP: the server did not restart – see the XBSL output panel."));
       }
     }),
-    vscode.commands.registerCommand("xbsl.lintProject", () => {
-      void vscode.window.showInformationMessage(
-        vscode.l10n.t(
-          'XBSL LSP: project-wide diagnostics run on the server on every save; force them with the "XBSL: restart the linter" command.'
-        )
-      );
-    }),
+    vscode.commands.registerCommand("xbsl.lintProject", () =>
+      vscode.commands.executeCommand("xbsl.reindexProject")),
     // A setting that shapes the run is an ARGUMENT of the server, and a running process cannot
     // be re-argued: without this the change did nothing at all until the window was reloaded.
     // The CLI mode has its own listener; LSP mode returns from activate() before that one is

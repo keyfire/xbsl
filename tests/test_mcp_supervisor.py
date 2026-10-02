@@ -344,7 +344,6 @@ def test_xbsl_mcp_is_the_supervisor_and_a_holder_only_as_the_bare_server():
 def test_xbsl_mcp_names_the_supervisor_in_the_package():
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'xbsl-mcp = "xbsl.mcp_supervisor:main"' in text
-    assert 'xbsllint-mcp = "xbsl.mcp_supervisor:main"' in text
 
 
 def test_no_supervisor_runs_the_bare_server_in_this_process(monkeypatch):

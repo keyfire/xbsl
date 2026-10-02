@@ -9,6 +9,27 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 1.0.0
+
+Not released yet.
+
+### Added
+
+- **A status-bar refresh icon reindexes and checks the project.** Its tooltip names the action;
+  the icon spins until the check completes. Repeated clicks share the same run. ([#173](https://github.com/keyfire/xbsl/pull/173))
+- **Standard method suggestions show signatures, a short description and parameters.**
+  Documentation loads when the item is selected. ([#173](https://github.com/keyfire/xbsl/pull/173))
+
+### Fixed
+
+- **Grouped numeric calculations offer methods, and module constants show their documentation.**
+  Both use the current source text. ([#173](https://github.com/keyfire/xbsl/pull/173))
+
+### Changed
+
+- **Current help uses `xbsl` and removes obsolete feature-version notes.** The extension and
+  engine are prepared as 1.0.0. ([#173](https://github.com/keyfire/xbsl/pull/173))
+
 ## 0.80.0
 
 ### Fixed

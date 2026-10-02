@@ -1,7 +1,7 @@
 """Self-update (`xbsl self-update`): wheel extraction with no network (urllib is mocked).
 
-The command must replace both the xbsl package and the xbsllint alias package from the same
-wheel, without touching the dist-info of the transitional xbsllint metapackage, and refuse
+The command replaces xbsl and removes a retired alias package, while leaving unrelated
+metadata intact. It must refuse
 to run in an editable install (there git does the updating, and extraction would wreck the
 repository).
 
@@ -31,7 +31,6 @@ def _fake_wheel(version: str) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as archive:
         archive.writestr("xbsl/__init__.py", f'__version__ = "{version}"\n')
-        archive.writestr("xbsllint/__init__.py", "import xbsl\n")
         archive.writestr(f"xbsl-{version}.dist-info/METADATA", f"Version: {version}\n")
     return buf.getvalue()
 
@@ -77,7 +76,7 @@ def test_self_update_extracts_wheel(fake_site, monkeypatch):
     assert new == "9.9.9" and old == xbsl.__version__
     text = (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8")
     assert '__version__ = "9.9.9"' in text
-    assert (fake_site / "xbsllint" / "__init__.py").is_file()  # the alias is replaced with the package
+    assert not (fake_site / "xbsllint").exists()  # the retired alias is removed on upgrade
     assert not (fake_site / "xbsl-0.0.1.dist-info").exists()  # the old dist-info is removed
     assert (fake_site / "xbsl-9.9.9.dist-info").exists()
     assert (fake_site / "xbsllint-0.16.0.dist-info").exists()  # the metapackage is untouched
@@ -619,7 +618,6 @@ def test_update_replaces_the_root_native_module_and_spares_the_foreign_one(fake_
     wheel = io.BytesIO()
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("xbsl/__init__.py", '__version__ = "9.9.9"\n')
-        archive.writestr("xbsllint/__init__.py", "import xbsl\n")
         archive.writestr(_MYPYC, "new native payload")  # то же имя - тот самый случай перезаписи
         archive.writestr(f"xbsl-9.9.9.dist-info/RECORD", f"{_MYPYC},sha256=new,18\n")
     _stub_download(monkeypatch, payload=wheel.getvalue())

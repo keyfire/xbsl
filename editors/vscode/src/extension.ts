@@ -28,6 +28,7 @@ import { registerDocs } from "./docsTree";
 import { registerHoverDocs } from "./hoverDocs";
 import { registerDefinitionDocs } from "./definitionDocs";
 import { registerStatusBar } from "./statusBar";
+import { registerProjectCheck } from "./projectCheck";
 import { registerUpdateCheck } from "./updateCheck";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
 import { registerTranslation } from "./translationPanel";
@@ -97,8 +98,11 @@ interface WorkspaceRun {
 const workspaceResults = new Map<string, WorkspaceRun>();
 // Debounce timers of scheduled workspace runs, per folder.
 const workspaceTimers = new Map<string, NodeJS.Timeout>();
+type WorkspaceRunOutcome = { status: "done" | "canceled" } | { status: "failed"; error: string };
 // Runs waiting in the chain (not started yet), per folder - they deduplicate frequent saves.
-const queuedRuns = new Map<string, Promise<void>>();
+const queuedRuns = new Map<string, Promise<WorkspaceRunOutcome>>();
+// The latest scheduled run remains reachable while a manual check follows save replacements.
+const latestRuns = new Map<string, Promise<WorkspaceRunOutcome>>();
 // The single currently executing run (its processes); a new save of the same folder cancels it.
 let activeRun: { folderKey: string; cancel: () => void } | undefined;
 // Workspace runs execute strictly one after another.
@@ -324,7 +328,7 @@ function scheduleWorkspaceLint(folder: vscode.WorkspaceFolder): void {
 
 // One run at a time: runs line up into a chain, a folder is queued at most once, and a save
 // while its folder is being checked cancels the now-outdated run.
-function enqueueWorkspaceRun(folder: vscode.WorkspaceFolder, notify = false): Promise<void> {
+function enqueueWorkspaceRun(folder: vscode.WorkspaceFolder, notify = false): Promise<WorkspaceRunOutcome> {
   const key = folder.uri.toString();
   const queued = queuedRuns.get(key);
   if (queued) {
@@ -338,11 +342,12 @@ function enqueueWorkspaceRun(folder: vscode.WorkspaceFolder, notify = false): Pr
     return runWorkspaceLint(folder, notify);
   });
   queuedRuns.set(key, run);
-  runChain = run.catch(() => undefined);
+  latestRuns.set(key, run);
+  runChain = run.then(() => undefined, () => undefined);
   return run;
 }
 
-async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean): Promise<void> {
+async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean): Promise<WorkspaceRunOutcome> {
   const settings = readSettings(folder.uri);
   const scope = runScopeFor(folder);
   const cwd = folder.uri.fsPath;
@@ -364,7 +369,7 @@ async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean)
   activeRun = undefined;
   if (result.canceled || dictionaryResult?.canceled) {
     output.appendLine(vscode.l10n.t('XBSL: the workspace run "{0}" was canceled – the files changed.', folder.name));
-    return;
+    return { status: "canceled" };
   }
   if (result.error) {
     // A soft failure: a huge workspace or a broken linter must not spray popup windows
@@ -374,10 +379,10 @@ async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean)
     } else {
       output.appendLine(vscode.l10n.t('XBSL: the workspace run "{0}" failed: {1}', folder.name, result.error));
     }
-    return;
+    return { status: "failed", error: result.error };
   }
   if (!result.report) {
-    return;
+    return { status: "failed", error: vscode.l10n.t("The project check did not return a report.") };
   }
   let report = result.report;
   let read: RunScope = { root: scope.root };
@@ -395,6 +400,9 @@ async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean)
   const s = report.summary;
   const stats = s ? vscode.l10n.t("{0} findings in {1} files", s.diagnostics, s.files) : vscode.l10n.t("done");
   output.appendLine(vscode.l10n.t('XBSL: workspace run "{0}": {1}, {2} ms.', folder.name, stats, Date.now() - started));
+  return dictionaryResult?.error
+    ? { status: "failed", error: dictionaryResult.error }
+    : { status: "done" };
 }
 
 // Distributes the run's findings across the files it read, replacing whatever was there before.
@@ -481,7 +489,7 @@ function scheduleWorkspaceLintAll(): void {
 }
 
 // Manual command: check all workspace folders, with a progress indicator and a visible error.
-async function lintProject(): Promise<void> {
+async function lintProject(waitForLatest = false): Promise<void> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
     void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: no open folder to check."));
@@ -490,7 +498,32 @@ async function lintProject(): Promise<void> {
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: vscode.l10n.t("XBSL: checking the project...") },
     async () => {
-      await Promise.all(folders.map((folder) => enqueueWorkspaceRun(folder, true)));
+      const checks = folders.map(async (folder) => {
+        let run = enqueueWorkspaceRun(folder, !waitForLatest);
+        if (!waitForLatest) {
+          await run;
+          return;
+        }
+        while (true) {
+          const outcome = await run;
+          const replacement = latestRuns.get(folder.uri.toString());
+          if (replacement && replacement !== run) {
+            // Follow the replacement the save already scheduled; enqueueing here would cancel it.
+            run = replacement;
+            continue;
+          }
+          if (outcome.status === "done") { return; }
+          if (outcome.status === "failed") { throw new Error(outcome.error); }
+          throw new Error(vscode.l10n.t("The project check was canceled before completion."));
+        }
+      });
+      if (waitForLatest) {
+        const results = await Promise.allSettled(checks);
+        const failure = results.find((result) => result.status === "rejected");
+        if (failure?.status === "rejected") { throw failure.reason; }
+      } else {
+        await Promise.all(checks);
+      }
     }
   );
 }
@@ -504,7 +537,7 @@ function lintOpenDocuments(): void {
 }
 
 // Forget everything and start over: used by the restart command and on settings changes.
-function resetAndRelint(): void {
+function resetAndRelint(scheduleWorkspace = true): void {
   warnedOnce = false;
   for (const timer of debounceTimers.values()) {
     clearTimeout(timer);
@@ -520,7 +553,7 @@ function resetAndRelint(): void {
   fixStore.clear();
   collection.clear();
   lintOpenDocuments();
-  scheduleWorkspaceLintAll();
+  if (scheduleWorkspace) { scheduleWorkspaceLintAll(); }
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -627,6 +660,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Extension/linter versions and the completion mode in the status bar (before the LSP branch -
   // visible in both modes).
   const statusBar = registerStatusBar(context, (resource) => readSettings(resource).linter);
+  registerProjectCheck(context, async () => {
+    if (lspActive()) {
+      const result = await lspRequest<{ ok: boolean; error?: string }>("xbsl/reindexProject", {});
+      if (!result?.ok) {
+        throw new Error(result?.error || vscode.l10n.t("The server did not complete the project check."));
+      }
+    } else {
+      resetAndRelint(false);
+      await lintProject(true);
+    }
+    await vscode.commands.executeCommand("xbsl.metadata.refresh");
+  });
   // "Is this the latest extension?" - the editor never answers it here: the extension is
   // installed from a vsix and VS Code asks the Marketplace, while the CI publishes to Open VSX.
   // The check is quiet (the status bar lights up), rare (once a day) and switchable.

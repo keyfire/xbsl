@@ -147,6 +147,114 @@ def _hover_text(tmp_path, code: str, line: int, character: int):
     return got.contents.value if got else None
 
 
+@pytest.mark.needs_data
+@pytest.mark.parametrize("declaration", [
+    'конст TOKEN = "sample"',
+    'конст TOKEN: Строка = "sample"',
+])
+@pytest.mark.parametrize("line, character", [(1, 8), (3, 15)])
+def test_hover_of_a_documented_module_constant(tmp_path, declaration, line, character):
+    code = "\n".join([
+        "/// A documented module constant.",
+        declaration,
+        "метод Probe()",
+        "    возврат TOKEN",
+        ";",
+    ])
+    text = _hover_text(tmp_path, code, line, character)
+    assert text is not None and "**TOKEN: Строка**" in text
+    assert "константа модуля" in text
+    assert "A documented module constant." in text
+
+
+@pytest.mark.needs_data
+def test_hover_of_a_module_constant_keeps_its_explicit_type(tmp_path):
+    code = '\n'.join([
+        'конст TOKEN: Строка|Число = "sample"',
+        "метод Probe()",
+        "    возврат TOKEN",
+        ";",
+    ])
+    text = _hover_text(tmp_path, code, 2, 15)
+    assert text is not None and "**TOKEN: Строка|Число**" in text
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("signature, declaration, expected", [
+    ("метод Probe(TOKEN: Число)", "", "**TOKEN: Число**"),
+    ("метод Probe(TOKEN)", "", None),
+    ("метод Probe()", "    знч TOKEN: Число = 1", "**TOKEN: Число**"),
+    ("метод Probe()", "    знч TOKEN = Unknown()", None),
+])
+def test_module_constant_hover_respects_local_shadows(tmp_path, signature, declaration, expected):
+    code = "\n".join([
+        "/// A documented module constant.",
+        'конст TOKEN = "sample"',
+        signature,
+        declaration,
+        "    возврат TOKEN",
+        ";",
+    ])
+    text = _hover_text(tmp_path, code, 4, 15)
+    if expected is None:
+        assert text is None
+    else:
+        assert text is not None and expected in text
+        assert "константа модуля" not in text
+        assert "A documented module constant." not in text
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("usage", ["    возврат receiver.TOKEN", "    // TOKEN", '    возврат "TOKEN"'])
+def test_module_constant_hover_ignores_members_and_text(tmp_path, usage):
+    code = "\n".join([
+        'конст TOKEN = "sample"',
+        "метод Probe()",
+        usage,
+        ";",
+    ])
+    assert _hover_text(tmp_path, code, 2, usage.index("TOKEN") + 2) is None
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("line, character, expected", [
+    (3, 10, "**TOKEN: Число**"),
+    (4, 19, "**TOKEN: Число**"),
+    (6, 19, None),
+])
+def test_module_constant_hover_respects_structure_fields(tmp_path, line, character, expected):
+    code = "\n".join([
+        "/// A documented module constant.",
+        'конст TOKEN: Строка = "sample"',
+        "структура Inner",
+        "    пер TOKEN: Число",
+        "    пер VALUE = TOKEN",
+        "    метод Probe()",
+        "        возврат TOKEN",
+        "    ;",
+        ";",
+    ])
+    text = _hover_text(tmp_path, code, line, character)
+    if expected is None:
+        assert text is None
+    else:
+        assert text is not None and expected in text
+        assert "константа модуля" not in text
+        assert "A documented module constant." not in text
+
+
+@pytest.mark.needs_data
+def test_module_constant_hover_ignores_namespace_qualified_names(tmp_path):
+    code = "\n".join([
+        "/// A documented module constant.",
+        'конст TOKEN = "sample"',
+        "метод Probe()",
+        "    возврат Other::TOKEN",
+        ";",
+    ])
+    assert _hover_text(tmp_path, code, 3, 21) is None
+
+
 CODE = "\n".join([
     "@НаСервере",
     "метод Проба()",

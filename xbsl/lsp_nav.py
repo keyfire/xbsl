@@ -515,7 +515,7 @@ def _inherited_entries(
     struct = lookup.struct_by_name(type_name)
     base = (struct or {}).get("base")
     members = (stdlib_members or {}).get(base) if isinstance(base, str) else None
-    return _stdlib_entries(members, language) if members else []
+    return _stdlib_entries(members, language, base) if members else []
 
 
 #: Buckets of the `manager` field of an index object, with what a completion item says about
@@ -737,7 +737,7 @@ def _spelling(name: str, language: str) -> str:
     return terms.common_english(name) or name
 
 
-def _stdlib_entries(members, language: str = "ru") -> list[dict]:
+def _stdlib_entries(members, language: str = "ru", owner: str = "") -> list[dict]:
     """Members of a stdlib type: properties and methods apart (methods get their own kind and insert parentheses).
 
     The dataset provides {"properties": [...], "methods": [...]}; the former flat list of
@@ -752,11 +752,15 @@ def _stdlib_entries(members, language: str = "ru") -> list[dict]:
         {"label": _spelling(str(x), language), "kind": "field", "detail": "свойство"}
         for x in members.get("properties") or []
     ]
-    entries += [
-        {"label": (name := _spelling(str(x), language)), "kind": "method",
-         "detail": "метод", "snippet": f"{name}($0)"}
-        for x in members.get("methods") or []
-    ]
+    for member in members.get("methods") or []:
+        name = ((terms.member_english_of(_nominal_head(owner), str(member)) if owner and language == "en" else None)
+                or _spelling(str(member), language))
+        entry = {"label": name, "kind": "method", "detail": "метод", "snippet": f"{name}($0)"}
+        if owner:
+            entry["data"] = {"xbsl_stdlib": {
+                "owner": owner, "member": str(member), "language": language,
+            }}
+        entries.append(entry)
     return entries
 
 
@@ -850,13 +854,13 @@ def resolve_completions(
         of_type = ((stdlib_members or {}).get(written)
                    or (stdlib_members or {}).get(_nominal_head(written)))
         if of_type:
-            entries += _stdlib_entries(of_type, project_language)
+            entries += _stdlib_entries(of_type, project_language, _nominal_head(written))
         if entries:
             return entries
     if expr_type and CHAIN_TAIL_RE.search(line_prefix):
         members = (stdlib_members or {}).get(expr_type)
         if members:
-            return _stdlib_entries(members, project_language)
+            return _stdlib_entries(members, project_language, expr_type)
         project = _project_type_entries(lookup, expr_type)
         if project:
             return project + _inherited_entries(
@@ -900,7 +904,7 @@ def resolve_completions(
             var_type = local_vars[token]
             members = (stdlib_members or {}).get(var_type)
             if members:
-                return _stdlib_entries(members, project_language)
+                return _stdlib_entries(members, project_language, var_type)
             return _project_type_entries(lookup, var_type)
         entries = _object_member_entries(lookup, token)
         if entries is not None:
@@ -914,7 +918,7 @@ def resolve_completions(
         # members come from the linter dataset's type_members, keyed there under both name forms.
         members = (stdlib_members or {}).get(token)
         if members:
-            return _stdlib_entries(members, project_language)
+            return _stdlib_entries(members, project_language, token)
         # A NAMESPACE of facets (`Сущность.Право`, `Сущность.Объект`): the catalogue keys such a
         # type by both segments, and the first one alone is not a type at all - the dot after it
         # used to answer nothing, though the names that may follow are known exactly.

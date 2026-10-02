@@ -2881,3 +2881,33 @@ def _reset_sets() -> None:
 
 
 dataset.register_reset(_reset_sets)
+
+
+
+def conditional_locals_at(source, offset: int) -> dict[str, str | None]:
+    """Types of visible conditional locals, using the compiler-oriented expression rules."""
+    typing = file_typing(source)
+    if typing is None:
+        return {}
+    typer = typing.typer
+    typer._prepare(typing.tree)
+    for method, this_type, owner_fields in typer._methods(typing.tree, True):
+        if not int(method.start) <= offset <= int(method.end):
+            continue
+        nodes = walk_nodes(method.body)
+        names = {node.name for node in nodes
+                 if isinstance(node, P.VarDecl) and isinstance(node.init, P.Ternary)
+                 and int(node.end) <= offset}
+        if not names:
+            return {}
+        scope = _MethodScope(method, nodes)
+        evaluator = _Evaluator(typer, scope, this_type, owner_fields)
+        result = {}
+        for name in names:
+            entry = scope.lookup(name, offset)
+            if not isinstance(entry, _Declared):
+                continue
+            got = evaluator.name_at(name, offset)
+            result[name] = got.text() if isinstance(got, TypeSet) and got.single and got.names else None
+        return result
+    return {}

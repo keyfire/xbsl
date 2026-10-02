@@ -32,7 +32,7 @@ END = "<!-- commands:end -->"
 
 #: Groups in the order they are shown; a command lands in the first group whose prefix matches.
 GROUPS: list[tuple[str, tuple[str, ...], dict[str, str]]] = [
-    ("project", ("xbsl.project.", "xbsl.lintProject", "xbsl.restartLinter", "xbsl.deploy",
+    ("project", ("xbsl.project.", "xbsl.lintProject", "xbsl.reindexProject", "xbsl.restartLinter", "xbsl.deploy",
                  "xbsl.checkForUpdate", "xbsl.choosePalette", "xbsl.goToDefinition",
                  "xbsl.forms.search", "xbsl.previewForm", "xbsl.openFormForModule"),
      {"en": "Project-wide", "ru": "По проекту"}),

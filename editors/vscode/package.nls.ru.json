@@ -201,5 +201,6 @@
   "config.debug.applicationUrl": "По какому адресу открывать отлаживаемое приложение, если оно отвечает на своём домене. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#отладка)",
   "cmd.migrateRules": "Перенести настройки правил в одну таблицу",
   "cmd.metadata.collapse": "Свернуть до видов метаданных",
-  "cmd.rules.panel": "Правила"
+  "cmd.rules.panel": "Правила",
+  "cmd.reindexProject": "Переиндексировать и проверить проект"
 }

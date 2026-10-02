@@ -408,7 +408,7 @@ ATTRIBUTION_DOCUMENTS = (
 #: modules, and naming the rest would judge identifiers by a dictionary written about prose.
 #: A sentence explaining a decision needs no catalog - it can be written in any file there is,
 #: and the three that were found by hand were written in the docstrings of tests.
-ATTRIBUTION_SOURCES = ("xbsl", "xbsllint", "tests", "tools", "scripts")
+ATTRIBUTION_SOURCES = ("xbsl", "tests", "tools", "scripts")
 
 #: The extension is TypeScript and its comments are prose the same way. One folder, because the
 #: rest of `editors/vscode` is generated output and packaging.
