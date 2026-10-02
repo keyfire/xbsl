@@ -31,6 +31,8 @@ import os
 import re
 import sys
 import threading
+import time
+from threading import Event
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -169,6 +171,122 @@ _FORM_EDIT_ARG_KEYS = (
 
 FILE_DEBOUNCE_S = 0.3
 PROJECT_DEBOUNCE_S = 0.7
+
+_PROJECT_PROGRESS_INTERVAL = 0.2
+_PROJECT_STAGES = {
+    "wait": 1, "index": 2, "read": 3, "file": 4,
+    "project": 5, "dictionary": 6, "publish": 7, "done": 8,
+}
+i18n.register({
+    "lsp.check.title": {"ru": "Переиндексация и проверка проекта", "en": "Reindex and check the project"},
+    "lsp.check.wait": {"ru": "Ожидание активной проверки", "en": "Waiting for an active check"},
+    "lsp.check.index": {"ru": "Индекс", "en": "Index"},
+    "lsp.check.read": {"ru": "Чтение файлов", "en": "Reading sources"},
+    "lsp.check.file": {"ru": "Файлы", "en": "File rules"},
+    "lsp.check.project": {"ru": "Правила проекта", "en": "Project rules"},
+    "lsp.check.dictionary": {"ru": "Словарь перевода", "en": "Translation dictionary"},
+    "lsp.check.publish": {"ru": "Публикация диагностик", "en": "Publishing diagnostics"},
+    "lsp.check.done": {"ru": "Готово", "en": "Done"},
+    "lsp.check.stage": {"ru": "Этап {stage}/8: {phase}", "en": "Stage {stage}/8: {phase}"},
+    "lsp.check.counts": {
+        "ru": "{stage} {percent}% – {completed}/{total}; осталось {remaining}",
+        "en": "{stage} {percent}% – {completed}/{total}; {remaining} remaining",
+    },
+    "lsp.check.empty": {
+        "ru": "{stage} – {completed}/{total}; осталось {remaining}",
+        "en": "{stage} – {completed}/{total}; {remaining} remaining",
+    },
+    "lsp.check.rule": {"ru": "{stage} – {title}", "en": "{stage} – {title}"},
+    "lsp.check.completed": {"ru": "Проверка проекта завершена.", "en": "Project check completed."},
+    "lsp.check.failed": {"ru": "Проверка проекта не завершена.", "en": "Project check did not complete."},
+    "lsp.check.canceled": {"ru": "Проверка проекта отменена.", "en": "Project check canceled."},
+})
+
+
+class _ProjectCheckCancelled(RuntimeError):
+    pass
+
+
+class _ProjectProgress:
+    """Client-scoped work-done progress with actual per-stage counts and a heartbeat."""
+
+    def __init__(self, server, token: int | str) -> None:
+        self.server = server
+        self.token = token
+        self.phase = "wait"
+        self.completed = 0
+        self.detail = ""
+        self.total: Optional[int] = None
+        self.last_sent = time.monotonic()
+        self.lock = threading.Lock()
+        self.stopped = Event()
+        self.server.progress.begin(token, lsp.WorkDoneProgressBegin(
+            title=i18n.t("lsp.check.title"), cancellable=True, message=self._message(),
+        ))
+        self.worker = threading.Thread(target=self._heartbeat, daemon=True)
+        self.worker.start()
+
+    def _message(self) -> str:
+        stage = i18n.t("lsp.check.stage", stage=_PROJECT_STAGES[self.phase],
+                       phase=i18n.t("lsp.check." + self.phase))
+        message = stage
+        if self.total is not None:
+            values = {"stage": stage, "completed": self.completed, "total": self.total,
+                      "remaining": max(0, self.total - self.completed)}
+            message = (i18n.t("lsp.check.counts", percent=100 * self.completed // self.total, **values)
+                       if self.total else i18n.t("lsp.check.empty", **values))
+        if self.phase == "project" and self.detail:
+            message = i18n.t("lsp.check.rule", stage=message, title=self.detail)
+        return message
+
+    def _canceled(self) -> bool:
+        future = self.server.progress.tokens.get(self.token)
+        return future is not None and future.cancelled()
+
+    def check_cancel(self) -> None:
+        if self._canceled():
+            raise _ProjectCheckCancelled(i18n.t("lsp.check.canceled"))
+
+    def _report(self, *, percentage: Optional[int] = None) -> None:
+        self.server.progress.report(self.token, lsp.WorkDoneProgressReport(
+            cancellable=True, message=self._message(), percentage=percentage,
+        ))
+        self.last_sent = time.monotonic()
+
+    def update(self, phase: str, completed: int, total: Optional[int], label: str = "") -> None:
+        self.check_cancel()
+        with self.lock:
+            boundary = phase != self.phase or total != self.total or (
+                total is not None and total > 0 and completed == total and self.completed < completed
+            )
+            self.phase, self.completed, self.total = phase, completed, total
+            self.detail = label if phase == "project" else ""
+            if boundary or time.monotonic() - self.last_sent >= _PROJECT_PROGRESS_INTERVAL:
+                self._report()
+
+    def _heartbeat(self) -> None:
+        while not self.stopped.wait(_PROJECT_PROGRESS_INTERVAL):
+            with self.lock:
+                if self._canceled():
+                    return
+                self._report()
+
+    def finish(self, result: Optional[dict]) -> None:
+        self.stopped.set()
+        self.worker.join(timeout=1)
+        try:
+            with self.lock:
+                if result and result.get("ok"):
+                    self.phase, self.completed, self.total = "done", 1, 1
+                    self._report(percentage=100)
+                    message = i18n.t("lsp.check.completed")
+                else:
+                    message = i18n.t("lsp.check.canceled" if result and result.get("canceled")
+                                     else "lsp.check.failed")
+                self.server.progress.end(self.token, lsp.WorkDoneProgressEnd(message=message))
+        finally:
+            self.server.progress.tokens.pop(self.token, None)
+
 
 _SEVERITY = {"error": 1, "warning": 2, "info": 3}  # DiagnosticSeverity
 _COMPLETION_KINDS = {
@@ -610,7 +728,7 @@ def _make_server() -> "LanguageServer":
         STATE.file_timers[uri] = timer
         timer.start()
 
-    def build_project_index() -> bool:
+    def build_project_index(progress: Optional[_ProjectProgress] = None) -> bool:
         """Rebuild the navigation index of the project (see indexer.build_index).
 
         It is built apart from the project lint and BEFORE it: the lint of a whole project
@@ -621,10 +739,16 @@ def _make_server() -> "LanguageServer":
         root = STATE.root
         if root is None:
             return False
+        if progress is not None:
+            progress.update("index", 0, None)
         with STATE.index_lock:
             try:
-                STATE.lookup = IndexLookup(indexer.build_index(root))
+                built = (indexer.build_index(root, progress=progress.update)
+                         if progress is not None else indexer.build_index(root))
+                STATE.lookup = IndexLookup(built)
                 return True
+            except _ProjectCheckCancelled:
+                raise
             except Exception as e:  # noqa: BLE001 - the index must not break diagnostics
                 server.show_message_log(f"xbsl-lsp: индекс не построен: {e}")
                 return False
@@ -636,25 +760,51 @@ def _make_server() -> "LanguageServer":
             build_project_index()
         return STATE.lookup
 
-    def project_lint(wait: bool = False) -> Optional[dict]:
+    def project_lint(wait: bool = False, progress: Optional[_ProjectProgress] = None) -> Optional[dict]:
         tell_if_stale()
         root = STATE.root
         if root is None:
             return {"ok": False, "files": 0, "diagnostics": 0,
                     "error": "Project root is not initialized."}
-        if not STATE.project_lock.acquire(blocking=wait):
+        if progress is not None:
+            progress.update("wait", 0, 1)
+        if wait and progress is not None:
+            while not STATE.project_lock.acquire(timeout=_PROJECT_PROGRESS_INTERVAL):
+                progress.update("wait", 0, 1)
+        elif not STATE.project_lock.acquire(blocking=wait):
             schedule_project_lint()  # a run is already in progress - retry afterwards
             return None
         try:
-            indexed = build_project_index()  # navigation comes alive before the whole-project lint
+            if progress is not None:
+                progress.update("wait", 1, 1)
+            indexed = build_project_index(progress)  # navigation comes alive before the whole-project lint
             project_paths = project_sources(root)
-            sources = [engine.load(p) for p in project_paths]
-            diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
+            if progress is not None:
+                progress.update("read", 0, len(project_paths))
+            sources = []
+            for completed, path in enumerate(project_paths, 1):
+                sources.append(engine.load(path))
+                if progress is not None:
+                    progress.update("read", completed, len(project_paths), str(path))
+            hook = {"progress": progress.update} if progress is not None else {}
+            diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore,
+                                       enable=STATE.enable, **hook)
             # The dictionary gets the file rules alone (see dictionary_sources).
             dictionary_paths = dictionary_sources(root)
-            dictionary = [engine.load(p) for p in dictionary_paths]
+            if progress is not None:
+                progress.update("dictionary", 0, len(dictionary_paths))
+            dictionary = []
+            for path in dictionary_paths:
+                if progress is not None:
+                    progress.check_cancel()
+                dictionary.append(engine.load(path))
+            hook = {"progress": lambda _phase, completed, total, label: progress.update(
+                "dictionary", completed, total, label,
+            )} if progress is not None else {}
             diags += engine.run_sources(dictionary, select=STATE.select, ignore=STATE.ignore,
-                                        enable=STATE.enable, scopes=("file",))
+                                        enable=STATE.enable, scopes=("file",), **hook)
+            if progress is not None:
+                progress.update("publish", 0, None)
             diags, problem = apply_baseline_file(diags, STATE.baseline)
             if problem:
                 server.show_message_log(f"xbsl-lsp: список принятых не применён: {problem}")
@@ -696,13 +846,20 @@ def _make_server() -> "LanguageServer":
                 """Whether the live per-file picture of a document outlasts this pass."""
                 return key in open_dirty or (key not in answered and key in still_open)
 
-            for key in set(STATE.published) | set(by_key):
-                if stands(key):
-                    continue
+            targets = [key for key in set(STATE.published) | set(by_key) if not stands(key)]
+            if progress is not None:
+                progress.update("publish", 0, len(targets))
+            for completed, key in enumerate(targets, 1):
                 # An open document is answered at the uri the editor itself used.
-                server.publish_diagnostics(
-                    STATE.published.get(key) or uri_of[key], by_key.get(key, []),
-                )
+                document_uri = STATE.published.get(key) or uri_of[key]
+                # Record each URI before sending: cancellation or a partial send must not
+                # orphan diagnostics that a later pass needs to replace or clear.
+                STATE.published[key] = document_uri
+                server.publish_diagnostics(document_uri, by_key.get(key, []))
+                if not by_key.get(key):
+                    STATE.published.pop(key, None)
+                if progress is not None:
+                    progress.update("publish", completed, len(targets))
             kept = {k: u for k, u in STATE.published.items() if stands(k)}
             STATE.published = {k: STATE.published.get(k) or uri_of[k] for k in by_key} | kept
             result = {"ok": indexed, "files": len(project_paths) + len(dictionary_paths),
@@ -812,17 +969,26 @@ def _make_server() -> "LanguageServer":
 
     @server.feature("xbsl/reindexProject")
     @server.thread()
-    def _reindex_project(_params: object = None) -> dict:
-        """Await a fresh index and full project check, after any pass already running."""
+    def _reindex_project(params: object = None) -> dict:
+        """Await a fresh index and full project check, with optional client work-done progress."""
         timer = STATE.project_timer
         if timer is not None:
             timer.cancel()
             STATE.project_timer = None
+        token = _param(params, "workDoneToken")
+        progress = _ProjectProgress(server, token) if type(token) in (int, str) else None
+        result = None
         try:
-            return project_lint(wait=True)
+            result = project_lint(wait=True, progress=progress)
+        except _ProjectCheckCancelled as exc:
+            result = {"ok": False, "canceled": True, "files": 0, "diagnostics": 0, "error": str(exc)}
         except Exception as exc:  # noqa: BLE001 - report a failed check to the waiting client
             server.show_message_log(f"xbsl-lsp: project check failed: {exc}")
-            return {"ok": False, "files": 0, "diagnostics": 0, "error": str(exc)}
+            result = {"ok": False, "files": 0, "diagnostics": 0, "error": str(exc)}
+        finally:
+            if progress is not None:
+                progress.finish(result)
+        return result
 
     # --- navigation --------------------------------------------------------------------
 

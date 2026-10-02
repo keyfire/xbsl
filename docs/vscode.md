@@ -25,7 +25,11 @@ The form wireframe displays `UsualCommands` in the footer and the `Italic`, `Und
 
 The extension uses the xbsl 1.0.0 engine. Install it in the Python selected by `xbsl.linter.pythonPath`.
 
-The refresh icon in the status bar rebuilds the project index and checks all project sources. Its tooltip names the action; the icon spins until the pass completes.
+The refresh icon in the status bar rebuilds the project index and checks all project sources.
+The progress notification and icon tooltip show the current stage, completed and remaining work,
+and the percentage within that stage. File phases count files; project checks count rules and
+name the rule currently running. Elapsed time updates once a second. The icon spins until
+diagnostics are published, when the run reaches its final 100%.
 
 ## How it works
 

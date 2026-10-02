@@ -16,6 +16,7 @@ import {
   lspActive,
   lspBaselinePassed,
   lspRequest,
+  reindexProject,
   setAfterServerStart,
 } from "./lspClient";
 import { registerMetadataTree } from "./metadataTree";
@@ -660,13 +661,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Extension/linter versions and the completion mode in the status bar (before the LSP branch -
   // visible in both modes).
   const statusBar = registerStatusBar(context, (resource) => readSettings(resource).linter);
-  registerProjectCheck(context, async () => {
+  registerProjectCheck(context, async (report) => {
     if (lspActive()) {
-      const result = await lspRequest<{ ok: boolean; error?: string }>("xbsl/reindexProject", {});
+      const result = await reindexProject(report);
       if (!result?.ok) {
         throw new Error(result?.error || vscode.l10n.t("The server did not complete the project check."));
       }
     } else {
+      report({ kind: "report", message: vscode.l10n.t("Checking project sources through the CLI...") });
       resetAndRelint(false);
       await lintProject(true);
     }

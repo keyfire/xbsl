@@ -10,6 +10,7 @@ import {
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
+  WorkDoneProgress,
 } from "vscode-languageclient/node";
 import { baselineForLint } from "./excludeAction";
 import { ciJobArgs, ciSettings } from "./report";
@@ -20,6 +21,9 @@ import { applyOverride, engineRuleArgs } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
 import { resolveMessageLanguage } from "./workspaceCore";
 
+import { ProjectCheckProgress, ProjectCheckResult, requestProjectCheck } from "./projectCheckProgressCore";
+
+let projectCheckSequence = 0;
 let client: LanguageClient | undefined;
 let baselineArg: string | undefined;
 // What to run once the server is up - after the first start AND after every restart. The
@@ -302,4 +306,15 @@ export async function activateLsp(
     })
   );
   return true;
+}
+
+
+export async function reindexProject(report: (event: ProjectCheckProgress) => void): Promise<ProjectCheckResult> {
+  const active = client;
+  if (!active) { throw new Error(vscode.l10n.t("The language server is not available.")); }
+  const token = `xbsl-project-${serverGeneration}-${++projectCheckSequence}`;
+  return requestProjectCheck({
+    onProgress: (value, handler) => active.onProgress(WorkDoneProgress.type, value, handler),
+    sendRequest: (method, params) => active.sendRequest<ProjectCheckResult>(method, params),
+  }, token, report);
 }

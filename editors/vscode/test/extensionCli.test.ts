@@ -20,6 +20,7 @@ function harness() {
   const events: Record<string, Function> = {}, commands: Record<string, Function> = {};
   const documents: any[] = [], buffers: any[] = [], projects: any[] = [], actions: any[] = [];
   const statusItems: any[] = [], errors: string[] = [];
+  const progressMessages: string[] = [], intervals = new Map<number, Function>();
   const findings = new Map<string, any[]>(), timers = new Map<number, { fn: Function; delay: number }>();
   let timer = 0, lsp = false;
   const collection = {
@@ -29,7 +30,7 @@ function harness() {
   const editor = {
     env: { language: "en" }, Uri: { file: uri },
     l10n: { t: (text: string, ...values: any[]) => text.replace(/\{(\d+)\}/g, (_, index) => String(values[Number(index)])) },
-    ProgressLocation: { Window: 10 }, StatusBarAlignment: { Left: 1 },
+    ProgressLocation: { Window: 10, Notification: 15 }, StatusBarAlignment: { Left: 1 },
     workspace: {
       workspaceFolders: folders, textDocuments: documents,
       getWorkspaceFolder: (key: any) => folders.find((entry) => key.fsPath.startsWith(entry.uri.fsPath + path.sep)),
@@ -41,7 +42,7 @@ function harness() {
     window: {
       createOutputChannel: () => ({ appendLine() {}, show() {} }),
       showErrorMessage: async (message: string) => { errors.push(message); },
-      withProgress: async (_options: any, work: Function) => work(),
+      withProgress: async (_options: any, work: Function) => work({ report: (value: any) => progressMessages.push(value.message) }),
       createStatusBarItem: () => {
         const item = { text: "", tooltip: "", command: undefined, show() {}, hide() {} };
         statusItems.push(item); return item;
@@ -79,6 +80,7 @@ function harness() {
       require: (name: string) => ["./workspaceCore", "./projectCheck", "./projectCheckCore"].includes(name)
         ? load(name.slice(2) + ".ts") : dependencies[name] ?? noops,
       setTimeout: (fn: Function, delay: number) => { timers.set(++timer, { fn, delay }); return timer; }, clearTimeout: (id: number) => timers.delete(id),
+      setInterval: (fn: Function) => { intervals.set(++timer, fn); return timer; }, clearInterval: (id: number) => intervals.delete(id),
     });
     return module.exports;
   }
@@ -89,7 +91,7 @@ function harness() {
   };
   const tick = async (delay: number) => { for (const [id, value] of [...timers]) if (value.delay === delay) { timers.delete(id); value.fn(); } await flush(); };
   const finishProject = async (diags: any[]) => { projects[0].resolve({ report: { diagnostics: diags } }); projects[1]?.resolve({ report: { diagnostics: [] } }); await flush(); };
-  return { root, uri, folders, doc, settings, events, commands, findings, buffers, projects, actions, statusItems, errors, tick, finishProject,
+  return { root, uri, folders, doc, settings, events, commands, findings, buffers, projects, actions, statusItems, errors, progressMessages, intervals, tick, finishProject,
     setLsp: (value: boolean) => { lsp = value; }, start: () => extension.activate({ subscriptions: [], globalState: {} }) };
 }
 let failures = 0;
@@ -185,6 +187,8 @@ async function main() {
     assert.strictEqual(h.commands["xbsl.reindexProject"](), manual, "duplicate clicks share the manual operation");
     await flush(); assert.strictEqual(h.projects.length, 2);
     assert.strictEqual(h.statusItems[0].text, "$(sync~spin)");
+    assert.ok(h.progressMessages.some((value) => value.includes("Elapsed:")));
+    assert.strictEqual(h.intervals.size, 1);
     const doc = h.doc("src/Item.xbsl", "xbsl"); doc.isDirty = false;
     h.events.Save(doc); await h.tick(500);
     assert.strictEqual(h.projects.length, 4);
@@ -195,6 +199,7 @@ async function main() {
     assert.strictEqual(h.projects[2].args[1], h.root, "replacement keeps the workspace cwd");
     h.projects[2].resolve({ report: { diagnostics: [] } }); h.projects[3].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.deepStrictEqual(h.errors, []);
   });
   await test("the manual project check follows successive save replacements", async () => {
@@ -208,6 +213,7 @@ async function main() {
     assert.strictEqual(h.projects[4].canceled, 0);
     h.projects[4].resolve({ report: { diagnostics: [] } }); h.projects[5].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.deepStrictEqual(h.errors, []);
   });
   await test("a failed replacement ends the manual operation with an error and no retry", async () => {
@@ -219,6 +225,7 @@ async function main() {
     await manual; await h.tick(500);
     assert.strictEqual(h.projects.length, 4, "a failed run must not be enqueued again");
     assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.strictEqual(h.errors.length, 1);
     assert.ok(h.errors[0].includes("synthetic CLI failure"));
   });
@@ -229,6 +236,7 @@ async function main() {
     await manual;
     assert.strictEqual(h.projects.length, 2);
     assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.strictEqual(h.errors.length, 1);
     assert.ok(h.errors[0].includes("canceled"));
   });
@@ -241,6 +249,7 @@ async function main() {
     await manual; await h.tick(500);
     assert.strictEqual(h.projects.length, 4);
     assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.strictEqual(h.errors.length, 1);
     assert.ok(h.errors[0].includes("synthetic dictionary failure"));
   });
@@ -254,6 +263,7 @@ async function main() {
     assert.strictEqual(h.errors.length, 0, "report failure after all folders finish");
     h.projects[2].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.strictEqual(h.errors.length, 1);
     assert.ok(h.errors[0].includes("synthetic first-folder failure"));
   });
@@ -269,6 +279,7 @@ async function main() {
     assert.strictEqual(h.errors.length, 0);
     h.projects[2].resolve({ report: { diagnostics: [] } }); h.projects[3].resolve({ report: { diagnostics: [] } });
     await manual; assert.strictEqual(h.statusItems[0].text, "$(refresh)");
+    assert.strictEqual(h.intervals.size, 0, "completed or failed checks release the elapsed clock");
     assert.strictEqual(h.errors.length, 0);
   });
   if (failures) process.exitCode = 1;

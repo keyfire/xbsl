@@ -40,6 +40,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import defaultdict, deque
+from collections.abc import Callable
 from pathlib import Path
 
 from xbsl import __version__
@@ -765,10 +766,19 @@ def sources_stamp(root: Path) -> tuple[tuple[str, bytes], ...]:
     return tuple(stamp)
 
 
-def build_index(root: Path) -> dict:
-    """Project index under root, ready to be printed as JSON (see the module docstring)."""
+def build_index(
+    root: Path, *, progress: Callable[[str, int, int, str], None] | None = None,
+) -> dict:
+    """Project index under root, ready to be printed as JSON (see the module docstring).
+
+    `progress` reports each source after its final reference pass. Callback exceptions
+    propagate so the caller can cancel indexing.
+    """
     base = (root if root.is_dir() else root.parent).resolve()
-    sources = [load(p) for p in _discover(root)]
+    paths = _discover(root)
+    if progress is not None:
+        progress("index", 0, len(paths), "")
+    sources = [load(p) for p in paths]
     yaml_sources = [s for s in sources if s.kind == "yaml"]
     xbsl_sources = [s for s in sources if s.kind == "xbsl"]
 
@@ -1027,11 +1037,18 @@ def build_index(root: Path) -> dict:
         | {m["name"] for m in methods}
     )
     references: list[dict] = []
+    completed = 0
     for s in xbsl_sources:
         module = s.path.stem
         references.extend(_module_references(s, referable, module, rel(s.path), object_names))
+        completed += 1
+        if progress is not None:
+            progress("index", completed, len(paths), rel(s.path))
     for s in yaml_sources:
         references.extend(_handler_references(s, s.path.stem, rel(s.path)))
+        completed += 1
+        if progress is not None:
+            progress("index", completed, len(paths), rel(s.path))
 
     return {
         "meta": {"root": base.as_posix(), "version": __version__},

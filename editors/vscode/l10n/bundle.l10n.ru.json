@@ -661,5 +661,9 @@
   "XBSL: project check failed: {0}": "XBSL: проверка проекта не выполнена: {0}",
   "The server did not complete the project check.": "Сервер не завершил проверку проекта.",
   "The project check did not return a report.": "Проверка проекта не вернула отчет.",
-  "The project check was canceled before completion.": "Проверка проекта отменена до завершения."
+  "The project check was canceled before completion.": "Проверка проекта отменена до завершения.",
+  "Waiting for project progress...": "Ожидание сведений о проверке проекта...",
+  "Elapsed: {0}": "Прошло: {0}",
+  "Checking project sources through the CLI...": "Проверка исходников проекта через CLI...",
+  "The language server is not available.": "Сервер языка недоступен."
 }

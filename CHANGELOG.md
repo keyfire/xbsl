@@ -29,8 +29,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 - **Standard method completion items include documentation.** Selecting an item loads its
   signatures, a short description and parameter details from the declaring type. ([#173](https://github.com/keyfire/xbsl/pull/173))
-- **`xbsl/reindexProject` completes a fresh index and project check before returning.** The editor
-  can keep progress visible until diagnostics are published. ([#173](https://github.com/keyfire/xbsl/pull/173))
+- **`xbsl/reindexProject` completes a fresh index and project check before returning.** Standard
+  LSP progress reports the current stage, completed and remaining file or rule counts, and the
+  active project rule. Editors can display elapsed time throughout the pass; final 100% follows
+  diagnostic publication. ([#173](https://github.com/keyfire/xbsl/pull/173))
 
 ### Changed
 

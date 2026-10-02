@@ -656,6 +656,7 @@ def run_sources(
     enable: set[str] | None = None,
     scopes: tuple[str, ...] = ("file", "project"),
     context: Collection[Path] | None = None,
+    progress: Callable[[str, int, int, str], None] | None = None,
 ) -> list[Diagnostic]:
     """Run the active rules over the sources.
 
@@ -664,6 +665,10 @@ def run_sources(
     A file rule reports on the file it is given - checked on four corpora, not one finding of
     theirs lands elsewhere - so its findings on a context file would be narrowed away anyway,
     and on a project that was a quarter of a list run.
+
+    `progress` reports a phase, completed count, total and detail after each file or
+    project rule, and before a project rule starts without advancing the count. Callback
+    exceptions propagate so the caller can cancel the run.
     """
     from xbsl import dataset
 
@@ -679,18 +684,28 @@ def run_sources(
     project_path = sources[0].rel if sources else ""
     if "file" in scopes:
         file_rules = [r for r in active if r.scope == "file"]
-        for src in sources:
-            if context and src.path in context:
-                continue
+        file_sources = [src for src in sources if not context or src.path not in context]
+        if progress is not None:
+            progress("file", 0, len(file_sources), "")
+        for completed, src in enumerate(file_sources, 1):
             for r in file_rules:
                 diags.extend(_rule_diags(r, src.rel, lambda r=r, src=src: r.func(src)))
+            if progress is not None:
+                progress("file", completed, len(file_sources), src.rel)
     if "project" in scopes:
-        for r in (r for r in active if r.scope == "project"):
+        project_rules = [r for r in active if r.scope == "project"]
+        if progress is not None:
+            progress("project", 0, len(project_rules), "")
+        for completed, r in enumerate(project_rules, 1):
+            if progress is not None:
+                progress("project", completed - 1, len(project_rules), r.title or r.id)
             if r.mapper is not None:
                 facts = _map_facts(r, sources, diags)
                 diags.extend(_rule_diags(r, project_path, lambda r=r, f=facts: r.func(f)))
             else:
                 diags.extend(_rule_diags(r, project_path, lambda r=r: r.func(sources)))
+            if progress is not None:
+                progress("project", completed, len(project_rules), r.title or r.id)
     if SEVERITY_OVERRIDES:
         diags = [
             replace(d, severity=SEVERITY_OVERRIDES[d.rule_id])

@@ -36,7 +36,19 @@ Everything an editor needs for code is standard LSP, so a plain client works wit
 wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
 on them, and another editor would use the same requests to reproduce those panels:
 
-`xbsl/reindexProject` waits for a fresh full project index and diagnostics pass. It returns `{ok, files, diagnostics}` after publication; an unsuccessful pass also carries `error`. Pending debounce is canceled, and an active pass finishes before the new one begins. Dirty open buffers keep their live diagnostics.
+`xbsl/reindexProject` waits for a fresh full project index and diagnostics pass. It returns
+`{ok, files, diagnostics}` after publication; an unsuccessful pass also carries `error`. Pending
+debounce is canceled, and an active pass finishes before the new one begins. Dirty open buffers
+keep their live diagnostics.
+
+An optional `workDoneToken` receives standard LSP `$/progress` notifications with `begin`,
+`report` and `end` values. Their localized messages name the eight stages: waiting, indexing,
+reading sources, file rules, project rules, the translation dictionary, publishing diagnostics
+and completion. Indexing, reading, file rules and dictionary checks count completed and remaining
+files; project checks count completed and remaining rules and name the rule currently running;
+publication counts documents whose diagnostics have been sent. Percentages in the message apply
+to the current stage. The standard `percentage` field reaches 100 only after successful
+publication. Failure or cancellation ends progress without reporting full completion.
 
 | Group | Requests |
 |---|---|
