@@ -11,7 +11,7 @@
 
 ## 1.0.0
 
-Not released yet.
+2026-10-03.
 
 ### Added
 

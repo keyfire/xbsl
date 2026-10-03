@@ -25,7 +25,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-10-03 – 1.0.0
 
 ### Added
 
@@ -33,18 +33,21 @@ entry either - say what the behaviour was, not which class name was compared.
   catalog, `data-export` restores the earlier layout, and `data-verify` checks its contents.
   `data-prune` previews unused files and removes them only with `--apply`. ([#173](https://github.com/keyfire/xbsl/pull/173))
 
-
 - **Standard method completion items include documentation.** Selecting an item loads its
   signatures, a short description and parameter details from the declaring type. ([#173](https://github.com/keyfire/xbsl/pull/173))
-- **`xbsl/reindexProject` completes a fresh index and project check before returning.** Standard
-  LSP progress reports the current stage, completed and remaining file or rule counts, and the
-  active project rule. Editors can display elapsed time throughout the pass; final 100% follows
-  diagnostic publication. ([#173](https://github.com/keyfire/xbsl/pull/173))
+- **`xbsl/reindexProject` returns after rebuilding the index and checking the project.**
+  Standard LSP progress includes stages, completed and remaining files or rules, and the active
+  rule. Editors can show elapsed time. The final 100% follows diagnostic publication. ([#173](https://github.com/keyfire/xbsl/pull/173))
 
 ### Changed
 
 - **Data readers and extractors support the shared layout.** JSON views, documentation searches
   and image paths keep their previous meaning; the earlier layout remains readable. ([#173](https://github.com/keyfire/xbsl/pull/173))
+
+### Removed
+
+- **The retired `xbsllint` commands and Python import are removed.** Use `xbsl` and its named
+  server commands. ([#173](https://github.com/keyfire/xbsl/pull/173))
 
 ### Fixed
 
@@ -52,11 +55,6 @@ entry either - say what the behaviour was, not which class name was compared.
   followed by a dot offers the methods of its result type. ([#173](https://github.com/keyfire/xbsl/pull/173))
 - **Module constants show their type and documentation on hover.** Local names and qualified
   references keep their own meaning. ([#173](https://github.com/keyfire/xbsl/pull/173))
-
-### Removed
-
-- **The retired `xbsllint` commands and Python import are removed.** Use `xbsl` and its named
-  server commands. ([#173](https://github.com/keyfire/xbsl/pull/173))
 
 ## 2026-10-01 – 0.127.0, 0.128.0, 0.128.1
 
