@@ -2115,3 +2115,52 @@ def test_outside_a_constructor_the_methods_stay():
         LOOKUP, language_id="xbsl", line_prefix="    Товар.", file_stem="Ф", stdlib_members={},
     )
     assert "Загрузить" in {e["label"] for e in entries or []}
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("initializer", ["28", "Mobile ? 28 : 46"])
+@pytest.mark.parametrize("partial", ["", "Окр"])
+def test_completion_after_grouped_numeric_expression(initializer, partial):
+    """A numeric receiver is typed from the expression, including conditional locals."""
+    code = ("метод Probe(Mobile: Булево)\n"
+            f"    знч Size = {initializer}\n"
+            "    знч Step = (Size * 1.05).Округлить(0)\n;\n")
+    src = engine.load_text("Probe.xbsl", code)
+    catalog = dataset.load_json("stdlib.json")
+    members = {**catalog["type_members"], **catalog["facet_members"]}
+    offset = code.index(").") + 2 + len(partial)
+    variables = local_var_types(src, offset, returns=catalog["member_types"], static_roots=members)
+    receiver = chain_type_at(src, offset, var_types=variables,
+                             returns=catalog["member_types"], static_roots=members)
+    assert receiver == "Число"
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix=f"(Size * 1.05).{partial}",
+        file_stem="Probe", stdlib_members=members, expr_type=receiver,
+    )
+    assert any(item["label"] == "Округлить" for item in entries)
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("receiver", ["(42)", "((28 * 1.05))", "(Истина ? 28 : 46)"])
+def test_grouped_receiver_is_typed_while_its_member_is_unfinished(receiver):
+    code = f"метод Probe()\n    знч Step = {receiver}.\n;\n"
+    source = engine.load_text("Probe.xbsl", code)
+    assert chain_type_at(source, code.index(".\n") + 1) == "Число"
+
+
+@pytest.mark.needs_data
+def test_grouped_arithmetic_with_unknown_operand_stays_unknown():
+    code = "метод Probe(Unknown: Объект)\n    знч Step = (Unknown * 1.05).\n;\n"
+    source = engine.load_text("Probe.xbsl", code)
+    assert chain_type_at(source, code.index(".\n") + 1) is None
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("initializer, expected", [
+    ("Mobile ? 28 : 46", "Число"),
+    ('Mobile ? "small" : "large"', "Строка"),
+    ('Mobile ? 28 : "large"', None),
+])
+def test_conditional_local_uses_branch_types(initializer, expected):
+    code = f"метод Probe(Mobile: Булево)\n    знч Value = {initializer}\n    Value.\n;\n"
+    source = engine.load_text("Probe.xbsl", code)
+    assert local_var_types(source, code.index("Value.\n") + len("Value.")).get("Value") == expected

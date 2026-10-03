@@ -564,5 +564,8 @@ def main(argv=None) -> int:
     return 0
 
 
+main = _distro.packed_step(main)
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -1354,6 +1354,41 @@ def enclosing_constructor(source: SourceFile, offset: int) -> str | None:
     return _type_head(toks, k + 1)
 
 
+def _completion_expression_source(source, toks, dot):
+    """Replace the selected member with a valid probe, including an unfinished dot."""
+    key = f"completion_expression:{toks[dot].start}"
+    if key not in source.cache:
+        marker = f"__xbsl_completion_receiver_{toks[dot].start}"
+        while marker in source.text:
+            marker += "_"
+        end = toks[dot].end
+        if (dot + 1 < len(toks) and toks[dot + 1].kind == "IDENT"
+                and "\n" not in source.text[toks[dot].end:toks[dot + 1].start]
+                and "\r" not in source.text[toks[dot].end:toks[dot + 1].start]):
+            end = toks[dot + 1].end
+        value = source.text[:toks[dot].end] + marker + source.text[end:]
+        source.cache[key] = (replace(source, text=value, data=value.encode("utf-8"), cache={}), marker)
+    return source.cache[key]
+
+
+def _grouped_receiver_type(source, toks, dot):
+    """Use the existing expression typer when the token chain cannot name a grouped receiver."""
+    if dot == 0 or toks[dot - 1].value != ")":
+        return None
+    from xbsl import typeinfer
+
+    candidate, marker = _completion_expression_source(source, toks, dot)
+    typing = typeinfer.file_typing(candidate)
+    if typing is None:
+        return None
+    names = frozenset({marker})
+    for site in [*typing.members(names), *typing.calls(names)]:
+        owner = site.owner
+        if isinstance(owner, typeinfer.TypeSet) and owner.single and owner.names:
+            return dataset.member_type_head(next(iter(owner.names)))
+    return None
+
+
 def chain_type_at(
     source: SourceFile, offset: int,
     var_types: dict | None = None,
@@ -1409,9 +1444,9 @@ def chain_type_at(
         if t.kind == "KEYWORD" and t.canonical in ("QUERY", "NEW"):
             root_i = j
             break
-        return None
+        return _grouped_receiver_type(source, toks, idx)
     if root_i is None:
-        return None
+        return _grouped_receiver_type(source, toks, idx)
     vt = var_types or {}
 
     def resolve_root(name: str) -> str | None:
@@ -1422,8 +1457,9 @@ def chain_type_at(
             return name
         return None
 
-    return chain_type(toks, root_i, resolve_root, returns, stop_offset=stop,
-                      own_returns=own_returns, resolve_written=(var_written or {}).get)
+    return (chain_type(toks, root_i, resolve_root, returns, stop_offset=stop,
+                       own_returns=own_returns, resolve_written=(var_written or {}).get)
+            or _grouped_receiver_type(source, toks, idx))
 
 
 def local_var_names(source: SourceFile, offset: int) -> set[str]:
@@ -1563,6 +1599,23 @@ def local_var_types(
             out[tok.value] = name
     _add_loop_var_types(toks, start, offset, out, resolve_root, returns, written_types,
                         own_returns)
+    # A conditional initializer is a value of its branches, never of its condition.
+    if any(t.kind == "OP" and t.value == "?" and start <= t.start < offset for t in toks):
+        from xbsl import typeinfer
+
+        candidate = source
+        cursor = next((i for i, t in reversed(list(enumerate(toks))) if t.end <= offset), -1)
+        if cursor >= 0 and toks[cursor].kind == "IDENT":
+            cursor -= 1
+        if cursor >= 0 and toks[cursor].value == ".":
+            candidate, _marker = _completion_expression_source(source, toks, cursor)
+        for name, inferred in typeinfer.conditional_locals_at(candidate, offset).items():
+            if inferred is None:
+                out.pop(name, None)
+                written_types.pop(name, None)
+            else:
+                out[name] = dataset.member_type_head(inferred)
+                written_types[name] = inferred
     # The written types travel out for the caller that continues the inference (the completion
     # walks a chain from a variable, and a generic member needs the arguments, not the head).
     if written_out is not None:

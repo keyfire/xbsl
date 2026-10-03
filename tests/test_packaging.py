@@ -49,13 +49,13 @@ def test_version_is_sane():
 
 def test_packages_list_matches_the_tree():
     # The tree is read with the tool that assembles the wheel, and with the same filter the list
-    # is meant to describe: everything under the two distributed top-level names.
+    # is meant to describe: everything under the distributed top-level package.
     setuptools = pytest.importorskip(
         "setuptools", reason="сверка списка пакетов с деревом требует setuptools"
     )
     declared = set(_project()["tool"]["setuptools"]["packages"])
     found = set(
-        setuptools.find_packages(where=str(_PYPROJECT.parent), include=["xbsl*", "xbsllint*"])
+        setuptools.find_packages(where=str(_PYPROJECT.parent), include=["xbsl", "xbsl.*"])
     )
     missing = sorted(found - declared)
     stale = sorted(declared - found)
@@ -68,3 +68,25 @@ def test_packages_list_matches_the_tree():
         "в pyproject.toml, [tool.setuptools] packages, перечислены несуществующие пакеты: "
         + ", ".join(stale)
     )
+
+
+def test_generated_metadata_does_not_offer_retired_console_commands(tmp_path):
+    import configparser
+    import os
+    import subprocess
+    import sys
+
+    pytest.importorskip("setuptools")
+    code = "import sys; from setuptools import build_meta; build_meta.prepare_metadata_for_build_wheel(sys.argv[1])"
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(tmp_path)], cwd=_PYPROJECT.parent,
+        capture_output=True, text=True, encoding="utf-8", timeout=60,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "XBSL_MYPYC": "0"},
+    )
+    assert result.returncode == 0, result.stderr
+    metadata = next(tmp_path.glob("*.dist-info"))
+    entry_points = configparser.ConfigParser()
+    entry_points.read(metadata / "entry_points.txt", encoding="utf-8")
+    commands = entry_points["console_scripts"]
+    assert "xbsl" in commands
+    assert not [name for name in commands if name.startswith("xbsllint")]

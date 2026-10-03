@@ -74,6 +74,10 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `baseline` | the baseline of accepted findings: add - append one rule's findings with a reason |
 | `extract` | generate the language data from an Element distribution (`--dist`) |
 | `data-diff` | compare two data versions: what changed in the platform |
+| `data-pack` | Pack data into a shared catalog |
+| `data-export` | Export data into the legacy format |
+| `data-verify` | Verify data integrity |
+| `data-prune` | Find or remove unused shared objects |
 | `translate` | translate the project sources into English spellings |
 | `self-update` | update xbsl by unpacking the wheel from PyPI |
 | `mcp-log` | the MCP server journal: when servers started, how they ended and who stopped them |

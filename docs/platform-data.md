@@ -130,3 +130,21 @@ are compared the same way.
 The data root itself is resolved in this order: the `--data-dir` flag, the `XBSL_DATA_DIR`
 environment variable, a root supplied by an installed `xbsl.data` entry point, then
 `xbsl/data/element` inside the package.
+
+## Shared storage
+
+`xbsl data-pack SOURCE TARGET` builds a shared data generation. Repeated vocabulary facts, property definitions and documentation pages share immutable catalog records. Images are stored once by SHA-256, with their original logical paths retained in each version manifest.
+
+`index.json` selects a catalog and immutable version manifests. The reader continues to support the older standalone JSON and SQLite layout. `xbsl data-export SOURCE TARGET` reconstructs that layout for older consumers. The Python, LSP and MCP APIs keep their logical response shapes.
+
+```sh
+xbsl data-pack old-data packed-data
+xbsl data-verify packed-data
+xbsl data-export packed-data legacy-copy
+xbsl data-prune packed-data
+xbsl data-prune packed-data --apply
+```
+
+`data-prune` reports unused generated objects unless `--apply` is supplied. It never removes current dependencies, and reports files Windows is holding as deferred. Updating selected versions with repeated `data-pack --version` keeps the other destination versions. Extracting into a packed root uses a temporary legacy workspace and publishes the new index only after successful extraction.
+
+The catalog keeps canonical facts and regenerable compressed JSON views. The latter preserve startup cost without becoming another source of truth: `data-verify` compares them with the canonical definitions. Full-text indexes remain separate per version, using shared external content, so search ranking uses the original document population and row identifiers.

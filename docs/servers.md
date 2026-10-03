@@ -36,9 +36,23 @@ Everything an editor needs for code is standard LSP, so a plain client works wit
 wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
 on them, and another editor would use the same requests to reproduce those panels:
 
+`xbsl/reindexProject` waits for a fresh full project index and diagnostics pass. It returns
+`{ok, files, diagnostics}` after publication; an unsuccessful pass also carries `error`. Pending
+debounce is canceled, and an active pass finishes before the new one begins. Dirty open buffers
+keep their live diagnostics.
+
+An optional `workDoneToken` receives standard LSP `$/progress` notifications with `begin`,
+`report` and `end` values. Their localized messages name the eight stages: waiting, indexing,
+reading sources, file rules, project rules, the translation dictionary, publishing diagnostics
+and completion. Indexing, reading, file rules and dictionary checks count completed and remaining
+files; project checks count completed and remaining rules and name the rule currently running;
+publication counts documents whose diagnostics have been sent. Percentages in the message apply
+to the current stage. The standard `percentage` field reaches 100 only after successful
+publication. Failure or cancellation ends progress without reporting full completion.
+
 | Group | Requests |
 |---|---|
-| Diagnostics and hints | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
+| Diagnostics and hints | `xbsl/relint`, `xbsl/reindexProject`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
 | Platform documentation | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
 | Schemas and vocabularies | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
 | Metadata scaffolding | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaDeleteObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaResourceReferences`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
@@ -317,7 +331,7 @@ depends on `xbsl`.
 
 ```toml
 # pyproject.toml of your package
-dependencies = ["xbsl>=0.16"]
+dependencies = ["xbsl>=1.0.0"]
 
 [project.entry-points."xbsl.rules"]
 myproject = "myproject.rules"        # importing the module runs its @rule decorators
@@ -329,8 +343,6 @@ myproject = "myproject:data_root"    # a path, or a callable returning one
 myproject = "myproject:severity_overrides"   # {rule id: "error"|"warning"|"info"|"off"}
 ```
 
-Packages that declared the groups under the pre-rename name (`xbsllint.rules`/`xbsllint.data`/
-`xbsllint.severity`) keep working: the old groups are scanned after the new ones.
 
 The severity dict, or a zero-argument callable returning one, raises and lowers the default level
 of any rule, built-in or plugin, for every run in this installation. A project may treat, say,

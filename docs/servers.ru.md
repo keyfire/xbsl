@@ -38,9 +38,23 @@ Neovim, JetBrains.
 дополнительной обвязки. Сверх этого сервер отвечает на собственные запросы `xbsl/*`. На них
 построены панели расширения VS Code, и по ним же эти панели можно повторить в другом редакторе:
 
+`xbsl/reindexProject` дожидается свежего полного индекса и проверки проекта. После публикации
+диагностик возвращаются `{ok, files, diagnostics}`, при ошибке также `error`. Ожидающий запуск
+по таймеру отменяется; активная проверка завершается перед новой. Открытые измененные буферы
+сохраняют свою текущую диагностику.
+
+Необязательный `workDoneToken` получает стандартные уведомления LSP `$/progress` со значениями
+`begin`, `report` и `end`. Локализованные сообщения называют восемь этапов: ожидание, индекс,
+чтение исходников, файловые правила, правила проекта, словарь перевода, публикация диагностик
+и завершение. Индексация, чтение, файловые правила и проверка словаря считают обработанные
+и оставшиеся файлы; проверка проекта – выполненные и оставшиеся правила с названием текущего;
+публикация – документы, для которых отправлены диагностики. Проценты в сообщении относятся
+к текущему этапу. Стандартное поле `percentage` достигает 100 только после успешной публикации.
+Ошибка или отмена завершают прогресс без сообщения о полном выполнении.
+
 | Группа | Запросы |
 |---|---|
-| Диагностики и подсказки | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
+| Диагностики и подсказки | `xbsl/relint`, `xbsl/reindexProject`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
 | Документация платформы | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
 | Схемы и словари | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
 | Создание метаданных | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaDeleteObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaResourceReferences`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
@@ -318,7 +332,7 @@ xbsl-web            # затем открыть http://127.0.0.1:8771/
 
 ```toml
 # pyproject.toml вашего пакета
-dependencies = ["xbsl>=0.16"]
+dependencies = ["xbsl>=1.0.0"]
 
 [project.entry-points."xbsl.rules"]
 мой-проект = "мой_проект.rules"      # импорт модуля выполняет его декораторы @rule
@@ -330,7 +344,6 @@ dependencies = ["xbsl>=0.16"]
 мой-проект = "мой_проект:severity_overrides"   # {id правила: "error"|"warning"|"info"|"off"}
 ```
 
-Пакеты, объявившие группы под старым именем (`xbsllint.rules`/`xbsllint.data`/`xbsllint.severity`),
 продолжают работать: старые группы сканируются вслед за новыми.
 
 Словарь уровней – или функция без аргументов, которая его возвращает – поднимает и понижает

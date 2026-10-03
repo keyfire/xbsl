@@ -49,7 +49,7 @@ def _selected(only: str, skip: str) -> list[tuple[str, str, bool, str]]:
     return [step for step in STEPS if step[0] in chosen and step[0] not in dropped]
 
 
-def main(argv=None) -> int:
+def _legacy_main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog=_distro.prog_name("xbsl extract"), description=__doc__.splitlines()[0]
     )
@@ -134,3 +134,44 @@ def main(argv=None) -> int:
             print("uischema строится по данным docs - проверьте сначала его")
         return 1
     return 0
+
+
+def main(argv=None) -> int:
+    """Stage a packed root through legacy extractor inputs and publish on success."""
+    import sys
+    import tempfile
+    from xbsl import data_storage, dataset
+    values = list(sys.argv[1:] if argv is None else argv)
+    if "--help" in values or "-h" in values:
+        return _legacy_main(values)
+    probe = argparse.ArgumentParser(add_help=False)
+    probe.add_argument("--data-dir")
+    options, _ = probe.parse_known_args(values)
+    root = Path(options.data_dir) if options.data_dir else _distro.data_root()
+    if not (root / "index.json").is_file() or not data_storage.index(root).get("storage"):
+        return _legacy_main(values)
+    previous_root = _distro._root_override
+    previous_dataset = dataset.pinned_root()
+    previous_version = dataset._selected
+    try:
+        with tempfile.TemporaryDirectory(prefix="xbsl-extract-") as temporary:
+            staged = Path(temporary)
+            data_storage.export(root, staged)
+            arguments = []
+            position = 0
+            while position < len(values):
+                value = values[position]
+                if value == "--data-dir":
+                    position += 2
+                    continue
+                if not value.startswith("--data-dir="):
+                    arguments.append(value)
+                position += 1
+            result = _legacy_main([*arguments, "--data-dir", str(staged)])
+            if result == 0:
+                data_storage.pack(staged, root)
+            return result
+    finally:
+        _distro.set_data_root(previous_root)
+        dataset.set_data_root(previous_dataset)
+        dataset.set_version(previous_version)

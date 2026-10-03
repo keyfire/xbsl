@@ -147,10 +147,8 @@ def _open(version: str | None = None) -> sqlite3.Connection | None:
     """A fresh read-only connection (the caller must close it) or None if there is no database."""
     if not available(version):
         return None
-    uri = Path(dataset.data_file(_DB_NAME, version)).as_uri() + "?mode=ro"  # file URI on any OS
-    con = sqlite3.connect(uri, uri=True)
-    con.row_factory = sqlite3.Row
-    return con
+    from xbsl import data_storage
+    return data_storage.open_docs(dataset.data_root(), dataset.resolve_version(version))
 
 
 def _fts_terms(query: str) -> list[str]:
@@ -489,16 +487,19 @@ def _member_index(version: str | None = None) -> dict[str, tuple[_MemberPlace, .
     """The member index of the data version, built once per file and rebuilt when it changes."""
     if not available(version):
         return {}
-    path = Path(dataset.data_file(_DB_NAME, version))
+    from xbsl import data_storage
+    resolved = dataset.resolve_version(version)
+    shared = data_storage.manifest(dataset.data_root(), resolved)
+    path = data_storage.catalog_path(dataset.data_root(), shared) if shared is not None else Path(dataset.data_file(_DB_NAME, version))
     try:
         stat = path.stat()
     except OSError:  # pragma: no cover - the file vanished between the check and the stat
         return {}
-    return _member_index_cached(str(path), stat.st_mtime, stat.st_size)
+    return _member_index_cached(str(path), stat.st_mtime, stat.st_size, resolved if shared is not None else None)
 
 
 @lru_cache(maxsize=4)
-def _member_index_cached(path: str, mtime: float, size: int) -> dict[str, tuple[_MemberPlace, ...]]:
+def _member_index_cached(path: str, mtime: float, size: int, version: str | None = None) -> dict[str, tuple[_MemberPlace, ...]]:
     """{member: (place, ...)} over member sections of reference pages and guides.
 
     Keyed by the file's own stamp the way the library archives are (libs.py): the database is
@@ -509,7 +510,7 @@ def _member_index_cached(path: str, mtime: float, size: int) -> dict[str, tuple[
     """
     del mtime, size  # the stamp is the cache key, nothing else
     index: dict[str, list[_MemberPlace]] = {}
-    con = sqlite3.connect(Path(path).as_uri() + "?mode=ro", uri=True)
+    con = _open(version) if version is not None else sqlite3.connect(Path(path).as_uri() + "?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     try:
         rows = con.execute("SELECT id, title, kind, html FROM pages").fetchall()
@@ -656,11 +657,12 @@ def asset(asset_id: str, version: str | None = None) -> dict | None:
         ver = dataset.resolve_version(version)
     except dataset.DatasetError:
         return None
-    path = dataset.data_root() / ver / asset_id
-    if not path.is_file():
+    from xbsl import data_storage
+    content = data_storage.asset(dataset.data_root(), ver, asset_id)
+    if content is None:
         return None
     return {
         "id": asset_id,
-        "mime": _MIME.get(path.suffix.lower(), "application/octet-stream"),
-        "bytes": path.read_bytes(),
+        "mime": _MIME.get(Path(asset_id).suffix.lower(), "application/octet-stream"),
+        "bytes": content,
     }

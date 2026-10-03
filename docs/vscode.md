@@ -23,6 +23,14 @@ a late response cannot overwrite the newer workspace report or its fixes.
 The form wireframe displays `UsualCommands` in the footer and the `Italic`, `Underline` and
 `Strikeout` flags of an absolute font. Tooltips use the property spellings of the source form.
 
+The extension uses the xbsl 1.0.0 engine. Install it in the Python selected by `xbsl.linter.pythonPath`.
+
+The refresh icon in the status bar rebuilds the project index and checks all project sources.
+During the check, the spinning icon shows the stage and its percentage beside it, for example
+`4/8 File rules · 43%`. Its tooltip shows completed and remaining files or rules, the active
+project rule and elapsed time, updated once a second. Each stage has its own percentage.
+After diagnostics are published and the check finishes, the button returns to its refresh icon.
+
 ## How it works
 
 The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine. In the
@@ -72,7 +80,7 @@ channel and nowhere else. There are no popups on every save.
 - **Quick Fix for mechanical findings.** A lightbulb on a fixable diagnostic (trailing
   whitespace, typography characters) applies the exact edit the linter reports. The *fix all*
   source action (`source.fixAll.xbsl`) fixes the whole file and can run on save via
-  `editor.codeActionsOnSave`. Needs `xbsl` >= 0.7.1. See [Quick Fix](#quick-fix).
+  `editor.codeActionsOnSave`. See [Quick Fix](#quick-fix).
 - **Deploy to the stand.** The *XBSL: deploy the project (elemctl)* command, and the cloud
   button in the title bar of the metadata tree, run `elemctl deploy` in a terminal task: build
   from sources → upload → apply → restart → a check that the apply actually took effect.
@@ -115,11 +123,8 @@ By default the extension calls `xbsl` from `PATH`. Point it elsewhere with
 `xbsl.linter.command` (an executable) or `xbsl.linter.pythonPath` (an interpreter – the linter is
 then invoked as `<python> -m xbsl`).
 
-The two are installed apart, so the engine can lag behind the extension. Most of the extension
-works with any version. The [translation dictionary](#translation-dictionary) needs **xbsl 0.72.0
-or newer**, because `--suggest`, the machine-translation run behind its suggestions button, only
-arrived there. With an older engine the panel does not open and says which version is installed
-(`pip install -U xbsl`).
+The engine and extension are installed separately. When updating the extension, update the
+engine too with `pip install -U xbsl`.
 
 ## New project
 
@@ -226,7 +231,7 @@ takes its element out of the written type of the collection (`Array<Catalog.Card
 
 The members of stdlib types come from the Element data (the `--data-dir` root), everything else
 from the project index. A name in scope wins over a type of the same name: once a variable `List`
-is declared, `List.` is about its type, not about the `List` component. Requires `xbsl` >= 0.10.0.
+is declared, `List.` is about its type, not about the `List` component.
 
 **Documentation comments.** A method documented with `///` lines reads in the editor the way it
 reads in the environment:
@@ -265,7 +270,7 @@ Findings the linter can repair mechanically carry a fix, and the extension turns
   "editor.codeActionsOnSave": { "source.fixAll.xbsl": "explicit" }
   ```
 
-Fixes need a linter that emits them in its JSON (`xbsl` >= 0.7.1). Only unambiguous edits are
+The engine supplies fixes in its JSON output. Only unambiguous edits are
 offered, and only against the exact text they were computed on: a version-stamped snapshot guards
 against applying an offset to text that changed since the last lint. Whole-file fixes (mixed
 newlines) are left to `xbsl --fix` on the command line.
@@ -351,8 +356,8 @@ wherever `xbsl.baseline` points. The reason stays next to the frozen finding, an
 }
 ```
 
-In LSP mode the suppression runs on the server and needs the engine 0.15.0 or newer; CLI mode
-works with any engine that has `--baseline`. The identity includes the message text, so the
+In LSP mode the server applies the baseline; CLI mode uses `--baseline`.
+The identity includes the message text, so the
 baseline is bound to the output language. Write and check it under the same `xbsl.linter.lang`.
 
 ## LSP mode (default)
@@ -806,7 +811,7 @@ reporting a miss. A real definition always wins, and when there is neither, VS C
 usual.
 
 The data comes from the linter's LSP server, so it needs [LSP mode](#lsp-mode-default) and the
-documentation database built from your distribution (`xbsl` >= 0.12.0, see
+documentation database built from your distribution (see
 [the linter README](https://github.com/keyfire/xbsl#documentation-searching-the-element-reference)).
 In the regular (CLI) mode the view reports that the documentation is available in LSP mode.
 
@@ -922,6 +927,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Command | Id | Invoked from |
 | --- | --- | --- |
 | Check the whole project | `xbsl.lintProject` | Command Palette |
+| Reindex and check the project | `xbsl.reindexProject` | Command Palette |
 | New 1C:Element project | `xbsl.project.new` | Command Palette |
 | Search forms by structure | `xbsl.forms.search` | Command Palette |
 | Restart the linter | `xbsl.restartLinter` | Command Palette |

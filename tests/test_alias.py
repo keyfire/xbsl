@@ -1,34 +1,24 @@
-"""Compatibility after the xbsllint -> xbsl package rename.
+"""The retired Python import is gone; existing environment and plugin settings still work."""
 
-The old name must keep working as an alias: importing xbsllint (and its submodules) yields
-the very same module objects as xbsl, the old environment variables are read as fallbacks,
-and the old entry-point groups are scanned alongside the new ones. A separate copy of the
-modules would be a bug - it would duplicate the rule registry - so we assert object identity.
-"""
-
+import os
+import subprocess
 import sys
+from pathlib import Path
 
 from xbsl import dataset, i18n, plugins
 
 
-def test_alias_package_is_same_module():
-    import xbsl
-    import xbsllint
-
-    assert xbsllint is xbsl
-    assert xbsllint.__version__ == xbsl.__version__
-
-
-def test_alias_submodule_identity():
-    import xbsl.engine
-    import xbsllint.engine
-
-    assert xbsllint.engine is xbsl.engine
-    # The familiar from-import form yields the same objects too.
-    from xbsllint.engine import RULES as legacy_rules
-
-    assert legacy_rules is xbsl.engine.RULES
-    assert sys.modules["xbsllint.engine"] is sys.modules["xbsl.engine"]
+def test_retired_python_import_is_unavailable():
+    name = "xbsllint"
+    root = Path(__file__).resolve().parent.parent
+    code = "import importlib, sys; sys.path.insert(0, sys.argv[1]); importlib.import_module(sys.argv[2])"
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", "-B", "-c", code, str(root), name],
+        cwd=root, capture_output=True, text=True, encoding="utf-8", timeout=30,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode != 0
+    assert "No module named 'xbsllint'" in result.stderr
 
 
 def test_legacy_lang_env(monkeypatch):

@@ -12,9 +12,6 @@ spellings and an MCP server for AI agents. Plus a VS Code extension on the same 
 on pairs of files: `Name.yaml` describes an element, `Name.xbsl` holds its code. And it answers
 long before the server-side compilation that runs on deploy.
 
-> Before 0.16 the project was named **xbsl-lint**, package `xbsllint`. The old commands,
-> imports, environment variables and entry-point groups keep working as aliases.
-
 > Not affiliated with 1C. "1C:Element", "1C:Fresh" and related names are trademarks of their
 > respective owners. Language data is generated from your own distribution. See [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).
 

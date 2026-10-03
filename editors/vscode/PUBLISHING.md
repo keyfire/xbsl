@@ -37,8 +37,8 @@ This is the usual way.
 2. Bump `version` in `editors/vscode/package.json` and update `CHANGELOG.md`.
 3. Commit, then tag and push:
    ```sh
-   git tag vscode-v0.1.0
-   git push origin vscode-v0.1.0
+   git tag vscode-v1.0.0
+   git push origin vscode-v1.0.0
    ```
    The workflow builds the `.vsix`, attaches it to a GitHub Release, and publishes to whichever
    marketplaces have their secrets in place.
@@ -58,7 +58,7 @@ npx @vscode/vsce publish -p <VSCE_PAT>            # or: vsce login keyfire && vs
 npx ovsx publish xbsl-vscode.vsix -p <OVSX_PAT>
 
 # GitHub Release (needs the gh CLI, run from the repo root)
-gh release create vscode-v0.1.0 editors/vscode/xbsl-vscode.vsix -t "XBSL extension 0.1.0"
+gh release create vscode-v1.0.0 editors/vscode/xbsl-vscode.vsix -t "XBSL extension 1.0.0"
 ```
 
 ## Install (any channel)

@@ -33,9 +33,9 @@ built so that the same situation ends with a working installation instead:
    been PROVEN to import in a separate process (the current one still runs the old code in
    memory and cannot judge). Anything unexpected - the old installation is put back.
 
-The wheel ships both the xbsl package and the xbsllint alias package - both are replaced.
-The dist-info of the transitional `xbsllint` METApackage (a separate, code-free
-distribution) is not touched. Only xbsl itself is updated, not its extras ([mcp]/[lsp]).
+The wheel ships the xbsl package. A retired alias package left by an older install is
+removed on upgrade; unrelated distribution metadata is not touched. Only xbsl itself is
+updated, not its extras ([mcp]/[lsp]).
 
 Download and unpack with the standard library (urllib + zipfile) - the command must work
 even in an installation without extras.
@@ -72,8 +72,8 @@ SIMPLE_ACCEPT = "application/vnd.pypi.simple.v1+json"
 #: releases inside one lag window are rare, and every round costs three requests.
 _PAGE_ROUNDS = 3
 
-# What belongs to the xbsl wheel in site-packages. The xbsl-*.dist-info pattern will not
-# touch the metapackage's xbsllint-*.dist-info: glob matches the prefix literally.
+# The current package and metadata, plus the retired shim removed during an upgrade.
+# Foreign xbsllint-*.dist-info metadata stays outside these exact cleanup targets.
 _OWNED_PATTERNS = ("xbsl", "xbsllint", "xbsl-*.dist-info")
 # Suffix of the directory kept aside while the new version is being proven.
 _BACKUP_SUFFIX = ".xbsl-selfupdate-backup"

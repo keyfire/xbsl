@@ -16,7 +16,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "xbsl contributors" }]
 keywords = ["1c", "1c-element", "xbsl", "linter", "lsp", "mcp", "scaffolding", "translation", "static-analysis"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Natural Language :: Russian",
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Quality Assurance",
@@ -56,18 +56,10 @@ xbsl-mcp = "xbsl.mcp_supervisor:main"
 xbsl-mcp-supervisor = "xbsl.mcp_supervisor:main"
 xbsl-web = "xbsl.web:main"
 xbsl-lsp = "xbsl.lsp:main"
-# Команды под старым именем пакета остаются псевдонимами на переходный период.
-xbsllint = "xbsl.cli:main"
-xbsllint-mcp = "xbsl.mcp_supervisor:main"
-xbsllint-web = "xbsl.web:main"
-xbsllint-lsp = "xbsl.lsp:main"
-
 [tool.setuptools]
-# xbsllint – пакет-псевдоним: импорт xbsllint/xbsllint.X отдаёт модули xbsl (см. его __init__).
-# Список явный, поэтому каждый новый подпакет дописывается сюда руками: не дописанный в колесо
-# не попадёт, а в разработке этого не видно – editable-установка показывает дерево целиком.
-# Сверку списка с деревом держит tests/test_packaging.py.
-packages = ["xbsl", "xbsl.extract", "xbsl.rules", "xbsl.translation", "xbsl.translation.machine", "xbsllint"]
+# The explicit package list must include every subpackage distributed by the wheel.
+# tests/test_packaging.py compares it with the source tree.
+packages = ["xbsl", "xbsl.extract", "xbsl.rules", "xbsl.translation", "xbsl.translation.machine"]
 
 [tool.setuptools.dynamic]
 version = {attr = "xbsl.__version__"}
