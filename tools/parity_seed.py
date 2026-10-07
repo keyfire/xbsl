@@ -9008,6 +9008,26 @@ SEEDS: list[Seed] = [
             kind="SettingsStorage", listed="User, ObjectKey")},
         tokens=_LISTED_KIND_TOKENS,
     ),
+
+    # Explicit opt-in: target client has been verified to reject Unicode class p.
+    Seed(
+        rule="code/client-pattern-unicode-class", expect=FINDING,
+        note="literal Unicode class p in the client Pattern constructor",
+        files={"Проба.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Проба\nОкружение: Клиент\n",
+               "Проба.xbsl": 'метод Проверить()\n    знч Текст = новый Образец("\\\\p{L}")\n;\n'},
+        english={"Probe.yaml": "ElementKind: CommonModule\nName: Probe\nEnvironment: Client\n",
+                 "Probe.xbsl": 'method Check()\n    val Text = new Pattern("\\\\p{L}")\n;\n'},
+        tokens={"Проба": "Probe", "Проверить": "Check", "Текст": "Text"},
+    ),
+    Seed(
+        rule="code/client-pattern-unicode-class", expect=CLEAN,
+        note="server Pattern with Unicode class p is outside the client restriction",
+        files={"Проба.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Проба\nОкружение: КлиентИСервер\n",
+               "Проба.xbsl": '@НаСервере\nметод Проверить()\n    знч Текст = новый Образец("\\\\p{L}")\n;\n'},
+        english={"Probe.yaml": "ElementKind: CommonModule\nName: Probe\nEnvironment: ClientAndServer\n",
+                 "Probe.xbsl": '@OnServer\nmethod Check()\n    val Text = new Pattern("\\\\p{L}")\n;\n'},
+        tokens={"Проба": "Probe", "Проверить": "Check", "Текст": "Text"},
+    ),
 ]
 
 

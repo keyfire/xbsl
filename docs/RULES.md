@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 279 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 280 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -700,6 +700,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A call that binds only to a deprecated form of a platform method, as the platform IDE warns [details](#d-code-deprecated-api) [docs](https://1cmycloud.com/docs/help/topics/update-app-data/) |
 | `code/deprecated-project` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A use bound to a project method, property, constructor, parameter or enumeration value marked deprecated, as the platform IDE warns [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Annotations/Compatibility/Deprecated_ru/) |
 | `code/contract-method-not-abstract` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A non-abstract method, ordinary or static, in a module of an entity contract - of the contract itself, of its object or of a row: these modules take abstract methods only, and the compiler refuses any other with "Non-abstract method ... cannot be defined" [details](#d-code-contract-method-not-abstract) |
+| `code/client-pattern-unicode-class` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Unicode class p in a literal client Pattern; enable only after confirming the target client rejects it [details](#d-code-client-pattern-unicode-class) |
 
 #### Tier D rules in detail
 
@@ -1394,3 +1395,5 @@ Compares parameter names only for an unambiguous project service contract and ma
 <a id="d-conventions-platform-translation-shadow"></a>**`conventions/platform-translation-shadow`.**
 
 Runs only in projects with a translation dictionary. Reports a Cyrillic declaration collected by the translator when it suppresses a known platform mapping and has no applicable explicit token pair. Local variables and parameters are excluded. Add a dictionary pair; renaming is optional and is never applied automatically. ASCII declarations are excluded by the translator's contract, so a fully translated English tree has no findings from this rule.
+
+<a id="d-code-client-pattern-unicode-class"></a>**`code/client-pattern-unicode-class`.** Disabled by default. Enable with `--select code/client-pattern-unicode-class` or rule configuration only after confirming that your target client rejects Unicode class `\p`. The language dataset version does not identify client-engine capabilities. Only the literal first argument of `new Pattern(...)` in a proven client module is checked, including the client execution of a shared common module. Methods annotated `@OnServer`, dynamic or interpolated patterns, strings used for another purpose, and escaped literal text are skipped. `\P` and other classes are not checked. There is no automatic fix: replacing a Unicode class with ASCII changes the accepted character set. Test the chosen replacement in your own client; successful server compilation does not prove client execution.
