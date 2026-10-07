@@ -19,12 +19,11 @@ spreadsheet area), and a method of the manager of a project element
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
-from xbsl import dataset, engine
+from xbsl import data_storage, dataset, engine
 from xbsl.translation import dictionary as dict_module
 from xbsl.translation.code import Resolver, translate_code
 from xbsl.translation.project import translate_project
@@ -304,8 +303,14 @@ def privilege_data_root(root: Path, *, stated: bool) -> Path:
     version = dataset.resolve_version()
     target = root / version
     target.mkdir(parents=True)
-    for path in (dataset.data_root() / version).glob("*.json"):
-        shutil.copyfile(path, target / path.name)
+    # The installed version may be a shared-storage view rather than physical JSON.
+    for name in data_storage.logical_files(dataset.data_root(), version):
+        path = target / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(data_storage.raw_json(dataset.data_root(), version, name), ensure_ascii=False),
+            encoding="utf-8",
+        )
     uiterms = json.loads((target / "uiterms.json").read_text(encoding="utf-8"))
     full = json.loads((target / "terms_full.json").read_text(encoding="utf-8"))
     tables = uiterms.setdefault("enum_values", {})

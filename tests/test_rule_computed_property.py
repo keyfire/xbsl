@@ -1,11 +1,10 @@
 """Computed property calls use proven endpoints and retain every property site."""
 
 import json
-import shutil
 
 import pytest
 
-from xbsl import engine, i18n, parser as P
+from xbsl import data_storage, engine, i18n, parser as P
 
 RULE = "code/computed-property-server-call"
 IMAGE_RULE = "code/image-binding-server-call"
@@ -410,9 +409,14 @@ def _installed_version():
 def _install_data(source, version, root, skip=()):
     """Put one data version under root the way an installation does: the files, then the index."""
     (root / version).mkdir(parents=True, exist_ok=True)
-    for path in source.glob("*.json"):
-        if path.name not in skip:
-            shutil.copyfile(path, root / version / path.name)
+    for name in data_storage.logical_files(source.parent, version):
+        if name not in skip:
+            destination = root / version / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(
+                json.dumps(data_storage.raw_json(source.parent, version, name), ensure_ascii=False),
+                encoding="utf-8",
+            )
     (root / "index.json").write_text(
         json.dumps({"available": [version], "default": version}), encoding="utf-8")
 
@@ -490,7 +494,10 @@ def test_catalogs_without_the_ui_schema_are_read_again(tmp_path):
     try:
         schema, names = _server_calls._catalogs()
         assert schema == {} and names
-        shutil.copyfile(source / "uischema.json", root / version / "uischema.json")
+        (root / version / "uischema.json").write_text(
+            json.dumps(data_storage.raw_json(source.parent, version, "uischema.json"), ensure_ascii=False),
+            encoding="utf-8",
+        )
         dataset.recheck_data()  # what the engine does before every pass
         schema, _names = _server_calls._catalogs()
     finally:

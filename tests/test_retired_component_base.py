@@ -16,12 +16,11 @@ the entry and without it.
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
-from xbsl import dataset, engine
+from xbsl import data_storage, dataset, engine
 
 pytestmark = pytest.mark.needs_data
 
@@ -36,8 +35,14 @@ def _data_root(root: Path, *, described: bool) -> Path:
     version = dataset.resolve_version()
     target = root / version
     target.mkdir(parents=True)
-    for path in (dataset.data_root() / version).glob("*.json"):
-        shutil.copyfile(path, target / path.name)
+    # The installed version may be a shared-storage view rather than physical JSON.
+    for name in data_storage.logical_files(dataset.data_root(), version):
+        path = target / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(data_storage.raw_json(dataset.data_root(), version, name), ensure_ascii=False),
+            encoding="utf-8",
+        )
     stdlib = json.loads((target / "stdlib.json").read_text(encoding="utf-8"))
     stdlib.setdefault("type_members", {}).pop(BASE, None)
     stdlib.setdefault("bases", {}).pop(BASE, None)
