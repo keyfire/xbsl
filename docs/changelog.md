@@ -25,6 +25,21 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## 2026-10-08 – 1.1.0
+
+### Added
+
+- **An opt-in rule checks Unicode class `\p` in client Pattern literals.** Enable
+  `code/client-pattern-unicode-class` after confirming that the target client rejects
+  this class. Server and dynamic patterns are excluded.
+  ([#174](https://github.com/keyfire/xbsl/pull/174))
+
+### Fixed
+
+- **Test datasets work with shared platform data.** Five fixtures now copy logical JSON
+  files instead of relying on physical per-version files. Their existing assertions are preserved.
+  ([#174](https://github.com/keyfire/xbsl/pull/174))
+
 ## 2026-10-03 – 1.0.0
 
 ### Added

@@ -109,9 +109,7 @@ def test_a_pinned_data_root_reaches_the_workers(request, tmp_path):
     unknown, which is exactly the report the defect produced.
     """
     import json
-    import shutil
-
-    from xbsl import dataset
+    from xbsl import data_storage, dataset
 
     invented = "ТипКоторогоНетВПоставке"
     source = tmp_path / "Проба.xbsl"
@@ -127,9 +125,18 @@ def test_a_pinned_data_root_reaches_the_workers(request, tmp_path):
     root = tmp_path / "data"
     version = dataset.default_version()
     (root / version).mkdir(parents=True)
-    shutil.copy(dataset.data_root() / "index.json", root / "index.json")
-    for name in dataset.data_root().joinpath(version).glob("*.json"):
-        shutil.copy(name, root / version / name.name)   # the json files only - docs.sqlite is 40 MB
+    # A pinned root may use shared storage rather than physical per-version JSON.
+    # Materialize logical JSON only; this test does not need the documentation database.
+    (root / "index.json").write_text(
+        json.dumps({"default": version, "available": [version]}), encoding="utf-8"
+    )
+    for name in data_storage.logical_files(dataset.data_root(), version):
+        destination = root / version / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(data_storage.raw_json(dataset.data_root(), version, name), ensure_ascii=False),
+            encoding="utf-8",
+        )
     catalog = json.loads((root / version / "stdlib.json").read_text(encoding="utf-8"))
     catalog["names"].append(invented)
     (root / version / "stdlib.json").write_text(

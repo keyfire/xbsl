@@ -1586,3 +1586,101 @@ def client_available_unused(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     rel, line, col, "code/client-available-unused", Severity.WARNING,
                     i18n.t("code/client-available-unused.unused", name=name),
                 )
+
+
+# A client-engine limitation cannot be inferred from the selected language dataset.
+# Enable this rule only after reproducing that limitation in the target client.
+_PATTERN_RULE = "code/client-pattern-unicode-class"
+i18n.register({
+    f"{_PATTERN_RULE}.title": {
+        "ru": "Символьный класс p в клиентском Образец",
+        "en": "Unicode class p in a client Pattern",
+    },
+    f"{_PATTERN_RULE}.off": {
+        "ru": "Включайте только после проверки, что целевой клиент не поддерживает символьный "
+              "класс p: возможности клиентского движка не определяются версией данных языка.",
+        "en": "Enable only after confirming that the target client rejects Unicode class p: "
+              "the language dataset version does not identify client-engine capabilities.",
+    },
+    f"{_PATTERN_RULE}.literal": {
+        "ru": "Литерал {pattern} в клиентском методе '{method}' содержит символьный класс p. "
+              "Правило включено для клиента, у которого этот класс не поддерживается. "
+              "Выберите поддерживаемый класс с учетом нужного набора символов или проверьте "
+              "шаблон в целевом клиенте. Серверная компиляция этого не проверяет.",
+        "en": "Literal {pattern} in client method '{method}' contains Unicode class p. "
+              "This rule is enabled for a client that does not support that class. "
+              "Choose a supported class that preserves the intended character set, or test "
+              "the pattern in the target client. Server compilation does not check this.",
+    },
+})
+
+
+def _pattern_class_p(text: str) -> bool:
+    """An XBSL string's escaped backslash must remain unescaped in the regex itself.
+
+    Two source backslashes decode to one regex escape; four decode to an escaped
+    backslash and literal p. Interpolation and malformed string escapes are undecided.
+    """
+    if len(text) < 2 or text[0] != '"' or text[-1] != '"' or '%' in text or '${' in text:
+        return False
+    return any(len(match.group(1)) % 4 == 2
+               for match in re.finditer(r'(\\+)p\{[^{}]+\}', text[1:-1]))
+
+
+def _client_pattern_mapper(source: SourceFile) -> dict | None:
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None:
+            return None
+        client = object_kind(data) in _CLIENT_ENV_KINDS or bool(_client_environment(data))
+        return {"k": "y", "stem": _pair_stem(source.rel), "client": client,
+                "name": value_of(data, "Имя", object_kind(data))}
+    if source.kind != "xbsl" or "p{" not in source.text:
+        return None
+    module, errors = parse(source)
+    if errors:
+        return None
+    forms = frozenset(terms.forms("Образец", "types"))
+    shadowed = _shadowed_names(code_tokens(source)) | frozenset(
+        member.name for member in module.members if hasattr(member, "name"))
+    lm = linemap(source)
+    found = []
+    for method in module.members:
+        if not isinstance(method, P.Method):
+            continue
+        if {ann.name for ann in method.annotations} & _on_server_forms():
+            continue
+        nodes = walk_nodes(method.body)
+        hidden = shadowed | _method_names(method, nodes)
+        for node in nodes:
+            if not isinstance(node, P.New) or node.type.text not in forms or node.type.text in hidden:
+                continue
+            if not node.args or node.args[0].name is not None:
+                continue
+            literal = node.args[0].value
+            if not isinstance(literal, P.Literal) or literal.kind != "STRING":
+                continue
+            if _pattern_class_p(literal.text):
+                line, col = lm.linecol(literal.start)
+                found.append((method.name, node.type.text, line, col))
+    return {"k": "x", "stem": _pair_stem(source.rel), "found": found} if found else None
+
+
+@rule(_PATTERN_RULE, f"{_PATTERN_RULE}.title", "D", scope="project",
+      severity=Severity.WARNING, enabled_by_default=False,
+      off_reason=f"{_PATTERN_RULE}.off", mapper=_client_pattern_mapper)
+def client_pattern_unicode_class(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """Only literal Pattern constructors in a proven client module, explicitly enabled."""
+    client = {fact["stem"] for fact in facts.values() if fact["k"] == "y" and fact["client"]}
+    names = {fact["name"] for fact in facts.values()
+             if fact["k"] == "y" and isinstance(fact.get("name"), str)}
+    for rel, fact in facts.items():
+        if fact["k"] != "x" or fact["stem"] not in client:
+            continue
+        for method, pattern, line, col in fact["found"]:
+            if pattern in names:
+                continue
+            yield Diagnostic(rel, line, col, _PATTERN_RULE, Severity.WARNING,
+                             i18n.t(f"{_PATTERN_RULE}.literal", method=method, pattern=pattern))
