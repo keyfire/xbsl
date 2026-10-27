@@ -260,7 +260,7 @@
 ### Changed
 - **Client-work parameters, an enumeration and a structure list their items right under the
   element.** Their one section used to add a level with nothing next to it. The parameters, values
-  or fields now hang under the element, and the "+" to add one sits on its row.
+  or fields now appear under the element, and the "+" to add one sits on its row.
   ([#68](https://github.com/keyfire/xbsl/pull/68))
 - **A subsystem in the metadata tree carries the icon of the Subsystems branch.** Subsystems used to
   draw curly braces, unlike an object, which draws the icon of its category. Now both groupings show
@@ -314,30 +314,25 @@
 
 
 ### Added
-- **The status bar says which rule set the Problems panel judges by.** `xbsl.linter.asCi` said
-  what was REQUESTED; what came of it was known to the engine alone, and its only trace was one
-  line in the XBSL output channel, printed once at startup - not where anyone looks while
-  reading a finding. With no pipeline file the server does not refuse (a refusal would cost the
-  whole editing session): it goes on judging by the rules of the settings, silently. The bar now
-  carries `CI: <job>` while the job's set is in force and a highlighted warning when it was
-  asked for and not taken, with the reason in the tooltip in the engine's own words; a click
-  opens the pipeline file the job stands in (the include it came from, when one brought it). The
-  answer is asked of the server (`xbsl/ciStatus`) after the start and after every restart - a
-  changed parity setting is exactly what causes one. An older engine that does not know the
-  request shows no indicator at all.
+- **The status bar identifies the rule set used by the Problems panel.** It shows `CI: <job>`
+  when the CI job's set is active, or a warning with the reason in its tooltip when the set
+  cannot be loaded. Clicking it opens the pipeline or include file containing the job. Without
+  a pipeline file, the server uses the settings and records the reason in the XBSL output
+  channel. The `xbsl.linter.asCi` setting enables this mode. The extension requests the status
+  through `xbsl/ciStatus` after server startup and
+  restart; changing the parity setting restarts the server. Older engines without this request
+  show no indicator.
 
 ## 0.68.0
 
 ### Added
-- **The Problems panel can judge by the rule set of the project's CI job.** The terminal and
-  an agent could already take it (`--as-ci`), the panel could not - so the same tree got two
-  verdicts and the one gating the merge request was the other one. `xbsl.linter.asCi` turns it
-  on and `xbsl.linter.asCiJob` names the job when the pipeline runs the linter twice (a project
-  that checks a translated tree runs two, by two different sets). The rule set is not copied
-  into the settings: the extension passes a flag and the engine reads the pipeline file, so
-  there is no second list to keep in step. The `xbsl.rules` table stays ON TOP of the job's
-  set, and with no pipeline file nothing breaks - the reason appears in the XBSL output channel
-  and the settings' own set stands.
+- **The Problems panel can use the project's CI job rule set.** The `xbsl.linter.asCi` setting
+  enables the same `--as-ci` check available in the terminal and to agents. When a pipeline
+  has several jobs, for example for a project and its translation, `xbsl.linter.asCiJob`
+  selects one. The extension passes the flag and the engine reads the pipeline without copying
+  the rules into settings. `xbsl.rules` takes precedence over the job's set. If the pipeline
+  file is absent, the settings' rule set remains active and the XBSL output channel gives the
+  reason.
 - **The hover and the documentation panel show a type member's block.** Over
   `Text.Substring` the hover said what the type String is and a right click opened its
   whole page; a bare member name fell through to full-text search. The hover now shows
@@ -345,11 +340,9 @@
   page at its heading, and a name several types declare is offered as those types.
 
 ### Fixed
-- **A parity setting took effect only after a window reload.** The `--as-ci` flag reaches the
-  LSP server as an argument, and the list of settings that restart the server did not know the
-  new keys: turned on in a live window, the setting changed nothing until the next reload - the
-  very trouble the list is kept for. `xbsl.linter.asCi` and `xbsl.linter.asCiJob` now restart
-  the server, as the other run flags do.
+- **A parity setting takes effect without reloading the window.** The LSP server receives
+  `--as-ci` at startup, so changes previously required a window reload. Changes to
+  `xbsl.linter.asCi` and `xbsl.linter.asCiJob` now restart the server.
 
 ## 0.67.7
 
@@ -385,9 +378,9 @@
 ## 0.67.4
 
 ### Fixed
-- **A pattern literal no longer swallows the code after it.** The grammar knew only
+- **A pattern literal no longer affects highlighting of the following code.** The grammar recognized only
   double-quoted strings, so the quotes inside a `'...'` pattern (a regular expression with a
-  quoted key, a duration) opened a phantom string, and every method below the literal was
+  quoted key, a duration) opened an incorrect string, and every method below the literal was
   colored as its tail until the next quote. Pattern literals are a scope of their own now, with
   backslash escapes, ending with the line - the way the engine's lexer reads them.
 
@@ -404,8 +397,7 @@
 ### Added
 - **Two more rules open their platform documentation.** `yaml/inline-command-name` leads to
   the command-interface fragment, `yaml/localization-missing-import` to app localization -
-  from the hint, the rules panel and the documentation tree alike. The rules themselves came
-  with the engine and have been working all along; what was missing was the way through.
+  from the hint, the rules panel and the documentation tree alike. The rules were already included in the engine; this release adds links to their documentation.
 
 ## 0.67.1
 
@@ -420,29 +412,26 @@
 
 ### Added
 - **The Resources section of the metadata tree.** Files of the Resources folders show up next
-  to the other kinds: grouped by subsystem and captioned by the KEY - the very path a
+  to the other kinds: grouped by subsystem and captioned by the key - the path a
   `Ресурс{...}` reference takes. A click opens the file; the section works in the by-subsystem
   grouping and under a filter too.
 
 ### Fixed
 - **A form panel no longer covers the yaml it belongs to.** Sharing an editor group with the
   source, the panel came forward on every click on that source - so the yaml could not be seen at
-  all. The pair now steps aside while both sit in one group.
+  all. The source remains visible when both are in one group.
 - **The metadata tree opens a source beside the form panel, not underneath it.** A click on a tree
   row used to put the file in the panel's own group, where the pairing immediately hid it.
 
 ## 0.66.1
 
 ### Changed
-- **Closing the panel during a read no longer breaks the command.** Reading the dictionary takes
-  seconds, and a tab closed in the middle of it received the answer through a webview that no
-  longer existed - which VS Code answers with a modal "Webview is disposed", blaming the command
-  that started the read. An answer with nobody to deliver it to is now dropped silently, and a
-  command that meets a closed panel opens a new one instead of waking the old.
-- **The column widths of the dictionary table survive closing the panel.** The webview remembered
-  them, and a webview lives exactly as long as its tab: a window restart kept them (the editor
-  restores the tab), closing and reopening lost them. The widths are now kept by the extension, and
-  globally rather than per project - the table is the same table everywhere.
+- **Closing the panel during a read no longer breaks the command.** A dictionary read could
+  return to a closed panel and VS Code displayed "Webview is disposed". The response is now
+  discarded, and a command issued after the panel closes opens a new panel.
+- **Dictionary column widths are retained after the panel closes.** The webview used to store
+  them: restarting the window restored the tab and its widths, but closing and reopening it lost
+  them. The extension now stores the widths globally across projects.
 - **The header of the dictionary table shows where a column border is.** The mark used to appear
   under the pointer alone, so finding it meant running the mouse along the header. Every border
   now carries a hairline of its own; under the pointer it still highlights and grows to the full
@@ -575,7 +564,7 @@
 - **An old engine is named as old instead of spilling an argparse dump.** The panel and the
   lightbulb are built on `translate --entries`/`--gaps`/`--set`, which the engine only learned in
   0.70.0, and the engine and the extension are installed apart - right after a release that is
-  the ordinary state. The version is now asked before the first call, and a lagging engine gets
+  the ordinary state. The version is now asked before the first call, and an older engine gets
   the extension's own message: the dictionary needs xbsl 0.70.0 or newer, this one is installed,
   the cure is `pip install -U xbsl`. A yes is remembered for the session, so no engine process
   runs before every word; output that cannot be read is not treated as a refusal.
@@ -670,7 +659,7 @@
 - **Inaccessible fields of the wireframe are drawn the way the platform draws them** - a gray
   fill with no border. An availability switched off, or computed, travels down the content until
   a node overrides it; the value shows in the tooltip.
-- **The form wireframe shows the localized TEXT, not the key.** A `$Dictionary.Key` value is drawn
+- **The form wireframe shows the localized text instead of the key.** A `$Dictionary.Key` value is drawn
   as the words the user will see, in the editor's language, with the key kept in the tooltip. A key
   with no text behind it falls back to its last segment, as before.
 
@@ -862,7 +851,7 @@
 ## 0.54.0
 
 ### Changed
-- **The rule count in the "Code" group description caught up with the registry:** engine 0.59.0
+- **The rule count in the "Code" group description matches the registry:** engine 0.59.0
   brought `code/unknown-structure-field`, so the group has 29 error rules instead of 28.
 
 ## 0.53.0
@@ -891,7 +880,7 @@
 ### Fixed
 - **The URL template menu never showed up** - in the `when` clause of four entries the word boundary
   was written so that the condition never matched.
-- **The Russian localization caught up with the interface:** 21 strings were shown in English under
+- **The Russian localization was completed:** 21 strings were shown in English under
   a Russian editor.
 - **English command titles write the service file names in English**
   (`Open object module (.Object.xbsl)`).
@@ -958,7 +947,7 @@
 
 ## 0.45.0
 
-- **The column grid of the wireframe is measured, not invented.** Probing all five sizes on a
+- **The wireframe column grid follows measured dimensions.** Probing all five sizes on a
   deployed form showed that the gap is always 24px, the number of columns is the largest n ≤ 4 for
   which a column is no narrower than 250px, and a size of N columns is `N * column + (N-1) * 24`.
   The wireframe builds a row by exactly that grid.
@@ -1104,7 +1093,7 @@
 - **Keys inside the panel:** the arrows walk the tree, `Alt+Up`/`Alt+Down` move a component, `F2`
   renames, `Delete` deletes, `Ctrl+C`/`Ctrl+V` carry a yaml fragment, and `Ctrl+Z`/`Ctrl+Y` undo and
   redo an edit.
-- **The selection honestly follows the cursor** - it is shared by the wireframe, the tree, the yaml
+- **The selection follows the cursor** - it is shared by the wireframe, the tree, the yaml
   and the properties panel.
 - **An event can be removed whole:** the reset asks whether to only unbind it or to delete the
   handler from the module; the yaml and the module are edited in one undo step.
@@ -1119,7 +1108,7 @@
 
 ## 0.27.1
 
-- **The panels survive an editor restart** - the form card, the documentation page and the templates
+- **The panels are restored after an editor restart** - the form card, the documentation page and the templates
   panel come back by themselves; a panel with nothing to show closes rather than hanging empty.
 - **The extension starts with the window,** so the trees and panels are ready whichever container was
   active at closing time.
@@ -1187,7 +1176,7 @@
 
 ## 0.22.1
 
-- **Custom code templates now really reach Ctrl+Space:** the extension passes `--templates` to the
+- **Custom code templates are available through Ctrl+Space:** the extension passes `--templates` to the
   server, and the server takes `.xbsl-templates.json` from the workspace root by default - the very
   file the panel writes.
 - **The templates panel no longer breaks Cyrillic on Windows** - the engine is started with
@@ -1233,12 +1222,12 @@
 
 ## 0.19.0
 
-- **The engine and the whole project were renamed: xbsl-lint → xbsl.** The engine command is `xbsl`,
+- **The engine and project were renamed: xbsl-lint → xbsl.** The engine command is `xbsl`,
   the server is `xbsl-lsp`; the old commands still work as aliases and the baseline file keeps its
   name.
 - **The metadata tree creates through the engine:** "Add <class>", the "+" actions for fields, a
   subsystem and an object form are written by the engine's scaffolding, and the extension applies the
-  changes in one undoable edit. Templates no longer live in the extension.
+  changes in one undoable edit. Templates are no longer stored in the extension.
 - **"Add object form" offers an object form or an object plus list pair,** and the engine registers
   them with the owner.
 - **The same scaffolding is available to AI agents through the engine's `meta_*` MCP tools.**
@@ -1288,7 +1277,7 @@
 ## 0.15.0
 
 - **A standard document link straight from a diagnostic:** the rule badge in Problems became a link
-  to the standard's page, and the lightbulb offers to open the document in the Documentation panel.
+  to the standard's page, and the Quick Fix menu offers to open the document in the Documentation panel.
 
 ## 0.14.1
 
@@ -1384,7 +1373,7 @@
 - **A new "Rule groups" settings section:** a drop-down per finding kind - keep the rules' own
   levels, show the whole group at one level or switch it off. `xbsl.rules` stays a thin override and
   outranks the drop-downs.
-- **The lightbulb gained a "Configure rule groups..." shortcut.**
+- **The Quick Fix menu gained a "Configure rule groups..." shortcut.**
 
 ## 0.8.0
 

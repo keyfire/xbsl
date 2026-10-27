@@ -1,9 +1,9 @@
 # Publishing the XBSL extension
 
-The extension goes out through three channels: the VS Code Marketplace, Open VSX (VSCodium,
+The extension is published through three channels: the VS Code Marketplace, Open VSX (VSCodium,
 Cursor, Windsurf, Gitpod) and a GitHub Release carrying the `.vsix`. The CI workflow
 [`.github/workflows/vscode-publish.yml`](../../.github/workflows/vscode-publish.yml) does all
-three on a `vscode-v*` tag. The manual commands below do the same by hand.
+three on a `vscode-v*` tag. The commands below also support manual publishing.
 
 The `publisher` in `package.json` is `keyfire`, and it must match your Marketplace publisher and
 your Open VSX namespace. For a different id, change it in `package.json` and nowhere else.
@@ -29,8 +29,6 @@ your Open VSX namespace. For a different id, change it in `package.json` and now
 Nothing to set up. CI uses the built-in `GITHUB_TOKEN`.
 
 ## Publishing through CI
-
-This is the usual way.
 
 1. Add the tokens as repository secrets (Settings → Secrets and variables → Actions): `VSCE_PAT`,
    `OVSX_PAT`. Leave one out to skip that marketplace; the GitHub Release still happens.

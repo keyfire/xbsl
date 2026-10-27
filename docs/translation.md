@@ -1,15 +1,15 @@
 ---
 title: "Translating a project"
-description: "Rewriting a project into English spellings: what the platform data answers, what the project dictionary answers, how coverage is measured and how a CI job checks it."
+description: "Rewriting a project into English spellings: what the 1C:Element data provides, what the project dictionary answers, how coverage is measured and how a CI job checks it."
 sidebar:
   label: Translation
   order: 6.5
 ---
 
-1C:Element is bilingual. Every keyword, metadata key, type, member and enumeration value has an
-English spelling, and a project written in those spellings compiles exactly like a Russian one.
-`xbsl translate` rewrites a whole project into them. The platform half comes from the extracted
-[platform data](platform-data), the project's own half from a dictionary the team fills.
+The `xbsl translate` command converts 1C:Element project sources to English spellings.
+1C:Element keywords, metadata keys, types, members and enumeration values have Russian and English
+spellings. Translation uses the extracted [1C:Element data](platform-data) and a project dictionary
+maintained by the development team.
 
 ```sh
 xbsl translate e1c/app                          # report only: coverage and what is missing
@@ -21,26 +21,29 @@ xbsl translate e1c/app --out build --strict   # non-zero exit unless it is compl
 
 ## What answers what
 
-**The platform half comes from the dataset, never from a translation.** Keywords take the form of
-the same case: `Если` becomes `If`, `если` becomes `if`. A yaml key takes the English spelling its
-metamodel class declares, so the same word can differ from node to node. An enumeration value is
-looked up inside its own enumeration, since across the whole dataset one Russian word answers to
-several English ones. A type expression keeps its shape and its facets (`.Ссылка` becomes
-`.Reference`), in yaml and in the code alike, wherever the parser reads a type: a parameter, a
-declaration, a constructor, a cast, a type argument. The same word after a dot elsewhere is a
-member. On a receiver that holds a facet of a project object, or whose chain goes on to load the
-record, the reference member is the facet word too, `Reference`; the link property of a label or a
-picture is `Link`. A value of a union-typed property that spells a member of the union, such as
-`Auto` of `Auto|Number`, becomes that member, spelled by the platform's type pairs. Inside
-`Query{ ... }` blocks the query vocabulary answers instead of the general one. A name the data
-cannot spell stays as written and is reported as a data gap: the translator never guesses. Nor
-does it guess an owner: a link of a chain declared `A|B` holds one of the two and the code does
-not say which, so the chain ends there and the word after it is read without an owner. A string
-interpolation is code of the method around it, chains and all - `"%{Объект.Товары.Граница()}"`
-reads exactly what the same expression reads outside the quotes.
+**Built-in names come from the 1C:Element dataset.** Keyword case is preserved: `Если` becomes
+`If`, and `если` becomes `if`. A yaml key uses the English spelling declared by its metamodel
+class. The same word can therefore have different spellings in different nodes. An enumeration
+value is looked up within its own enumeration: one Russian value can have several English
+spellings across enumerations.
 
-**The project half comes from the dictionary.** People translate everything the project named
-itself: objects, methods, attributes, form components, dictionary keys, resource files, and an
+A type expression retains its structure and facets: `.Ссылка` becomes `.Reference`. This applies
+to yaml and code wherever the parser reads a type: parameters, declarations, constructors, casts
+and type arguments. The same word after a dot in another position is a member. On a receiver
+holding a project-object facet, or a chain that loads a record, the reference member also becomes
+`Reference`. The link property of a label or picture is written as `Link`. A value matching a
+member of a union-typed property, such as `Auto` in `Auto|Number`, uses that member's spelling
+from the 1C:Element type name pairs.
+
+`Query{ ... }` blocks use the query vocabulary. A name missing from the data remains unchanged
+and is reported as a data gap. If a chain link is declared as `A|B`, its owner cannot be
+determined: analysis stops at that link and the following word is read without an owner.
+Expressions inside string interpolation are processed as code in the enclosing method, including
+chains. For example, `"%{Объект.Товары.Граница()}"` is processed like the same expression outside
+the quotes.
+
+**Project names are translated using the dictionary.** The dictionary contains translations for names
+declared by the project: objects, methods, attributes, form components, dictionary keys, resource files, and an
 enumeration default either bare or qualified by its enumeration (`States.Open`). Every Cyrillic
 comment line goes the same way, in a module and in a resource file alike. There are three planes:
 
@@ -58,18 +61,16 @@ phrases:
     "Задача помечается выполненной.": "The task is marked done."
 ```
 
-A phrase is keyed by one comment line as it stands: the marker and the padding taken off,
-no escaping at all. The `literals` plane below is spelled the opposite way, and an escaped
-quote is what travels between the two by mistake. `--set` and `translate_set` write such a
-key by the spelling that fires and name the correction in `normalized`. The value loses its
-padding the same way, since the translator puts the indent of the line back itself; a
-rewrite that changes nothing but the whitespace of a value is marked `whitespace_only` in
-`rewritten`. A key on two lines they refuse: the translator looks up each line of a comment
-on its own.
+A phrase key is one comment line without its marker, indentation or escaping. In the `literals`
+plane, keys and values retain the escaping used in the source code. If a phrase key is supplied
+with an escaped quote by mistake, `--set` and `translate_set` normalize it and report the change
+in `normalized`. They also remove whitespace around a value; the translator restores the line's
+indentation. A rewrite that changes only a value's whitespace is marked `whitespace_only` in
+`rewritten`. A multiline key is rejected because each comment line is translated separately.
 
-The indent is four spaces, the way the tool itself writes. Your own indent survives too: the
-writer copies it from the entries already in the section, so a file started with two spaces stays
-valid after an edit from the panel or from `--set`.
+A new file uses four-space indentation. When writing to an existing section, the tool copies the
+indentation of adjacent entries, so a different indent, such as two spaces, is preserved. This
+applies to edits from the panel and through `--set`.
 
 The third plane - `literals` - is about the string literals of the code:
 
@@ -80,25 +81,25 @@ literals:
     "Не разобрано тело: %{Описание}": "Could not parse the body: %{Описание}"
 ```
 
-A literal is data, and the translator never guesses data: it replaces exactly what the team
-listed. The key and the value are written the way the text stands between the quotes in the
-source, with the same escaping the code uses. A value that is not a valid literal body is refused
-when the dictionary loads. An interpolation inside the value is written as in the source, and the
-engine translates the name inside it. A literal inside `Query{}`, `Pattern{}` and the other
-resolvable literals is left alone: there it is code, not data.
+The translator replaces only literals listed in the dictionary. Keys and values are written as
+the text between the source quotes, with the same escaping. A value that is not a valid literal
+body is rejected when the dictionary loads. An interpolation in the value is written as in the
+source; the engine translates the name inside it. Literals inside `Query{}`, `Pattern{}` and
+other resolvable literals are left unchanged because they contain code.
 
-Two places mix text and code, and the literals plane serves them apart. The first is **the name
-of a named group** of a pattern, `(?<Name>...)`. That is a name of the project: the code reads the
-group back by it, with `Group("Name")`. Both sides take the spelling from one source, the literals
-plane first and the ordinary name resolution after. Let them part, and the call asks for a group
-the pattern never declared. The second is **the presentation template** of an event kind, prose
-with expressions inside it. The expressions are renamed as names, while the text itself comes from
-the literals plane by the whole value. What the plane does not name goes into the gap report
-instead of staying in the source language silently.
+The `literals` plane also applies to two cases where text is associated with code:
+
+- **The name of a named group** in a pattern, `(?<Name>...)`. Code refers to the group by name,
+  for example through `Group("Name")`. The group name and the call argument use the same source:
+  the literals plane first, then ordinary name resolution. This keeps the declaration and the
+  reference consistent.
+- **The presentation template** of an event-log event kind. Expressions in the template are
+  translated as names; its text uses a literals entry for the entire value. If there is no entry,
+  the text is included in the gap report.
 
 The suffixes of a duration literal in code move to their English spellings by themselves, so
 `300мс` becomes `300ms` and `2д14ч30м5с6мс` becomes `2d14h30m5s6ms`. The Russian set comes from
-the type's documentation, and the English one is confirmed by the platform compiler. A number
+the type's documentation, and the English one is confirmed by the 1C:Element compiler. A number
 glued to any other letters is left alone.
 
 The same plane serves every yaml value the metamodel types a localizable text (`Localizable`) -
@@ -111,8 +112,7 @@ presentations of a catalog's groups (`CatalogGroupPresentation`), the `ActivePre
 event - `PresentationTemplate` and the `BeginPresentationTemplate`, `EndPresentationTemplate` and
 `ErrorPresentationTemplate` beside it. A person reads each of those on the page, so each is either
 named whole by an entry or reported as a gap. The one exception is the `Description` property: it
-is developer documentation, so it stays data. Only a description that carries a `%{...}`
-substitution goes through the plane the way a template does, and then its gap is listed.
+is developer documentation, so it stays data. Only a description containing a `%{...}` substitution goes through the plane the way a template does, and then its gap is listed.
 
 A gap in any of those texts fails `--strict`, because the English build would show that text in
 Russian. Any other gap of the plane is listed and fails nothing: a string literal of a module or
@@ -122,16 +122,15 @@ between its own quotes, as in a module.
 
 The engine translates the deprecation mark itself. The naming standard starts the caption of a
 deprecated element with `(не используется)`, and `naming/presentation` asks an English project
-for `(not used)`, so the English tree carries that mark in its place. When a dictionary entry
+for `(not used)`, so the English tree uses that mark instead. When a dictionary entry
 leaves the mark out, the translator puts it in front of the entry's text. A text without an entry
 changes only its mark and stays a gap. A report's presentation, which the translator keeps as
 data, changes its mark the same way. An entry that starts with a bracket of its own is written as
 it is, and the rule points at it in the English tree.
 
 The prefix of a deprecated name is the engine's as well. The standard starts such a name with
-`Устарело`, and a file of the English tree keeps nothing else of the Russian name: the rule knows
-a deprecated element there by the prefix `Deprecated` alone. So the translator keeps the prefix
-whatever the entry says. An entry that starts with `Deprecated` is written as it is, and any other
+`Устарело`, and a file of the English tree keeps nothing else of the Russian name: the rule recognizes a deprecated element there by the prefix `Deprecated`. So the translator keeps the prefix
+regardless of the entry's translation. An entry that starts with `Deprecated` is written as it is, and any other
 one gets the prefix in front: `УстарелоКурсы: Rates` and `УстарелоКурсы: ObsoleteRates` give
 `DeprecatedRates` and `DeprecatedObsoleteRates`. The file of the element and every use of the name
 follow. A name that only begins with the same letters, the head of a longer word, keeps its entry.
@@ -146,7 +145,7 @@ literals:
 
 The pass writes the text back as it was, the plane counts it as named, and `--strict` has nothing
 to report. Neither `--unused` nor `--redundant` touches such a pair: the pass uses it, and the
-platform does not answer for it.
+1C:Element data has no corresponding entry.
 
 Names are translated whole rather than word by word. The word order of an English name is the
 reverse of the Russian one, and the parts of a Russian name are declined, so gluing per-word
@@ -159,7 +158,7 @@ and to a `/* ... */` comment alike. Such a comment keeps `/*` at the head of its
 they were, and so do lines that were long in the source already.
 
 A line of a documentation comment that opens a tag - `@параметр Коды - Коды для проверки.` - is
-looked up whole first, and a pair written for the whole line still wins. Without one the line is
+looked up whole first, and a pair written for the whole line takes precedence. Without one the line is
 translated by its parts: the tag word becomes the English one (`@parameter`, `@returns`,
 `@throws`, `@see`), the name after `@параметр` or `@выбрасывает` is translated the way the code
 translates it, a reference written as names (`@см Модуль.Метод`) is translated as names, and only
@@ -188,7 +187,7 @@ each pipeline was green, and the merged dictionary failed to load with ten keys 
 four of them differently. Taken one at a time, that was four loads.
 
 A place is a file and a line, which makes a key repeated inside one file a collision of the same
-kind. The yaml parser keeps only the last value of a repeated key and says nothing about the first,
+kind. The yaml parser keeps only the last value of a repeated key and does not report the earlier value,
 so the dictionary files are read with the line of every key. A repeat with two values is refused
 along with the other conflicts, and a repeat of the same value is a redundant copy. The same key in
 two sections is not a repeat, and a section head written twice in one file reads as one section, the
@@ -219,7 +218,7 @@ localized-strings dictionary may need a spelling the same word cannot have in co
 A method-qualified entry applies to that method's locals, including its parameters. It does
 not rename aliases inside `Query{...}`: the alias and an access to its result field use their
 common spelling. A catch variable annotated with `Exception` also participates in typed member
-resolution, so its `Cause` property keeps the platform spelling when a project field uses a
+resolution, so its `Cause` property keeps the 1C:Element spelling when a project field uses a
 different dictionary entry for the same source name.
 
 When translated comments are wrapped, deeper-indented lines under a list item stay separate.
@@ -228,37 +227,34 @@ continuation; ordinary prose after it can be wrapped again.
 
 ## Names the project declares are the project's
 
-A word the platform dictionaries also know may be what the project called its own thing: an
-enumeration value, an attribute, a method, a dictionary key. Only the project dictionary answers
-such names. Without that check a use would move to the English spelling while its declaration
-waited for a dictionary entry. The yaml would still declare the Russian value, the module would
-already call the English one, and the build would refuse the tree. With the check both halves move
-together, or both wait for one entry.
+A project name may match a word in the 1C:Element dictionary. It can be an enumeration value,
+attribute, method or dictionary key. Such names are translated only through the project dictionary.
+The declaration and its references receive the same spelling or remain untranslated until an
+entry is added. This prevents a mismatch between a yaml declaration and references in a module.
 
-The exceptions stay with the platform: the built-in items a collection dispatches by name, which
-are the standard code, name and owner attributes, and the facet after a dot in a type
-expression.
+Exceptions are the built-in collection items identified by name: the standard code, name and
+owner attributes. A facet after a dot in a type expression is also an exception.
 
-An override of a platform handler is the platform's word too. A method under `@Handler` named
-like a handler the platform lists is not a name of the project: the compiler finds the override
-by the platform's name. In a module that declares that handler, the declaration and the calls in
+An overridden 1C:Element handler uses its built-in name. A method under `@Handler` named
+like a handler in the 1C:Element lists is not a name of the project: the compiler finds the override
+by its 1C:Element name. In a module that declares that handler, the declaration and the calls in
 the module take the English spelling from the lists in the data. The module of an interface
 component overrides what its base declares (`AfterCreate` for the after-create override); the
 module of another element overrides what the compiler declares for its kind and module:
 `BeforeWrite` and `OnCreateOnBasis` in the object module of a catalog, `Handler` in the module of
 a scheduled job, `CheckHasAccessKeys` in the module of an access key, and the record-level
 security handlers, such as `ComputeAccessPermissionsForObjects`, in the module of an entity. In
-other modules the platform dictionaries translate the name. A project dictionary entry that spells
+other modules the 1C:Element dictionaries translate the name. A project dictionary entry that spells
 it otherwise is reported as a dictionary defect, and one that spells it the same way as redundant.
 Data without the lists leaves such a name to the dictionary, as before.
 
-A type is the platform's wherever only a type can stand: in a type expression, at the root of a
+A built-in type name is recognized wherever only a type can stand: in a type expression, at the root of a
 static call and right before a facet, as in `Entity.Privilege`. A field, an attribute or a method
 the project spelled the same way holds nothing there. Only a type the project declares under that
 name answers to the dictionary, so its declaration and its uses still move together.
 
 A name in scope is not a type either. A local, a parameter, a loop or `catch` variable, a lambda
-parameter and a property of the module's own element may be spelled like a platform type, and then
+parameter and a property of the module's own element may be spelled like a built-in type, and then
 `Name.Member` keeps the spelling of the declaration. Such a word still reads as the type in a static
 method, which has no element, and in a component method compiled on the server alone, which sees
 only the contextual properties. The code inside a string interpolation belongs to its method and
@@ -268,64 +264,57 @@ A resource file is the project's name at every place it stands. The file of the 
 property, a path in a string and the body of `Resource{...}` take the dictionary's word together, or
 keep the file's own name together.
 
-Pictures of the platform's library are not files of the project. Each picture exists under a
+Pictures of the standard 1C:Element library are not files of the project. Each picture exists under a
 Russian and an English name, and the English one goes to a reference the compiler resolves: the
 value of a picture property and the body of `Resource{...}`. The library namespace may be written
 or left out: `Стд::Аккаунт.svg` becomes `Std::Account.svg`.
 
-A name written without the namespace is looked for among the project's files first, and a file of
-the project wins. A name written with the library's namespace always means the library, which is
-what writing it says.
+A name without a namespace is first looked up among the project files; a matching project file takes precedence. A name with the library namespace always refers to the library.
 
-A string does not reach the library. A path in a string is read by `ПакетРесурсов.Текущий()`, the
+A string path does not address library resources. A path in a string is read by `ПакетРесурсов.Текущий()`, the
 resource package of the current namespace. So a string literal and a yaml value the schema types
 as text stay as they were written, even when they spell a name of the library letter for letter.
 
-The translator takes the English names from `resource_paths` in the platform's `uiterms.json`, and
+The translator takes the English names from `resource_paths` in `uiterms.json` in the 1C:Element data, and
 on data without that section a reference does not get them.
 
 A method a component of the project declares, called through a node of a form, is the project's
-word too, while a built-in command of a platform component keeps the spelling of the ui vocabulary.
+word too, while a command of a built-in component keeps the spelling of the ui vocabulary.
 
 ## What is left alone
 
-Data. Labels, descriptions and any other text a user reads stay as written: the platform's own
-mechanism localizes them, and the translated project keeps the same dictionaries. String literals
+Data. Labels, descriptions and any other text a user reads stay as written: the standard localization mechanism
+localizes them, and the translated project keeps the same dictionaries. String literals
 stay too. The exception is the code inside their interpolations, which is re-tokenized and
 translated like any other code. `Id` values never change, because the translated tree is the same
 project rather than a copy of it.
 
-A string literal that equals a renamed name is reported as a warning. A method called by its name
-from a string breaks silently when only the declaration is renamed.
+A string literal that equals a renamed name is reported as a warning. A call using a method name from a string stops working without a warning when only the declaration is renamed.
 
-A second warning of the same kind is `literal-data-value`. It marks a literal that equals a value
-from a json resource of the project and was moved by a literals-plane entry. Such a literal is
-usually compared against that data, in a seeding parse, and data is never translated. After the
-move the comparison silently stops matching. When the literal really is data, mark that explicitly
-with an entry whose value equals its key: the coverage is counted, the text does not move, and no
-warning is drawn. The report prints the warnings as a list: file, line, kind and text.
+The `literal-data-value` warning identifies a literal that matches a value in a project json
+resource and is changed by a `literals` entry. Such a literal can be compared with the data, for
+example when parsing initial data. The data is not translated, so changing the literal makes the
+comparison fail. To leave the literal unchanged and count it as covered, add an entry whose value
+matches its key. The report lists each warning with its file, line, kind and text.
 
-The third one, `short-pair`, is about comments. A phrase pair is keyed by one comment line, and a
-line of one or two words means what its comment makes of it: the pair of `нет.` may have been
-written as `timer.` for the tail of a sentence about a timer. When a comment has new lines, and a
-short line of the same comment was translated by such a pair, the report warns at that line, and
-every gap of the comment carries `neighbors` under `--gaps` (and in `translate_gaps`): the short
-lines with their translations, to read together with the new one. Lines written one under another
-with the same marker are one comment; in a yaml file, a run of whole comment lines. A comment
-whose lines are all covered says nothing.
+The `short-pair` warning concerns a short comment line. A phrase pair applies to one line, but the
+translation of one or two words depends on context. For example, `нет.` may have been translated
+as `timer.` at the end of a sentence about a timer. If a comment contains untranslated lines and a
+short line in that comment uses such a pair, the report warns on the short line. Each gap in that
+comment includes `neighbors` in `--gaps` and `translate_gaps`, with short lines and their
+translations for checking context. Consecutive lines with the same marker count as one comment; in
+yaml, consecutive comment lines form one comment. No warning is issued when all lines are covered.
 
 There are two exceptions, and both are a name written a second time, outside the code.
 
 **The keys of the project's own json resources that name a field of its structures.** A structure
-reads json by field name, so such a key is the same name written again. Rename the field, leave
-the key, and the binding finds nothing - silently, because the reading options tolerate an unknown
-property and initialize a missing field. The project compiles, applies and starts with empty data.
+reads json by field name, so such a key is the same name written again. If the field is renamed but the key is retained, the data no longer binds to the field: the reading options skip the unknown property without a warning and initialize the missing field. The project compiles, applies and starts with empty data.
 Those keys go through the same dictionary as the fields. Values, and keys no structure declares
 such as a map keyed by content or an external contract, stay as written. The number of renamed
 keys is part of the run's summary.
 
 **A literal that spells a resource path**, such as `"Значки/%Код.svg"`. The pass renames the
-resource files and directories, and a path has to follow them or the platform stops finding the
+resource files and directories, and a path has to follow them or 1C:Element stops finding the
 resource. Only a literal shaped like a path qualifies: it ends with a known resource suffix and
 every segment reads as a file name. A regular expression, with its slashes and named groups, does
 not qualify and stays data.
@@ -351,19 +340,16 @@ entry. The gap shows up under `--gaps`, counts towards the coverage, and fails `
 Selectors, property names and their values, attributes, identifiers and the text of the page stay
 as written. The file is scanned character by character, so a marker inside data opens no comment:
 `content: "/*"`, an unquoted address in `url(...)`, a template literal, a regular expression such
-as `/[/*]/`. Markup goes through the standard library's html parser, which knows
-that `<!--` inside an attribute value opens nothing.
+as `/[/*]/`. Markup is parsed by the standard library's html parser, so `<!--` inside an attribute value does not open a comment.
 
-Two borders are drawn on purpose. A comment that carries a licence is left alone: its wording is a
-legal text, and a translation of it says something the original does not. A minified `.css` or
+Two borders are drawn on purpose. A license comment is left unchanged: its wording is a legal text, and a translation could change its meaning. A minified `.css` or
 `.js` is skipped whole: it is build output, a banner is all that is left of its comments, and
 nobody edits a file like that. A file counts as minified when its longest line runs past five
 hundred characters.
 
 ## The written tree is a repository
 
-`--out DIR` makes DIR a repository root: the project lands in `DIR/{Vendor}/{Name}`, the two names
-its translated descriptor carries. That is the only layout a build accepts, since it packs the
+`--out DIR` makes DIR a repository root: the project lands in `DIR/{Vendor}/{Name}`, using the two names from the translated descriptor. That is the only layout a build accepts, since it packs the
 files under `{vendor}/{name}` and refuses a directory named otherwise. So the tree that comes out
 deploys as it is, with nothing moved by hand. The names are the translated ones: a project whose
 own name is a Russian word changes it in the pass, and the directory follows.
@@ -374,8 +360,7 @@ existed keeps working. A tree with no descriptor, meaning a fragment translated 
 written where it was asked for. The log line names the directory the files actually went to.
 
 A second run into the same directory simply rewrites the tree, and the directory is recognised by
-its descriptor, `Project.yaml` or `Проект.yaml`. A directory holding someone else's files is not
-touched at all: the run says which directory it is and what to do about it. A single file that
+its descriptor, `Project.yaml` or `Проект.yaml`. A directory holding unrelated files is not modified: the command identifies the directory and the required action. A single file that
 could not be written is named in the report with its reason rather than killing the pass. Usually
 the obstacle is a leftover of an earlier run: a directory where a file goes, a read-only file, a
 file held by another program. The report is printed whole, with the first five such files named
@@ -420,27 +405,26 @@ leftovers of earlier passes to be removed: 2
   Main/Resources/percent.svg
 ```
 
-The text report names the first twenty and counts the rest. The json payload carries `dry_run`,
+The text report names the first twenty and counts the rest. The json payload contains `dry_run`,
 `planned` (the size of the tree the pass would write) and `removals`, all of them. Without `--out`
 there is no tree to describe, and the flag is refused rather than ignored.
 
 The table modes - `--gaps`, `--entries`, `--table`, `--unused`, `--redundant`, `--drift`,
-`--suggest` - write
-no tree at all. So they refuse `--out`, `--clean`, `--dry-run` and `--missing` as well, and name
+`--suggest` - do not write a tree. So they refuse `--out`, `--clean`, `--dry-run` and `--missing` as well, and name
 the run that does write the tree.
 
 ## Localized strings turn around
 
-A project that already carries the target language in its localization sections gets those values
+A project that already has the target language in its localization sections gets those values
 as its base, with the keys translated. The original values move under `Localization/<Code>/`, and
 the project descriptor's default and development languages follow. A key with no value in the
 target language keeps the original one and is reported.
 
 Only the translation into the target language swaps places with the base. Its folder is found
-by the language code whatever the case of the name, the way the platform finds it. A
+by the language code whatever the case of the name, the way 1C:Element finds it. A
 translation into any other language (`Localization/Vi` next to `Localization/En`) keeps its
 place: its keys follow the base keys through the same dictionary, and its values stay in its
-own language. The English names of the languages come from the platform data, so a descriptor
+own language. The English names of the languages come from the 1C:Element data, so a descriptor
 that lists Vietnamese needs no dictionary entry for it.
 
 ## Coverage and the gaps
@@ -451,7 +435,7 @@ dictionary stub: entries ordered by frequency, each annotated with its count and
 values empty and ready to fill.
 
 Three counters are kept apart on purpose. The first is the dictionary's coverage, the number a
-team fills towards 100%. The second is the platform data gaps, which no dictionary entry should
+team fills towards 100%. The second is the 1C:Element data gaps, which no dictionary entry should
 paper over. The third is the Cyrillic scalars left alone as data, listed so a reviewer can confirm
 they really are data.
 
@@ -461,43 +445,41 @@ the message names the places looked at, plus a dictionary found below the root i
 file new entries land in, `090-manual.yaml` by default. For a dictionary directory, pass a
 filename only: paths with `/`, `\` or a drive prefix are rejected before any edits are written.
 The MCP `translate_set` tool applies the same check. `--comment` is the head line such a file
-is created with, which is the place to say what the batch is about. `--format json` hands the
-whole report to a machine. `--no-localization-swap` leaves the localized-strings layout as it is,
+is created with, which is the place to say what the batch is about. `--format json` returns the complete report as JSON for automated processing. `--no-localization-swap` leaves the localized-strings layout as it is,
 for a project that translates its sources but keeps its language layout.
 
 `--strict` exits non-zero unless the coverage is complete and no problems were found, which is
 what a CI job wants before it publishes a translated build. A name collision is one such problem.
 Two different names of one namespace translated into one word break the build, because the
-platform refuses a repeated name, and only the translator can see it coming. Every colliding name
+compiler rejects a repeated name, and only the translator can see it coming. Every colliding name
 is reported with its own place, as in
 `method:RolesString - 'Number' <- ... (Module.xbsl:2:9), ... (Module.xbsl:5:13)`. A namespace on
 its own would leave the reader to find two words among the fifteen a method declares, and the two
 are rarely neighbours.
 
-A platform type a method reads as the root of a static access stands in the same namespace. A local
+A built-in type a method reads as the root of a static access stands in the same namespace. A local
 translated into the type's word hides the type in the English tree, so the pair is reported with
 both places, and an entry qualified by the method (`Method.Local`) separates them.
 
 Three more problems come from the dictionary itself, and all three were found on a real project whose
-English build failed while the coverage stood at 100%. The first is an entry that spells a platform
-member as the platform spells it nowhere, such as `Важность: Severity` against the event's
+English build failed while the coverage stood at 100%. The first is an entry that gives a built-in
+member a spelling absent from the 1C:Element data, such as `Важность: Severity` against the event's
 `Importance`. It is reported at the first place where a receiver of known type proves it. There the
-platform spelling is taken, but a receiver whose type nothing names gets the entry's word, and the
-compiler refuses it. The cure is the platform spelling in the entry. A word the platform itself
-spells two ways is not judged: `Загрузить` is `Load` on a binary object and `Upload` on the object
+spelling from the 1C:Element data is used, but a receiver whose type nothing names gets the entry's word, and the
+compiler refuses it. Use the spelling from the 1C:Element data in the entry. If the 1C:Element data has two spellings, matching either is not an error: `Загрузить` is `Load` on a binary object and `Upload` on the object
 storage, and an entry matching either names nothing wrong. The second problem is a named literal
 whose substitutions differ from its key's after translation, such as `%{AccountCode}` where the
 field translates to `SubscriberCode`. It is reported with both lists, because the names inside
 `%{...}` must translate the same fields in either language.
 
-The third is a type the project itself declares under the spelling of a platform type, with an entry that
-renames it to something else. A type expression normally takes the platform's word over any name of
+The third is a type the project itself declares under the spelling of a built-in type, with an entry that
+renames it to something else. A type expression normally takes the built-in name over any name of
 the project, but a type the project declares is the exception - its declaration and its uses have to
-move together - so the entry answers every type expression of that spelling, the platform's own among
+move together - so the entry answers every type expression of that spelling, the built-in type among
 them. A palette node called `Образец` and an entry `Образец: Swatch` turned `new Образец(...)` of a
 file that had never heard of the palette into `new Swatch(...)`, and the build answered
 `Type "Swatch" is not defined`. No value repairs it and the cure is not a value: the project's type
-has to be renamed. An entry that repeats the platform's own spelling moves no platform word anywhere
+has to be renamed. An entry that repeats the spelling in the 1C:Element data does not change a built-in name
 and is left alone.
 
 A localizable yaml text without its literal entry fails `--strict` as well - any value the
@@ -524,11 +506,9 @@ the dictionary files and reports three of them:
   parameter"), where the subject and the object kept the places of the Russian sentence;
 - capitals the Russian key does not have, such as "does NOT narrow" for a key that stresses nothing.
   A stressed word in the Russian key excuses them, and so does the same Latin word in the key.
-  Abbreviations (`MB`, `URL`) and constants are never judged.
+  Abbreviations (`MB`, `URL`) and constants are not checked.
 
-The finding stands on the word in the dictionary file and comes without a fix, since only the author
-knows which word was meant. Only the files of the discovered dictionary are judged. A project
-without one hears nothing, and a lint run over the directory that holds both the project and its
+The finding stands on the word in the dictionary file and has no automatic fix; the author must choose the intended word. Only the files of the discovered dictionary are checked. A project without a dictionary gets no such findings, and a lint run over the directory that holds both the project and its
 `xbsl-translation` checks the sources and the dictionary together.
 
 In VS Code the findings appear even when `xbsl.projectRoot` narrows the checks to the project
@@ -547,12 +527,11 @@ once. Literals, tokens and terms are not read by them. Both rules are off by def
 
 The rule `conventions/missing-translation` - info, off by default, project scope - shows the same
 gaps where they stand. A name or a comment line the dictionary does not cover gives one finding at
-its first occurrence in the file. The rule stays silent unless a dictionary is discovered, so it
-only speaks in a project that translates its sources. Enable it with
+its first occurrence in the file. The rule reports findings only when a dictionary is found, so it
+only produces findings in a project that translates its sources. Enable it with
 `--enable conventions/missing-translation`, or in the editor with the Linter: Enable setting.
 
-The finding carries the dictionary key, its kind and the suggestion, so the **lightbulb** offers
-to write the translation without leaving the file. "Translate as ..." takes the platform spelling
+The finding contains the dictionary key, its kind and a suggestion. The Quick Fix menu offers to write the translation without leaving the file. "Translate as ..." uses the 1C:Element spelling
 in one click. "Translate ..." asks for the word. A third action opens the dictionary table filtered
 by that key. The project is re-checked once the entry is written, with no restart.
 
@@ -560,14 +539,14 @@ by that key. The project is re-checked once the entry is written, with no restar
 entries next to what the sources do not cover yet: kind, key, translation, the number of
 occurrences, the first place and the dictionary file. Each record takes two lines, with the
 translation field stretched under the rest at the full width of the row. The field is edited in
-place. A search box and an "only empty" switch narrow the table. A suggestion - the platform's own
+place. A search box and an "only empty" switch narrow the table. A suggestion - the 1C:Element
 spelling first, an external service's guess otherwise - stands grey inside an empty field and goes
 in on a click or on `Enter`. The table reads `--table`, which yields the entries, the gaps and the
 coverage out of one pass over the project, and it writes through `--set`. A written cell does not
 cost another pass, only a re-read of the dictionary, and the header counters step forward by what
 that edit changed. The "Re-read" button replaces them with freshly counted ones.
 The **"Suggest via translation service"** button in the same panel
-fills empty fields with an external service's guesses; details are in
+fills empty fields with suggestions from an external service; details are in
 [Machine translation](#machine-translation) below.
 
 ## Filling the dictionary from the tools
@@ -600,64 +579,58 @@ so a batch a script dumps with every key in quotes (`yaml.safe_dump(..., default
 reads as well as one written by hand. A batch with no entries is refused, and the refusal names
 the top-level keys the file has.
 
-The writer warns about two shapes it can see without walking the project, and writes the pair all
-the same. A value another key of the same scope already takes is the collision above, met at the
-moment a person types the word. A key spelled like a word the platform itself carries is the other: as a
-type, where nothing but renaming the project's node repairs it, and as a member of a platform type,
-where the right value is the spelling the platform itself gives the member (`ЦветСсылок: LinksColor`
-against `DesignTheme.LinksColor`). Warnings and not refusals: what makes a key spelled like a
-platform type fatal is a type the project declares under that spelling, and only the pass over the
-project can see one - so that verdict is the strict pass's, and it fails the tree there. A qualified
-key (`<Owner>.<Name>`) holds inside one namespace, never answers a type expression and is not warned
-about. `translate_set` carries the same rows in `collisions` and `platform_names`; `--set` prints
-them on stderr, beside the count of what was written.
+Writing a dictionary entry reports two kinds of warning that can be detected without checking
+the project. The first concerns a value already used by another key in the same namespace. The
+second concerns a key that matches a 1C:Element name. When the key matches a type name, the
+project node may need to be renamed. When it matches a type member, use the spelling from the
+1C:Element data (`ЦветСсылок: LinksColor` against `DesignTheme.LinksColor`).
 
-`--unused` answers the question opposite to `--gaps`. That one shows what the project needs and
-the dictionary lacks; this one shows what the dictionary still says and the project no longer has.
-Deleting code leaves its names and comment lines behind, and nothing else reports them. `--strict`
-judges what is not covered, and `--entries` shows where a pair is declared rather than whether
-anything uses it. `--prune` removes exactly the rows it just listed, so `--kind`, `--filter` and
-the page apply to the removal as well. A page cut by `--limit` is called out, because removing
-"everything" while looking at fifty rows of three thousand is not what the flag looks like it
-does.
+Both cases produce warnings when the entry is written. A strict project check detects an error
+when the project declares its own type under a built-in type name and the entry assigns it a
+different spelling. A qualified key
+(`<Owner>.<Name>`) applies within one namespace, does not affect type expressions and is not
+checked for this match. `translate_set` returns these details in `collisions` and
+`platform_names`; `--set` prints them to stderr alongside the number of entries written.
 
-`--stale` is the same flag under the name the question is usually asked by. `--filter` is what
-makes the answer a worklist: after a deletion the question is about the names of that one
-component, not about the whole history of the project.
+Unlike `--gaps`, which lists missing translations, `--unused` lists dictionary entries no longer
+used by the project, such as names and comment
+lines from deleted code. `--strict` checks untranslated locations; `--entries` shows where entries
+are declared without checking their use. `--prune` removes the listed entries, subject to `--kind`,
+`--filter` and the selected page. When `--limit` truncates the list, the report indicates this:
+only entries on the displayed page are removed.
 
-`--since` answers the question a task asks at its end: what its own change left behind, rather
-than what the dictionary has accumulated over the life of the project. The answer holds the keys
-the project no longer spells anywhere and that occurred nowhere but in the lines that change
-removed. `--prune` beside it removes exactly those. A branch or a commit is read from the fork
-point with HEAD to the working tree, so work not committed yet counts as part of the change. A
-range `A..B` is handed to git as written, which is how a change already merged is examined.
-Measured on a live project: 3297 orphans without a filter, 18 of them the change's own, nine names
-and nine comment lines. One call instead of nineteen calls with `--filter` a name at a time.
+`--stale` is another name for the same mode. Use `--filter` to narrow the list, for example to
+names of a deleted component.
 
-A change is judged from both sides. Its diff of the sources gives the removed lines, and its diff of
-the dictionary files gives the pairs it added or rewrote, and those are candidates of the change as
-well. A comment line written in a branch and reworded in the same branch stands in the diff against
-the base as neither a removed line nor an added one, so the pair of the first wording used to stay
-in the dictionary for good: the strict pass does not judge it, and `--unused --since` answered that
-the change left nothing behind. Each candidate is still judged against the working tree, and only a
-key the project spells nowhere is answered with. The header, and the `since` block of
-`--format json`, size both sides: the files of the change, the dictionary files its diff names and
-the entries on their added lines.
+`--unused --since` limits the list to entries associated with one change. These include keys no longer
+used by the project that appeared only in lines removed by the change, and entries added or
+modified in the dictionary by that change. With `--prune`, the listed entries are removed.
 
-Removed lines come from `git diff`. Comments are read in the old file from Git, so unchanged
-block delimiters still determine which phrase each removed line belongs to. Relative project
-and dictionary paths resolve from the directory where the command was called.
-A git that has not answered within a minute is refused,
-and the refusal names the other way round: the same list without git is narrowed by `--filter`.
+For a branch or commit, the comparison runs from its fork point with HEAD to the working tree,
+so uncommitted changes are included. A range `A..B` is passed to Git as written. In one project,
+the unfiltered list had 3297 unused entries, of which 18 belonged to the change: nine names and
+nine comment lines. One call found them instead of nineteen calls with `--filter` for individual
+names.
+
+Candidates come from removed source lines and dictionary entries added or modified in the diff.
+For example, a comment added and reworded in one branch may not appear as a removed line in the
+diff against its base. The first wording is also found through the dictionary diff. Each
+candidate is checked against the working tree; only keys no longer used there are listed.
+The header and the `since` block in `--format json` count changed files, dictionary files in the
+diff and entries on added lines.
+
+Removed lines come from `git diff`. Comments are parsed in the old Git version of the file, so
+unchanged block delimiters are included. Relative project and dictionary paths resolve from the
+command's working directory. If Git does not respond within one minute, the command fails and
+suggests narrowing the list without Git using `--filter`.
 
 The walk over the sources reports its progress on stderr every 200 files, so a long run is seen to
-move; stdout stays the report, and `--format json` there is one document. In that shape every row of
-`unused` carries `kind`, `key`, `value`, `file`, `line` and `scope` - what a script reads instead of
+move; stdout stays the report, and `--format json` there is one document. In that shape every row of `unused` contains `kind`, `key`, `value`, `file`, `line` and `scope` - what a script reads instead of
 splitting the text rows on double spaces, which a key may hold itself.
 
 The narrowing is an intersection rather than a shortcut: a name the project still spells does not
 become an orphan however generously the diff reads. So an answer with neither a filter nor
-`--since` carries a caveat. The reading is textual, and the list describes the whole accumulated
+`--since` contains a caveat. The reading is textual, and the list describes the whole accumulated
 dictionary, which makes it something to read through rather than to prune wholesale.
 
 The reading is textual, and the direction of its error matters. A name that also occurs in prose
@@ -668,35 +641,30 @@ keys it too. A yaml file goes through the pass's own walk, which tells a present
 template from a name. A module goes through the lexer, which reads a string inside an
 interpolation of another string whole. A name is looked for in the file
 names as well, since a folder and a file go through the same token plane. A qualified key
-(`<Owner>.<Name>`) is judged by both halves: the sources spell them apart, and reading the dotted
+(`<Owner>.<Name>`) is checked by both halves: the sources spell them apart, and reading the dotted
 text as one name would call every such entry an orphan.
 
-`--redundant` is the other mirror of `--gaps`. It shows a word the dictionary spells exactly as
-the platform spells it anyway. Such an entry breaks nothing: the tree comes out word for word the
-same without it. It is worth listing for another reason - it answers in place of the platform
-data, so a hole in that data, or in this engine, stays hidden behind it. One live dictionary
-spelled the languages of its own project descriptor that way, and the half-translated enumeration
-behind that pair was found by a test on an empty dictionary, never by the project. The plain
-report says how many there are without being asked, and `--prune` removes exactly the rows the
-flag just listed.
+`--redundant` lists dictionary entries that repeat spellings from the 1C:Element data. Removing
+such an entry leaves the translated tree unchanged. These entries can hide gaps in the data or
+the engine. For example, entries for project descriptor languages in one dictionary concealed an
+incomplete enumeration translation; a test with an empty dictionary found it. The ordinary report
+counts such entries, and `--prune` removes the listed entries.
 
-Unlike `--unused`, this one runs the full pass, and its verdict rests on evidence rather than on a
-second reading of the tables. An entry is listed only when every place it answered would have come
-out the same without it. So a pair that carries one position of its own is never called redundant;
-that happens with a word the platform spells in one role and not in another. An entry the project
-never uses is not listed here at all, because that is the orphan question and `--unused` answers
-it.
+Unlike `--unused`, this command checks the whole project. An entry is redundant only when every
+use would have the same result without it. An entry needed at any use is retained: for example,
+when the 1C:Element data has a spelling for one role of a word but not another. Entries unused
+by the project are checked by `--unused`.
 
 `--drift` looks at the phrases. A comment line is translated whole, names included, and nothing
 ties a name inside the translation to the tokens section. A token renamed after the phrase was
 written, or a line translated with its own idea of a name, leaves the English comment naming
 something the English tree does not have, and the only trace used to be a `comment/unknown-name`
 finding on the English tree - on the comment, not on the entry to fix. The mode lists every name
-of a phrase key that has a pair, a token of the project or the platform's English spelling, when
-the translation carries none of the pair's spellings and names something unknown in its place:
+of a phrase key that has a pair, a token of the project or the 1C:Element English spelling, when
+the translation contains neither spelling from the pair and names something unknown in its place:
 `ОбщееСклада -> StockCommon, while the translation names WarehouseCommon`, with the file and line
 of the entry. A translation that renders the name in plain words names nothing and is not listed.
-A pair written for a whole tag line is judged by the name after the tag as well, whatever its
+A pair written for a whole tag line is also checked by the name after the tag, whatever its
 shape - a parameter named with one plain word is still the name of the signature - and by the tag
 word: `@возвращает -> @returns, while the translation names @return`.
 The mode reads the dictionary alone, answers in seconds and stays out of `--strict`: the tree
@@ -704,10 +672,10 @@ builds either way, and the gate answers whether it builds. The plain report coun
 in one line that points at `--drift` when there are any (`dictionary_drift` in json); the exit
 code does not change over them.
 
-`--gaps` shows the count, the first places to look at and `suggestion`, the platform's own
+`--gaps` shows the count, the first places to look at and `suggestion`, the 1C:Element
 spelling where it has one. A suggestion stays a hint: a name the project declared may deliberately
-need a different word. An internal platform name, such as the metadata class `CodeAttrMd`, is
-never offered at all.
+need a different word. An internal 1C:Element name, such as the metadata class `CodeAttrMd`, is
+not offered.
 
 **The MCP tools** are the same six, for an agent that fills the dictionary:
 
@@ -719,11 +687,11 @@ never offered at all.
   the answer naming the `dictionary` it read;
   `compact` returns only `{key, kind, count}` per row - the worklist shape that fits an
   answer when the full rows would not;
-- `translate_entries` - what the dictionary already says, with the file and line of each entry, so a
+- `translate_entries` - dictionary entries with the file and line of each entry, so a
   new word stays consistent with the accepted ones; ten rows by default, and `compact` keeps
   `{key, kind, value}` per row - the answer to "how is this term translated" without the places,
   which came to ten kilobytes per call on a common stem;
-- `translate_unused` - the opposite question: what the dictionary still says and the project no
+- `translate_unused` - entries the dictionary contains and the project no
   longer has; `filter` narrows it to the names of one deleted component - or to a list of substrings
   at once, and the answer names in `unmatched` the ones no orphan fell under; `since` narrows it to
   the orphans of one change (a branch, a commit or a range `A..B`): the keys on the lines it removed
@@ -734,30 +702,28 @@ never offered at all.
   with `compact=true` keeping only key, kind, file and line. `counts` covers all filtered candidates; `budget_seconds` (300 by default)
   bounds the walk over the sources - past it the answer is what was read, marked `partial`, with
   `sources` counting the files read of the total and a `note` on how to go on, a list of candidates
-  on which `prune` does nothing; an answer with neither `filter` nor `since` carries a `note` saying
-  what its reading is worth;
-- `translate_redundant` - the entries the platform answers itself, which the pass would spell
-  the same way without them: the workarounds that hide a gap in the platform data or in the
+  on which `prune` does nothing; an answer with neither `filter` nor `since` includes a `note` about the cost of reading it;
+- `translate_redundant` - entries for which the 1C:Element data supplies the same spelling, which the pass would spell
+  the same way without them: the workarounds that hide a gap in the 1C:Element data or in the
   engine. `filter` narrows it, `prune` (off by default) removes every entry `filter` selects,
   whatever the page, and `pruned.keys` counts them; unlike `translate_unused` it runs a full pass, because the verdict rests on the places
   the entry actually answered;
 - `translate_drift` - the phrases whose translation names a name otherwise than its pair (the
-  `--drift` listing): each row gives the name, the spellings of its pair, the names the
-  translation says instead and the file and line of the entry; `filter` narrows it by any of
+  `--drift` listing): each row gives the name, the spellings of its pair, the names used in the translation instead and the file and line of the entry; `filter` narrows it by any of
   those texts;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
 
 Every page states what it left out. `total: 72` beside exactly fifty rows reads as a complete
 answer, and a dictionary built from one such page came out twenty-two entries short. The strict
-pass found them after the merge. So a cut page carries `truncated: true`, `remaining` and a `hint`
+pass found them after the merge. So a partial page contains `truncated: true`, `remaining` and a `hint`
 naming the next `offset`. `limit=0` returns the whole list, and for the gaps there is also
 `--missing`, which writes the entire remainder to a file as a dictionary stub.
 
 A new entry lands in `090-manual.yaml`, or in the file named by `target`, while an entry that
-already exists is corrected where it lives, in every place when the dictionary declares the key
+already exists is corrected in every place where the dictionary declares the key
 more than once. An emptied value removes every copy, and which copy to take out is left to a person,
-the way `--check-duplicates` lists it. The writer never duplicates a key. A key translated
+the way `--check-duplicates` lists it. Writing an entry does not create duplicate keys. A key translated
 differently in two places, two files or twice in one, is refused when the dictionary loads, and
 `--check-duplicates` lists every such key without loading it.
 
@@ -785,8 +751,7 @@ that file itself.
 
 Without `--provider` the engine takes the one service that is configured. With none configured,
 the refusal names the missing environment variables. With more than one configured, the refusal
-lists the services themselves, `google` and `yandex`, and asks for a choice with `--provider`. The
-engine does not guess silently in either case.
+lists the services themselves, `google` and `yandex`, and asks the user to choose one with `--provider`.
 
 **Two services, and they are not interchangeable.**
 
@@ -794,15 +759,15 @@ engine does not guess silently in either case.
   The batch limit is 10,000 characters per request. It understands a glossary, so the project's
   term list travels with the request itself.
 - **Google Translate** - authorizes with one key alone, and its batch limit is 5,000 characters.
-  Its API has no glossary at all, so the term spelling is enforced afterward, when the engine
+  Its API does not support a glossary, so the term spelling is enforced afterward, when the engine
   builds a name out of the returned prose.
 
-Whatever either service allows, one request carries at most 100 texts. That is the engine's own
+Whatever either service allows, one request contains at most 100 texts. That is the engine's own
 conservative bound. A batch turned away for its size costs exactly as much as one that is
 accepted, and the character sum alone would let six hundred one-word names ride in a single
 call.
 
-**Keys live in the environment, never on a command line or in a setting.** Three variables,
+**Keys are stored in the environment, never on a command line or in a setting.** Three variables,
 named after the service each belongs to:
 
 - `XBSL_TRANSLATE_YANDEX_KEY`, `XBSL_TRANSLATE_YANDEX_FOLDER` - the Yandex key and folder, both
@@ -831,17 +796,16 @@ a translation plan and it does not count toward coverage. It feeds two things: t
 sent with the request, which only Yandex takes, and the spelling used when a name is built. The
 second half works on the answer. Building an identifier, the engine matches every English word the
 service returned against the term list, ignoring case, and puts the dictionary's spelling in its
-place wherever the word stands in the phrase. Russian word forms are not analyzed at all. A term
+place wherever the word stands in the phrase. Russian word forms are not analyzed. A term
 the service answered in another English word, a plural or a synonym, is not recognized and stays
-as it came. Terms do not touch comment lines (`phrases`) at all: a comment stays exactly what the
+as it came. Terms do not affect comment lines (`phrases`): a comment stays exactly what the
 service answered.
 
 **The engine builds the names, not the service, and it builds them by fixed rules.** The service
 answers in prose, such as "Site address", while the `tokens` plan needs an identifier. The engine
 drops stop words (a, the, of...), substitutes a term's spelling where one is known, then
 title-cases and glues the rest. A name already taken by another dictionary key is refused with a
-named reason, and so is prose that yields no identifier at all. The engine never guesses and never
-overwrites.
+named reason, and so is text that yields no identifier. Existing entries are not overwritten.
 
 **Literals never reach the network.** `--suggest` sends the service only `tokens` and `phrases`
 gaps, meaning whole names and whole comment lines. A string literal is filled separately, and only
@@ -850,7 +814,7 @@ all.
 
 **What is sent.** The service sees only the gap's own text: a name as the project wrote it, or a
 whole comment line. It never sees a file path, the code around it, or the rest of the project.
-Without a key the command sends no request at all, to either service. It refuses immediately and
+Without a key the command sends no request to either service. It refuses immediately and
 names the variable that is missing.
 
 The report prints the same way `--set` does. `cached` is how many answers came from the cache,
@@ -859,9 +823,7 @@ with its reason.
 
 In the editor the same three numbers stay in the panel's own summary line until the next run.
 Before, they lived only in a status-bar message that closes itself in a few seconds. A hover on
-that line names each refusal's reason. When there was nothing left to ask, the line says so in
-words instead of three zeroes, and when every offer came from a local literal match without a
-single request, it says that too.
+that line names each refusal's reason. When there is nothing left to request, the line displays a message instead of three zeroes. It also indicates when every suggestion came from a local literal match without a service request.
 
 ### Dynamic-list reference expressions
 

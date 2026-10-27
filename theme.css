@@ -100,3 +100,8 @@
 .prose td:last-child :not(pre) > code {
   overflow-wrap: anywhere;
 }
+
+/* Wrap long identifiers in prose without changing preformatted examples. */
+article :not(pre) > code {
+  overflow-wrap: anywhere;
+}

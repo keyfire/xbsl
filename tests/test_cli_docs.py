@@ -209,3 +209,19 @@ def test_committed_pages_are_current(generator):
     for fname, text in generator.generate().items():
         committed = (DOCS / fname).read_text(encoding="utf-8")
         assert committed == text, f"{fname} is stale: rerun python scripts/gen-cli-docs.py"
+
+
+def test_russian_reference_normalizes_prose_and_preserves_literals(generator):
+    help_text = (
+        "usage: xbsl --example Ёлка\n\n"
+        "Команда берёт `Ёлка`, 'Ёж' и \"ёж\".\n\n"
+        "options:\n"
+        "  --example  Ищёт https://example.com/ёлка и `ещё`\n"
+    )
+    ru = generator.render(help_text, {**generator.TEXT["ru"], "without_yo": True})
+    en = generator.render(help_text, generator.TEXT["en"])
+    assert "Команда берет `Ёлка`, 'Ёж' и \"ёж\"." in ru
+    assert "Ищет https://example.com/ёлка и `ещё`" in ru
+    assert "usage: xbsl --example Ёлка" in ru
+    assert "Команда берёт `Ёлка`" in en
+    assert generator.esc_text('Флаг "--select".', without_yo=True) == 'Флаг "`--select`".'

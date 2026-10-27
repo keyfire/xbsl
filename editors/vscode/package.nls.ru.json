@@ -181,7 +181,7 @@
   "attach.stopOnEntry": "Останавливаться на первой строке каждого потока. На живом веб-приложении шумно – паузится каждый серверный вызов; предпочитайте точки останова.",
   "attach.workspace": "Корень исходников: каталог, содержащий <Поставщик>/<Имя>/Проект.yaml. Пусто – определяется автоматически от открытой папки.",
   "attach.envFile": "Путь к .env с реквизитами Console API (elemctl --env-file). Пусто – .env корня исходников.",
-  "config.debug.adapterPath": "Каталог debug-адаптера платформы из вашего дистрибутива 1С:Элемент. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#отладка)",
+  "config.debug.adapterPath": "Каталог адаптера отладки из дистрибутива 1С:Элемент. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#отладка)",
   "config.debug.javaPath": "Путь к исполняемому файлу Java (JDK 17+). По умолчанию – `java` из PATH. Пример: `C:/Program Files/Java/jdk-21/bin/java.exe`.",
   "config.debug.openApplicationOnStart": "Открывать отлаживаемое приложение в браузере при старте сессии (с параметрами debug-сессии).",
   "snippet.attach.label": "1С:Элемент: отладка приложения (attach)",

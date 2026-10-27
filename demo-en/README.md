@@ -16,16 +16,15 @@ Exactly such a project compiles, and `elemctl` (0.27.0+) builds it - both spelli
 service file names are resolved there too.
 
 Enumeration values are English here as well (`Banner`, `Single`, `Double`, `Main`) - the
-compiler accepts them. The generated data does not carry those pairs yet (they live inside
-the distribution), so the linter deliberately does not judge an ASCII value
-of such a property: silence beats a false error on legal code.
+compiler accepts them. Generated data includes English value pairs from the distribution
+when available. If the English values for a property are incomplete, `yaml/unknown-enum-value`
+leaves ASCII values of that property unchecked to avoid false errors.
 
 The members of the form's base type are English here as well - a built-in command is a
 PROPERTY of the form (`WriteAndClose`, of type `Command`), and running it is
-`WriteAndClose.Execute()`. This paragraph used to claim the opposite and name
-`ВыполнитьЗаписатьИЗакрыть` as a member with no English spelling; it is not a member at all -
-the compiler answers `Unknown method` to that name in either language, and what carried it
-was a handler method of the author's own, declared in the form module.
+`WriteAndClose.Execute()`. `ВыполнитьЗаписатьИЗакрыть` is not a built-in member: the
+compiler reports `Unknown method` for that name in either language. The name may be used
+for a handler declared in the form module.
 
 The documentation shipped with the platform is Russian only, so the docs panel and hovers stay
 Russian whatever the editor's display language is.

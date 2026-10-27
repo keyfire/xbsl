@@ -1,12 +1,14 @@
 ---
-title: "Platform data"
-description: "The generated datasets behind the checks: versions, the documentation index, and the diff between two platform releases."
+title: "1C:Element data"
+description: "The generated datasets behind the checks: versions, the documentation index, and the diff between two 1C:Element releases."
 sidebar:
-  label: Platform data
+  label: 1C:Element data
   order: 11
 ---
 
-The semantic rules, the completion and the documentation panel all read data extracted from a distribution. This page is about that data: what else can be built from it and how versions are kept apart.
+1C:Element data is used by semantic rules, completion and the documentation panel. It is
+extracted from a 1C:Element distribution. This page describes the datasets, documentation search
+and comparison of 1C:Element versions.
 
 ## Generic variance and base arguments
 
@@ -41,8 +43,7 @@ python tools/extract_docs.py --dist "$ELEMENT_DIST"
 plus the pure `sections` and `summarize` over a page's HTML. With no database the search is simply
 empty. `for_symbol` never answers with a page of the property references or of the glossary: their
 titles repeat the names of types, members and variables, so search and the tree reach those pages
-instead. The MCP tools run on this API, and later the reference panel of the VS Code extension will
-too.
+instead. The MCP tools and the VS Code extension documentation panel use this API.
 
 ## Retired interface components
 
@@ -66,8 +67,8 @@ components and containers; it does not assume that the active project's mode per
 ## Enumeration values of the metamodel
 
 `metamodel.json` lists the values of every enumeration its properties are typed by: `enums` keeps
-the Russian values in the order the platform declares them, and `enum_items` keeps a record of
-each value - an item of the enumeration, as the platform calls it.
+the Russian values in the order declared by the metamodel, and `enum_items` keeps a record of
+each value - an item of the enumeration, as it is called in 1C:Element.
 
 ```json
 "enum_items": {
@@ -83,19 +84,19 @@ importance of a favorite. `translate` and the properties panel of an English pro
 by the record of its own enumeration.
 
 `since` is the compatibility mode the value appeared in, `until` the last mode that still has it;
-a value with neither is there in every mode. The modes come from the compiled classes of the
-platform and from its table of languages, since the model files date no value. The properties
+a value with neither is there in every mode. The modes come from the compiled classes of
+1C:Element and from its table of languages, since the model files date no value. The properties
 panel offers only the values the mode of the project allows, and a value the file already holds
 stays shown whatever its mode. MCP `metadata_schema` returns the limits in `enum_modes`.
 
-Data extracted before the section appeared is read as it was: an enumeration of the model is
-matched into the tables of the interface by its values, the flat table of pairs answers after
-them, and no value is limited by a mode. That match is a guess, and data with the records never
-makes it. Re-extract the metamodel to get the records.
+Data extracted before the section appeared remains supported. A model enumeration is matched
+against interface tables by its values; if the spelling is unresolved, the flat table of pairs is
+used. Values are not limited by compatibility mode. The match is approximate and is not used for
+data with enumeration records. Re-extract the metamodel to get the records.
 
 ## Element versions
 
-The data is versioned by platform version:
+The data is versioned by 1C:Element version:
 
 ```
 xbsl/data/element/
@@ -112,7 +113,7 @@ A combined set that a data package may build from several versions is not produc
 `xbsl extract`. If the package has one, rebuild it after the versions it is based on are
 regenerated: otherwise it keeps the data of the previous run.
 
-`xbsl data-diff [old] [new]` shows what changed in the platform between two data versions. With
+`xbsl data-diff [old] [new]` shows what changed in 1C:Element between two data versions. With
 no arguments it compares the default version against the closest older one. The report covers
 every file of the version: the stdlib catalog (types and members, and the rest of it too – module
 handlers, signatures, availability, constructors, type parameters, deprecations, retired

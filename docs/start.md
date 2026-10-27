@@ -6,17 +6,15 @@ sidebar:
   order: 3
 ---
 
-What it takes to get the linter answering on your sources: the package, the language data generated from your own distribution, and the language of the output.
+To check sources, install XBSL, generate the language data from a 1C:Element distribution and,
+if needed, select the output language.
 
 ## How the pieces fit
 
-One engine, reached three ways. An editor keeps a long-living server open. An agent calls the same
-operations as MCP tools. A terminal runs the CLI. All three read and write the same sources on
-disk.
+The engine is available through the CLI, an LSP server for editors and an MCP server for agents.
+All three interfaces work with the sources on disk.
 
-![The whole path: the installation sources on top - Open VSX with the extension, PyPI with the engine and elemctl, the platform distribution that hands the reference and the types to the engine and the debug adapter to elemctl; below, the editor and the engine read the project sources while elemctl carries the deploy and the debugging to the platform stand](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/install-to-debug.svg)
-
-The rest of this page is about getting there: the package, the data, the language of the output.
+![The whole path: the installation sources on top - Open VSX with the extension, PyPI with the engine and elemctl, the 1C:Element distribution that hands the reference and the types to the engine and the debug adapter to elemctl; below, the editor and the engine read the project sources while elemctl carries the deploy and the debugging to the 1C:Element stand](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/install-to-debug.svg)
 
 ## Installation details
 
@@ -43,19 +41,19 @@ one. Without `--version` the command reads both of them and also asks for the pa
 version, which PyPI serves as soon as the release is out. When the sources disagree, the
 command prints what each of them said. It never replaces an installation with an older release.
 
-The lexer and the parser are the hot modules, and mypyc can compile them into C extensions. Set
+The lexer and parser can be compiled into C extensions using mypyc. Set
 `XBSL_MYPYC=1` at build time; you need mypy and a C compiler for that, which means MSVC Build
 Tools on Windows, Xcode CLT on macOS, gcc on Linux. Users never need a compiler. CI builds the
 native wheels (`native-wheels.yml`), and where no wheel matches, the package runs as plain
-Python. Nothing is lost but speed.
+Python, with the same functionality at a lower speed.
 
 ## Language data
 
-The linter judges by the language tables (bilingual keywords, operators), an stdlib type catalog
-and the configuration metamodel with the properties of each element. XBSL is built on Eclipse
-Xtext and ANTLR, and all of that comes out of **your** 1C:Element distribution: the
-`InternalBsl.g` grammar, the documentation and the `.xcore` metamodel. None of it is bundled in
-this repository, so generate it locally:
+The linter uses language tables with bilingual keywords and operators, the stdlib type catalog
+and the configuration metamodel with element properties. The data is extracted from the
+1C:Element distribution: the `InternalBsl.g` grammar, documentation and `.xcore` metamodel.
+The XBSL language is built on Eclipse Xtext and ANTLR. The data is not bundled with the
+repository, so generate it locally:
 
 ```sh
 xbsl extract --dist "<path to the 1C:Element distribution>"      # the whole dataset in one go
@@ -65,7 +63,7 @@ xbsl extract --dist ... --skip docs                              # docs builds a
 
 The command runs the six extractors in dependency order: uischema reads what the docs step
 produced. From a repository clone the same entry points are `python tools/extract.py` and the
-individual `tools/extract_<step>.py`. The extractors detect the platform version themselves and
+individual `tools/extract_<step>.py`. The extractors detect the 1C:Element version themselves and
 place the data under `xbsl/data/element/<version>/`, a folder listed in `.gitignore`. Without the
 data the linter and the tests will tell you to generate it. To write the data elsewhere, pass
 `--data-dir` or set `XBSL_DATA_DIR` – for instance into a private package that ships it, see
