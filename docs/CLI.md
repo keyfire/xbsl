@@ -8,11 +8,11 @@ sidebar:
 
 <!-- Собрано из вывода `xbsl --help` скриптом scripts/gen-cli-docs.py. Не редактировать вручную. -->
 
-This reference is generated from the tool itself – the same text `xbsl --help` prints, gathered on one page.
+This reference lists commands and options from the help for `xbsl` and its subcommands.
 
-With no command `xbsl` checks the paths you give it: that is the default mode and its options are in the first block. The other commands address the rest of the toolkit.
+Without a subcommand, `xbsl` checks the specified paths. Its options are listed in the first section; the remaining sections describe the subcommands.
 
-The output language follows `--lang`, the `XBSL_LANG` variable, or the system locale.
+The output language is selected by `--lang`, the `XBSL_LANG` variable or the system locale.
 
 ## No command: checking sources
 

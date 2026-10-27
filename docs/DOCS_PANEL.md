@@ -1,15 +1,14 @@
 ---
 title: "Documentation panel"
-description: "The 1C:Element help inside the editor: the contents tree, full-text search, the page for the symbol under the cursor and the jumps from the designer - all built from your own platform distribution."
+description: "The 1C:Element help inside the editor: the contents tree, full-text search, the page for the symbol under the cursor and the jumps from the designer - all built from your own 1C:Element distribution."
 sidebar:
   label: Documentation panel
   order: 9
 ---
 
-The extension shows the platform help **inside the editor**, in its own
-**Documentation (1C:Element)** container in the activity bar. It is the same reference as on the
-documentation site, only built from **your own 1C:Element distribution**. So it matches the
-platform version you actually run, and it works offline.
+The extension's documentation panel provides 1C:Element help in the editor. The
+**Documentation (1C:Element)** container is on the activity bar. The reference is built from
+the 1C:Element distribution, matches its version and is available offline.
 
 ## What is inside
 
@@ -23,13 +22,13 @@ platform version you actually run, and it works offline.
   It carries the article's code, tables and images, a **Copy** button on samples, and a
   **Primary source** link to the same page on the site. Internal links open other pages in the
   same tab, and the "Contents" tree follows the page you open.
-- **Search** sits behind the button in the tree header and behind the *XBSL: search the
-  documentation* command. It is full-text across the whole reference and both guides, and
-  picking a hit opens the page.
+- **Search** is available from the tree header and the *XBSL: search the documentation*
+  command. Full-text search covers the reference and both guides. Selecting a result opens
+  its page.
 
 ## How you get here
 
-One panel answers "what is this thing" for the whole extension:
+The panel can be opened from the following parts of the extension:
 
 | From | What happens |
 | --- | --- |
@@ -39,27 +38,23 @@ One panel answers "what is this thing" for the whole extension:
 | The "Contents" tree and search | plain navigation through the reference |
 
 A member is documented where it is declared. `Array.Size` opens the page of the ancestor that
-declares it; the heir's page says nothing about it. When several unrelated types declare the same
+declares it; the inherited member is not repeated on the descendant's page. When several unrelated types declare the same
 name, those types are offered as the choice, each with that member's block as the line under it.
 For everything else with no page of its own, the candidates are **ranked by the receiver before
 the dot**: `ScheduledJob.Configure` prefers the scheduled-job pages over a guide topic of the same
 name.
 
-A name the project declares is never explained by a platform member of the same spelling. The
-project and the platform share a lot of words: a module of your own has a `Write` as readily as
-the platform does. The main hover answers such a name with the project's own card - the method,
-its signature, the file it lives in. The documentation block used to be added under that card, so
-the reader got a platform member with no connection to the method in front of him. The project
-index itself keeps that out. There is no second list of what counts as a project name: whatever
-the hover answers with - an object, a method of the module, a component of the form, a tabular
-section, a value of an enumeration - is the project's answer, and the block stays out of it. The
-panel still offers a search over that word. The word may genuinely have a page; that page is
-simply not the answer to "what is this name here".
+For a project name, the hover shows the project's own card, such as a method, its signature and file. The
+project index identifies objects, module methods, form components, tabular sections and
+enumeration values, so documentation for a built-in member of the same name is not added to the
+card. For example, documentation for a built-in `Write` method is not substituted
+for a project method with the same name. The panel still offers a documentation
+search for that name.
 
 ## What you need
 
-- **LSP mode** (`pip install "xbsl[lsp]"`): the server holds the documentation database, and the
-  extension only asks and displays.
+- **LSP mode** (`pip install "xbsl[lsp]"`): the server stores the documentation database, and the
+  extension requests and displays its contents.
 - **The documentation dataset** built from your 1C:Element distribution - see
   [Language data](/start#language-data).
 
@@ -75,7 +70,7 @@ The same reference is available outside the editor:
   its own, so it answers with its own block of the type's page. Both page tools can also answer
   briefly (`brief` gives the summary and the section names) or with one section (`section`), for
   when the whole article is more than the question needs. This is how an AI agent verifies the
-  platform API without going online.
+  1C:Element API without going online.
 - **LSP** - the `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`,
   `xbsl/docsForSymbol` and `xbsl/hoverDoc` requests. Any LSP-capable editor can build its own
   panel on top of them. The last two answer a member the way `docs_symbol` does: the page of the

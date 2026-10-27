@@ -34,16 +34,13 @@ Reload the window after changing the setting, and the status bar reports the clo
 version. To go back to the installed package, remove the setting and reload again. The
 interpreter needs the `[lsp]` and `[morph]` extras.
 
-CLI subcommands run differently from the clone. `python -m xbsl` parses the check mode only: it
-takes a subcommand for a path and lints 0 files. Write
-`python -c "from xbsl.cli import main; main()" list-rules` instead.
+The CLI supports both checking and subcommands from the clone. For example,
+`python -m xbsl data-diff --help` shows the data comparison command help.
 
 ### Which xbsl is actually running
 
-`python -m xbsl` from the clone puts the working directory first on `sys.path`, so the sources
-silently take over from an installed wheel. A probe then passes or fails depending on where it
-was started, and the defect looks intermittent. Print where the module came from instead of
-assuming it:
+`python -m xbsl` from the clone puts the working directory first on `sys.path`, so Python loads
+the clone instead of an installed package. To check the module path, run:
 
 ```sh
 python -c "import xbsl.lexer as L; print(L.__file__)"

@@ -6,7 +6,8 @@ sidebar:
   order: 10
 ---
 
-One engine, several ways to reach it: a long-living server for an editor, a tool surface for an agent, a page in a browser. There is also a way to extend all of them at once.
+The XBSL engine is available through an LSP server for editors, an MCP server for agents and
+a local web panel. Plugins add rules, data and diagnostic severities to these interfaces.
 
 ## LSP server
 
@@ -24,11 +25,11 @@ outside the root are not checked.
 The whole-project check reads only the root and the dictionary. Any other open file, such as a module
 outside the root, keeps the findings of its own check until you close it.
 
-The server lives as long as the editor window, so the code and the data on disk can change under
-it: `self-update`, a `git pull` of an editable checkout, a plugin upgrade, a reinstall that
-rewrites the platform data. It keeps checking with what it loaded at start, and its findings then
+The server runs while the editor window is open. During that time, code and data on disk can
+change: `self-update`, a `git pull` of an editable checkout, a plugin upgrade, a reinstall that
+rewrites the 1C:Element data. It keeps checking with what it loaded at start, and its findings then
 differ from the CLI and CI. So the server compares the engine version, the installed plugins, its
-code files and the platform data files it has read with the state at start, and when one of them
+code files and the 1C:Element data files it has read with the state at start, and when one of them
 changed it shows a warning once per change and asks for a restart (in VS Code, the command
 "XBSL: Restart the linter"). The checks go on, and the server does not restart on its own.
 
@@ -53,7 +54,7 @@ publication. Failure or cancellation ends progress without reporting full comple
 | Group | Requests |
 |---|---|
 | Diagnostics and hints | `xbsl/relint`, `xbsl/reindexProject`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
-| Platform documentation | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
+| 1C:Element documentation | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
 | Schemas and vocabularies | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
 | Metadata scaffolding | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaDeleteObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaResourceReferences`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
 | Forms | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
@@ -78,8 +79,7 @@ claude mcp add xbsl -- xbsl-mcp
 Every writing `meta_*` tool applies the changes and returns the lint of the written files in the
 same response: creation and validation in one round trip. The lint is short: the number of
 files and findings, and up to ten findings one line each. `lint_paths` on the written files
-gives the whole report. The core and the CLI do not need `mcp`
-at all; it lives only in the `[mcp]` extra.
+gives the whole report. The core and CLI do not require `mcp`; it is included in the `[mcp]` extra.
 
 **When the client says the transport closed.** The server keeps a short journal in the user's
 local state folder: when it started, how it ended and what stopped it. `xbsl self-update
@@ -110,8 +110,8 @@ says the same in its own report. The server does not restart or exit on its own 
 [supervisor](#a-supervisor-that-replaces-the-server) does that for it), and `xbsl mcp-log` shows
 the first time it noticed each change.
 
-**When the platform data changed under a running server.** A few modules take constants from the
-platform's term pairs while the server imports them, and a reset of the caches does not rebuild
+**When the 1C:Element data changed under a running server.** A few modules take constants from the
+1C:Element term pairs while the server imports them, and a reset of the caches does not rebuild
 those. A server started a moment before a reinstall wrote new data files went on answering from the
 old pairs, while the CLI read the new ones. So the server notes the size and the modification time
 of every data file it reads, and before every call compares them with the disk. The check costs one
@@ -164,13 +164,49 @@ yours.
 
 | Tool | What it does |
 |---|---|
-| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root, as_ci, as_ci_job, compact, fix, as_ci_full, compare, list_info)` | check files and directories on disk (relative paths – against `root`, the summary names it); paths of several project roots – two worktrees of one project are two – are never checked as one project: each root is checked the way a call of its own would check it, with its own project context, its own baseline and, with `as_ci`, the CI job of its own checkout, and the answer counts them all while `summary.projects` holds a record per root – `project`, its own counts, and its baseline, CI-job and fix keys; the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too; the stale entries are named in `summary.baseline_stale_entries`, not merely counted); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps; `as_ci` takes the rule set and the baseline from the project's CI job (`.gitlab-ci.yml` or a GitHub workflow next to the project), so a preflight judges what the job judges and the summary carries `as_ci` – the file and the job, the include the command stands in, the root of the checkout, the set as data (`select`, `ignore`, `enable`, `baseline`) and as one sentence (`flags`), the other jobs that run the linter and the includes left unread; the CLI `--format json` answers with the same record; `as_ci_job` names which of them to take - a pipeline that checks a second tree (a translation) runs the linter twice, by two different sets; the summary counts the findings by rule, by file and by severity (`by_rule`, `by_file`, `by_severity`), and `compact` narrows the answer - the summary stays, with its baseline and CI-job records, `errors` holds the full records of the error-level findings, and up to 10 findings (`report.COMPACT_FINDINGS_LIMIT`) `findings` lists them one line each (`path:line rule – message`); past 10 `findings` is left out and `findings_hint` says how many there are and how to read them, because the text of every finding is what a full answer costs: several hundred characters each when the question was only whether the tree is clean. The info-level findings are counted, not listed, and do not count towards the 10: `info_hint` gives their number and rules, `list_info=true` lists them. `compact=true` also omits `summary.by_file`, and narrows `summary.as_ci` to one line, `brief`: the file relative to the checkout, the job, the flags with a long list counted (`--enable ×10`), the other jobs while none was named, and the includes left unread. `as_ci_full=true` keeps the whole CI-job record, and `compact=false` gives the complete file map as well. Whatever the run found, a compact answer stays within 12,000 characters of JSON (`report.COMPACT_ANSWER_LIMIT`): past that the lists that grow with the run are cut from their end – the stale and reworded baseline entries first, then `findings`, the `errors` records, the records of the project roots and `by_rule` – `truncated` names every list cut with `{shown, total}`, and `truncated_hint` says how to read the whole answer. The counts are never cut. `fix=true` applies available edits before returning the remaining findings; the default is read-only. Accepted baseline occurrences stay protected across passes, and the baseline file stays unchanged. `summary.fixed` counts applied edits and `summary.files_changed` counts changed files. `compare` names a file that keeps the run for the next call, the same file the CLI `--compare` uses. The first call saves the run and answers `compare: {file, compared: false}`. Every later call compares the run with the saved one, writes it over the old one and answers `{summary, compare}` in place of the findings. `appeared` and `disappeared` count the changed findings, `rules` holds a row per changed rule (`rule`, `files`, `findings`, `appeared`, `disappeared`), `findings` lists the changed findings as records (`path`, `line`, `col`, `rule`, `message`), and `not_compared` names the paths and rules that only one of the two runs checked. Paths are matched by the folder they name, then by spelling, so runs of one folder by a relative and an absolute path compare with each other. With `compact`, more than 10 changes give way to `findings_hint`, and the whole list stays in the file under `changes` until the next call. |
+| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root, as_ci, as_ci_job, compact, fix, as_ci_full, compare, list_info)` | Check files and directories on disk. Details follow below. |
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go; paths of several project roots are checked each on its own, and roots with baselines of their own (two worktrees) are pruned one call each – a call over them is refused and names the files |
 | `list_rules(select, ignore, filter)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry, and `filter` narrows further: a word that IS a group (the part of an id before `/`) lists that group alone, while any other word is looked for as an id substring or as a word of the title or the description – every i18n text registered under the rule's id (the title and the message templates its diagnostics are built from), in either language, plus its English docstring; `docs/RULES.md` is not read, since it ships with neither the sdist nor the wheel. Matching is case-insensitive. A `filter` that matches nothing answers `{error, near_groups}` – the groups closest to it by spelling – instead of an empty list |
-| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file. `engine_on_disk` and `plugins_on_disk` say what is installed now, and `stale` appears when that differs from what the server loaded or when a platform data file it read changed on disk (reason `data`) |
+| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file. `engine_on_disk` and `plugins_on_disk` say what is installed now, and `stale` appears when that differs from what the server loaded or when a 1C:Element data file it read changed on disk (reason `data`) |
 
-**Platform reference and schemas**
+**`lint_paths` parameters and response**
+
+`lint_paths` checks files and directories on disk. Relative paths are resolved against `root`,
+which is named in the summary. Paths belonging to different project roots, including two
+worktrees of the same project, are checked separately. Each root uses its own project context,
+baseline and, with `as_ci`, CI job. The response combines the counts; `summary.projects` gives
+each root's `project`, counts, baseline, CI-job and fix keys.
+
+The project's `.xbsllint-baseline` applies automatically, as in the CLI. `summary.baselined`
+counts suppressed findings; `no_baseline` includes them in the report. Stale entries are listed
+in `summary.baseline_stale_entries`. `enable` adds rules that are off by default to the default
+set, for example to check translation gaps.
+
+`as_ci` takes the rule set and baseline from the project's CI job (`.gitlab-ci.yml` or a GitHub
+workflow next to the project). `summary.as_ci` identifies the file, job, include containing the
+command, checkout root, settings (`select`, `ignore`, `enable`, `baseline`), a `flags` sentence,
+other jobs running the linter and unread includes. CLI output with `--format json` includes the
+same record. Use `as_ci_job` to choose a job when a pipeline runs different checks, for example
+on the project and its translation.
+
+The summary counts findings by rule, file and severity (`by_rule`, `by_file`, `by_severity`).
+With `compact`, it remains available with baseline and CI-job records, `errors` contains full
+error-level records, and `findings` lists up to 10 findings (`report.COMPACT_FINDINGS_LIMIT`),
+one line each (`path:line rule – message`). Above that limit, `findings` is omitted and
+`findings_hint` gives the count and explains how to read the findings.
+
+The info-level findings are counted, not listed, and do not count towards the 10: `info_hint` gives their number and rules, `list_info=true` lists them.
+
+`compact=true` also omits `summary.by_file`, and narrows `summary.as_ci` to one line, `brief`: the file relative to the checkout, the job, the flags with a long list counted (`--enable ×10`), the other jobs while none was named, and the includes left unread. `as_ci_full=true` keeps the whole CI-job record, and `compact=false` gives the complete file map as well.
+
+Whatever the run found, a compact answer stays within 12,000 characters of JSON (`report.COMPACT_ANSWER_LIMIT`): past that the lists that grow with the run are cut from their end – the stale and reworded baseline entries first, then `findings`, the `errors` records, the records of the project roots and `by_rule` – `truncated` names every list cut with `{shown, total}`, and `truncated_hint` says how to read the whole answer. The counts are never cut.
+
+`fix=true` applies available edits before returning the remaining findings; the default is read-only. Accepted baseline occurrences stay protected across passes, and the baseline file stays unchanged. `summary.fixed` counts applied edits and `summary.files_changed` counts changed files.
+
+`compare` names a file that keeps the run for the next call, the same file the CLI `--compare` uses. The first call saves the run and answers `compare: {file, compared: false}`. Every later call compares the run with the saved one, writes it over the old one and answers `{summary, compare}` in place of the findings. `appeared` and `disappeared` count the changed findings, `rules` holds a row per changed rule (`rule`, `files`, `findings`, `appeared`, `disappeared`), `findings` lists the changed findings as records (`path`, `line`, `col`, `rule`, `message`), and `not_compared` names the paths and rules that only one of the two runs checked. Paths are matched by the folder they name, then by spelling, so runs of one folder by a relative and an absolute path compare with each other. With `compact`, more than 10 changes give way to `findings_hint`, and the whole list stays in the file under `changes` until the next call.
+
+**1C:Element reference and schemas**
 
 | Tool | What it does |
 |---|---|
@@ -193,8 +229,8 @@ The three `docs_*` tools need the `docs.sqlite` database (see [Documentation sea
 | `translate_unused(root, kind, filter, since, limit, offset, prune, compact, budget_seconds)` | dictionary entries no longer used by the project; `filter` accepts a substring or a list, `since` scopes candidates to one change. Preview lists full rows by default; `compact=true` keeps only key, kind, file and line. `prune=true` removes every key the filters select, whatever the page, with all its declarations, and normally omits the list: `removed` counts occurrences, `pruned.keys` counts pairs, and `pruned.by_kind` / `pruned.by_file` group them. Explicit `compact=false` includes full rows after removal. `counts` covers the whole filtered candidate set, and so does `prune`: pagination shapes only the list. `budget_seconds` (300 by default) bounds scanning; a `partial` answer lists candidates and never removes entries. |
 | `translate_set(root, edits, edits_file, target, comment)` | write entries back: add, correct in place (in every place the key is declared), or remove by emptying a value; `edits_file` is a batch file (the dictionary's own yaml format, read by the dictionary's loader, so a batch dumped with every key in quotes reads too, or the JSON list; a batch with no entries is refused, naming the top-level keys it has), `comment` is the head line a newly created file gets. Every plane is held to the spelling its pass reads: an entry that could not fire comes back in `refused`, and one with a single obvious reading - a phrase whose quote is escaped the literal way - is written by that reading and listed in `normalized` |
 
-All four answer in pages over one engine core, so filling a dictionary of thousands of entries
-never means reading the files.
+The listing tools return pages, so a dictionary with thousands of entries can be explored
+without reading its files directly.
 
 **The project and its objects**
 
@@ -222,7 +258,7 @@ never means reading the files.
 | Tool | What it does |
 |---|---|
 | `meta_add_field(yaml_path, field_kind, name, type, props, names, doc, ...)` | add a section item: attribute, dimension, resource, enumeration value, parameter, field, a property of a contract or of an interface component (a name and a type, no `Id`), tabular section. `doc` is the item's description, written as its documentation comment: the `##` lines at the head of the item, which the development environment reads and keeps; it is refused for a built-in attribute, a localized string key and a batch of several names. `names` adds several items of one kind in one call with the same type and properties, such as the values of an enumeration; the batch is planned whole, and a taken name refuses all of it. A built-in attribute (`Number`, `Date`, `Code`, `Name`, `Owner`) is judged by its own class, so `Length`, `Uniqueness` and the `Autonumbering` block are accepted and `type` may be omitted where the class fixes it; `props` takes a nested block as a dict or a dotted key (`Autonumbering.Prefix`) and a list as a sequence; a block of a class the metamodel does not describe (`Presentation`) is refused as a known limitation; a section the file lacks is created at the end of the file (a component's `Properties` in front of its `Events`, the order the designer writes), and for a register `notes` say so and name the sibling kind that would have placed the item beside the existing fields (a resource where an attribute was asked, and the other way round) |
-| `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | set properties on a section item that already exists; the same value shapes as `meta_add_field`, a nested block replaces the old one whole, and a `Type` is read like its `type`: markup escapes undone, platform names in the language of the file |
+| `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | set properties on a section item that already exists; the same value shapes as `meta_add_field`, a nested block replaces the old one whole, and a `Type` is read like its `type`: markup escapes undone, 1C:Element names in the language of the file |
 | `meta_add_route(yaml_path, routes, template, methods)` | add url templates to an `HttpService` plus the handler stubs |
 | `meta_add_method(module_path, name, params, returns, ...)` | insert a method into an `.xbsl` module without tearing annotation blocks apart |
 | `meta_add_form(root, ..., forms, card_min_width, card_placeholder)` | generate forms for an object and register them in its `Interface` |
@@ -280,7 +316,7 @@ adds, such as `xbsl-mcp-supervisor`, gets its stub only from `pip install --upgr
 The worker decides when it has to go, and the supervisor reads that from its answers:
 
 - a refusal with `stale.ran: false` means the tool did not run: the engine on disk has another
-  version, its code files changed under the same one, or a platform data file the worker read
+  version, its code files changed under the same one, or a 1C:Element data file the worker read
   changed. The supervisor sends the same call to a new worker, and the agent gets the answer of
   the new code and data instead of the refusal. `version_info` is asked again the same way,
   because it only reads. A worker started after one change of the files is replaced after
@@ -343,6 +379,9 @@ myproject = "myproject:data_root"    # a path, or a callable returning one
 myproject = "myproject:severity_overrides"   # {rule id: "error"|"warning"|"info"|"off"}
 ```
 
+
+Plugins using the legacy `xbsllint.rules`, `xbsllint.data` and `xbsllint.severity` entry point
+groups remain supported. The legacy groups are scanned after the new ones.
 
 The severity dict, or a zero-argument callable returning one, raises and lowers the default level
 of any rule, built-in or plugin, for every run in this installation. A project may treat, say,

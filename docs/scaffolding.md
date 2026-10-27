@@ -6,21 +6,21 @@ sidebar:
   order: 6
 ---
 
-Writing yaml by hand means remembering a UUID, the property names of a kind and where a form is registered. The engine does that part, and the same operations are available from the CLI, an editor and an agent.
+The metadata scaffolding tools create project objects, fields, routes and forms. The same
+operations are available through the CLI, an editor and the MCP server.
 
 ## Metadata scaffolding
 
-The toolkit takes over the metadata mechanics: UUIDs, indentation, precise yaml insertions,
-duplicate checks and the compatibility of a section with a kind. The same operations show up in
-three places. In the CLI they are subcommands with JSON output. In MCP they are the `meta_*`
-tools for agents. In LSP they are the custom `xbsl/meta*` requests behind the VS Code metadata
-tree.
+The toolkit creates UUIDs, preserves indentation, makes targeted yaml insertions, and checks for
+duplicates and compatibility between sections and object kinds. CLI subcommands return JSON;
+MCP exposes `meta_*` tools; and LSP provides the `xbsl/meta*` requests used by the VS Code
+metadata tree.
 
 33 kinds of project element can be created: from `Catalog` and `Document` to `VirtualTable`
 paired with its mandatory `.xbql` query, `ScheduledJob`, contracts, rights and commands. Each
-kind carries what the docs make mandatory. That means the platform's own default scope,
-`InSubsystem` - widen it deliberately with `--scope`. It also means a module stub for the handler
-the kind cannot live without, and a note about whatever the generator must not invent for you.
+kind includes the properties required by the documentation. Its default scope is `InSubsystem`;
+use `--scope` to change it. A handler stub is created where required, and notes identify details
+that the developer must supply.
 Kinds whose content is drawn in the designer, `ReportPanel` and `IntegrationProcess`, are
 deliberately absent.
 
@@ -56,8 +56,8 @@ xbsl project-info . --package <package>                # the objects of one pack
 The object kind is taken in either spelling, and `xbsl new-object --help` lists the kinds a
 project can hold. The item kind of `add-field` and `set-field-property` is a word of the tool
 itself: `реквизит`, `табличная-часть`, `строка` and the rest that `xbsl add-field --help` lists.
-Each has an English twin for a project written in English, the platform's own term for the same
-item - `attribute`, `tabular-part`, `string` - and case and hyphens do not matter. The access
+Each has an English spelling from 1C:Element terminology, such as `attribute`, `tabular-part`
+and `string`. Case and hyphens do not matter. The access
 methods and rights of `set-access` are taken in either language too, the way a yaml file of that
 language spells them: `PermitAuthenticated` or its Russian name, `Read` or `Чтение`. The
 annotations and every identifier reach the CLI in the spelling the platform uses for the
@@ -77,10 +77,9 @@ does a processing: its caption belongs to the `Interface` section itself. `--per
 periodic set has a list beside its record, so it is captioned the way an information register
 is: `--presentation` for the list, `--record-presentation` for the record.
 
-A property the kind is born with goes in only where the compatibility mode of the project knows
-it. An access key is born computed (`ManualGrant: False`, with the stub of its handler): a project
-in the newest mode refuses a key that does not choose its flavour, and a mode that predates the
-property gets the key without the line and a note saying why.
+A default property is written only if the project compatibility mode supports it. An access key
+is created as computed (`ManualGrant: False`, with a handler stub). The newest mode requires a
+key kind; a mode that predates the property receives the key without that line and a note.
 
 `project-info` answers narrowly. `--kind`, `--subsystem` and `--package` narrow the list of objects,
 `--brief` leaves the lists out and keeps the counts, and `--project` walks only the named project -
@@ -149,14 +148,11 @@ the image above the caption. The `notes` field reports what landed on the card a
 `--card-placeholder` sets the image shown when the photo is empty.
 
 `set-localization` writes one localized string into every language at once. The text of the
-default language goes into the `LocalizedStrings` element itself, which is where the platform
-keeps it; every other language gets its own `Localization/<Code>/<Name>.yaml`. This was the
-missing half of `add-localization`, which adds a language. A caption used to be typed into the
-element and again into its English twin, the two files drifted apart, and nothing but a pair of
-eyes could compare them. A language named without a translation file is refused: add the language
-first. An existing language the call says nothing about still gets the row, with the default text
-and a note, so no translation is left a key short. A key keeps the section it already lives in,
-and a new one goes to `Rows` unless `--section` says `Templates`.
+default language is written to the `LocalizedStrings` element. Other languages use their own
+`Localization/<Code>/<Name>.yaml` files. Add a language with `add-localization` before naming it
+in a call; a language without a translation file is rejected. A language omitted from the call
+receives the default text and a note. Existing keys remain in their sections. New keys go to
+`Rows` unless `--section` specifies `Templates`.
 
 `--dry-run` here is unlike the rest of the family: a summary by row (key, language, file, the
 text before and after) rather than the whole files, because one key on a two-language project
@@ -202,8 +198,8 @@ shows up in `project-info` under `projects[].libraries`. The vendor, name, versi
 qualified type names of a library come from parsing its archive:
 `elemctl inspect <file.xlib>`.
 
-`set-access` edits `AccessControl.Permissions` of an object in place, and it knows what each kind
-allows. `--default` sets the `Default` right. `--permission Read=PermitEveryone` sets an
+`set-access` edits an object's `AccessControl.Permissions` according to the selected kind's
+constraints. `--default` sets the `Default` right. `--permission Read=PermitEveryone` sets an
 individual one, custom rights of a `PrivilegeOnElement` included. Either language is taken, and
 the file gets its own: an English object is written `Read: PermitEveryone` even when the call
 spoke Russian. `--calc-by` fills
@@ -256,7 +252,7 @@ has to be deleted before pulling.
 `move-object` (MCP `meta_move_object`) moves an object into another folder of its project: a package
 of the subsystem - a folder that does not exist yet becomes one - another package, the subsystem
 root or another subsystem. The object takes its forms, modules, list row and list table along, and a
-SOAP service client its WSDL descriptions. An element of a package lives in the package's own
+SOAP service client its WSDL descriptions. An element of a package belongs to the package's own
 namespace, so the move repairs what reached the object from its old place: a module or a yaml of
 another subsystem gets `import Subsystem::Package` or an `Import` item, the moved files get the
 imports of their old subsystem when the move crosses a subsystem boundary, a qualified name - the
@@ -324,10 +320,10 @@ The builtin set is 51 templates, all in `xbsl/templates_builtin.py`: the control
 declarations (methods with their annotations, structures, enumerations, exception types), queries
 and the applied idioms - walking a `Catalog`, register movements, an `HttpService` handler,
 per-object access permissions, object events, form handlers. Every pattern is parsed by the same
-parser the linter runs (`tests/test_templates.py`), so a template cannot insert code that does
-not compile.
+parser the linter uses (`tests/test_templates.py`). This checks syntax; server-side compilation
+performs additional checks.
 
-A pattern holds edit points and choices. The variables use the `${...}` syntax of 1C:EDT
+A pattern contains edit points and choices. The variables use the `${...}` syntax of 1C:EDT
 templates. The platform gives them no English spelling, the way it does for the metadata
 vocabulary, so the table describes them instead of spelling them out:
 
@@ -338,7 +334,7 @@ vocabulary, so the table describes them instead of spelling them out:
 | metadata name | a dropdown of **this project's** objects of the given kind (`Catalog`, `Enum`, ...), from the index |
 | qualified metadata name | the same, inserted as `<Kind>.<Name>` |
 
-Your own templates live in `.xbsl-templates.json` at the workspace root; the path comes from
+User templates are stored in `.xbsl-templates.json` at the workspace root; the path comes from
 `--file` or from the `xbsl.templates.file` setting. The file extends the builtin set, and a
 template with the same name replaces the builtin one. Only what differs from the builtin set is
 stored, so the next release still reaches you.

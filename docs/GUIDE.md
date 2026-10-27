@@ -1,12 +1,13 @@
 ---
 title: "XBSL user guide"
-description: "The map of the guide: installation, checking, scaffolding, the servers and the platform data."
+description: "The map of the guide: installation, checking, scaffolding, the servers and the 1C:Element data."
 sidebar:
   label: Guide
   order: 2
 ---
 
-The guide is split by task. The [README](https://github.com/keyfire/xbsl/blob/main/README.md) is the short tour. Each page below covers one part of the toolkit in depth.
+This guide covers installation and use of the XBSL tools. For a short overview, see the
+[README](https://github.com/keyfire/xbsl/blob/main/README.md).
 
 | Page | What is there |
 | --- | --- |
@@ -14,11 +15,11 @@ The guide is split by task. The [README](https://github.com/keyfire/xbsl/blob/ma
 | [Checking sources](/linting) | the flags of a run, what the deeper rules rely on, the baseline, CI |
 | [Rules](/RULES) | the full list of checks, with severities and scope |
 | [Metadata scaffolding](/scaffolding) | objects, attributes, routes and forms through the engine; code templates |
-| [Comments in yaml](/yaml-comments) | where a note in an element description survives the visual editor, and the rules that check it |
+| [Comments in yaml](/yaml-comments) | which comments the visual editor retains and which rules check them |
 | [Servers and plugins](/servers) | the LSP server, the MCP server, the web panel, plugins of your own |
-| [Platform data](/platform-data) | the generated datasets, the documentation index, the diff between two versions |
+| [1C:Element data](/platform-data) | the generated datasets, the documentation index, the diff between two versions |
 | [Translating a project](/translation) | rewriting the sources into English spellings: the dictionary, the coverage, the CI check |
 | [Commands](/CLI) | every command and flag, generated from the tool itself |
 | [VS Code extension](/vscode) | the editor built on the same engine: diagnostics, the metadata tree, deploy |
 | [Visual designer](/DESIGNER) | the form panel, the palette, the properties panel |
-| [Documentation panel](/DOCS_PANEL) | the platform help inside the editor: contents, search, the page for a symbol |
+| [Documentation panel](/DOCS_PANEL) | the 1C:Element help inside the editor: contents, search, the page for a symbol |

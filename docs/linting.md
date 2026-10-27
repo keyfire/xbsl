@@ -6,7 +6,8 @@ sidebar:
   order: 4
 ---
 
-The default mode of the tool is checking sources. The full rule list lives on a separate page ([Rules](/RULES)); this one is about driving the run.
+The linter checks project sources. This page describes the command options, rules that use
+1C:Element data, the baseline and CI checks. For the complete list, see [Rules](/RULES).
 
 ## CLI flags
 
@@ -15,12 +16,11 @@ rule id, rule group – the part of the id before `/` – or tier letter), `--fi
 `--baseline`/`--write-baseline`, `--element-version`, `--data-dir`, `--lang`,
 `--format text|json|codeclimate`, `--summary`/`--compare`.
 
-`--fix` repairs the mechanical findings in place, then reports whatever is left. It trims trailing
+`--fix` applies available fixes to the files and reports remaining findings. It trims trailing
 whitespace, corrects typography characters (em dash to en dash, `…` to `...`, curly quotes and
 comment guillemets to straight ones, a character off the keyboard in a comment to its keyboard
 spelling: `→` to `->`) and normalizes mixed newlines to the dominant style. It applies unambiguous
-edits only, and only for rules active in the run, so `--fix --enable typography` also pays down the
-em-dash and guillemets debt. The group holds `typography/en-dash-comment` too, so the same run turns
+edits only, and only for rules active in the run, so `--fix --enable typography` corrects em dashes and guillemets. The group holds `typography/en-dash-comment` too, so the same run turns
 the en dash of a comment into a hyphen; a project that writes the en dash there adds
 `--ignore typography/en-dash-comment`. Anything that needs judgment stays where it is.
 
@@ -62,16 +62,16 @@ the run found, a compact answer stays within 12,000 characters: past that it cut
 grow with the run from their end, the error records among them, keeps every count and names each
 cut in `truncated`.
 
-Paths of several project roots are never checked as one project. A root is the folder holding the
-project descriptor, so two worktrees of one project given in one run are two roots, and so are the
-projects under a folder given as a whole. Loaded as one project, the two worktrees gave a finding for
-every name they share, and the baseline of the first one judged the files of the second. Now each
-root is checked on its own, with its own project around a file asked for alone, the baseline found
-above its files and, with `--as-ci`, the job of its own checkout. The findings of all the roots come
-in one list. The text report adds a line per root under the totals, and the json payload a record
-per root in `summary.projects`: its counts, its baseline and its CI job, which then leave the top of
-the summary. `xbsl baseline add` and the MCP `baseline_prune` change one file, so they refuse paths
-whose roots keep baselines of their own and name the files.
+A project root is the folder containing its
+descriptor. Each root is checked separately, including multiple worktrees of one project and
+projects under a specified folder. The check uses each root's project, the baseline found above
+its files and, with `--as-ci`, the CI job of its own checkout. The same applies to a single file.
+
+Findings from all roots are combined in one list. The text report adds a line for each root.
+In JSON, `summary.projects` contains a record for each root with its counts, baseline and CI
+job; these details are removed from the top-level summary. `xbsl baseline add` and the MCP
+`baseline_prune` modify one file, so they reject paths whose roots use separate baselines and
+report the files involved.
 
 `--summary` prints the counts instead of the findings: a row per rule with the files it reached
 and its findings, and a line of totals below. `--compare FILE` prints the same on its first run
@@ -119,7 +119,7 @@ relative to the current directory. Run it from the repository root and save the 
 ## Rules in depth
 
 **The full list of all 280 rules of the base set** - severity, default state, scope, links to
-platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
+1C:Element documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
 
@@ -190,7 +190,7 @@ CI line. The name of another product mentioned in prose with no system beside it
 shape, which is why the rule is off by default and a project turns it on with
 `--enable comment/unknown-name`.
 
-Several rules repeat warnings of the platform IDE, so those places show up before anyone opens the
+Several rules repeat warnings of the 1C:Element IDE, so those places show up before anyone opens the
 code there, and each rule follows the condition the compiler applies. `code/unused-local` and
 `code/unused-loop-var` resolve names through block scopes the way the compiler binds them. They
 report a `val`, `var` or `use` the method never reads and the variable of a `for X in` loop; a local
@@ -240,14 +240,14 @@ holds the same value, as in `Date{9999-12-31}`, `1h30m` or `True`, and leaves th
 otherwise. `FindType` is never rewritten: the call returns `Type?` while the literal names the type
 itself, so a variable declared from the call would change its type.
 
-Four more warnings of the platform IDE need no type of an expression. `style/boolean-ternary`
+Four more warnings of the 1C:Element IDE need no type of an expression. `style/boolean-ternary`
 reports a ternary with `True` and `False` branches, in a module, a string interpolation or a yaml
 binding; the fix writes the condition or its negation, and the negation follows the platform:
 `not` covers a comparison but not `is`, `and` or `or`, so `X is T` becomes `X is not T`.
 `style/redundant-scope` reports a `scope` that is the only statement of its block and removes it.
 `style/redundant-union-member` drops a union member that repeats another, a second `Undefined` and a
-member that `Object` or a base type of the catalog covers; a generic base covers only with the same
-arguments, because the catalog does not say which type parameters accept a wider one.
+member that `Object` or a base type in the catalog covers. For generic bases, the rule uses
+variance and base-argument formulas from the catalog; unproven relationships remain invariant.
 `code/duplicate-import` reports a repeated `import`, the short and the full name of a namespace
 counted as one, and `yaml/duplicate-import` reads the `Import` section of an element the same way,
 although the IDE does not check it.
@@ -277,7 +277,7 @@ method result whose declared type has no `Null`; a `?` type refuses it too. A la
 only this rule uses so far. A computed column is not judged: the compiler narrows
 `CASE WHEN X IS NULL THEN ... ELSE X END` itself.
 
-`code/deprecated-api` checks calls of deprecated platform methods. It selects overloads using the
+`code/deprecated-api` checks calls of deprecated 1C:Element methods. It selects overloads using the
 project compatibility mode and the number, names and inferred types of arguments, and reports only
 when every matching form is deprecated. Unknown types keep ambiguous calls silent. This requires a
 catalog with extracted deprecation metadata; project-defined deprecated declarations are not
@@ -364,8 +364,8 @@ methods and modules without valid metadata.
 
 ## Baseline: adopt a rule on a legacy codebase
 
-To enable a rule over code that already violates it without drowning in old findings, freeze the
-current findings into a baseline and hold only new code to the rule:
+To enable a rule on existing code, save its current findings in a baseline. Subsequent checks
+report new findings:
 
 ```sh
 xbsl acme/app --enable style --write-baseline baseline.json   # freeze the debt once
@@ -426,8 +426,9 @@ once.
 
 ## Use in CI
 
-`xbsl` exits non-zero only when a run produces an **error-severity** finding, so it works as a
-pipeline gate as it is: warnings and `info` do not fail the build. The one prerequisite is the
+After a completed check, `xbsl` returns exit code 1 for an **error-severity** finding. Warnings
+and `info` do not fail the build. Startup and configuration errors also return a non-zero code.
+The prerequisite is the
 language data (see [Language data](/start#language-data)). Generate it in the job itself - the
 extractors ship with the repository, so check the repo out - or depend on a package that ships the
 data via the `xbsl.data` entry point
@@ -436,9 +437,9 @@ it.
 
 ### Locally - with the set the job runs
 
-A job's rule set is almost never the default one: a project turns its own rules on with
-`--enable` right in the pipeline. A local run knows nothing about them, so you learn the
-difference from a red job, a round trip one push long.
+A CI job can use a rule set different from the default: a project can enable rules with
+`--enable` in its pipeline file. A normal local run does not read those flags, so its results
+may differ.
 
 `--as-ci` settles it. The `--select`, `--ignore` and `--enable` flags and the baseline are taken
 from the `xbsl` command in the pipeline file next to the project: `.gitlab-ci.yml` or a GitHub
@@ -462,8 +463,7 @@ so a run started in a subdirectory opens the same file the job does. How the run
 `--jobs`, `--format`, the paths - stays its own business, because one folder is checked far more
 often than the whole tree.
 
-With no pipeline file, or no `xbsl` command in it, the run refuses with a message. It will not
-quietly check a narrower set, because that silent difference is what cost the red job.
+If the pipeline file or its `xbsl` command is missing, the run exits with an error message.
 
 The name after the flag is the pipeline file, and the optional value is a trap worth knowing.
 `xbsl --as-ci e1c` hands the flag the tree that was meant to be checked, and the run then lints
@@ -602,7 +602,7 @@ cached syntax tree or the source offsets used by fixes.
 project checks. `code/captured-local-write` and `code/unused-return-value` use file facts.
 The latter requires `checked_return_methods` in the extracted standard-library catalog;
 old catalogs remain supported and leave that check silent. Re-extract the standard
-library from the matching platform distribution to enable it.
+library from the matching 1C:Element distribution to enable it.
 
 `code/ambiguous-type` and `yaml/ambiguous-type` judge written type positions against the
 project placement model. They do not infer a type from arbitrary strings or value names,

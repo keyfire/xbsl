@@ -1,15 +1,15 @@
 ---
 title: "Comments in yaml"
-description: "Where a note in an element description survives the visual editor, how to write it and what checks it."
+description: "Which comments the visual editor retains, how to write them and how to check them."
 sidebar:
   label: Comments in yaml
   order: 6.7
 ---
 
-The 1C:Element development environment keeps an element description as a model. When you edit
-the file in the visual editor, it writes the yaml again from that model. The only comments the
-model keeps are documentation ones: `##` lines where the model has a field for a description. A
-plain `#` and `##` lines in the wrong place are lost on the first such edit.
+The 1C:Element development environment stores an element description in a model. When a file is
+edited in the visual editor, the yaml is written again from that model. Documentation comments
+marked `##` are retained where the model has a description field. Plain `#` comments and `##`
+lines in other locations are removed when the file is written.
 
 ## Where a note has a place
 
@@ -22,11 +22,11 @@ plain `#` and `##` lines in the wrong place are lost on the first such edit.
   `UrlTemplates:`, the attributes and the tabular parts of a catalog in `Attributes:` and
   `TabularParts:`.
 
-There is no place on the standard attributes of a catalog, the ones picked by their name (`Code`,
-`Name`), on the items of `Methods:` of a URL template, and on a single property of a node. On an instance of a project or a library component
-in a list a comment does harm: with it the server does not apply the project, because producing
-the metadata of the instance fails. A note about such a node goes into the comment of the group
-it stands in.
+Description fields are unavailable for standard catalog attributes selected by name (`Code`,
+`Name`), items in a URL template's `Methods:`, and individual node properties. A comment on a
+project or library component instance in a list causes an error when building its metadata, so
+the server does not apply the project. Put a note about such a node in the containing group's
+comment.
 
 ## How to write one
 
@@ -64,11 +64,11 @@ In a `.xbsl` module the development environment reads the description above a de
 All three rules are off by default and are turned on with `--enable`. In a project written before
 the visual editor was in the picture they fire on almost every node.
 
-Pasting a fragment places its notes by the same rules. This is what the MCP tool
-`meta_insert_fragment` and the `insert-fragment` operation of `xbsl form-edit` do. A comment above
-the component moves inside the node as `##` lines. A note with no place of its own stays as it
-is, and the answer names it in the notes. Without the Element data the places are unknown: the
-notes stay as pasted, and the answer says so.
+The MCP tool `meta_insert_fragment` and the `insert-fragment` operation of `xbsl form-edit` apply
+the same rules when inserting a fragment. A comment above a component is moved inside the node as
+`##` lines. A note without a description field remains in place and is listed in the response
+notes. Without the Element data, description locations cannot be determined: notes remain as
+inserted and the response reports this.
 
 ## Folding notes that have no place
 
@@ -92,7 +92,7 @@ By default the command only shows the plan and the diff; `--write` writes. A mov
 read two ways is proposed, not applied: the first block of the file above a key outside the head
 (it may describe the element or only that key), the heading of a section, a block in a
 localization file, an item of a list without a name, a block above a list. `--all` applies them
-too. A note at the end of the file is left alone: it has no owner.
+too. A note at the end of the file is left in place because it cannot be assigned to a node unambiguously.
 
 A file is written only when the result passes the audit. The yaml parses to the same data, every
 line of every comment is still there, the comment rules find nothing but the blocks left on

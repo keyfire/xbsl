@@ -6,19 +6,14 @@ sidebar:
   order: 8
 ---
 
-The extension includes a visual designer for 1C:Element interface components
-(`ElementKind: InterfaceComponent` - forms and custom components). The main workplace is the
-**form panel**: the structure tree on the left, the form's data on the right, the form frame
-under them. Next to it live the component palette in the sidebar and the typed properties panel.
-The text editor stays the primary surface, and the designer is a contextual lens over it.
+The extension's visual designer edits 1C:Element interface components
+(`ElementKind: InterfaceComponent`), including forms and custom components. The form panel
+contains a structure tree, form data and a wireframe. The component palette and properties panel
+are separate. The source file remains available in the text editor.
 
-Two things to keep in mind:
-
-- **Every action is a minimal text edit.** The designer never rewrites or reformats the whole
-  file. Comments, key order and formatting survive, and each operation is a single undo step.
-  Opening a form in the designer changes nothing until you act.
-- **The preview is a wireframe, not a render.** Rendering is server-side in the platform, so the
-  local preview shows structure and layout but not pixels.
+Each operation changes only the necessary text and is a single undo step. Comments, key order and
+formatting are preserved. Opening a form in the designer does not change the file. 1C:Element
+renders forms on the server, so the local preview shows their structure and layout as a wireframe.
 
 ## What you need
 
@@ -45,15 +40,14 @@ The remaining panels live in side-bar containers and follow the active editor:
 
 ## The form panel
 
-**Every form gets a panel of its own**, living as a normal editor tab. A second form opens next
-to the first, each panel keeps its own tree, selection and expansion memory, and opening the same
-form again brings its panel forward.
+**Each form opens in a separate panel** as a regular editor tab. A second form opens next
+to the first. Each panel keeps its own tree, selection and expansion state; opening the same form
+again brings its panel forward.
 
-A panel and its open `.yaml` are linked: picking a tab on one side brings the other forward, as
-long as the two sit in different groups. Once they share one group – a tab dragged over, or
-`Ctrl+P` – the link releases and the picked tab stays in front. Otherwise the panel would cover
-the source just brought forward, and there would be no way to reach it at all. Closing the panel
-closes the form's yaml and its module, unless they have unsaved changes.
+A panel is linked to its open `.yaml` file: selecting either tab brings the corresponding tab
+forward in the other group. When both tabs are in the same group, for example after dragging a
+tab or opening it with `Ctrl+P`, the selected tab stays in front. Closing the panel also closes
+the form's yaml and its module, unless they have unsaved changes.
 
 The link itself never adds tabs. While a source sits closed, it stays closed: clicking a field in
 the frame, a row in the structure tree, a row in the data area, or the selection change after an
@@ -75,12 +69,12 @@ shown. The Properties panel stays separate and follows the selection.
 
 ### The module tab
 
-The strip at the bottom of the panel mirrors the platform IDE's bottom tabs. **Form** is the
+The strip at the bottom of the panel mirrors the 1C:Element IDE's bottom tabs. **Form** is the
 panel itself. **Module** opens the form's `.xbsl` (the file next to the yaml) as a regular editor
 tab of the same group: the area switches to the code with the whole editor behind it – completion,
 hovers, diagnostics, go to definition. The tab dims while the form has no module file.
 
-The way back lives on the module's side: the **Open the form** button in the editor title (the
+To return from the module, use the **Open the form** button in the editor title (the
 same spot where a form yaml carries its designer button), the panel's tab itself, or `Ctrl+Tab`.
 
 ### Structure
@@ -120,7 +114,7 @@ The **Data** area binds input components to data. It has two sections: the compo
 
 ### The form frame
 
-The frame shows the structure of the form, not the platform's rendering. It highlights the
+The frame shows the structure of the form, not the 1C:Element rendering. It highlights the
 selected component and follows both the structure selection and the yaml cursor; a
 click on a block selects the component, `Ctrl+click` jumps to its yaml. An `Image` component with
 `Image: file.svg` shows the picture itself, and resource images are resolved under
@@ -162,12 +156,12 @@ The same following covers metadata: the properties panel follows the cursor in a
 
 The **Palette** sits next to the metadata tree and shows up while the form panel is open. It
 lists components you can insert into the current structure selection, in sections: **Frequent**,
-**Favorites**, **Project** (your own components and inserts), then the platform packages from the
+**Favorites**, **Project** (your own components and inserts), then the 1C:Element packages from the
 ui schema.
 
 - **Insert** by double-clicking (or pressing `Enter` twice) a palette entry while a container is
   selected in the Structure area; or **Insert into the form** from the context menu.
-- **A palette entry cannot be dragged into the form panel.** The platform does not carry a drag
+- **A palette entry cannot be dragged into the form panel.** VS Code does not carry a drag
   from its own tree into a webview, which is why insertion is click-driven. Dragging works inside
   the panel itself.
 - **Add to favorites** / **Remove from favorites** (the star) pins the components you use most.
@@ -199,7 +193,7 @@ edits metadata objects too, because it is one shared panel.
   deletion takes the method with its annotations, and the yaml and the module change in one
   undo step.
 - **Metadata objects, the same way.** For a selected object (`Catalog`, `Document`, `HttpService`,
-  ...) the applicable properties come from the platform metamodel, so the **All properties**
+  ...) the applicable properties come from the 1C:Element metamodel, so the **All properties**
   section also shows what the file does not set yet: `Presentation`, `Hierarchical`,
   `InputByString`, `AccessControl`. The editors are typed: a tri-state for a flag, a value list
   for an enumeration, a combobox for a data type. Collections and nested blocks (`Attributes`,
@@ -219,7 +213,7 @@ edits metadata objects too, because it is one shared panel.
 
 ## Documentation panel
 
-The **Documentation (1C:Element)** container holds the platform help built from your 1C:Element
+The **Documentation (1C:Element)** container holds the 1C:Element help built from your
 distribution. This is where the designer answers "what is this component": the **Open
 documentation** action on a palette item opens the page right here, without leaving the editor.
 In detail - [Documentation panel](/DOCS_PANEL).
@@ -270,7 +264,7 @@ LSP requests (`xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`). See the
 
 ## Provenance
 
-The platform ships its own web-based visual editor. This designer is an independent
-reimplementation written from the public platform documentation, the toolkit's own extracted
+1C:Element has its own web-based visual editor. This designer is an independent
+reimplementation written from the public 1C:Element documentation, the toolkit's own extracted
 datasets and black-box observation of designers in general-purpose IDEs. UI texts, icons and
 layouts are our own. See [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).

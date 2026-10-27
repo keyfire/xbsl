@@ -7,10 +7,10 @@
 ![CI](https://github.com/keyfire/xbsl/actions/workflows/ci.yml/badge.svg)
 
 The XBSL toolkit for 1C:Element: a linter with autofixes, an LSP server, a project index,
-platform documentation search, metadata scaffolding, translation of sources into English
-spellings and an MCP server for AI agents. Plus a VS Code extension on the same engine. It works
-on pairs of files: `Name.yaml` describes an element, `Name.xbsl` holds its code. And it answers
-long before the server-side compilation that runs on deploy.
+1C:Element documentation search, metadata scaffolding, translation of sources into English
+spellings and an MCP server for AI agents. The VS Code extension uses the same engine. XBSL works
+with file pairs: `Name.yaml` describes an element, and `Name.xbsl` contains its code. It checks
+the sources before server-side compilation during deployment.
 
 > Not affiliated with 1C. "1C:Element", "1C:Fresh" and related names are trademarks of their
 > respective owners. Language data is generated from your own distribution. See [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).
@@ -19,16 +19,14 @@ Development notes and updates (in Russian): the [1C × AI: engineering workshop]
 
 ## Why
 
-1C:Element has no tooling outside the platform. The only check on the code is the server-side
-compilation on deploy, which is slow and knows nothing about a project's conventions. xbsl
-answers right away on your own machine, catches what the compiler never looks at, and takes over
-the metadata mechanics: creating objects, attributes and forms.
+Sources are compiled on the server during deployment. XBSL checks them locally before
+deployment, including project conventions, and helps create objects, attributes and forms.
 
 ## How it works
 
-One engine, four surfaces. The core reads the `<element>.yaml` and `<element>.xbsl` pairs, and
-the scaffolding writes them back. The CLI, the LSP server, the MCP server and the web UI are thin
-adapters over that core, so all four see the same rules, data and templates:
+The engine reads `<element>.yaml` and `<element>.xbsl` file pairs. Metadata commands write
+changes to those files. The CLI, LSP server, MCP server and web UI use the same rules, data and
+templates:
 
 ![The engine core (linter, autofixes, project index, docs search) and the metadata scaffolding read and write the project sources; a private plugin adds Element language data and custom rules via entry points; the CLI, the LSP server (VS Code), the MCP server (AI agents) and the web UI are surfaces over the same core](https://raw.githubusercontent.com/keyfire/xbsl/main/images/how-it-works.png)
 
@@ -118,8 +116,8 @@ a deploy button. It runs on `xbsl-lsp`, a Language Server any LSP-capable editor
 ([details](https://github.com/keyfire/xbsl/blob/main/docs/servers.md#lsp-server)).
 
 **Code templates.** Type the first letters of a construct, press Ctrl+Space, and the whole
-construct arrives with its edit points. There are 51 builtin templates, each one parsed by the
-linter's own parser, so none of them can insert broken code. Your own live in
+construct arrives with its edit points. There are 51 built-in templates; the linter's parser
+checks the syntax of each one. Your own live in
 `.xbsl-templates.json`, with a management panel in VS Code. The mechanism and the file format
 mirror 1C:EDT.
 [Details](https://github.com/keyfire/xbsl/blob/main/docs/scaffolding.md#code-templates).
@@ -136,8 +134,8 @@ gets the lint of the written files in one round trip.
 **Web interface.** `xbsl-web` – a local page over the same engine: rule toggles, filters,
 themes. [Details](https://github.com/keyfire/xbsl/blob/main/docs/servers.md#web-interface).
 
-**CI.** The exit code is non-zero only on error-severity findings, so `xbsl` gates a pipeline
-as it is. `--format codeclimate` feeds the GitLab Code Quality widget. Ready-made GitHub Actions
+**CI.** After a completed check, `xbsl` returns exit code 1 for error-severity findings.
+Startup and configuration errors also return a non-zero code. `--format codeclimate` feeds the GitLab Code Quality widget. Ready-made GitHub Actions
 and GitLab CI jobs are in
 [the guide](https://github.com/keyfire/xbsl/blob/main/docs/linting.md#use-in-ci).
 

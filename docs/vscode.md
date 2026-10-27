@@ -11,10 +11,11 @@ sidebar:
 
 Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`), powered by the
 [xbsl](https://github.com/keyfire/xbsl) engine. It also brings the form designer, a metadata
-tree, the platform docs panel, metadata scaffolding, debugging and a deploy button.
+tree, the 1C:Element docs panel, metadata scaffolding, debugging and a deploy button.
 
-> Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
-> folder of the repository. It is a tiny 1C:Element app with a form and a handful of deliberate findings.
+> To try the extension, open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
+> folder in the repository. It contains a 1C:Element application with a form and several
+> intentional violations for the linter to find.
 
 YAML buffer checks are limited to the configured project root and its translation dictionary.
 Quick fixes are available for YAML as well as modules. Saving invalidates pending buffer results;
@@ -23,7 +24,8 @@ a late response cannot overwrite the newer workspace report or its fixes.
 The form wireframe displays `UsualCommands` in the footer and the `Italic`, `Underline` and
 `Strikeout` flags of an absolute font. Tooltips use the property spellings of the source form.
 
-The extension uses the xbsl 1.0.0 engine. Install it in the Python selected by `xbsl.linter.pythonPath`.
+Extension version 1.0.0 uses the separately installed xbsl engine. If `xbsl.linter.pythonPath`
+is set, install the engine in the selected Python interpreter.
 
 The refresh icon in the status bar rebuilds the project index and checks all project sources.
 During the check, the spinning icon shows the stage and its percentage beside it, for example
@@ -54,10 +56,9 @@ In CLI mode two producers feed one diagnostic collection. The buffer state decid
   Buffers that are dirty again by then keep their live `--stdin` diagnostics until the next save.
   Modules opened outside the project root keep theirs too: the check does not read them.
 
-That leaves no duplicates and loses no rule. A clean file shows the full picture of the workspace
-run, a file being edited shows the instant per-file picture, and each save reconciles the two.
-Both runs speak the same `{diagnostics, summary}` JSON contract that the linter's MCP server
-answers with.
+A saved file shows the project check results, while a file being edited shows its per-file
+results. Both checks use the same `{diagnostics, summary}` JSON contract as the linter's MCP
+server.
 
 A workspace run that fails or exceeds `xbsl.workspaceLintTimeout` goes to the *XBSL* output
 channel and nowhere else. There are no popups on every save.
@@ -133,9 +134,8 @@ scratch. The wizard asks four things: the project name, the vendor, the project 
 (application or library) and the folder. It then scaffolds the project through the same engine
 that serves the other metadata operations and opens the generated `Проект.yaml`.
 
-The vendor is remembered between runs: for one developer it is usually the same. If the project
-lands outside the open folder, the extension offers to open it – a fresh project is rarely part
-of the current window.
+The vendor is retained between runs. If the project is created outside the open folder, the
+extension offers to open it.
 
 ## Structural search across forms
 
@@ -155,9 +155,8 @@ type sit on different lines.
 
 Navigation comes from the engine. The language server keeps the project index and answers
 definition, references, completion and hover. The extension adds no second implementation, so
-navigation knows exactly what the engine knows: the return types of project methods, the members
-of platform types. Without the LSP mode there is no navigation, because the CLI has no process to
-ask.
+navigation uses the engine data: return types of project methods and members of 1C:Element
+types. Navigation requires LSP mode.
 
 **Go to definition** (F12 / Ctrl+Click), in `.xbsl` and `.yaml`:
 
@@ -370,7 +369,7 @@ project-wide diagnostics on save and quick fixes work as before, just faster. Re
 installed with the `[lsp]` extra (`pip install "xbsl[lsp]"`). The server is found as `xbsl-lsp` on
 `PATH`, via `xbsl.linter.pythonPath` (run as a module), or by the explicit `xbsl.lsp.command`.
 
-Without the server the extension quietly keeps working in the former CLI mode. Details go to the
+Without the server, the extension continues in CLI mode. Details go to the
 *XBSL* output channel, and the status bar shows the mode actually in use. To switch the server
 off entirely, set `"xbsl.lsp.enabled": false`; changing the setting needs a window reload.
 
@@ -455,8 +454,8 @@ shows every uncovered name, comment line and string literal where it stands. Its
   prompt says how the text is written between the quotes;
 - **Open the translation dictionary** – the panel above, filtered by this very key.
 
-The finding carries the exact dictionary key and its kind in its data, so the repair never guesses
-either one out of the message – neither for a name, nor for a comment line elided in the text, nor
+The finding contains the exact dictionary key and its kind, so the fix reads them from the data
+instead of the message – neither for a name, nor for a comment line elided in the text, nor
 for a literal. After a write the project is checked again: the server re-reads the dictionary by
 itself, no restart, and the finding goes away.
 
@@ -523,7 +522,7 @@ way the platform draws them, tables with their real columns, switchable tabs (`P
 and HTML-container placeholders, and the form's command bar. Unknown and custom component types
 render as labeled boxes with their content inside, so nothing disappears. The area header has a zoom
 (−/+, the wheel over the control and `Ctrl+wheel` over the frame) and a theme picker: light (the
-platform web client look, the default), dark, or the editor theme. The choice is remembered.
+1C:Element web client look, the default), dark, or the editor theme. The choice is remembered.
 
 **The selection is shared by the three areas.** A click on a frame block and a cursor move in the
 yaml expand whatever collapsed groups stand in the way, land on the node in the structure and fill
@@ -536,11 +535,11 @@ end up hidden behind the very form it belongs to.
 
 **The component palette** sits next to the metadata tree and appears while the form panel is open.
 A double click on a palette component inserts it into the selected structure node. You cannot drag
-from the palette into the panel, because the platform does not carry a drag from its own tree into
+from the palette into the panel, because VS Code does not carry a drag from its own tree into
 a webview. That is why insertion is click-driven.
 
 **Properties panel.** A click on an element selects it and opens a separate **Properties** panel,
-a tab of its own you can drag below or aside. It works like the platform web editor: enums as
+a tab of its own you can drag below or aside. It works like the 1C:Element web editor: enums as
 dropdowns (`Layout`, alignments, spacings, widths, button kinds), `HorizontalStretch` and
 `VerticalStretch` as Auto / `True` / `False` toggles, everything else as text. You get the
 component's standard set plus every property present in the yaml, with object values shown
@@ -555,7 +554,7 @@ carries a literal/binding toggle: press `=` to bind the property to data. In bin
 autocomplete offers the bindings already used in the form and the attributes of the form's owner
 object (`=Object.Name`); the `abc` button switches back to a literal.
 
-It is a layout skeleton, not the platform's rendering. Composition, nesting and captions are
+It is a layout skeleton, not the 1C:Element rendering. Composition, nesting and captions are
 faithful; exact sizes and styles are not, though explicit label colors and font sizes are applied.
 
 **Block presets.** In the structure area, *Save as block preset* on a component stores its whole
@@ -573,7 +572,7 @@ or rebind a group of fields in one step.
 
 The collapse button in the tree title (**Collapse to the metadata kinds**) stops at the first
 level: the list of kinds stays visible while the expanded categories fold. The rest – new project,
-grouping, filter, refresh, hiding empty categories – lives in the `...` menu of the same title bar.
+grouping, filter, refresh, hiding empty categories – is in the `...` menu of the same title bar.
 
 A dedicated **1C:Element** icon in the Activity Bar opens a tree of the project metadata, built
 like the platform designer but inside VS Code.
@@ -596,7 +595,7 @@ per language of the section (`Localization/<language>/<Name>.yaml`), where a cli
 translated text. A SOAP service client gets a **WSDL** node for the description its type is
 generated from (`<Name>.Wsdl.1.wsdl` beside the element): a click opens it as XML, several
 descriptions get a node each, and **Open WSDL** in the client's context menu does the same. A SOAP
-service has no such node - the platform builds its WSDL from the element.
+service has no such node: its WSDL is generated from the element description.
 Imported XML schemas (`<Name>.Wsdl.<N>.xsd`) appear under the same node and open as XML.
 
 The tree shows its own error and warning counts for all files of an object, including
@@ -731,8 +730,8 @@ badge) like the Explorer, while keeping their kind icon.
 **Deletion.** Right-click an object – **Delete object** (with confirmation; removes the object files,
 undoable; references are left as is – the linter flags dangling ones).
 
-A created object is a scaffold in files and does not deploy on its own. A broken one surfaces on
-the next deploy, where elemctl catches the rollback, and your working files are never corrupted.
+A created object is a scaffold in files and is not deployed automatically. An invalid scaffold
+is detected on the next deployment. Elemctl detects a rollback; working files remain unchanged.
 
 ### Example: a demo app from the tree, deployed to 1cmycloud.com
 
@@ -771,11 +770,11 @@ the standard UI; the demo needs no OIDC or login.
 
 ## Documentation
 
-A container of its own – **Documentation (1C:Element)** in the Activity Bar – shows the platform
+A container of its own – **Documentation (1C:Element)** in the Activity Bar – shows the 1C:Element
 reference the way the docs site does, but built from your own distribution. It matches the
-platform version you use and works offline.
+1C:Element version you use and works offline.
 
-> The reference shipped with the platform distribution exists in Russian only, so the pages and the contents tree stay Russian whatever the editor language is.
+> The reference shipped with the 1C:Element distribution exists in Russian only, so the pages and the contents tree stay Russian whatever the editor language is.
 
 **The tree.** A curated "Contents" that mirrors the site: the developer and administrator guides,
 the type reference (`Std::Collections` → `Array` → ...), the properties of project elements and
@@ -840,10 +839,10 @@ offered for installation right from the error message.
 
 Debug **1C:Element** applications in regular VS Code, without the Theia-based web IDE:
 breakpoints, a call stack that chains client and server frames, variable values, stepping. The
-extension is thin here too. It starts the **platform's own debug adapter** (Java, the DAP
+extension is thin here too. It starts the **1C:Element debug adapter** (Java, the DAP
 protocol) and gets the session coordinates through `elemctl` (Console API `/actions/debug`). A
 session id generated on the client ties the adapter and the debuggee together through the
-platform's debug server.
+1C:Element debug server.
 
 > Until version 0.57 this was a separate extension, *XBSL Debug* (`keyfire.xbsl-debug`). It is
 > now part of this one. Deploy and debugging address the same application with the same elemctl,
@@ -872,7 +871,7 @@ debug parameters and execution stops on your breakpoint.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `xbsl.debug.adapterPath` | – | The platform debug adapter directory from your distribution – a folder with a `repo` subfolder holding the jars. |
+| `xbsl.debug.adapterPath` | – | The 1C:Element debug adapter directory from your distribution – a folder with a `repo` subfolder holding the jars. |
 | `xbsl.debug.javaPath` | `java` | The Java 17+ launcher. |
 | `xbsl.debug.openApplicationOnStart` | `true` | Open the debuggee in the browser when the session starts, with the debug parameters. |
 | `xbsl.debug.applicationUrl` | – | Where to open the debuggee. Empty – the `uri` of the application card, which is its address **inside the platform**; set this when the application answers on a domain of its own. The `applicationUrl` attribute of `launch.json` overrides it. |

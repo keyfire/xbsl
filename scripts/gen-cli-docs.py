@@ -33,16 +33,16 @@ from xbsl import cli  # noqa: E402 - imported after sys.path is adjusted
 
 TEXT = {
     "ru": {
+        "without_yo": True,
         "title": "Команды",
         "desc": "Справочник команд и опций xbsl: проверка исходников, серверы LSP и MCP, веб-панель, шаблоны кода.",
         "label": "Команды",
         "intro": (
-            "Справочник собран из самого инструмента – это то же, что показывает "
-            "`xbsl --help`, только на одной странице и целиком.\n\n"
-            "Без команды `xbsl` проверяет указанные пути: это режим по умолчанию, и его опции "
-            "перечислены в первом блоке. Остальные команды адресуют другие части инструментария.\n\n"
-            "Язык вывода переключается флагом `--lang`, переменной `XBSL_LANG` или берётся "
-            "из локали системы."
+            "Справочник содержит команды и параметры из справки `xbsl` и его подкоманд.\n\n"
+            "Без подкоманды `xbsl` проверяет указанные пути. Параметры этого режима приведены "
+            "в первом разделе; остальные разделы описывают подкоманды.\n\n"
+            "Язык вывода выбирается параметром `--lang`, переменной `XBSL_LANG` или "
+            "локалью системы."
         ),
         "common": "Без команды: проверка исходников",
         "scaffold": "Создание метаданных",
@@ -61,12 +61,11 @@ TEXT = {
         "desc": "Reference of xbsl commands and options: checking sources, the LSP and MCP servers, the web panel, code templates.",
         "label": "Commands",
         "intro": (
-            "This reference is generated from the tool itself – the same text "
-            "`xbsl --help` prints, gathered on one page.\n\n"
-            "With no command `xbsl` checks the paths you give it: that is the default mode and "
-            "its options are in the first block. The other commands address the rest of the toolkit.\n\n"
-            "The output language follows `--lang`, the `XBSL_LANG` variable, or the system "
-            "locale."
+            "This reference lists commands and options from the help for `xbsl` and its subcommands.\n\n"
+            "Without a subcommand, `xbsl` checks the specified paths. Its options are listed "
+            "in the first section; the remaining sections describe the subcommands.\n\n"
+            "The output language is selected by `--lang`, the `XBSL_LANG` variable or the "
+            "system locale."
         ),
         "common": "No command: checking sources",
         "scaffold": "Metadata scaffolding",
@@ -181,13 +180,20 @@ def esc(s: str) -> str:
     return s.replace("|", "\\|")
 
 
-def esc_text(s: str) -> str:
+def esc_text(s: str, *, without_yo: bool = False) -> str:
     """Ordinary text: Markdown reads angle brackets as a tag and swallows them along with
     what is inside (`xbsl <command>` becomes `xbsl`), and the theme's typography glues a
     double hyphen into a dash - a flag mentioned in a description, `--select`, turns into an
     unusable `-select`. Inside backticks neither happens."""
     s = s.replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
-    return FLAG_RE.sub(r"`\1`", s)
+    s = FLAG_RE.sub(r"`\1`", s)
+    if not without_yo:
+        return s
+    # Keep literal examples, quoted values and URLs unchanged in the Russian reference.
+    parts = re.split(r"(`[^`]*`|https?://[^\s]+|\"[^\"]*\"|'[^']*')", s)
+    for i in range(0, len(parts), 2):
+        parts[i] = parts[i].replace("ё", "е").replace("Ё", "Е")
+    return "".join(parts)
 
 
 def children(entries: list, i: int) -> list[int]:
@@ -226,7 +232,7 @@ def render(help_text: str, t: dict) -> str:
     p = parse(help_text)
     out = io.StringIO()
     if p["description"]:
-        out.write(esc_text(p["description"]) + "\n\n")
+        out.write(esc_text(p["description"], without_yo=t.get("without_yo", False)) + "\n\n")
     out.write("```bash\n" + p["usage"] + "\n```\n\n")
     for title, entries in p["sections"]:
         if not entries:
@@ -240,11 +246,11 @@ def render(help_text: str, t: dict) -> str:
         for k, (opt, desc, _) in enumerate(entries):
             if k in skip:
                 continue
-            out.write(f"| `{esc(opt)}` | {esc_text(desc)} |\n")
+            out.write(f"| `{esc(opt)}` | {esc_text(desc, without_yo=t.get('without_yo', False))} |\n")
         out.write("\n")
     for paragraph in p["epilog"]:
         if paragraph:
-            out.write(esc_text(paragraph) + "\n\n")
+            out.write(esc_text(paragraph, without_yo=t.get("without_yo", False)) + "\n\n")
     return out.getvalue()
 
 
