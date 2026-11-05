@@ -18,6 +18,11 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of 1C:Element have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+- Added the optional rule `comment/personification` for verbs of remembering or
+  perceiving whose subject is a code object in a Russian comment.
+
 ## 2026-10-08 – 1.1.0
 
 ### Added

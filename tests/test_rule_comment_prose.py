@@ -16,6 +16,7 @@ from xbsl.rules import _comments
 SUBJUNCTIVE = "comment/subjunctive"
 FIRST_PERSON = "comment/first-person"
 CAPS = "comment/emphasis-caps"
+PERSONIFICATION = "comment/personification"
 
 _HEAD = "ВидЭлемента: Справочник\nИмя: Склады\n"
 
@@ -72,6 +73,45 @@ def test_comment_rules_speak_english_without_cyrillic_outside_quotes(rule_id):
 
 
 # --- where the comments are -------------------------------------------------------------------
+
+@pytest.mark.parametrize("comment", (
+    "## Справочник помнит запись.\n",
+    "## Выданное помнит справочник.\n",
+    "## Метод еще не знает код.\n",
+    "## Обработчик\n## не замечает изменения.\n",
+))
+def test_personification_in_yaml_comment(comment):
+    (finding,) = _yaml(comment, PERSONIFICATION)
+    assert finding.rule_id == PERSONIFICATION and finding.line == 1
+    assert finding.fix is None
+
+
+def test_personification_leaves_a_human_subject_and_quoted_text_alone():
+    text = (
+        "## Пользователь видит запись.\n"
+        "## На свежий запрос смотрит администратор.\n"
+        '## Пример фразы "справочник помнит запись".\n'
+        "## Модуль проверяет запись.\n"
+        "## Пользователь видит справочник.\n"
+    )
+    assert _yaml(text, PERSONIFICATION) == []
+
+
+@pytest.mark.needs_data
+def test_personification_in_module_comment_formats():
+    text = (
+        "// Сервис знает адрес.\n"
+        "/// Модуль видит запись.\n"
+        "/* Список забывает запись. */\n"
+    )
+    assert [item.line for item in _lint("Inventory.xbsl", text, PERSONIFICATION)] == [1, 2, 3]
+
+
+def test_personification_is_an_opt_in_warning():
+    info = _info(PERSONIFICATION)
+    assert info.severity.value == "warning" and info.scope == "file"
+    assert info.enabled_by_default is False
+
 
 def test_yaml_comment_lines_skip_the_hash_inside_values():
     text = (

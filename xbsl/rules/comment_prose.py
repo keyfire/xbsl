@@ -3,8 +3,7 @@ finding by eye, turned into checks.
 
 A comment of a module, of an element description or of a resource file is read by the
 next developer, and a project that publishes its sources shows every one of them to the
-reader. Three habits kept coming back through a whole-project edit of the
-comments, each caught on one line and then chased through the tree by hand:
+reader. The first three checks came from a project-wide edit of the comments.
 
 - `comment/subjunctive` - the particle "бы": a comment in the subjunctive describes what
   the code would do, not what it does. The trap is in the repair: dropping the particle
@@ -30,7 +29,10 @@ comments, each caught on one line and then chased through the tree by hand:
   capitalizes its first letter at the start of a sentence - the sweep of a project over
   two hundred lines did exactly that.
 
-The three read the same comment lines (`_comments.lines`), skip what stands inside quotes
+- `comment/personification` - a code object as the subject of a verb of remembering or
+  perceiving in a Russian comment. Name the operation or describe what changes in the data.
+
+These rules read the same comment lines (`_comments.lines`), skip what stands inside quotes
 or backticks (a quoted label or a cited identifier is data, not the author's voice), and
 are OFF by default: on a code base that never adopted the convention they fire in bulk,
 and a project that did turns the group on with `--enable comment` in its CI.
@@ -153,6 +155,22 @@ MESSAGES = {
               "on foreign code it fires in bulk. A project turns the `comment` group on in "
               "its CI (--enable comment)",
     },
+    "comment/personification.title": {
+        "ru": "Одушевление кода в комментарии",
+        "en": "Personification of code in a comment",
+    },
+    "comment/personification.found": {
+        "ru": "\"{subject} {verb}\" в комментарии приписывает коду память или восприятие. "
+              "Опишите операцию или изменение данных.",
+        "en": "\"{subject} {verb}\" attributes memory or perception to code. "
+              "Describe the operation or how it changes the data.",
+    },
+    "comment/personification.off": {
+        "ru": "соглашение о стиле комментариев. Включите группу comment (--enable comment), "
+              "если в проекте принято это соглашение",
+        "en": "a convention for comments. Enable the comment group (--enable comment) "
+              "if your project follows this convention",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -189,6 +207,65 @@ def _neighbours(lines: list[_comments.CommentLine], index: int) -> tuple[str, st
         text = lines[index + 1].text
         below = _prose(text[_comments.lead(text):])
     return above, below
+
+
+# --- comment/personification --------------------------------------------------------------
+
+_CODE_SUBJECT = (
+    r"справочник|кэш|запись|ответ|запрос|ключ|пересч[её]т|обработчик|метод|модуль|список|сервис"
+)
+_PERSONAL_VERB = r"помнит|знает|забывает|видит|смотрит|замечает"
+_PERSONAL_VERB_PRESENT = re.compile(_PERSONAL_VERB, re.IGNORECASE)
+_PERSONAL_ACTION = re.compile(
+    rf"(?<![\w-])(?P<subject>{_CODE_SUBJECT})\s+"
+    r"(?:(?:не|уже|ещ[её]|теперь|всегда|снова|больше|тоже)\s+){0,3}"
+    rf"(?P<verb>{_PERSONAL_VERB})(?![\w-])",
+    re.IGNORECASE,
+)
+_INVERTED_PERSONAL_ACTION = re.compile(
+    r"(?:^|[.!?,;:–]\s*)(?:выданное|полученное|сохран[её]нное|это)\s+"
+    rf"(?P<verb>{_PERSONAL_VERB})\s+(?P<subject>{_CODE_SUBJECT})(?![\w-])",
+    re.IGNORECASE,
+)
+# A noun following a preposition can be the object: "на запрос смотрит оператор".
+_OBJECT_PREFIX = re.compile(
+    r"\b(?:в|во|на|за|под|про|через|о|об|по)\s+"
+    r"(?:(?:[а-яё]+(?:ый|ий|ой|ую|ое)|этот|тот|сам)\s+){0,2}$",
+    re.IGNORECASE,
+)
+
+
+@rule(
+    "comment/personification", "comment/personification.title", "B",
+    severity=Severity.WARNING, enabled_by_default=False, off_reason="comment/personification.off",
+)
+def personification(source: SourceFile) -> Iterable[Diagnostic]:
+    """A narrow check for clear subject and verb pairs in Russian prose."""
+    if not _PERSONAL_VERB_PRESENT.search(source.text):
+        return
+    lines = _comments.lines(source)
+    for index, cl in enumerate(lines):
+        lead = _comments.lead(cl.text)
+        text = _prose(cl.text[lead:])
+        _, below = _neighbours(lines, index)
+        prose = f"{text} {below}"
+        for pattern in (_PERSONAL_ACTION, _INVERTED_PERSONAL_ACTION):
+            for match in pattern.finditer(prose):
+                subject = match.start("subject")
+                verb = match.start("verb")
+                first = min(subject, verb)
+                if first >= len(text):
+                    continue
+                if subject < verb and _OBJECT_PREFIX.search(prose[:subject]):
+                    continue
+                yield Diagnostic(
+                    source.rel, cl.line, cl.column + lead + first, "comment/personification",
+                    Severity.WARNING,
+                    i18n.t(
+                        "comment/personification.found",
+                        subject=match["subject"], verb=match["verb"],
+                    ),
+                )
 
 
 # --- comment/subjunctive -------------------------------------------------------------------
