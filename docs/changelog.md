@@ -25,10 +25,14 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of 1C:Element have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-11-06 – 1.2.0
 
-- Added the optional rule `comment/personification` for verbs of remembering or
-  perceiving whose subject is a code object in a Russian comment.
+### Added
+
+- **The new `comment/personification` rule flags phrases like "the module remembers"
+  in Russian comments.** The rule is off by default. To turn it on, use
+  `--enable comment/personification`.
+  ([#177](https://github.com/keyfire/xbsl/pull/177))
 
 ## 2026-10-08 – 1.1.0
 
