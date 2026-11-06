@@ -13,7 +13,7 @@ and a VS Code extension built on it.
 
 ## What is in the box
 
-- **Linter with autofixes** – 280 rules in four tiers: yaml structure, text and typography
+- **Linter with autofixes** – 281 rules in four tiers: yaml structure, text and typography
   conventions, code structure, and semantics checked against the technology data and the project
   itself (a plugin can add rules of its own on top).
 - **LSP server** – live diagnostics, go-to-definition and completion for any LSP-capable editor.
