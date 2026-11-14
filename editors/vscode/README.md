@@ -17,7 +17,7 @@ a late response cannot overwrite the newer workspace report or its fixes.
 The form wireframe displays `UsualCommands` in the footer and the `Italic`, `Underline` and
 `Strikeout` flags of an absolute font. Tooltips use the property spellings of the source form.
 
-Extension version 1.0.0 uses the separately installed xbsl engine. If `xbsl.linter.pythonPath`
+Extension version 1.0.1 uses the separately installed xbsl engine. If `xbsl.linter.pythonPath`
 is set, install the engine in the selected Python interpreter.
 
 The refresh icon in the status bar rebuilds the project index and checks all project sources.

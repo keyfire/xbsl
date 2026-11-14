@@ -9,6 +9,18 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 1.0.1
+
+2026-11-14.
+
+### Changed
+
+- Updated the extension guide and clarified the debug adapter settings.
+  ([documentation](https://github.com/keyfire/xbsl/commit/edc8f9e3), [debug settings](https://github.com/keyfire/xbsl/commit/b123e8de))
+- With the separately installed xbsl 1.3.0 and 1C:Element data that describes binding directions,
+  the Problems panel reports computed expressions where a two-way binding is required, and
+  assignments to properties whose values are computed in YAML. ([#178](https://github.com/keyfire/xbsl/pull/178))
+
 ## 1.0.0
 
 2026-10-03.
