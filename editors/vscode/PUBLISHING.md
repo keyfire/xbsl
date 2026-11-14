@@ -13,9 +13,20 @@ your Open VSX namespace. For a different id, change it in `package.json` and now
 ### VS Code Marketplace
 1. Create a publisher at <https://marketplace.visualstudio.com/manage>, signing in with the
    Microsoft or Azure account that owns it. The publisher id must equal `keyfire`.
-2. Create an Azure DevOps Personal Access Token: <https://dev.azure.com> → User settings → Personal access
-   tokens → New. Organization: **All accessible organizations**; Scope: **Marketplace → Manage**.
-3. Keep the token as `VSCE_PAT`.
+2. Under **Trusted Publishing**, create a policy with these settings.
+
+   | Field | Value |
+   | --- | --- |
+   | Policy name | `XBSL VS Code release` |
+   | Provider | GitHub Actions |
+   | Repository owner | `keyfire` |
+   | Repository | `xbsl` |
+   | Workflow | `vscode-publish.yml` |
+   | Environment | Leave empty |
+
+   GitHub Actions requests a short-lived Marketplace credential through OIDC. The workflow
+   needs `id-token: write` and an OIDC-capable version of `vsce`. See the
+   [VS Code publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing).
 
 ### Open VSX
 1. Sign in at <https://open-vsx.org> with GitHub, then create an access token (Settings → Access Tokens).
@@ -30,16 +41,15 @@ Nothing to set up. CI uses the built-in `GITHUB_TOKEN`.
 
 ## Publishing through CI
 
-1. Add the tokens as repository secrets (Settings → Secrets and variables → Actions): `VSCE_PAT`,
-   `OVSX_PAT`. Leave one out to skip that marketplace; the GitHub Release still happens.
-2. Bump `version` in `editors/vscode/package.json` and update `CHANGELOG.md`.
+1. For Open VSX, set `OVSX_PAT` in **Settings → Secrets and variables → Actions**.
+2. Bump `version` in `editors/vscode/package.json` and update the extension changelogs.
 3. Commit, then tag and push:
    ```sh
    git tag vscode-v1.0.0
    git push origin vscode-v1.0.0
    ```
-   The workflow builds the `.vsix`, attaches it to a GitHub Release, and publishes to whichever
-   marketplaces have their secrets in place.
+   A tag that matches the manifest version builds one `.vsix` for the GitHub Release and
+   both registries. A manual workflow run on a branch checks packaging without publishing.
 
 ## Publishing by hand
 
@@ -50,7 +60,7 @@ npm install
 npm run package                                   # -> xbsl-vscode.vsix
 
 # VS Code Marketplace
-npx @vscode/vsce publish -p <VSCE_PAT>            # or: vsce login keyfire && vsce publish
+# Upload xbsl-vscode.vsix in https://marketplace.visualstudio.com/manage/publishers/keyfire.
 
 # Open VSX
 npx ovsx publish xbsl-vscode.vsix -p <OVSX_PAT>
