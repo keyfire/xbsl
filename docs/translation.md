@@ -695,7 +695,7 @@ not offered.
   longer has; `filter` narrows it to the names of one deleted component - or to a list of substrings
   at once, and the answer names in `unmatched` the ones no orphan fell under; `since` narrows it to
   the orphans of one change (a branch, a commit or a range `A..B`): the keys on the lines it removed
-  and the pairs it added to the dictionary, both sides sized in the `since` block; `prune` (off by
+  and the pairs it added to the dictionary, both sides sized in the `since` block. Pass `since` or a nonblank `filter`. Use `all=true` to scan the whole project. `prune` (off by
   default) removes every key the filters select, whatever the page, with all its declarations.
   After removal the default answer omits the list: `removed` counts occurrences, `pruned.keys`
   counts the pairs, and `pruned.by_kind` / `pruned.by_file` group them; `compact=false` includes full rows. Preview remains full by default,

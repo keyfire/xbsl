@@ -1080,6 +1080,42 @@ def test_a_component_the_help_retired_takes_its_members_from_the_shipped_descrip
     }
 
 
+def test_the_shipped_two_way_binding_flag_reaches_the_catalog(tmp_path):
+    import json
+
+    descriptor = """\
+type: ui
+term: {en: Group, ru: Группа}
+properties:
+- term: {en: Title, ru: Заголовок}
+  type: Std::String
+  bidirectionalDataBinding: true
+- term: {en: Visible, ru: Видимость}
+  type: Std::Boolean
+- term: {en: Enabled, ru: Доступность}
+  type: Std::Boolean
+  bidirectionalDataBinding: false
+- term: {en: Expanded, ru: Развернутость}
+  type: Std::Boolean
+  bidirectionalDataBinding: "true"
+- term: {en: Selected, ru: Выбрано}
+  type: Std::Boolean
+  bidirectionalDataBinding: true
+  runtimeOnly: true
+- term: {en: Previous, ru: Прежнее}
+  type: Std::Boolean
+  bidirectionalDataBinding: true
+  to: 8.0
+"""
+    _retired_car(tmp_path, {"Group": descriptor})
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["component_two_way_bindings"] == {"Группа": ["Заголовок"]}
+
+
+
 def test_the_shipped_description_never_overrules_the_help_and_names_no_new_type(tmp_path):
     """Two narrowings, both of them the reason the help stays the primary source.
 

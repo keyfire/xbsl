@@ -557,17 +557,19 @@ def _translate_entries(arguments: dict) -> Built:
 
 def _translate_unused(arguments: dict) -> Built:
     wanted = arguments.get("filter") or ""
-    if isinstance(wanted, list):
-        texts = [text for text in wanted if text]
-        if len(texts) > 1:
-            # The CLI takes one substring: several would be several walks over the sources,
-            # and a pruning run could not be told apart from the tool's single one.
-            return None
-        wanted = texts[0] if texts else ""
-    arguments = {**arguments, "filter": wanted}
+    texts = [wanted] if isinstance(wanted, str) else wanted
+    filters = [text for text in texts if text.strip()]
+    if len(filters) > 1:
+        # The CLI accepts only one substring.
+        return None
+    since = (arguments.get("since") or "").strip()
+    whole = arguments.get("all", False)
+    if (since and whole) or not (since or filters or whole):
+        return None
+    arguments = {**arguments, "filter": filters[0] if filters else ""}
     argv = [*_project(arguments), "--unused", *_narrowed(arguments)]
-    if arguments.get("since"):
-        argv += _option("--since", arguments["since"])
+    if since:
+        argv += _option("--since", since)
     # The tool removes the whole filtered set whatever its page, the CLI the page it lists:
     # a pruning run lists everything.
     argv += ["--prune"] if arguments.get("prune") else _page(arguments)

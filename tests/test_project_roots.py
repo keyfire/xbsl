@@ -196,7 +196,14 @@ def test_each_worktree_takes_the_ci_job_of_its_own_checkout(server, trees):
             encoding="utf-8",
         )
 
-    answer = server.lint_paths([str(root) for root in trees], as_ci=True, compact=True)
+    paths = [str(root) for root in trees]
+    answer = server.lint_paths(paths, as_ci=True, compact=True)
+    brief = server.lint_paths(paths, as_ci=True, brief=True)
+
+    assert brief["diagnostics"] == []
+    assert len(brief["summary"]["projects"]) == 2
+    assert all("as_ci" not in entry and entry["baselined"] == 1
+               for entry in brief["summary"]["projects"])
 
     # The job of the other checkout would lend its baseline, which matches none of the files.
     assert answer["summary"]["diagnostics"] == 0

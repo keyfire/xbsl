@@ -607,6 +607,7 @@ def build_schema(
     pages: list[dict], element_version: str, guides: list[dict] | None = None,
     retired_components: dict[str, dict] | None = None,
     component_from: dict[str, str] | None = None,
+    component_two_way_bindings: dict[str, list[str]] | None = None,
 ) -> dict:
     """The full uischema dictionary from the type pages of the documentation dataset.
 
@@ -751,8 +752,11 @@ def build_schema(
     for name in sorted(runtime_records):
         add_retired(name)
 
-    for rec in components.values():
-        for prop in (rec.get("props") or {}).values():
+    for name, rec in components.items():
+        bindings = (component_two_way_bindings or {}).get(name, ())
+        for prop_name, prop in rec["props"].items():
+            if prop_name in bindings and "types" in prop:
+                rec["props"][prop_name] = {**prop, "binding": "two-way"}
             for member in prop.get("types") or ():
                 used_enums |= type_refs(member) & set(enum_values)
 
@@ -823,6 +827,7 @@ def main(argv=None) -> int:
         docs.type_pages(version), version, docs.guide_pages(version),
         retired_components=stdlib.get("retired_components"),
         component_from=stdlib.get("component_from"),
+        component_two_way_bindings=stdlib.get("component_two_way_bindings"),
     )
     out = Path(args.out) if args.out else _distro.version_dir(version) / "uischema.json"
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -1271,7 +1271,7 @@ class ProjectCatalog:
                                 or STANDARD_FIELDS.get(kind, {}).get(name))
                     return standard.replace("{}", element_name) if standard else None
                 return written
-        standard = STANDARD_FIELDS.get(element.get("kind") or "", {}).get(name)
+        standard = STANDARD_FIELDS.get(element.get("kind") or "", {}).get(_facet_russian(name))
         if standard:
             return standard.replace("{}", element_name)
         return _MISSING_FIELD
@@ -1599,8 +1599,16 @@ def element_fact(source) -> dict | None:
     values = _typed_members(data, "Элементы", kind) if kind == "Перечисление" else {}
     names: set[str] = set()
     _yaml_names(data, names)
+    access = value_of(data, "КонтрольДоступа", kind)
+    by = None
+    if isinstance(access, dict):
+        from xbsl import metamodel
+
+        by = access.get("РасчетРазрешенийПо", access.get(metamodel.english_name("РасчетРазрешенийПо")))
+    permission_keys = by if isinstance(by, list) and all(isinstance(key, str) for key in by) else []
     return {
         "name": name,
+        **({"permissions_by": permission_keys} if permission_keys else {}),
         "kind": kind,
         "attributes": _typed_members(data, "Реквизиты", kind),
         "dimensions": _typed_members(data, "Измерения", kind),
@@ -2535,6 +2543,24 @@ class ModuleTyper:
                 continue
             sites.extend(site(level, node) for node in walk_nodes(init) if wanted(node))
         return sites
+
+    def constructor_arguments(self, module: object, names: frozenset[str], pattern: re.Pattern):
+        """The known argument types of matching constructions in the module."""
+        def wanted(node: object) -> bool:
+            return (isinstance(node, P.New) and bool(node.args)
+                    and node.type.text.rsplit(".", 1)[-1].strip() in names)
+
+        for evaluator, nodes in self._judged(module, pattern, True, wanted):
+            for node in nodes:
+                yield node, [_typed(evaluator, argument.value) for argument in node.args]
+        level = self._module_level
+        for member in self.fields.values():
+            init = getattr(member, "init", None)
+            if init is None or level is None:
+                continue
+            for node in walk_nodes(init):
+                if wanted(node):
+                    yield node, [_typed(level, argument.value) for argument in node.args]
 
     def members(self, module: object, names: frozenset[str]) -> list[MemberSite]:
         """Every access of a member named one of `names` that is not the callee of a call, in the

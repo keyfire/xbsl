@@ -1046,13 +1046,17 @@ _POPUP_DECLARATION_RU = "Свойства:\n    -\n        Имя: Окно\n   
 _POPUP_DECLARATION_EN = "Properties:\n    -\n        Name: Window\n        Type: OwnTooltip?\n"
 _POPUP_TOKENS = {"СобственнаяПодсказка": "OwnTooltip", "СтраницаОтметки": "MarkPage",
                  "Блок": "Block", "Окно": "Window"}
-#: An insert whose height is bound; `{height}` is a computed expression or a bare path.
+#: A form with a field and an insert; the placeholders take the bound expression.
 _BOUND_FORM_RU = """\
 ВидЭлемента: КомпонентИнтерфейса
 Ид: 1d1f5c60-0000-4000-8000-000000000f2b
 Имя: ФормаОтметки
 ОбластьВидимости: ВПроекте
 Содержимое:
+    -
+        Тип: ПолеВвода<Строка>
+        Имя: Поле
+        Значение: {value}
     -
         Тип: КонтейнерHtml
         Имя: Блок
@@ -1065,14 +1069,20 @@ Name: MarkForm
 VisibilityScope: InProject
 Content:
     -
+        Type: Edit<String>
+        Name: Field
+        Value: {value}
+    -
         Type: HtmlContainer
         Name: Block
         Height: {height}
 """
 _BOUND_ASSIGN_RU = "метод Показать()\n    Компоненты.Блок.Высота = 640\n;\n"
 _BOUND_ASSIGN_EN = "method Show()\n    Components.Block.Height = 640\n;\n"
+_BOUND_VALUE_ASSIGN_RU = "метод Заполнить()\n    Компоненты.Поле.Значение = \"\"\n;\n"
+_BOUND_VALUE_ASSIGN_EN = "method Fill()\n    Components.Field.Value = \"\"\n;\n"
 _BOUND_TOKENS = {"ФормаОтметки": "MarkForm", "Блок": "Block", "ВысотаБлока": "BlockHeight",
-                 "Показать": "Show", "Отступ": "Indent"}
+                 "Поле": "Field", "Показать": "Show", "Заполнить": "Fill", "Отступ": "Indent"}
 #: A component declaring a property its own module assigns, and the instances that bind it.
 _PICKER_RU = """\
 ВидЭлемента: КомпонентИнтерфейса
@@ -2880,6 +2890,35 @@ AccessControl:
 """
 _LISTED_KIND_TOKENS = {"Узлы": "Nodes"}
 
+
+_PERMISSION_ARGUMENT_RU = """\
+метод Проверить(Запись: Склады.Объект)
+    знч Данные = новый Склады.ДанныеРасчетаРазрешений(Запись.{field})
+;
+"""
+_PERMISSION_ARGUMENT_EN = """\
+method Check(Item: Stock.Object)
+    val Data = new Stock.PermissionsComputeData(Item.{field})
+;
+"""
+_ACTIVE_BINDING_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000001001
+Имя: Переключатель
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Кнопка
+    Активность: ={value}
+"""
+_ACTIVE_BINDING_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000001001
+Name: Toggle
+VisibilityScope: InProject
+Inherits:
+    Type: Button
+    Active: ={value}
+"""
 
 SEEDS: list[Seed] = [
     Seed(
@@ -5256,28 +5295,29 @@ SEEDS: list[Seed] = [
     Seed(
         rule="code/bound-property-assign",
         expect=CLEAN,
-        note="a data binding assigned from code – a bare path is a two-way link",
+        note="a data binding assigned from code - the property takes data (DataType), so the "
+             "link is two-way",
         files={
-            "ФормаОтметки.yaml": _BOUND_FORM_RU.format(height="=Отступ"),
-            "ФормаОтметки.xbsl": _BOUND_ASSIGN_RU,
+            "ФормаОтметки.yaml": _BOUND_FORM_RU.format(value="=СтрокаОтметки", height="Авто"),
+            "ФормаОтметки.xbsl": _BOUND_VALUE_ASSIGN_RU,
         },
         english={
-            "MarkForm.yaml": _BOUND_FORM_EN.format(height="=Indent"),
-            "MarkForm.xbsl": _BOUND_ASSIGN_EN,
+            "MarkForm.yaml": _BOUND_FORM_EN.format(value="=MarkString", height="Auto"),
+            "MarkForm.xbsl": _BOUND_VALUE_ASSIGN_EN,
         },
         tokens=_BOUND_TOKENS,
     ),
     Seed(
         rule="code/bound-property-assign",
         expect=FINDING,
-        note="a COMPUTED property assigned from code is reported – the components root and the "
+        note="a COMPUTED property assigned from code is reported - the components root and the "
              "property are matched in both spellings",
         files={
-            "ФормаОтметки.yaml": _BOUND_FORM_RU.format(height="=ВысотаБлока()"),
+            "ФормаОтметки.yaml": _BOUND_FORM_RU.format(value="=СтрокаОтметки", height="=ВысотаБлока()"),
             "ФормаОтметки.xbsl": _BOUND_ASSIGN_RU,
         },
         english={
-            "MarkForm.yaml": _BOUND_FORM_EN.format(height="=BlockHeight()"),
+            "MarkForm.yaml": _BOUND_FORM_EN.format(value="=MarkString", height="=BlockHeight()"),
             "MarkForm.xbsl": _BOUND_ASSIGN_EN,
         },
         tokens=_BOUND_TOKENS,
@@ -9028,6 +9068,40 @@ SEEDS: list[Seed] = [
                  "Probe.xbsl": '@OnServer\nmethod Check()\n    val Text = new Pattern("\\\\p{L}")\n;\n'},
         tokens={"Проба": "Probe", "Проверить": "Check", "Текст": "Text"},
     ),
+    *[
+        Seed(
+            rule="code/constructor-argument-type", expect=expect, note=note,
+            files={
+                "Склады.yaml": _LISTED_CATALOG_RU.format(listed="Ответственный"),
+                "Проба.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Проба\n",
+                "Проба.xbsl": _PERMISSION_ARGUMENT_RU.format(field=ru),
+            },
+            english={
+                "Stock.yaml": _LISTED_CATALOG_EN.format(listed="Keeper"),
+                "Probe.yaml": "ElementKind: CommonModule\nName: Probe\n",
+                "Probe.xbsl": _PERMISSION_ARGUMENT_EN.format(field=en),
+            },
+            tokens={**_LISTED_CATALOG_TOKENS, "Проба": "Probe", "Проверить": "Check",
+                    "Запись": "Item", "Данные": "Data"},
+        )
+        for expect, ru, en, note in (
+            (FINDING, "Ссылка", "Reference", "a reference passed to a string permission key"),
+            (CLEAN, "Ответственный", "Keeper", "the declared string field used as the permission key"),
+        )
+    ],
+    *[
+        Seed(
+            rule="yaml/binding-needs-two-way", expect=expect, note=note,
+            files={"Переключатель.yaml": _ACTIVE_BINDING_RU.format(value=ru)},
+            english={"Toggle.yaml": _ACTIVE_BINDING_EN.format(value=en)},
+            tokens={"Переключатель": "Toggle", "ПолучитьРежим": "GetMode", "Режим": "Mode"},
+            needs_section="component_two_way_bindings",
+        )
+        for expect, ru, en, note in (
+            (FINDING, "ПолучитьРежим()", "GetMode()", "a computed active state on an editable button"),
+            (CLEAN, "Режим", "Mode", "an active state bound to a variable"),
+        )
+    ],
 ]
 
 

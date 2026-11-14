@@ -566,6 +566,35 @@ def test_a_reason_survives_a_rewrite_of_an_entry_naming_a_file(tmp_path):
     assert entry == {"count": 1, "reason": "две формы списка одного вида"}
 
 
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_duplicate_subtree_baseline_survives_node_growth(tmp_path, lang):
+    from dataclasses import replace
+    from xbsl import baseline, i18n
+
+    i18n.set_lang(lang)
+    old = i18n.t("yaml/duplicate-subtree.copy", nodes=54, other="Forms/Original2.yaml", places=2)
+    grown = _finding(tmp_path, i18n.t(
+        "yaml/duplicate-subtree.copy", nodes=57, other="Forms/Original2.yaml", places=2))
+    legacy = _entry(old, reason="Shared form layout")
+    assert baseline.apply([grown], legacy, tmp_path) == ([], 1, 0, [])
+
+    another = replace(grown, line=10)
+    new_partner = replace(grown, line=20, message=i18n.t(
+        "yaml/duplicate-subtree.copy", nodes=57, other="Forms/Original3.yaml", places=2))
+    more_copies = replace(grown, line=30, message=i18n.t(
+        "yaml/duplicate-subtree.copy", nodes=57, other="Forms/Original2.yaml", places=3))
+    findings = [grown, another, new_partner, more_copies]
+    assert baseline.apply(findings, legacy, tmp_path) == (findings[1:], 1, 0, [])
+
+    path = tmp_path / "baseline.json"
+    baseline.save(path, legacy)
+    rebuilt = baseline.write(path, [grown])
+    assert baseline.apply(findings, rebuilt, tmp_path) == (findings[1:], 1, 0, [])
+    [entry] = rebuilt["files"]["Второй.yaml"]["yaml/duplicate-subtree"].values()
+    assert entry == {"count": 1, "reason": "Shared form layout"}
+
+
 # --- the run's reach: entries of files the run did not cover ---------------------------------
 
 def test_entries_of_files_outside_the_run_are_not_stale(tmp_path, capsys):
@@ -886,3 +915,24 @@ def test_baseline_vetted_display_positions_do_not_change_identity(tmp_path, lang
     unrelated = replace(moved, rule_id="custom/unrelated")
     unrelated_data = {"files": {"Sample.xbsl": {unrelated.rule_id: {original.message: 1}}}}
     assert baseline.apply([unrelated], unrelated_data, tmp_path)[0] == [unrelated]
+
+
+def test_duplicate_subtree_baseline_keeps_the_exact_match(tmp_path):
+    from dataclasses import replace
+    from xbsl import baseline, i18n
+
+    older = i18n.t("yaml/duplicate-subtree.copy", nodes=54, other="Forms/Original2.yaml", places=2)
+    newer = i18n.t("yaml/duplicate-subtree.copy", nodes=100, other="Forms/Original2.yaml", places=2)
+    old_finding = replace(_finding(tmp_path, older), line=20)
+    new_finding = _finding(tmp_path, newer)
+    data = _entry(older, reason="Shared form layout")
+    assert baseline.apply([new_finding, old_finding], data, tmp_path) == ([new_finding], 1, 0, [])
+
+    baseline.add_entries(data, [new_finding, old_finding], tmp_path, reason="Second layout")
+    assert data["files"]["Второй.yaml"]["yaml/duplicate-subtree"] == {
+        older: {"count": 1, "reason": "Shared form layout"},
+        newer: {"count": 1, "reason": "Second layout"},
+    }
+    path = tmp_path / "baseline.json"
+    baseline.save(path, data)
+    assert baseline.write(path, [new_finding, old_finding])["files"] == data["files"]

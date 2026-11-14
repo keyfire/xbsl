@@ -479,8 +479,8 @@ dataset.register_recheck(_reset)
 
 
 def _lookup(components: dict, name: str) -> dict | None:
-    """The palette record for the name, or a record composed outside the palette."""
-    return components.get(name) or _outside_component(name)
+    """Prefer the palette record, including a platform alias, to the fallback schema."""
+    return components.get(name) or components.get(canonical_component(name)) or _outside_component(name)
 
 
 def _miss(components: dict, name: str) -> dict:
@@ -538,7 +538,7 @@ def component(name: str, version: str | None = None) -> dict:
 
 def _brief_line(prop: dict, enums: dict) -> str:
     """One line for one property: the type union with enum values inline, the
-    nullable/slot markers, or the event signature."""
+    nullable, slot and two-way binding markers, or the event signature."""
     if "event" in prop:
         return f"событие {prop['event']}"
     parts = []
@@ -555,6 +555,8 @@ def _brief_line(prop: dict, enums: dict) -> str:
         line += "?"
     if prop.get("slot"):
         line += " [slot]"
+    if prop.get("binding") == "two-way":
+        line += " [two-way]"
     return line
 
 
@@ -596,6 +598,8 @@ def component_property(name: str, prop_name: str, version: str | None = None) ->
         return _miss(components, name)
     props = rec.get("props") or {}
     prop = props.get(prop_name)
+    if prop is None:
+        prop = props.get(canonical_property(prop_name))
     if prop is None:
         return {
             "available": True,

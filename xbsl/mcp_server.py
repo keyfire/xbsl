@@ -467,6 +467,7 @@ def lint_paths(
     as_ci_full: bool = False,
     compare: str | None = None,
     list_info: bool = False,
+    brief: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -488,7 +489,7 @@ def lint_paths(
                   (or a GitHub workflow) next to the project, ADDED to whatever this call
                   asks for. This is what a preflight needs - a project turns rules on in its
                   pipeline, and a run without them calls clean what the job fails on. The
-                  summary then carries `as_ci`: the file and the job, the include the command
+                  summary normally carries `as_ci`: the file and the job, the include the command
                   stands in, the root of the checkout, the set as data (select/ignore/enable/
                   baseline) and as one sentence (flags), the other jobs and the includes left
                   unread. The CLI `--format json` answers with the same record. When there is
@@ -524,7 +525,10 @@ def lint_paths(
                   says how to read the whole answer (without `compact`, with narrower
                   `paths`/`select`, or the CLI `--format json --out FILE`). The counts are
                   never cut;
-    as_ci_full  - with `compact` or `select`, keep the whole `as_ci` record instead of the line;
+    brief       - omit the CI configuration from the summary, including per-project records.
+                  The check still uses the CI job and returns all diagnostics unless
+                  `compact` or `compare` changes their format;
+    as_ci_full  - keep the full `as_ci` record with `brief`, `compact` or `select`;
     list_info   - with `compact`, list the info-level findings with the rest;
     compare     - a file that keeps the run for the next call; the CLI `--compare` reads and
                   writes the same file. The first call saves the run and answers
@@ -574,6 +578,7 @@ def lint_paths(
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
     narrow = bool(select)  # the caller's own selection, before the job adds its set
+    include_as_ci = not brief or as_ci_full
     own = CheckSettings(select, ignore, enable, None, str(named) if named else None, no_baseline)
     parts = split_by_project(asked)
     checks: list[_RootCheck] = []
@@ -619,7 +624,7 @@ def lint_paths(
         payload["summary"].update(check.extra)
         payload["summary"].update(check.fix)
         payload["summary"]["root"] = str(base)
-        if check.job is not None:
+        if check.job is not None and include_as_ci:
             payload["summary"]["as_ci"] = _as_ci_record(check.job, as_ci_job, narrow, as_ci_full)
     else:
         # Every root checked on its own, the answer counting them all: the records that
@@ -637,7 +642,8 @@ def lint_paths(
             })
         payload["summary"]["root"] = str(base)
         payload["summary"]["projects"] = [
-            check.record(as_ci_job, narrow, as_ci_full) for check in checks
+            check.record(as_ci_job, narrow, as_ci_full, include_as_ci=include_as_ci)
+            for check in checks
         ]
     if state is not None:
         return _compared(payload, diags, paths, base, state, saved, active, chosen,
@@ -698,12 +704,13 @@ class _RootCheck:
                     part.requested,
                 )
 
-    def record(self, as_ci_job: str | None, narrow: bool, as_ci_full: bool) -> dict:
+    def record(self, as_ci_job: str | None, narrow: bool, as_ci_full: bool,
+               *, include_as_ci: bool) -> dict:
         """The entry of the root in `summary.projects`."""
         entry = report.project_record(self.part.root, self.diags, len(self.part.counted))
         entry.update(self.extra)
         entry.update(self.fix)
-        if self.job is not None:
+        if self.job is not None and include_as_ci:
             entry["as_ci"] = _as_ci_record(self.job, as_ci_job, narrow, as_ci_full)
         return entry
 
@@ -1008,7 +1015,7 @@ def ui_schema(component: str | None = None, brief: bool = False, property: str |
     carry a slot Содержимое - a wrap/drop target) and a one-line doc, WITHOUT property
     lists. With `component` - the full schema of that component: properties with value
     type unions, resolved enum values, event handler signatures, slot flags (the
-    property accepts components/commands), doc snippets and documented defaults, plus
+    property accepts components/commands), two-way binding metadata, doc snippets and documented defaults, plus
     "enums" - the value lists of the enumerations referenced by the property unions; an
     unknown name yields close_matches. {"available": false} when the ui schema dataset
     is not generated (tools/extract_uischema.py).
@@ -2798,6 +2805,7 @@ def translate_unused(
     prune: bool = False,
     compact: bool | None = None,
     budget_seconds: float = 300,
+    all: bool = False,
 ) -> dict:
     """The opposite of translate_gaps: what the DICTIONARY still says and the project has not.
 
@@ -2825,16 +2833,14 @@ def translate_unused(
              counts; a range `A..B` is handed to git as written, which is how a change
              already merged is examined. The `since` block of the answer sizes both sides:
              `files` of the change and `dictionary_files` / `dictionary_added` of the
-             dictionary diff. Without it the answer covers the whole accumulated dictionary
-             - a live project answers with thousands of rows, every one of them somebody's
-             old deletion - and says so in `note`;
+             dictionary diff;
+    all    - search the whole dictionary without a Git revision. Use this for a project-wide
+             audit. Without `since` or a nonempty `filter`, `all=true` is required.
+             `all` and `since` are mutually exclusive;
     limit/offset - the page (limit 0 means all); a cut page says so in `truncated`;
-    prune  - REMOVE the entries from the dictionary files. Off by default and named
-             separately from the listing on purpose: this is the one direction where a
-             mistaken reading destroys a translation. `kind` and `filter` select the keys -
-             ALL of them, whatever the page, since `limit`/`offset` shape only the listing -
-             and every dictionary occurrence of those keys is removed. `pruned.keys` counts
-             the pairs removed, `removed` the physical occurrences;
+    prune  - remove all occurrences of the selected keys from the dictionary files.
+             Selection follows `since`, `kind` and `filter`. `limit` and `offset` shape the
+             listing only. `pruned.keys` counts pairs and `removed` counts occurrences;
     compact - omitted: a preview lists full rows, a successful prune returns only counts.
              False always includes full rows; True shortens preview rows to {key, kind,
              file, line} and omits the list after pruning. `pruned` counts the removed
@@ -2870,6 +2876,13 @@ def translate_unused(
     refusal = entries_module.kind_refusal(kind)
     if refusal:
         return {"error": refusal}
+    since = since.strip()
+    wanted = [filter] if isinstance(filter, str) else list(filter or [])
+    needles = {text: text.casefold() for text in wanted if text.strip()}
+    if since and all:
+        return {"error": i18n.t("translate.unused.scope-conflict")}
+    if not (since or needles or all):
+        return {"error": i18n.t("translate.unused.scope-required")}
     project, dictionary, error = translate_cli.load_for_tools(root)
     if error:
         return {"error": error}
@@ -2880,8 +2893,6 @@ def translate_unused(
             removed = entries_module.removed_surfaces(project, since, path)
         except ValueError as exc:
             return {"error": str(exc)}
-    wanted = [filter] if isinstance(filter, str) else list(filter or [])
-    needles = {text: text.casefold() for text in wanted if text}
     hit: set[str] = set()
     found = entries_module.orphans_of(project, path, dictionary, removed, deadline=deadline)
     rows = []

@@ -118,7 +118,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 281 rules of the base set** - severity, default state, scope, links to
+**The full list of all 283 rules of the base set** - severity, default state, scope, links to
 1C:Element documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -388,7 +388,7 @@ editors too. The identity includes the message text, so write and check the base
 same output language. References to source line numbers in known diagnostic templates are
 excluded from the identity, so moving an accepted finding does not make it new. Names and
 semantic numbers still distinguish findings; the displayed message keeps the current line
-number. Existing baseline files use the same matching without being rewritten.
+number. For `yaml/duplicate-subtree`, the baseline also ignores the number of nodes in the subtree. The other copy and the number of copies still distinguish findings. Existing baseline files use the same matching without being rewritten.
 
 A new release may reword the message of a rule. An entry frozen under the earlier wording still
 holds its finding when its text fits no current wording of the rule and names the same values in
