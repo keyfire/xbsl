@@ -239,6 +239,10 @@ MESSAGES = {
         "ru": "показать покрытие по каждому объекту метаданных",
         "en": "print the coverage of every metadata object",
     },
+    "translate.help.quiet": {
+        "ru": "отключить сообщения о ходе проверки неиспользуемых переводов",
+        "en": "suppress progress messages when checking for unused translations",
+    },
     "translate.help.strict": {
         "ru": "ненулевой выход, если покрытие неполное, есть проблемы или платформенные "
               "пропуски, а также если у локализуемого текста метамодели нет пары в плане "
@@ -584,6 +588,7 @@ def _parser() -> argparse.ArgumentParser:
                         help=i18n.t("translate.help.kind"))
     parser.add_argument("--limit", type=int, default=0, help=i18n.t("translate.help.limit"))
     parser.add_argument("--offset", type=int, default=0, help=i18n.t("translate.help.offset"))
+    parser.add_argument("--quiet", action="store_true", help=i18n.t("translate.help.quiet"))
     parser.add_argument("--strict", action="store_true", help=i18n.t("translate.help.strict"))
     parser.add_argument("--no-localization-swap", action="store_true",
                         help=i18n.t("translate.help.no-swap"))
@@ -1082,7 +1087,9 @@ def _list_unused(args, root: Path, loaded) -> int:
             print(str(exc), file=sys.stderr)
             return 2
     needle = args.filter.casefold()
-    found = entries_module.orphans_of(root, path, loaded, removed, progress=_progress)
+    found = entries_module.orphans_of(
+        root, path, loaded, removed, progress=None if args.quiet else _progress,
+    )
     rows = [
         entry for entry in found.entries
         if (args.kind in ("any", entry.kind))

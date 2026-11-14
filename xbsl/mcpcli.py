@@ -371,10 +371,14 @@ def _lint_paths(arguments: dict) -> Built:
         argv += _option("--baseline", _under(base, arguments["baseline"]))
     if arguments.get("no_baseline"):
         argv.append("--no-baseline")
-    if arguments.get("as_ci_job"):
-        argv += _option("--as-ci-job", arguments["as_ci_job"])  # implies --as-ci, as here
-    elif arguments.get("as_ci"):
+    if arguments.get("as_ci_file"):
+        argv += _option("--as-ci", _under(base, arguments["as_ci_file"]))
+    elif arguments.get("as_ci") and not arguments.get("as_ci_job"):
         argv.append("--as-ci")
+    if arguments.get("as_ci_job"):
+        argv += _option("--as-ci-job", arguments["as_ci_job"])
+    if arguments.get("since") is not None:
+        argv += _option("--since", arguments["since"])
     if arguments.get("fix"):
         argv.append("--fix")
     if arguments.get("compare"):

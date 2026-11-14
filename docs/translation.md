@@ -429,6 +429,11 @@ that lists Vietnamese needs no dictionary entry for it.
 
 ## Coverage and the gaps
 
+`--strict` fails when two source keys translate to the same key in one YAML mapping.
+The report lists both source keys and their file and line numbers under `problems`.
+For automation, use `--unused --format json --quiet`. The `--quiet` option suppresses
+progress messages on stderr. The report remains on stdout.
+
 `--coverage` prints the dictionary's share for every metadata object, meaning the yaml and xbsl
 family that shares one stem, and for the project as a whole. `--missing` writes what is left as a
 dictionary stub: entries ordered by frequency, each annotated with its count and first location,

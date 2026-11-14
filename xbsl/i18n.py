@@ -56,6 +56,30 @@ _CORE_MESSAGES = {
         "ru": "(правила ещё не зарегистрированы)",
         "en": "(no rules registered yet)",
     },
+    "cli.help.since": {
+        "ru": "показать замечания в файлах, измененных с общей базы с указанной ревизией Git",
+        "en": "show findings in files changed since the merge base with this Git revision",
+    },
+    "cli.since-needs-files": {
+        "ru": "--since требует пути к файлам или каталогу Git",
+        "en": "--since requires file paths or a Git directory",
+    },
+    "cli.since-conflict": {
+        "ru": "--since нельзя использовать вместе с {flag}.",
+        "en": "--since cannot be used with {flag}.",
+    },
+    "cli.since-summary": {
+        "ru": "С {ref}: измененных проверенных файлов {changed_files}, "
+              "замечаний в остальных файлах {other_diagnostics}.",
+        "en": "Since {ref}: {changed_files} changed files checked, "
+              "{other_diagnostics} findings in other files.",
+    },
+    "cli.unknown-selectors": {
+        "ru": "Неизвестные селекторы правил: {selectors}. Укажите идентификатор правила, "
+              "группу или ярус A, B, C, D. Список правил: xbsl --list-rules.",
+        "en": "Unknown rule selectors: {selectors}. Use a rule ID, group or tier A, B, C, D. "
+              "List rules with xbsl --list-rules.",
+    },
     "cli.no-rules-selected": {
         "ru": "Под отбор не подошло ни одно правило: {keys}. Отбирают по id правила, группе "
               "(часть id до '/') или букве тира; всего правил: {total}.",

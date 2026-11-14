@@ -16,7 +16,7 @@ from typing import NamedTuple
 from xbsl import (
     __version__, baseline, cijob, dataset, engine, environment, i18n, plugins, report, rundiff,
 )
-from xbsl import storage_cli
+from xbsl import lint_scope, storage_cli
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
@@ -491,6 +491,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=i18n.t("cli.help.summary"),
     )
+    parser.add_argument("--since", help=i18n.t("cli.help.since"))
     parser.add_argument(
         "--compare",
         metavar=i18n.t("cli.help.meta.file"),
@@ -1744,6 +1745,14 @@ def _scaffold_main(argv: list[str]) -> int:
     return 0
 
 
+def _refuse_lint_input(message: str, args) -> int:
+    if args.format == "json":
+        _emit_report(json.dumps({"error": message}, ensure_ascii=False), args.out)
+    else:
+        print(message, file=sys.stderr)
+    return 2
+
+
 def _refuse_ci(exc: cijob.CiLintError, args) -> int:
     """The refusal of `--as-ci`: the reason on stderr, and in the json report as well."""
     print(str(exc), file=sys.stderr)
@@ -2021,6 +2030,7 @@ def _check_main(argv: list[str]) -> int:
 
     from xbsl.engine import (
         RULES, active_rules, load, make_source, matching_rules, near_rule_groups, run_sources,
+        unknown_selectors,
     )
     from xbsl.rules import comment_names
 
@@ -2028,6 +2038,9 @@ def _check_main(argv: list[str]) -> int:
     # roots every root takes the job of its own checkout on top of these.
     own = CheckSettings(args.select, args.ignore, args.enable, args.other_system,
                         args.baseline, args.no_baseline)
+    unknown = unknown_selectors(_parse_set(own.select))
+    if unknown and not args.list_rules:
+        return _refuse_lint_input(i18n.t("cli.unknown-selectors", selectors=", ".join(unknown)), args)
     adopted: cijob.CiLint | None = None
     if args.as_ci is not None or args.as_ci_job:
         # "As in CI" is read from the pipeline file itself, never from a second list of rules
@@ -2037,6 +2050,11 @@ def _check_main(argv: list[str]) -> int:
             job = cijob.find(args.paths, args.as_ci or None, args.as_ci_job)
         except cijob.CiLintError as exc:
             return _refuse_ci(exc, args)
+        unknown = unknown_selectors(set(job.select))
+        if unknown and not args.list_rules:
+            return _refuse_ci(cijob.CiLintError(
+                i18n.t("cli.unknown-selectors", selectors=", ".join(unknown)),
+            ), args)
         adopted = job
         merged = own.with_job(job)
         args.select, args.ignore, args.enable = merged.select, merged.ignore, merged.enable
@@ -2106,6 +2124,21 @@ def _check_main(argv: list[str]) -> int:
     # differently about one tree differ here first, and the report must say so itself.
     active = active_rules(select, ignore, enable)
 
+    changed = None
+    if args.since is not None:
+        if args.stdin:
+            return _refuse_lint_input(i18n.t("cli.since-needs-files"), args)
+        conflict = next((flag for flag, enabled in (
+            ("--fix", args.fix), ("--compare", args.compare is not None),
+            ("--write-baseline", args.write_baseline), ("--prune-baseline", args.prune_baseline),
+        ) if enabled), None)
+        if conflict:
+            return _refuse_lint_input(i18n.t("cli.since-conflict", flag=conflict), args)
+        try:
+            changed = lint_scope.changed_paths(args.paths or ["."], args.since)
+        except ValueError as exc:
+            return _refuse_lint_input(str(exc), args)
+
     if args.fix and args.stdin:
         print(i18n.t("cli.fix-needs-files"), file=sys.stderr)
         return 2
@@ -2174,6 +2207,11 @@ def _check_main(argv: list[str]) -> int:
                     job = cijob.find(part.asked, None, args.as_ci_job)
                 except cijob.CiLintError as exc:
                     return _refuse_ci(exc, args)
+                unknown = unknown_selectors(set(job.select))
+                if unknown:
+                    return _refuse_ci(cijob.CiLintError(
+                        i18n.t("cli.unknown-selectors", selectors=", ".join(unknown)),
+                    ), args)
                 part_settings = own.with_job(job)
                 if args.format == "text" and job.where() != adopted.where():
                     _describe_job(job, args)
@@ -2240,6 +2278,16 @@ def _check_main(argv: list[str]) -> int:
             counted_files.add(check.baseline.resolve())
             not_checked.extend(check.not_checked)
 
+    change = None
+    if changed is not None:
+        total = len(diagnostics)
+        for check in checks:
+            check.diagnostics = lint_scope.filter_diagnostics(check.diagnostics, changed)
+        diagnostics = [d for check in checks for d in check.diagnostics]
+        change = lint_scope.counts(args.since, changed, files, total, len(diagnostics))
+        if args.format == "text":
+            print(i18n.t("cli.since-summary", **change), file=sys.stderr)
+
     if brief:
         selection = {name: sorted(chosen) if chosen else None
                      for name, chosen in (("select", select), ("ignore", ignore),
@@ -2250,6 +2298,8 @@ def _check_main(argv: list[str]) -> int:
     elif args.format == "json":
         # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.
         payload = report.report(diagnostics, len(files))
+        if change is not None:
+            payload["summary"]["since"] = change
         if args.fix:
             payload["summary"].update(fix_summary)
         payload["summary"].update(environment.provenance(active))

@@ -36,7 +36,7 @@ from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
     cijob, formmodel, freshness, i18n, mcpcli, mcpjournal, metamodel, plugins, report,
-    resource_usage, rundiff, scaffold, uischema,
+    lint_scope, resource_usage, rundiff, scaffold, uischema,
 )
 from xbsl.cli import (
     CheckSettings, ProjectPart, _context_of, _filter_requested, baselines_of, discover,
@@ -44,7 +44,7 @@ from xbsl.cli import (
 )
 from xbsl.engine import (
     RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
-    run, run_sources,
+    run, run_sources, unknown_selectors,
 )
 
 # mcp 2.0 renamed the ergonomic server class and moved it: FastMCP from mcp.server.fastmcp
@@ -468,6 +468,8 @@ def lint_paths(
     compare: str | None = None,
     list_info: bool = False,
     brief: bool = False,
+    as_ci_file: str | None = None,
+    since: str | None = None,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -495,6 +497,10 @@ def lint_paths(
                   unread. The CLI `--format json` answers with the same record. When there is
                   no such file, or no xbsl command in it, the answer is {"error"} rather than
                   a quieter verdict;
+    since       - show findings in files changed since the merge base with this Git revision.
+                  The check reads the whole requested tree and counts other findings in summary.since.
+    as_ci_file  - path to a CI file relative to root, or absolute. Implies as_ci.
+                  Use it to apply the job's rules to a tree in another directory.
     as_ci_job   - WHICH job of that file to take (implies `as_ci`). A pipeline runs the
                   linter twice as soon as the project checks a second tree - the sources in
                   one job, what `translate` wrote in another - and those judge different
@@ -577,19 +583,36 @@ def lint_paths(
     base = _base(root)
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
+    ci_file = _under(base, as_ci_file)
+    unknown = unknown_selectors(_as_set(select))
+    if unknown:
+        return {"error": i18n.t("cli.unknown-selectors", selectors=", ".join(unknown))}
     narrow = bool(select)  # the caller's own selection, before the job adds its set
     include_as_ci = not brief or as_ci_full
     own = CheckSettings(select, ignore, enable, None, str(named) if named else None, no_baseline)
+    changed = None
+    if since is not None:
+        if fix or compare is not None:
+            return {"error": i18n.t("cli.since-conflict", flag="fix" if fix else "compare")}
+        try:
+            changed = lint_scope.changed_paths(asked or [str(base)], since)
+        except ValueError as exc:
+            return {"error": str(exc)}
     parts = split_by_project(asked)
     checks: list[_RootCheck] = []
     for part in parts:
         job = None
         settings = own
-        if as_ci or as_ci_job:
+        if as_ci or as_ci_job or ci_file:
             # The job of the root's own checkout: two worktrees keep two pipeline files, and
             # the baseline the first one names would judge the files of the second.
             try:
-                job = cijob.find(part.asked, job=as_ci_job)
+                job = cijob.find(part.asked, str(ci_file) if ci_file else None, job=as_ci_job)
+                unknown = unknown_selectors(set(job.select))
+                if unknown:
+                    raise cijob.CiLintError(
+                        i18n.t("cli.unknown-selectors", selectors=", ".join(unknown)),
+                    )
             except cijob.CiLintError as exc:
                 refusal = {"error": str(exc)}
                 if len(parts) > 1:
@@ -616,6 +639,13 @@ def lint_paths(
             reach=reach.get(check.baseline.resolve()) if check.baseline is not None else None,
             nested=nested_roots(check.part, parts),
         )
+    change = None
+    if changed is not None:
+        total = sum(len(check.diags) for check in checks)
+        files = [path for check in checks for path in check.part.counted]
+        for check in checks:
+            check.diags = lint_scope.filter_diagnostics(check.diags, changed)
+        change = lint_scope.counts(since, changed, files, total, sum(len(check.diags) for check in checks))
     if len(checks) == 1:
         (check,) = checks
         diags, active, chosen = check.diags, check.active, check.chosen
@@ -645,6 +675,8 @@ def lint_paths(
             check.record(as_ci_job, narrow, as_ci_full, include_as_ci=include_as_ci)
             for check in checks
         ]
+    if change is not None:
+        payload["summary"]["since"] = change
     if state is not None:
         return _compared(payload, diags, paths, base, state, saved, active, chosen,
                          compact=compact, as_ci_full=as_ci_full)

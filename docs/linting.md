@@ -11,6 +11,13 @@ The linter checks project sources. This page describes the command options, rule
 
 ## CLI flags
 
+`--since REV` lists findings in files changed relative to the merge base of `REV` and
+`HEAD`. It includes branch commits, working tree edits and untracked files that Git does
+not ignore. The linter checks the full requested project. The report counts findings
+in other files separately, under `summary.since` in JSON. The exit status reflects
+errors in the displayed files. Use `--since` without `--fix`, `--compare` or options
+that change the baseline.
+
 `--list-rules`, `--where` (data root, source and versions), `--select`/`--enable`/`--ignore` (by
 rule id, rule group – the part of the id before `/` – or tier letter), `--fix`,
 `--baseline`/`--write-baseline`, `--element-version`, `--data-dir`, `--lang`,

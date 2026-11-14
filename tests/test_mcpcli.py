@@ -1041,3 +1041,15 @@ def test_old_staged_folders_are_swept_and_the_rest_kept(tmp_path):
     assert mcpcli.sweep_old_folders(str(tmp_path), now) == 1
     assert not old.exists()
     assert young.exists() and stranger.exists() and lone_file.exists()
+
+
+def test_lint_fallback_preserves_git_scope_and_external_ci_file(same, tmp_path):
+    call = same(
+        "lint_paths", paths=["tree"], root=str(tmp_path), as_ci_file="ci/.gitlab-ci.yml",
+        as_ci_job="English", since="origin/main",
+    )
+    _assigned, words, _stdin = _one(call)
+    args = cli.build_parser().parse_args(_tail(words))
+    assert args.as_ci == str(tmp_path / "ci" / ".gitlab-ci.yml")
+    assert args.as_ci_job == "English"
+    assert args.since == "origin/main"

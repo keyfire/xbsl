@@ -3039,3 +3039,33 @@ def test_a_project_property_spelled_like_a_platform_type_does_not_hide_the_type(
         "Тело": "Body", "Символ": "Character",
     }), out)
     assert "return Body.CharAt(0)" in (out / "Module.xbsl").read_text(encoding="utf-8")
+
+
+def test_strict_translation_reports_the_two_source_keys_in_one_mapping(tmp_path, capsys):
+    import json
+    from xbsl.translation.cli import cli_main
+
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "Проект.yaml").write_text(
+        "ВидЭлемента: Проект\nИмя: app\nЯзыкПоУмолчанию: Русский\n", encoding="utf-8",
+    )
+    (project / "Card.yaml").write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Card\nСвойства:\n"
+        "  - Имя: Наименование\n    Тип: Строка\n", encoding="utf-8",
+    )
+    (project / "Form.yaml").write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Form\nСодержимое:\n"
+        "    - Тип: Card\n      Имя: First\n      'Наименование': Second\n",
+        encoding="utf-8",
+    )
+    dictionary = tmp_path / "dictionary.yaml"
+    dictionary.write_text(
+        "version: 1\nlanguage: en\ntokens:\n  Наименование: Name\n", encoding="utf-8",
+    )
+    rc = cli_main([str(project), "--dictionary", str(dictionary), "--strict", "--format", "json"])
+    report = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert any("Form.yaml" in problem and "Имя" in problem and "Наименование" in problem
+               and "'Name'" in problem and ":5" in problem and ":6" in problem
+               for problem in report["problems"])
