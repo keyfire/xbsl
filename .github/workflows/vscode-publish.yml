@@ -7,6 +7,11 @@ on:
   push:
     tags: ["vscode-v*"]
   workflow_dispatch:
+    inputs:
+      verify_marketplace_oidc:
+        description: Verify Marketplace OIDC without publishing
+        type: boolean
+        default: false
 
 # Один тег - одна публикация: GitHub изредка порождает по событию тега два прогона, и
 # второй падает на "уже опубликовано" (ovsx --skip-duplicate этот случай не покрывает).
@@ -15,7 +20,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-marketplace-oidc:
+    if: github.repository == 'keyfire/xbsl' && github.ref == 'refs/heads/main' && inputs.verify_marketplace_oidc
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Exchange OIDC token with Marketplace
+        run: |
+          node <<'NODE'
+          // This is the same exchange used by vsce publish --oidc in the pinned vsce version.
+          const { getOIDCCredential } = require('./node_modules/@vscode/vsce/out/oidc.js');
+          const { publisher, name, version } = require('./package.json');
+          getOIDCCredential(publisher).then(() => {
+            console.log('Marketplace accepted GitHub OIDC for %s (%s@%s).', publisher, name, version);
+          }).catch(error => {
+            const status = /^(GitHub Actions OIDC token request|Marketplace OIDC token exchange) failed with (\d{3})\b/.exec(error.message);
+            console.error(status ? status[1] + ' failed (HTTP ' + status[2] + ').' : 'Marketplace OIDC verification failed.');
+            process.exitCode = 1;
+          });
+          NODE
+
   publish:
+    if: ${{ !inputs.verify_marketplace_oidc }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
