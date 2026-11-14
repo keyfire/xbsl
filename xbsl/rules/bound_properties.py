@@ -6,12 +6,9 @@ specified by expression". The refusal is easy to miss because such an assignment
 sits inside a `try/catch` cascade - then nothing is raised and nothing happens, and the
 symptom is a layout that quietly ignores the code.
 
-A DATA BINDING is a different thing and is left alone. `Value: =Record.Value` is a plain
-path into the form's data, and the documentation says such a link is two-way for an
-editable component ("the data link is bidirectional or unidirectional depending on
-ReadOnly") - writing to it is the ordinary way an editor gives the value back. So the
-rule judges the SHAPE of the expression: a bare path is a binding, anything computed - a
-call, a ternary, arithmetic - is not assignable.
+A writable path on a data-binding property, such as Value or Button.Active, can be assigned
+from code. A setting like Visibility remains read-only when specified by an expression,
+even when the expression is a plain data path. The UI schema identifies the property.
 
 The pair is read from the disk neighbour: a form's components are declared in the yaml
 next to the module, so one file plus its pair is enough and the rule stays file-scope -
@@ -29,6 +26,7 @@ from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, make_source, rule
 from xbsl.lexer import Token
+from xbsl.rules._rows import _binding, _writable_binding
 from xbsl.rules._syntax import code_tokens, signatures
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.yaml_schema import (
@@ -62,26 +60,41 @@ i18n.register(MESSAGES)
 
 # The name of a component in the markup: the platform reads both spellings.
 _NAME_KEYS = ("Имя", "Name")
+# The kind of a placement in the markup: needed to look the property up in the schema.
+# A form writes it as `Type`, an older shape spells it `ElementKind` - both are read.
+_TYPE_KEYS = ("Тип", "Type", "ВидЭлемента", "ElementKind")
 # The root through which a form reaches its own components.
 _COMPONENT_ROOTS = frozenset({"Компоненты", "Components"})
 # A data binding: a bare path over the form's data (`=Запись.Значение`, `=Объект.Товар.Код`).
 # Anything else - a call, a ternary, arithmetic, a literal - is a computed expression.
-_DATA_PATH_RE = re.compile(
+# The cross-file rule below needs this test: it compares INSTANCES of one component, and
+# an instance bound to a bare path is a legal assignment target for that component's code.
+_COMPUTED_PATH_RE = re.compile(
     r"=\s*[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*(?:\s*\??\.\s*[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)*\s*$"
 )
 
 
 def _computed(expression: str) -> bool:
     """Is the expression computed (and therefore not assignable), not a data binding?"""
-    return not _DATA_PATH_RE.match(expression.strip())
+    return not _COMPUTED_PATH_RE.match(expression.strip())
 
 
-def _bound_properties(pair: Path) -> dict[str, dict[str, int]]:
-    """Component name -> {property: markup line} for COMPUTED properties.
+def _data_binding_property(component: str, prop: str) -> bool | None:
+    """Return whether the schema declares a binding, or None if the property is unknown."""
+    head = component.split("<", 1)[0].strip()
+    if not head or not uischema.available():
+        return None
+    descriptor = uischema.component_property(head, prop).get("property")
+    if descriptor is None:
+        return None
+    return descriptor.get("binding") == "two-way" or any(
+        name.rstrip("?") in ("ТипДанных", "DataType")
+        for name in descriptor.get("types", ())
+    )
 
-    The value is the LINE of the expression: the message names it, so the reader goes
-    straight to the markup instead of searching for the property by eye.
-    """
+
+def _bound_properties(pair: Path) -> dict[str, dict[str, tuple[str, str, int]]]:
+    """Map component and property names to the kind, expression and markup line."""
     try:
         if not pair.is_file():
             return {}
@@ -91,19 +104,21 @@ def _bound_properties(pair: Path) -> dict[str, dict[str, int]]:
     root = _composed(source)
     if root is None:
         return {}
-    found: dict[str, dict[str, int]] = {}
+    found: dict[str, dict[str, tuple[str, str, int]]] = {}
     for mapping in _mapping_nodes(root):
         entries = _scalar_entries(mapping)
         named = next((entries[key] for key in _NAME_KEYS if key in entries), None)
         if named is None or not isinstance(named[1], yaml.ScalarNode):
             continue
+        kind = next((entries[key] for key in _TYPE_KEYS if key in entries), None)
+        kind = kind[1].value if kind is not None and isinstance(kind[1], yaml.ScalarNode) else ""
         name = named[1].value
         for prop, (_key, value) in entries.items():
             if not isinstance(value, yaml.ScalarNode):
                 continue
             text = value.value.lstrip()
-            if text.startswith("=") and _computed(text):
-                found.setdefault(name, {})[prop] = value.start_mark.line + 1
+            if text.startswith("="):
+                found.setdefault(name, {})[prop] = (kind, text, value.start_mark.line + 1)
     return found
 
 
@@ -137,7 +152,7 @@ def bound_property_assign(source: SourceFile) -> Iterable[Diagnostic]:
     toks = code_tokens(source)
     if not toks:
         return
-    bound: dict[str, dict[str, int]] | None = None
+    bound: dict[str, dict[str, tuple[str, str, int]]] | None = None
     for i, tok in enumerate(toks):
         if tok.kind != "OP" or tok.value != "=":
             continue
@@ -152,11 +167,17 @@ def bound_property_assign(source: SourceFile) -> Iterable[Diagnostic]:
         # The markup keys are stored CANONICALLY (`_scalar_entries` folds `Height` to the
         # metamodel's own name), so a property written in English in the module has to be
         # folded the same way before the lookup - otherwise a translated pair matched nothing.
+        canonical = uischema.canonical_property(prop)
         properties = bound.get(name, {})
-        line = properties.get(prop)
-        if line is None:
-            line = properties.get(uischema.canonical_property(prop))
-        if line is None:
+        hit = properties.get(canonical) or properties.get(prop)
+        if hit is None:
+            continue
+        kind, value, line = hit
+        expression, _ = _binding(value)
+        if expression is None:
+            continue
+        # Preserve the interpretation of a data path when the schema is unavailable.
+        if _writable_binding(expression) and _data_binding_property(kind, canonical) is not False:
             continue
         yield Diagnostic(
             source.rel, toks[i - 1].line, toks[i - 1].col, "code/bound-property-assign",

@@ -318,7 +318,7 @@ def test_the_resolution_of_paths_is_the_servers_own(mcp_module, monkeypatch, tmp
 
 # -- every argument ----------------------------------------------------------------------------
 
-#: The smallest call of each tool the CLI can make: its required arguments.
+#: The smallest valid call of each tool the CLI can make.
 _BASE_CALLS = {
     "list_rules": {},
     "lint_paths": {"paths": ["a.xbsl"]},
@@ -328,7 +328,7 @@ _BASE_CALLS = {
     "translate_status": {"root": "project"},
     "translate_gaps": {"root": "project"},
     "translate_entries": {"root": "project"},
-    "translate_unused": {"root": "project"},
+    "translate_unused": {"root": "project", "all": True},
     "translate_redundant": {"root": "project"},
     "translate_drift": {"root": "project"},
     "translate_set": {"root": "project", "edits_file": "batch.yaml"},
@@ -343,6 +343,7 @@ _BASE_CALLS = {
 #: The arguments that shape only the ANSWER of a tool, which the CLI prints its own way.
 _SHAPE_ONLY = {
     ("lint_paths", "as_ci_full"),            # the whole CI-job record instead of its one line
+    ("lint_paths", "brief"),                 # omit the CI-job record
     ("lint_paths", "list_info"),             # the info findings listed, not counted
     ("translate_status", "full"),            # every duplicate the ref has, instead of a count
     ("translate_unused", "budget_seconds"),  # the CLI walks every file, with no clock
@@ -683,6 +684,12 @@ def test_a_pruning_run_takes_the_whole_filtered_set(same, tmp_path):
     assert unused.unused and unused.prune and unused.filter == "Карточка"
     assert unused.since == "origin/master" and (unused.limit, unused.offset) == (0, 0)
     assert redundant.redundant and redundant.prune and redundant.limit == 0
+
+
+def test_no_scope_for_translate_unused_gets_no_command(same, tmp_path):
+    assert same("translate_unused", root=str(tmp_path), prune=True) is None
+    (unused,) = _translate(same("translate_unused", root=str(tmp_path), all=True, prune=True))
+    assert unused.unused and unused.prune and not unused.since and not unused.filter
 
 
 def test_several_filters_of_translate_unused_get_no_command(same, tmp_path):

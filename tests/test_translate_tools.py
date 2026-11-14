@@ -94,7 +94,8 @@ def test_found_below_is_bounded_and_skips_hidden_directories(tmp_path):
 )
 def test_translate_tools_refuse_a_root_without_a_dictionary(mcp_module, tmp_path, tool):
     project = _project(tmp_path)
-    answer = getattr(mcp_module, tool)(str(project))
+    scope = {"all": True} if tool == "translate_unused" else {}
+    answer = getattr(mcp_module, tool)(str(project), **scope)
     assert set(answer) == {"error"}
     assert str(project) in answer["error"] and dict_module.DICTIONARY_DIR in answer["error"]
 
@@ -230,7 +231,7 @@ def test_translate_unused_names_the_pairs_the_project_dropped(mcp_module, tmp_pa
         encoding="utf-8",
     )
 
-    answer = mcp_module.translate_unused(str(project))
+    answer = mcp_module.translate_unused(str(project), all=True)
 
     assert {row["key"] for row in answer["unused"]} == {"СнятоеИмя"}
     assert answer["dictionary"] == str(folder)
@@ -246,11 +247,11 @@ def test_translate_unused_writes_nothing_unless_prune_is_asked_for(mcp_module, t
         "version: 1\nlanguage: en\ntokens:\n    СнятоеИмя: RemovedName\n", encoding="utf-8")
     before = extra.read_text(encoding="utf-8")
 
-    listed = mcp_module.translate_unused(str(project))
+    listed = mcp_module.translate_unused(str(project), all=True)
     assert "removed" not in listed
     assert extra.read_text(encoding="utf-8") == before
 
-    pruned = mcp_module.translate_unused(str(project), prune=True)
+    pruned = mcp_module.translate_unused(str(project), all=True, prune=True)
     assert pruned["removed"] == 1
     assert "СнятоеИмя" not in extra.read_text(encoding="utf-8")
 
@@ -283,12 +284,12 @@ def test_translate_unused_compact_rows_and_counts_by_kind(mcp_module, tmp_path):
         encoding="utf-8",
     )
 
-    answer = mcp_module.translate_unused(str(project), compact=True, limit=1)
+    answer = mcp_module.translate_unused(str(project), all=True, compact=True, limit=1)
 
     assert answer["counts"] == {"token": 1, "phrase": 1}
     assert len(answer["unused"]) == 1
     assert set(answer["unused"][0]) == {"key", "kind", "file", "line"}
-    full = mcp_module.translate_unused(str(project))
+    full = mcp_module.translate_unused(str(project), all=True)
     assert full["counts"] == {"token": 1, "phrase": 1}
     assert "value" in full["unused"][0]
 
@@ -318,7 +319,7 @@ def test_translate_unused_narrows_to_the_orphans_of_one_change(mcp_module, tmp_p
 
     assert {row["key"] for row in answer["unused"]} == {"СнятоеСейчас"}
     assert answer["since"]["base"] == base and "note" not in answer
-    plain = mcp_module.translate_unused(str(project))
+    plain = mcp_module.translate_unused(str(project), all=True)
     assert {row["key"] for row in plain["unused"]} == {"СнятоеСейчас", "СнятыйДавно"}
     assert "since" in plain["note"], "the plain answer says what its reading is worth"
 
@@ -346,7 +347,7 @@ def test_unused_prune_summary_and_explicit_detail(mcp_module, tmp_path, detail):
     extra.write_text("version: 1\nlanguage: en\ntokens:\n    СнятоеИмя: RemovedName\n"
                      "phrases:\n    Снятая строка.: Removed line.\n", encoding="utf-8")
     kwargs = {} if detail is None else {"compact": detail}
-    answer = mcp_module.translate_unused(str(project), prune=True, limit=0, **kwargs)
+    answer = mcp_module.translate_unused(str(project), all=True, prune=True, limit=0, **kwargs)
     assert answer["removed"] == 2
     assert answer["pruned"] == {
         "keys": 2, "by_kind": {"token": 1, "phrase": 1}, "by_file": {str(extra): 2},
@@ -355,7 +356,7 @@ def test_unused_prune_summary_and_explicit_detail(mcp_module, tmp_path, detail):
         assert len(answer["unused"]) == 2 and "value" in answer["unused"][0]
     else:
         assert "unused" not in answer
-    assert mcp_module.translate_unused(str(project))["unused"] == []
+    assert mcp_module.translate_unused(str(project), all=True)["unused"] == []
 
 
 @pytest.mark.needs_data
@@ -370,12 +371,12 @@ def test_unused_prune_takes_the_whole_filtered_set_whatever_the_page(mcp_module,
     extra = folder / "020-more.yaml"
     extra.write_text("version: 1\nlanguage: en\ntokens:\n"
                      "    СнятоеИмя: RemovedName\n    ДругоеСнятое: OtherRemoved\n", encoding="utf-8")
-    answer = mcp_module.translate_unused(str(project), prune=True, limit=1)
+    answer = mcp_module.translate_unused(str(project), all=True, prune=True, limit=1)
     assert answer["removed"] == 2
     assert answer["counts"] == {"token": 2}
     assert answer["pruned"] == {"keys": 2, "by_kind": {"token": 2}, "by_file": {str(extra): 2}}
     assert "unused" not in answer
-    assert mcp_module.translate_unused(str(project))["unused"] == []
+    assert mcp_module.translate_unused(str(project), all=True)["unused"] == []
     empty = mcp_module.translate_unused(str(project), prune=True, filter="absent")
     assert empty["removed"] == 0
     assert empty["pruned"] == {"keys": 0, "by_kind": {}, "by_file": {}}

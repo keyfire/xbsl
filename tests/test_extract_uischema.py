@@ -643,6 +643,28 @@ def test_the_retired_components_come_from_the_catalog_of_the_same_version(tmp_pa
     assert "УстаревшаяГруппа" not in default["components"]
 
 
+def test_two_way_bindings_come_from_the_catalog_of_the_same_version(tmp_path, monkeypatch):
+    _version_with_docs(tmp_path, "9.9.9+0", {})
+    _version_with_docs(tmp_path, "9.8.0", {
+        "component_two_way_bindings": {
+            "Виджет": ["Видимость", "НесуществующееСвойство"],
+            "НесуществующийКомпонент": ["Видимость"],
+        },
+    })
+    (tmp_path / "index.json").write_text(
+        json.dumps({"available": ["9.8.0", "9.9.9+0"], "default": "9.9.9+0"}), encoding="utf-8"
+    )
+
+    older = _run_main(monkeypatch, tmp_path, "--element-version", "9.8.0")["components"]
+    default = _run_main(monkeypatch, tmp_path)["components"]
+    assert older.keys() == default.keys()
+    assert older["Компонент"] == default["Компонент"]
+    plain = default["Виджет"]["props"]["Видимость"]
+    assert "binding" not in plain
+    assert older["Виджет"]["props"] == {"Видимость": {**plain, "binding": "two-way"}}
+
+
+
 def test_a_root_without_the_catalog_warns_that_the_retired_components_are_left_out(
         tmp_path, monkeypatch, capsys):
     _version_with_docs(tmp_path, "9.9.9+0", None)

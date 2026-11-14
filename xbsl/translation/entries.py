@@ -145,6 +145,16 @@ MESSAGES = {
         "en": " The whole remainder at once - as a dictionary stub in a file:"
               " xbsl translate <root> --missing <file>.",
     },
+    "translate.unused.scope-required": {
+        "ru": "Укажите since с ревизией Git, filter с подстрокой ключа или перевода "
+              "либо all=true для проверки всего словаря",
+        "en": "Pass a Git revision in since, a key or translation substring in filter, "
+              "or all=true to scan the whole dictionary",
+    },
+    "translate.unused.scope-conflict": {
+        "ru": "Выберите один параметр области проверки – since или all=true",
+        "en": "Choose one scope parameter, since or all=true",
+    },
     "translate.unused.textual": {
         "ru": "чтение сирот текстовое: ключ считается живым, пока его текст встречается в"
               " исходниках, какими они лежат сейчас. Поэтому список без отбора описывает"

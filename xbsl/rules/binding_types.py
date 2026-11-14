@@ -40,8 +40,10 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from xbsl import dataset, i18n, uischema
+from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
+from xbsl.rules._rows import _binding, _writable_binding
 from xbsl.rules._syntax import code_tokens, signatures, type_expr
 from xbsl.rules.component_props import _markup_nodes, _type_value
 from xbsl.rules.yaml_schema import (
@@ -54,6 +56,16 @@ from xbsl.rules.yaml_schema import (
 )
 
 MESSAGES = {
+    "yaml/binding-needs-two-way.title": {
+        "ru": "Свойство требует двусторонней привязки",
+        "en": "A property requires a two-way binding",
+    },
+    "yaml/binding-needs-two-way.computed": {
+        "ru": "Свойство '{prop}' компонента '{component}' требует двусторонней привязки. "
+              "Укажите переменную или свойство, в которое можно записать значение.",
+        "en": "Property '{prop}' on component '{component}' requires a two-way binding. "
+              "Use a writable variable or property.",
+    },
     "yaml/double-quoted-binding.title": {
         "ru": "Привязка нестрокового свойства в двойных кавычках",
         "en": "A nonstring property binding uses double quotes",
@@ -203,6 +215,67 @@ def double_quoted_binding(source: SourceFile) -> Iterable[Diagnostic]:
                     prop=key_node.value, component=component,
                 ),
                 fix=fix,
+            )
+
+
+@lru_cache(maxsize=1)
+def _two_way_props() -> dict[str, frozenset[str]]:
+    schema = dataset.load_ui_schema() or {}
+    table = {}
+    for component, record in (schema.get("components") or {}).items():
+        names = frozenset(name for name, prop in (record.get("props") or {}).items()
+                          if prop.get("binding") == "two-way")
+        if names:
+            table[component] = names
+    return table
+
+
+dataset.register_reset(_two_way_props.cache_clear)
+
+
+@rule(
+    "yaml/binding-needs-two-way", "yaml/binding-needs-two-way.title", "D",
+    severity=Severity.ERROR,
+)
+def binding_needs_two_way(source: SourceFile) -> Iterable[Diagnostic]:
+    """Reject computed expressions for properties whose schema requires a two-way binding."""
+    if source.kind != "yaml" or not _HAVE_YAML or "=" not in source.text:
+        return
+    table = _two_way_props()
+    if not table:
+        return
+    data, error = _parsed(source)
+    if error is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:
+        return
+    for mapping in _markup_nodes(root):
+        written_type = _type_value(mapping)
+        if written_type is None:
+            continue
+        component = uischema.canonical_component(written_type.value.split("<", 1)[0].strip())
+        props = table.get(component)
+        if not props:
+            continue
+        entries = _scalar_entries(mapping)
+        readonly = entries.get("ТолькоЧтение") or entries.get("ReadOnly")
+        if readonly:
+            mode = readonly[1]
+            if not isinstance(mode, yaml.ScalarNode) or mode.value.strip().casefold() not in ("false", "ложь"):
+                continue  # ReadOnly can make this binding one-way.
+        if component == "Кнопка" and ("Команда" in entries or "Command" in entries):
+            continue  # A switchable command can supply the button's active state.
+        for key, (key_node, value) in entries.items():
+            if key not in props or not isinstance(value, yaml.ScalarNode):
+                continue
+            expression, _ = _binding(value.value)
+            if expression is None or _writable_binding(expression):
+                continue
+            yield Diagnostic(
+                source.rel, value.start_mark.line + 1, value.start_mark.column + 1,
+                "yaml/binding-needs-two-way", Severity.ERROR,
+                i18n.t("yaml/binding-needs-two-way.computed", prop=key_node.value, component=component),
             )
 
 

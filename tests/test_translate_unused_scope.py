@@ -115,7 +115,7 @@ def test_unused_takes_a_list_of_filters_and_names_the_ones_nothing_fell_under(
 
     assert [row["key"] for row in one["unused"]] == ["Вторая снятая строка."]
     assert one["unmatched"] == []
-    assert "unmatched" not in mcp_module.translate_unused(str(project))
+    assert "unmatched" not in mcp_module.translate_unused(str(project), all=True)
 
 
 @pytest.mark.needs_data
@@ -127,7 +127,7 @@ def test_unused_answers_in_part_when_the_budget_is_spent(mcp_module, tmp_path):
     folder = _dictionary(tmp_path / "vendor", _BASE_DICTIONARY + "    СнятоеИмя: RemovedName\n")
     before = (folder / "010-objects.yaml").read_text(encoding="utf-8")
 
-    answer = mcp_module.translate_unused(str(project), budget_seconds=0, prune=True)
+    answer = mcp_module.translate_unused(str(project), all=True, budget_seconds=0, prune=True)
 
     assert answer["partial"] is True
     assert answer["sources"] == {"read": 0, "total": 2}
@@ -137,7 +137,7 @@ def test_unused_answers_in_part_when_the_budget_is_spent(mcp_module, tmp_path):
     assert "removed" not in answer
     assert (folder / "010-objects.yaml").read_text(encoding="utf-8") == before
 
-    whole = mcp_module.translate_unused(str(project), budget_seconds=60)
+    whole = mcp_module.translate_unused(str(project), all=True, budget_seconds=60)
 
     assert "partial" not in whole and whole["sources"] == {"read": 2, "total": 2}
     assert [row["key"] for row in whole["unused"]] == ["СнятоеИмя"]
@@ -353,6 +353,49 @@ def test_the_real_server_describes_a_filter_as_a_string_or_a_list():
 
 
 @pytest.mark.needs_data
+@pytest.mark.parametrize(("scope", "options"), [
+    ({}, ("since", "filter", "all")),
+    ({"filter": ["", " "]}, ("since", "filter", "all")),
+    ({"since": " "}, ("since", "filter", "all")),
+    ({"since": "HEAD", "all": True}, ("since", "all")),
+])
+def test_real_unused_rejects_missing_or_conflicting_scope_before_pruning(tmp_path, scope, options):
+    module = _real_server()
+    project = _project(tmp_path)
+    body = _BASE_DICTIONARY + "    СтароеИмя: OldName\n"
+    folder = _dictionary(tmp_path / "vendor", body)
+    try:
+        result = asyncio.run(module.mcp.call_tool(
+            "translate_unused", {"root": str(project), "prune": True, **scope},
+        ))
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+    content = result[0] if isinstance(result, tuple) else result
+    answer = json.loads(content[0].text)
+    assert set(answer) == {"error"}
+    assert all(option in answer["error"] for option in options)
+    assert (folder / "010-objects.yaml").read_text(encoding="utf-8") == body
+
+
+@pytest.mark.needs_data
+def test_real_unused_all_opts_into_the_whole_dictionary(tmp_path):
+    module = _real_server()
+    project = _project(tmp_path)
+    _dictionary(tmp_path / "vendor", _BASE_DICTIONARY + "    СтароеИмя: OldName\n")
+    try:
+        result = asyncio.run(module.mcp.call_tool(
+            "translate_unused", {"root": str(project), "all": True},
+        ))
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+    content = result[0] if isinstance(result, tuple) else result
+    answer = json.loads(content[0].text)
+    assert [row["key"] for row in answer["unused"]] == ["СтароеИмя"]
+
+
+@pytest.mark.needs_data
 def test_the_real_server_takes_a_list_through_a_call(tmp_path):
     """The call path of the protocol, not the function: the list arrives through validation."""
     module = _real_server()
@@ -378,7 +421,7 @@ def test_real_server_prune_default_and_explicit_detail(tmp_path, detail):
     module = _real_server()
     project = _project(tmp_path)
     _dictionary(tmp_path / "vendor", _BASE_DICTIONARY + "    СнятоеИмя: RemovedName\n")
-    args = {"root": str(project), "prune": True}
+    args = {"root": str(project), "all": True, "prune": True}
     if detail is not None:
         args["compact"] = detail
     try:

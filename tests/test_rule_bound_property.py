@@ -66,6 +66,45 @@ def test_data_binding_assignment_is_not_flagged(tmp_path):
     assert diags == []
 
 
+def test_bare_path_in_a_setting_is_flagged(tmp_path):
+    """A bare path in a SETTING is not a binding: the platform refuses the assignment.
+
+    The live case: `Visibility: =Flag` and `Components.Table.Visibility = Flag` in the
+    module. By the shape of the expression it is the same bare path as the lawful
+    `Value` binding - what tells them apart is the property type in the schema, not
+    the kind of expression.
+    """
+    diags = _pair(
+        tmp_path,
+        value="Значение: =Запись.Значение",
+        height="Доступность: =ФлагДоступности",
+        code="метод Ф(Флаг: Булево)\n    Компоненты.Вставка.Доступность = Флаг\n;\n",
+    )
+    assert len(diags) == 1
+    assert "Доступность" in diags[0].message
+
+
+def test_setting_of_a_plain_group_is_flagged(tmp_path):
+    """A group with no type arguments: the property comes from the schema by its kind."""
+    (tmp_path / "Форма.yaml").write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Ид: 6e2a2f0f-4a1d-4d2e-9b0f-2b5c7f2a1111\n"
+        "Имя: Форма\n"
+        "Содержимое:\n"
+        "  - ВидЭлемента: Группа\n"
+        "    Имя: ГруппаФормы\n"
+        "    Видимость: =Флаг\n",
+        encoding="utf-8",
+    )
+    module = tmp_path / "Форма.xbsl"
+    module.write_text(
+        "метод Ф(Флаг: Булево)\n    Компоненты.ГруппаФормы.Видимость = Флаг\n;\n",
+        encoding="utf-8",
+    )
+    diags = engine.run([module], select={"code/bound-property-assign"})
+    assert len(diags) == 1 and "Видимость" in diags[0].message
+
+
 def test_literal_property_assignment_is_not_flagged(tmp_path):
     diags = _pair(
         tmp_path,
@@ -120,3 +159,48 @@ def test_english_pair_is_judged(tmp_path):
     module.write_text("method F()\n    Components.Insert.Height = 640\n;\n", encoding="utf-8")
     diags = engine.run([module], select={"code/bound-property-assign"})
     assert len(diags) == 1 and "Height" in diags[0].message
+
+
+@pytest.mark.parametrize(
+    "name, kind, prop, expression, code",
+    [
+        ("Форма", "Кнопка", "Активность", "=Флаг",
+         "метод Ф()\n    Компоненты.Переключатель.Активность = Истина\n;\n"),
+        ("Form", "Button", "Active", "=Flag",
+         "method F()\n    Components.Переключатель.Active = True\n;\n"),
+        ("Форма", "ПолеВвода", "Значение", "=Значения[0]",
+         "метод Ф()\n    Компоненты.Переключатель.Значение = 42\n;\n"),
+    ],
+)
+def test_writable_binding_is_accepted_by_both_rules(tmp_path, name, kind, prop, expression, code):
+    markup = tmp_path / f"{name}.yaml"
+    module = tmp_path / f"{name}.xbsl"
+    markup.write_text(
+        f"ВидЭлемента: КомпонентИнтерфейса\nИмя: {name}\nСодержимое:\n"
+        f"  - Тип: {kind}\n    Имя: Переключатель\n    {prop}: {expression}\n",
+        encoding="utf-8",
+    )
+    module.write_text(code, encoding="utf-8")
+    assert engine.run([markup, module], select={
+        "code/bound-property-assign", "yaml/binding-needs-two-way",
+    }) == []
+
+
+def test_assignment_to_computed_data_property_is_reported(tmp_path):
+    diags = _pair(
+        tmp_path,
+        value="Значение: =Вычислить()\n        ТолькоЧтение: Истина",
+        height="Высота: 320",
+        code="метод Ф()\n    Компоненты.Значение.Значение = 42\n;\n",
+    )
+    assert len(diags) == 1 and diags[0].rule_id == "code/bound-property-assign"
+
+
+def test_assignment_to_unknown_property_with_a_data_path_is_left_alone(tmp_path):
+    diags = _pair(
+        tmp_path,
+        value="Значение: =Запись.Значение",
+        height="СвойствоПользователя: =Запись.Значение",
+        code="метод Ф()\n    Компоненты.Вставка.СвойствоПользователя = 42\n;\n",
+    )
+    assert diags == []

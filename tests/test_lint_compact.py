@@ -145,6 +145,29 @@ def test_compact_answer_keeps_the_record_of_the_ci_job(server, tmp_path):
 
 
 @pytest.mark.needs_data
+def test_brief_keeps_diagnostics_without_echoing_the_ci_configuration(server, tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "Sample.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "lint:\n  script:\n    - xbsl project --select whitespace/trailing\n",
+        encoding="utf-8",
+    )
+
+    full = server.lint_paths([str(project)], as_ci=True)
+    brief = server.lint_paths([str(project)], as_ci=True, brief=True)
+
+    assert set(brief) == {"summary", "diagnostics"}
+    assert brief["summary"]["diagnostics"] == 1
+    assert [finding["rule"] for finding in brief["diagnostics"]] == ["whitespace/trailing"]
+    assert brief["diagnostics"] == full["diagnostics"]
+    assert full["summary"]["as_ci"]["select"] == ["whitespace/trailing"]
+    assert "as_ci" not in brief["summary"]
+    detailed = server.lint_paths([str(project)], as_ci=True, brief=True, as_ci_full=True)
+    assert detailed["summary"]["as_ci"] == full["summary"]["as_ci"]
+
+
+@pytest.mark.needs_data
 def test_compact_as_ci_full_keeps_the_whole_record(server, tmp_path):
     project = tmp_path / "project"
     project.mkdir()

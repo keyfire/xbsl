@@ -245,6 +245,17 @@ def expression_formula(node, source: str) -> tuple:
     return ("atom", _text(source, node), _roots(node))
 
 
+def _writable_binding(expression: P.Expr) -> bool:
+    """Recognize a data path with ordinary member and index access."""
+    while isinstance(expression, (P.Member, P.Index)):
+        if isinstance(expression, P.Member) and expression.safe:
+            return False
+        if isinstance(expression, P.Index) and expression.index is None:
+            return False
+        expression = expression.obj
+    return isinstance(expression, (P.Name, P.GlobalAccess))
+
+
 def _binding(value: str):
     """(expression, its text) of a `=...` scalar, or (None, "") when it does not parse."""
     stripped = value.strip()

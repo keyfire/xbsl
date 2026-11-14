@@ -284,6 +284,22 @@ def test_component_property_full_record(ui_root):
     assert got["enums"] == {"ВидГраницы": ["Сплошная", "Пунктирная"]}
 
 
+def test_binding_metadata_is_available_under_english_schema_names(ui_root):
+    root = ui_root / _VER
+    schema = json.loads((root / "uischema.json").read_text(encoding="utf-8"))
+    schema["components"]["КарточкаАкме"]["props"]["Ссылка"]["binding"] = "two-way"
+    (root / "uischema.json").write_text(json.dumps(schema), encoding="utf-8")
+    terms = {"types": {"AcmeCard": "КарточкаАкме"}, "properties": {"Link": "Ссылка"}}
+    (root / "uiterms.json").write_text(json.dumps(terms), encoding="utf-8")
+
+    record = uischema.component("AcmeCard")["component"]
+    assert record["props"]["Ссылка"]["binding"] == "two-way"
+    brief = uischema.component_brief("AcmeCard")["component"]
+    assert brief["props"]["Ссылка"] == "Url? [two-way]"
+    prop = uischema.component_property("AcmeCard", "Link")["property"]
+    assert prop == {"name": "Link", "types": ["Url"], "nullable": True, "binding": "two-way"}
+
+
 def test_component_property_unknown_gives_close_matches(ui_root):
     miss = uischema.component_property("КарточкаАкме", "Гран")
     assert miss["property"] is None and "Граница" in miss["close_matches"]

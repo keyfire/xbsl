@@ -1410,13 +1410,18 @@ def extract(dist: Path) -> tuple:
         global_env.pop(member, None)
     for name in conflicted_type_env:
         type_env.pop(name, None)
+    component_two_way_bindings = {
+        russian: record["two_way_bindings"]
+        for russian, record in sorted(descriptions.items())
+        if russian in names and record["two_way_bindings"]
+    }
     return (names, members, components, types, globals_, global_env, type_env,
             managers, manager_returns,
             facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
             type_variance, method_params,
             deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired,
             component_floors(descriptions), component_handlers(descriptions, names),
-            element_handlers)
+            element_handlers, component_two_way_bindings)
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1487,6 +1492,17 @@ def _description_rows(record: dict, kind: str, *, typed: bool) -> list[dict]:
             entry["type"] = type_str
         found.append(entry)
     return found
+
+
+def _two_way_binding_props(record: dict) -> list[str]:
+    """Names of current declarative properties with the descriptor's two-way flag."""
+    return sorted({
+        russian
+        for row in record.get("properties") or ()
+        if isinstance(row, dict) and row.get("bidirectionalDataBinding") is True
+        and row.get("runtimeOnly") is not True and row.get("to") is None
+        if (russian := _spelled_ru(row))
+    })
 
 
 def _mode_text(value: object) -> str:
@@ -1569,6 +1585,7 @@ def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
                 "properties": _description_rows(data, "properties", typed=True),
                 "events": _description_rows(data, "events", typed=False),
                 "handlers": _handler_rows(data),
+                "two_way_bindings": _two_way_binding_props(data),
             }
     return found
 
@@ -1975,7 +1992,7 @@ def main(argv=None) -> int:
      facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
      type_variance, method_params,
      deprecated, folds, checked_methods, retired, component_from,
-     module_handlers, element_handlers) = extract(dist)
+     module_handlers, element_handlers, component_two_way_bindings) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -2022,6 +2039,8 @@ def main(argv=None) -> int:
         # The compatibility mode a component is registered from, as its shipped description
         # states it (see component_floors); the schema step reads it. Older datasets omit it.
         **({"component_from": component_from} if component_from else {}),
+        **({"component_two_way_bindings": component_two_way_bindings}
+           if component_two_way_bindings else {}),
         # The handlers a module of a component overrides by name, each type with its OWN ones
         # (see component_handlers); the reader adds those of the bases. Older datasets omit it,
         # and a consumer then judges no override at all.

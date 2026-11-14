@@ -128,9 +128,10 @@ def _identity_path(diag_path: str, base_dir: Path) -> str:
 _PATH_IN_MESSAGE = re.compile(r"[^\s\"'()<>]*[\\/][^\s\"'()<>]*\.(?:yaml|xbsl|xbql|json)")
 
 
-# Only reviewed positional fields participate. Counts such as duplicate-bodies.lines,
-# namespace names and every other semantic value remain part of the identity.
-_POSITION_FIELDS = {
+# Only reviewed numeric fields can change without creating a new finding. A duplicated
+# subtree can grow in both files and remain the same copy. The other file and the number
+# of copies still distinguish findings, as do numeric fields in unlisted messages.
+_NORMALIZED_FIELDS = {
     "code/bound-property-assign.msg": "line",
     "yaml/computed-binding-assigned.msg": "line",
     "code/unclosed-resource.early-exit": "line",
@@ -149,15 +150,16 @@ _POSITION_FIELDS = {
     "code/duplicate-declaration.local": "line",
     "yaml/duplicate-key.repeat": "line",
     "yaml/missing-import.query": "query_line",
+    "yaml/duplicate-subtree.copy": "nodes",
 }
-_POSITION_MESSAGES: dict[str, list[tuple[str, str]]] = {}
-for _message_id, _field in _POSITION_FIELDS.items():
-    _POSITION_MESSAGES.setdefault(_message_id.split(".", 1)[0], []).append((_message_id, _field))
+_NORMALIZED_MESSAGES: dict[str, list[tuple[str, str]]] = {}
+for _message_id, _field in _NORMALIZED_FIELDS.items():
+    _NORMALIZED_MESSAGES.setdefault(_message_id.split(".", 1)[0], []).append((_message_id, _field))
 
 
 @lru_cache(maxsize=128)
-def _position_pattern(template: str, position: str) -> re.Pattern:
-    """Match a complete translated template, capturing only its vetted position field.
+def _normalized_field_pattern(template: str, normalized_field: str) -> re.Pattern:
+    """Match a complete translated template and capture the number to normalize.
 
     Other fields, including translated n[...] names, match their rendered values but stay
     byte-for-byte in the identity. Patterns follow the registered templates, not copies.
@@ -165,27 +167,30 @@ def _position_pattern(template: str, position: str) -> re.Pattern:
     parts = []
     for literal, field, format_spec, conversion in Formatter().parse(template):
         parts.append(re.escape(literal))
-        if field == position:
-            parts.append(r"(?P<position>\d+)")
+        if field == normalized_field:
+            parts.append(r"(?P<number>\d+)")
         elif field is not None:
             parts.append(".*?")
     return re.compile("".join(parts), re.DOTALL)
 
 
-def _identity_message(message: str, base_dir: Path, rule_id: str | None = None) -> str:
-    """Normalize paths and vetted display positions without changing diagnostic text."""
+def _identity_message(message: str, base_dir: Path, rule_id: str | None = None,
+                      *, normalize_nodes: bool = True) -> str:
+    """Normalize paths and selected numeric fields without changing diagnostic text."""
     message = _PATH_IN_MESSAGE.sub(lambda hit: _identity_path(hit.group(0), base_dir), message)
-    candidates = _POSITION_MESSAGES.get(rule_id, [])
+    candidates = _NORMALIZED_MESSAGES.get(rule_id, [])
     if candidates:
         # Standalone baseline callers need the builtin message registry too.
         from xbsl import rules  # noqa: F401
 
-        for message_id, position in candidates:
+        for message_id, normalized_field in candidates:
+            if normalized_field == "nodes" and not normalize_nodes:
+                continue
             for template in (i18n.translations(message_id) or {}).values():
-                match = _position_pattern(template, position).fullmatch(message)
+                match = _normalized_field_pattern(template, normalized_field).fullmatch(message)
                 if match is not None:
-                    return (message[:match.start("position")] + "{" + position + "}"
-                            + message[match.end("position"):])
+                    return (message[:match.start("number")] + "{" + normalized_field + "}"
+                            + message[match.end("number"):])
     return message
 
 
@@ -196,12 +201,12 @@ _QUOTES = {"'": "'", '"': '"', "`": "`"}
 
 
 @lru_cache(maxsize=512)
-def _wording(template: str, position: str | None) -> tuple[re.Pattern, tuple[tuple[str, str], ...]]:
+def _wording(template: str, normalized_field: str | None) -> tuple[re.Pattern, tuple[tuple[str, str], ...]]:
     """A template as a pattern of its whole text, with the quotes around each value it captures.
 
     A value is what the finding names. A translated name (`n[...]`) belongs to the wording, and
-    a display position (`position`, see _POSITION_FIELDS) is normalized in the identity, so both
-    are matched without being captured.
+    a numeric field listed in _NORMALIZED_FIELDS is normalized in the identity. Neither is
+    captured.
     """
     pieces = list(Formatter().parse(template))
     parts: list[str] = []
@@ -210,7 +215,7 @@ def _wording(template: str, position: str | None) -> tuple[re.Pattern, tuple[tup
         parts.append(re.escape(literal))
         if field is None:
             continue
-        if field.startswith("n[") or field == position:
+        if field.startswith("n[") or field == normalized_field:
             parts.append(".*?")
             continue
         parts.append("(.*?)")
@@ -222,10 +227,10 @@ def _wording(template: str, position: str | None) -> tuple[re.Pattern, tuple[tup
 
 
 def _wordings(rule_id: str, keys: list[str]) -> list[tuple[str, str | None]]:
-    """Every current template of the rule in every language, with its position field."""
+    """Every current template of the rule in every language, with its normalized field, if any."""
     prefix = rule_id + "."
     return [
-        (template, _POSITION_FIELDS.get(key))
+        (template, _NORMALIZED_FIELDS.get(key))
         for key in keys if key.startswith(prefix)
         for template in (i18n.translations(key) or {}).values()
     ]
@@ -234,8 +239,8 @@ def _wordings(rule_id: str, keys: list[str]) -> list[tuple[str, str | None]]:
 def _values(message: str, wordings: list[tuple[str, str | None]]) -> list[str] | None:
     """The values a current wording fills into the message, each in its quotes, or None when
     no current wording fits the text."""
-    for template, position in wordings:
-        pattern, quotes = _wording(template, position)
+    for template, normalized_field in wordings:
+        pattern, quotes = _wording(template, normalized_field)
         match = pattern.fullmatch(message)
         if match is not None:
             return [opening + value + closing
@@ -329,7 +334,7 @@ def reasons_of(data: dict, base_dir: Path) -> dict[tuple[str, str, str], str]:
             for message, value in per_message.items():
                 reason = _entry_reason(value)
                 if reason:
-                    out[(path, rule_id, _identity_message(message, base_dir, rule_id))] = reason
+                    out[(path, rule_id, _identity_message(message, base_dir, rule_id, normalize_nodes=False))] = reason
     return out
 
 
@@ -345,7 +350,7 @@ def build(
     files: dict[str, dict[str, dict[str, object]]] = {}
     for d in sorted(diags, key=lambda x: x.sort_key()):
         path = _identity_path(d.path, base_dir)
-        message = _identity_message(d.message, base_dir, d.rule_id)
+        message = _identity_message(d.message, base_dir, d.rule_id, normalize_nodes=False)
         per_rule = files.setdefault(path, {})
         per_message = per_rule.setdefault(d.rule_id, {})
         per_message[message] = _entry_count(per_message.get(message, 0)) + 1
@@ -391,14 +396,35 @@ def _reworded_reasons(
     Without them a rewrite after a reworded release wrote the finding under its new text and
     dropped the sentence explaining why it was excluded.
     """
+
+    subtree = "yaml/duplicate-subtree"
+    by_nodes: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
+    for entry in reasons:
+        path, rule_id, message = entry
+        if rule_id == subtree:
+            normalized = _identity_message(message, base_dir, subtree)
+            by_nodes.setdefault((path, normalized), []).append(entry)
+    new_nodes: dict[tuple[str, str], set[str]] = {}
+    for d in diags:
+        if d.rule_id == subtree:
+            path = _identity_path(d.path, base_dir)
+            message = _identity_message(d.message, base_dir, subtree, normalize_nodes=False)
+            normalized = _identity_message(message, base_dir, subtree)
+            new_nodes.setdefault((path, normalized), set()).add(message)
     earlier: _Reworded | None = None
     every = dict.fromkeys(reasons, 1)
     out: dict[tuple[str, str, str], str] = {}
     for d in diags:
         key = (_identity_path(d.path, base_dir), d.rule_id,
-               _identity_message(d.message, base_dir, d.rule_id))
+               _identity_message(d.message, base_dir, d.rule_id, normalize_nodes=False))
         if key in reasons or key in out:
             continue
+        if key[1] == subtree:
+            group = (key[0], _identity_message(key[2], base_dir, subtree))
+            holders = by_nodes.get(group, [])
+            if len(holders) == 1 and len(new_nodes[group]) == 1:
+                out[key] = reasons[holders[0]]
+                continue
         if earlier is None:
             earlier = _Reworded()
             for entry in reasons:
@@ -574,7 +600,9 @@ def stale_entries(
     for path, rule_id, message, value in _entries(data, rules, wanted=True, roots=roots):
         count = _entry_count(value)
         # Spent by identity, reported as WRITTEN: the caller drops the entry by its own key.
-        spent = message if base_dir is None else _identity_message(message, base_dir, rule_id)
+        spent = message if base_dir is None else _identity_message(
+            message, base_dir, rule_id, normalize_nodes=False,
+        )
         key = (path, rule_id, spent)
         consumed = min(max(count, 0), remaining_used.get(key, 0))
         remaining_used[key] = remaining_used.get(key, 0) - consumed
@@ -666,7 +694,7 @@ def apply(
                     # Two entries of one identity meet when a file carries a message frozen
                     # on Windows and its twin frozen on Linux: their budgets add up rather
                     # than one replacing the other.
-                    key = (path, rule_id, _identity_message(message, base_dir, rule_id))
+                    key = (path, rule_id, _identity_message(message, base_dir, rule_id, normalize_nodes=False))
                     budgets[key] = budgets.get(key, 0) + count
                     written.setdefault(key, (message, _entry_reason(value)))
                     if (rules is None or rule_id in rules) and _in_reach(path, roots):
@@ -676,7 +704,7 @@ def apply(
     suppressed = 0
     for d in sorted(diags, key=lambda x: x.sort_key()):
         key = (_identity_path(d.path, base_dir), d.rule_id,
-               _identity_message(d.message, base_dir, d.rule_id))
+               _identity_message(d.message, base_dir, d.rule_id, normalize_nodes=False))
         left = budgets.get(key, 0)
         if left > 0:
             budgets[key] = left - 1
@@ -684,6 +712,41 @@ def apply(
             suppressed += 1
         else:
             kept.append(d)
+
+    # Node counts identify exact matches. A changed count can spend a remaining entry
+    # only when there is one message for that subtree on both sides of the comparison.
+    subtree = "yaml/duplicate-subtree"
+    by_nodes: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
+    for key, left in budgets.items():
+        path, rule_id, message = key
+        if left > 0 and rule_id == subtree:
+            normalized = _identity_message(message, base_dir, subtree)
+            by_nodes.setdefault((path, normalized), []).append(key)
+    if by_nodes:
+        candidates: dict[tuple[str, str], set[str]] = {}
+        for d in kept:
+            if d.rule_id == subtree:
+                path = _identity_path(d.path, base_dir)
+                normalized = _identity_message(d.message, base_dir, subtree)
+                candidates.setdefault((path, normalized), set()).add(
+                    _identity_message(d.message, base_dir),
+                )
+        still: list[Diagnostic] = []
+        for d in kept:
+            if d.rule_id != subtree:
+                still.append(d)
+                continue
+            match = (_identity_path(d.path, base_dir), _identity_message(d.message, base_dir, subtree))
+            holders = by_nodes.get(match, [])
+            if len(holders) != 1 or len(candidates[match]) != 1 or budgets[holders[0]] <= 0:
+                still.append(d)
+                continue
+            key = holders[0]
+            budgets[key] -= 1
+            used[key] = used.get(key, 0) + 1
+            suppressed += 1
+        kept = still
+
     if kept and any(left > 0 for left in budgets.values()):
         # The second pass: what the exact text left unspent may still hold a finding whose
         # rule reworded the message since the entry was frozen.
@@ -749,7 +812,7 @@ def add_entries(
     added: dict[tuple[str, str, str], int] = {}
     for d in sorted(kept, key=lambda x: x.sort_key()):
         key = (_identity_path(d.path, base_dir), d.rule_id,
-               _identity_message(d.message, base_dir, d.rule_id))
+               _identity_message(d.message, base_dir, d.rule_id, normalize_nodes=False))
         added[key] = added.get(key, 0) + 1
     files = data.get("files")
     if not isinstance(files, dict):
@@ -769,7 +832,7 @@ def add_entries(
         # The entry is matched by identity but kept under the key as WRITTEN: a message
         # naming a file may carry the separators of another host.
         written = next(
-            (k for k in per_message if _identity_message(k, base_dir, rule_id) == message), None,
+            (k for k in per_message if _identity_message(k, base_dir, rule_id, normalize_nodes=False) == message), None,
         )
         if written is None:
             per_message[message] = {"count": count, "reason": reason} if reason else count
