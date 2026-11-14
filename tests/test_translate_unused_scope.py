@@ -432,3 +432,14 @@ def test_real_server_prune_default_and_explicit_detail(tmp_path, detail):
     answer = json.loads(content[0].text)
     assert answer["removed"] == 1
     assert ("unused" in answer) is (detail is False)
+
+
+@pytest.mark.needs_data
+def test_quiet_json_unused_has_no_progress_output(tmp_path, capsys, monkeypatch):
+    project = _project(tmp_path)
+    _dictionary(tmp_path / "vendor", _BASE_DICTIONARY)
+    monkeypatch.setattr(entries, "PROGRESS_STEP", 1)
+    assert cli.cli_main([str(project), "--unused", "--format", "json", "--quiet"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["total"] == 0
+    assert captured.err == ""

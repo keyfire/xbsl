@@ -593,3 +593,75 @@ def test_compact_names_the_ci_job_of_each_project_root_in_one_line():
     assert set(answer["summary"]["projects"][0]["as_ci"]) == {"adopted", "brief"}
     whole = report.compact(full, as_ci_full=True)
     assert whole["summary"]["projects"][0]["as_ci"] == job
+
+
+@pytest.mark.needs_data
+def test_lint_rejects_an_unknown_explicit_select(server, tmp_path):
+    answer = server.lint_paths([str(tmp_path)], select=["E", "yaml"])
+    assert "error" in answer and "E" in answer["error"]
+
+
+@pytest.mark.needs_data
+def test_lint_uses_an_explicit_ci_file_for_a_separate_tree(server, tmp_path):
+    project = tmp_path / "tree"
+    project.mkdir()
+    (project / "Main.xbsl").write_text(_WARNING, encoding="utf-8")
+    pipeline = tmp_path / "checkout" / ".gitlab-ci.yml"
+    pipeline.parent.mkdir()
+    pipeline.write_text(
+        "English:\n  script:\n    - xbsl e1c --select whitespace/trailing\n", encoding="utf-8",
+    )
+    answer = server.lint_paths([str(project)], root=str(tmp_path), as_ci_file="checkout/.gitlab-ci.yml",
+                               as_ci_job="English")
+    assert answer["summary"]["as_ci"]["job"] == "English"
+    assert answer["summary"]["rules"]["active"] == 1
+
+
+@pytest.mark.needs_data
+def test_since_filters_output_on_both_lint_surfaces(server, tmp_path, capsys):
+    import subprocess
+    from xbsl import cli
+
+    def git(*args):
+        subprocess.run(
+            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
+             "-c", "commit.gpgsign=false", *args],
+            cwd=tmp_path, check=True, capture_output=True, encoding="utf-8",
+        )
+
+    git("init", "-q")
+    (tmp_path / "Unchanged.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / "Modified.xbsl").write_text("", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    (tmp_path / "Modified.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / "New.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / "Ignored.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("Ignored.xbsl\n", encoding="utf-8")
+    arguments = [str(tmp_path), "--select", "whitespace/trailing", "--format", "json", "--since", "HEAD"]
+    assert cli.main(arguments) == 0
+    command = json.loads(capsys.readouterr().out)
+    tool = server.lint_paths([str(tmp_path)], select=["whitespace/trailing"], since="HEAD")
+    for answer in (command, tool):
+        assert {Path(finding["path"]).name for finding in answer["diagnostics"]} == {
+            "Modified.xbsl", "New.xbsl",
+        }
+        assert answer["summary"]["diagnostics"] == 2
+        assert answer["summary"]["since"]["other_diagnostics"] == 2
+        assert answer["summary"]["since"]["changed_files"] == 2
+    refused = server.lint_paths([str(tmp_path)], since="unknown-revision")
+    assert "error" in refused and "unknown-revision" in refused["error"]
+
+
+@pytest.mark.needs_data
+def test_lint_refuses_an_unknown_ci_selector_on_both_surfaces(server, tmp_path, capsys):
+    from xbsl import cli
+
+    pipeline = tmp_path / ".gitlab-ci.yml"
+    pipeline.write_text("English:\n  script:\n    - xbsl . --select E\n", encoding="utf-8")
+    answer = server.lint_paths([str(tmp_path)], as_ci_job="English")
+    assert "error" in answer and "E" in answer["error"]
+    status = cli.main([str(tmp_path), "--as-ci-job", "English", "--format", "json"])
+    assert status == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "E" in payload["error"] and not payload["summary"]["as_ci"]["adopted"]

@@ -164,7 +164,7 @@ yours.
 
 | Tool | What it does |
 |---|---|
-| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root, as_ci, as_ci_job, compact, fix, as_ci_full, compare, list_info, brief)` | Check files and directories on disk. Details follow below. |
+| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root, as_ci, as_ci_job, compact, fix, as_ci_full, compare, list_info, brief, as_ci_file, since)` | Check files and directories on disk. Details follow below. |
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go; paths of several project roots are checked each on its own, and roots with baselines of their own (two worktrees) are pruned one call each – a call over them is refused and names the files |
 | `list_rules(select, ignore, filter)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry, and `filter` narrows further: a word that IS a group (the part of an id before `/`) lists that group alone, while any other word is looked for as an id substring or as a word of the title or the description – every i18n text registered under the rule's id (the title and the message templates its diagnostics are built from), in either language, plus its English docstring; `docs/RULES.md` is not read, since it ships with neither the sdist nor the wheel. Matching is case-insensitive. A `filter` that matches nothing answers `{error, near_groups}` – the groups closest to it by spelling – instead of an empty list |
@@ -189,6 +189,14 @@ command, checkout root, settings (`select`, `ignore`, `enable`, `baseline`), a `
 other jobs running the linter and unread includes. CLI output with `--format json` includes the
 same record. Use `as_ci_job` to choose a job when a pipeline runs different checks, for example
 on the project and its translation.
+
+Pass `as_ci_file` to apply a CI file to a tree outside its checkout. A relative path is
+resolved against `root`. Use `as_ci_job` to choose the job from that file. An explicit
+`select` accepts a rule ID, group or tier A, B, C, D. An unknown selector returns an error.
+
+`since` takes a Git revision. The check reads the whole requested project, including
+context for cross-file rules, and lists findings in changed files. `summary.since` counts
+changed files checked and findings in other files. Use `since` without `fix` or `compare`.
 
 The summary counts findings by rule, file and severity (`by_rule`, `by_file`, `by_severity`).
 With `compact`, it remains available with baseline and CI-job records, `errors` contains full

@@ -40,7 +40,7 @@ from xbsl import dataset, engine, lexer, metamodel, terms, uischema
 from xbsl.engine import SourceFile
 from xbsl.rules.enum_defaults import bare_type_name
 from xbsl.rules.naming import DEPRECATED_MARKS
-from xbsl.rules.yaml_schema import _composed, _parsed, object_kind
+from xbsl.rules.yaml_schema import _composed, _mapping_nodes, _parsed, object_kind
 from xbsl.translation import code as code_module
 from xbsl.translation import platform_map
 from xbsl.translation.code import (
@@ -137,8 +137,33 @@ def translate_yaml(source: SourceFile, resolver: Resolver, report: FileReport) -
         else:
             # A subsystem or resource descriptor: no element kind, a handful of keys.
             _walk_plain(root, resolver, report, edits)
+    if root is not None:
+        _note_key_collisions(root, edits, report)
     _comment_edits(source, root, resolver, report, edits)
     return apply_edits(source.text, edits)
+
+
+def _note_key_collisions(root, edits: list[Edit], report: FileReport) -> None:
+    """Compare the final spelling of scalar string keys inside each source mapping."""
+    replacements = {(start, end): text for start, end, text in edits}
+    if not replacements:
+        return
+    for mapping in _mapping_nodes(root):
+        keys: dict[str, list[tuple[str, int, int]]] = {}
+        for key, _ in mapping.value:
+            if not isinstance(key, yaml.ScalarNode) or key.tag != "tag:yaml.org,2002:str":
+                continue
+            changed = replacements.get((key.start_mark.index, key.end_mark.index))
+            spelling = key.value
+            if changed is not None:
+                spelling = yaml.safe_load(changed) if key.style in ("'", '"') else changed
+            line, col = _at(key)
+            keys.setdefault(spelling, []).append((key.value, line, col))
+        for spelling, sources in keys.items():
+            if len({source for source, _, _ in sources}) > 1:
+                for source, line, col in sources:
+                    report.note_name(f"YAML mapping at line {mapping.start_mark.line + 1}",
+                                     source, spelling, line, col)
 
 
 def _is_localization_body(root) -> bool:

@@ -462,6 +462,14 @@ def _is_selected(
     return info.enabled_by_default
 
 
+def unknown_selectors(select: set[str] | None) -> list[str]:
+    """Return selectors outside the current rule IDs, groups and tier letters."""
+    if not select:
+        return []
+    known = {name for info in RULES for name in (info.id, info.id.split("/", 1)[0], info.tier)}
+    return sorted(select - known)
+
+
 def active_rules(
     select: set[str] | None = None,
     ignore: set[str] | None = None,
