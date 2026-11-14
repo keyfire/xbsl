@@ -25,6 +25,34 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of 1C:Element have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## 2026-11-14 – 1.3.0
+
+### Added
+
+- **Check constructor argument types and two-way bindings.** With regenerated 1C:Element
+  data, the linter catches computed values where a writable binding is required and
+  checks assignments to properties set by an expression. ([#178](https://github.com/keyfire/xbsl/pull/178))
+- **Show findings in changed files.** Use `--since REV` in the CLI or `since` in
+  `lint_paths`. The check still reads the project and counts findings in other files
+  separately. ([#179](https://github.com/keyfire/xbsl/pull/179))
+- **Use a separate CI file with MCP.** Set `as_ci_file` when the files being checked
+  are outside the checkout that holds the workflow. Use `translate --unused --quiet`
+  to suppress progress messages in scripts. ([#179](https://github.com/keyfire/xbsl/pull/179))
+
+### Changed
+
+- **Choose how much MCP reports.** `lint_paths` accepts `brief` to omit CI settings
+  while keeping full diagnostics. `translate_unused` requires a revision, a filter
+  or explicit `all=true`. ([#178](https://github.com/keyfire/xbsl/pull/178))
+
+### Fixed
+
+- **Keep accepted duplicate-subtree findings when a subtree grows.** The baseline
+  uses an unambiguous match after applying exact matches. ([#178](https://github.com/keyfire/xbsl/pull/178))
+- **Fail strict translation on duplicate YAML keys and reject unknown lint selectors.**
+  The translation report names both original keys and their locations. An invalid
+  `select` value fails the check, including in CI settings. ([#179](https://github.com/keyfire/xbsl/pull/179))
+
 ## 2026-11-06 – 1.2.0
 
 ### Added
